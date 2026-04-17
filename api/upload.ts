@@ -16,11 +16,11 @@
 
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 
-// Edge runtime per Vercel's official recommendation for Blob client uploads.
-// Tested on real deployment; `vercel dev` has known issues with this pattern
-// locally (hangs / callback URL failures), so we test live on preview URLs
-// rather than via `vercel dev`.
-export const config = { runtime: "edge" };
+// Node.js runtime required. Edge runtime rejects @vercel/blob's internals
+// (undici + node:stream / node:crypto / node:tls etc. are Node-only).
+// `vercel dev` has known hang issues with this pattern locally, so we test
+// uploads on the deployed preview URL rather than via `vercel dev`.
+export const config = { runtime: "nodejs" };
 
 export default async function handler(request: Request): Promise<Response> {
   if (request.method !== "POST") {
