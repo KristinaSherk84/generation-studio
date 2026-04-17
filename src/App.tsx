@@ -571,8 +571,19 @@ const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) 
 
 const STYLES = [
   { id: "corporate", name: "Corporate", desc: "Clean neutral bg", swatch: "#D3D1C7" },
-  { id: "creative", name: "Creative", desc: "Soft creamy bokeh", swatch: "#B4B2A9", bokeh: true },
+  { id: "creative", name: "Creative", desc: "Soft creamy bokeh", swatch: "#9C9A91", bokeh: true },
   { id: "executive", name: "Executive", desc: "Bold, authoritative", swatch: "#444441" },
+] as const;
+
+// Large bokeh orbs for the Creative swatch. Positions and sizes are hand-placed
+// to read as scattered out-of-focus highlights from an f/1.4 lens, not a pattern.
+const CREATIVE_BOKEH = [
+  { top: "8%",  left: "12%", size: 42, opacity: 0.45 },
+  { top: "18%", left: "62%", size: 55, opacity: 0.55 },
+  { top: "48%", left: "8%",  size: 36, opacity: 0.35 },
+  { top: "42%", left: "48%", size: 60, opacity: 0.60 },
+  { top: "68%", left: "72%", size: 46, opacity: 0.50 },
+  { top: "72%", left: "28%", size: 38, opacity: 0.40 },
 ] as const;
 
 const STUDIO_BGS = [
@@ -645,8 +656,18 @@ const SectionLabel = ({ children, style = {} }: SectionLabelProps) => (
   </p>
 );
 
+// Selections captured on the Style screen. All four are required to generate,
+// except `background` — which is only meaningful for Corporate style. Creative
+// and Executive get their background direction from the style prompt itself.
+export type StyleSelections = {
+  style: "corporate" | "creative" | "executive";
+  attire: "formal" | "casual" | "keep";
+  lighting: "studio" | "natural" | "dramatic" | "golden";
+  background?: "white" | "lightgrey" | "midgrey" | "dark" | "blue" | "green";
+};
+
 type StyleScreenProps = {
-  onGenerate: (style: string | null) => void;
+  onGenerate: (selections: StyleSelections) => void;
   onBack: () => void;
 };
 
@@ -742,25 +763,19 @@ const StyleScreen = ({ onGenerate, onBack }: StyleScreenProps) => {
                 }}
               >
                 {"bokeh" in s && s.bokeh && (
-                  <div
-                    style={{
-                      position: "absolute",
-                      inset: 0,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: 6,
-                    }}
-                  >
-                    {[18, 12, 22].map((size, i) => (
+                  <div style={{ position: "absolute", inset: 0 }}>
+                    {CREATIVE_BOKEH.map((orb, i) => (
                       <div
                         key={i}
                         style={{
-                          width: size,
-                          height: size,
+                          position: "absolute",
+                          top: orb.top,
+                          left: orb.left,
+                          width: orb.size,
+                          height: orb.size,
                           borderRadius: "50%",
-                          background: "rgba(255,255,255,0.25)",
-                          filter: "blur(4px)",
+                          background: `rgba(255, 255, 255, ${orb.opacity})`,
+                          filter: "blur(6px)",
                         }}
                       />
                     ))}
@@ -871,7 +886,24 @@ const StyleScreen = ({ onGenerate, onBack }: StyleScreenProps) => {
 
       {/* CTA */}
       <div style={{ marginTop: 24 }}>
-        <Button onClick={() => onGenerate(style)} disabled={!canGenerate} full>
+        <Button
+          onClick={() => {
+            if (!canGenerate || !style || !attire || !lighting) return;
+            onGenerate({
+              style: style as StyleSelections["style"],
+              attire: attire as StyleSelections["attire"],
+              lighting: lighting as StyleSelections["lighting"],
+              // Only pass background for Corporate — for Creative / Executive
+              // the style block handles background direction on its own.
+              background:
+                style === "corporate"
+                  ? (background as StyleSelections["background"])
+                  : undefined,
+            });
+          }}
+          disabled={!canGenerate}
+          full
+        >
           {!style
             ? "Select a style"
             : !attire
@@ -885,9 +917,197 @@ const StyleScreen = ({ onGenerate, onBack }: StyleScreenProps) => {
   );
 };
 
+// -------------------- Loading screen (while 6 headshots generate) --------------------
+//
+// Shown after the user clicks "Generate 6 headshots" on the Style screen.
+// The parent App fires six parallel POSTs to /api/generate and updates
+// `readyCount` + `readyImages` as each one returns. When readyCount === 6
+// (or the last pending call resolves even as a failure), the parent
+// transitions to the Grid screen.
+
+type LoadingScreenProps = {
+  readyCount: number;            // 0–6, increments as each image returns
+  readyImages: string[];         // images collected so far, rendered as thumbnails
+  totalCount: number;            // always 6 for V1 — passed explicitly so it can change later
+  errorMessage: string | null;   // shown if all 6 failed
+  onBack: () => void;            // cancel / go back to the style screen
+};
+
+const LoadingScreen = ({
+  readyCount,
+  readyImages,
+  totalCount,
+  errorMessage,
+  onBack,
+}: LoadingScreenProps) => {
+  // The counter message says "Generating headshot N of 6" where N = the
+  // image currently being worked on. With parallel requests all 6 are
+  // technically in flight at once, but showing (readyCount + 1) mirrors
+  // the user's mental model: "how far along am I?"
+  const currentlyGenerating = Math.min(readyCount + 1, totalCount);
+  const allDone = readyCount >= totalCount;
+
+  return (
+    <div
+      style={{
+        maxWidth: 720,
+        margin: "0 auto",
+        padding: "80px 32px",
+        textAlign: "center",
+        ...font,
+      }}
+    >
+      <div
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "8px 14px",
+          background: C.white,
+          border: `1px solid ${C.border}`,
+          borderRadius: 999,
+          fontSize: 12,
+          color: C.mediumGrey,
+          marginBottom: 24,
+        }}
+      >
+        {allDone ? (
+          <>
+            <Check size={13} color={C.mediumGrey} />
+            All 6 ready
+          </>
+        ) : (
+          <>
+            <span
+              style={{
+                display: "inline-block",
+                width: 10,
+                height: 10,
+                borderRadius: "50%",
+                border: `2px solid ${C.mediumGrey}`,
+                borderTopColor: "transparent",
+                animation: "spin 0.8s linear infinite",
+              }}
+            />
+            Working
+          </>
+        )}
+      </div>
+
+      <h1
+        style={{
+          fontSize: 32,
+          fontWeight: 500,
+          color: C.dark,
+          margin: 0,
+          letterSpacing: -0.5,
+        }}
+      >
+        {errorMessage
+          ? "Something went wrong"
+          : allDone
+          ? "All 6 headshots are ready"
+          : `Generating headshot ${currentlyGenerating} of ${totalCount}…`}
+      </h1>
+
+      <p style={{ fontSize: 15, color: C.mediumGrey, marginTop: 12, lineHeight: 1.6 }}>
+        {errorMessage
+          ? errorMessage
+          : "This will take 2 to 3 minutes. Please don't close this tab — your headshots appear below as they finish."}
+      </p>
+
+      {/* Progress count */}
+      {!errorMessage && (
+        <div
+          style={{
+            marginTop: 24,
+            fontSize: 14,
+            color: C.mediumGrey,
+          }}
+        >
+          {readyCount} of {totalCount} ready
+        </div>
+      )}
+
+      {/* Thumbnails appear here as each one finishes */}
+      {readyImages.length > 0 && (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(3, 1fr)",
+            gap: 12,
+            marginTop: 32,
+          }}
+        >
+          {Array.from({ length: totalCount }, (_, i) => {
+            const src = readyImages[i];
+            return (
+              <div
+                key={i}
+                style={{
+                  aspectRatio: "4/5",
+                  background: C.lightGrey,
+                  borderRadius: 8,
+                  overflow: "hidden",
+                  border: `1px solid ${C.border}`,
+                }}
+              >
+                {src ? (
+                  <img
+                    src={src}
+                    alt={`Headshot ${i + 1}`}
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "cover",
+                      display: "block",
+                    }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: C.mediumGrey,
+                      fontSize: 11,
+                    }}
+                  >
+                    {i + 1}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Back / cancel — only shown after an error so the user isn't stuck */}
+      {errorMessage && (
+        <div style={{ marginTop: 32 }}>
+          <Button onClick={onBack} full>
+            Back to style selection
+          </Button>
+        </div>
+      )}
+
+      {/* Spinner keyframes — scoped here so the component is self-contained */}
+      <style>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
+    </div>
+  );
+};
+
 // -------------------- Screen 4: Pick & Cart --------------------
 
 type GridScreenProps = {
+  images: string[]; // base64 data URIs returned from /api/generate, one per card
   onCheckout: (count: number) => void;
   onBack: () => void;
   onRegenerate: () => void;
@@ -896,6 +1116,7 @@ type GridScreenProps = {
 };
 
 const GridScreen = ({
+  images,
   onCheckout,
   onBack,
   onRegenerate,
@@ -903,6 +1124,9 @@ const GridScreen = ({
   maxRegens,
 }: GridScreenProps) => {
   const [cart, setCart] = useState<Set<number>>(new Set());
+  // Always render 6 slots. If generation returned fewer than 6 (some failed),
+  // the missing slots render as empty placeholders — better than blanking the
+  // whole grid, and it's clear to the user how many images actually arrived.
   const photos = Array.from({ length: 6 }, (_, i) => i);
 
   const toggle = (i: number) => {
@@ -975,47 +1199,80 @@ const GridScreen = ({
       >
         {photos.map((i) => {
           const picked = cart.has(i);
+          const src = images[i]; // may be undefined if this slot failed to generate
           return (
             <div
               key={i}
-              onClick={() => toggle(i)}
+              onClick={() => src && toggle(i)}
               style={{
                 position: "relative",
                 aspectRatio: "4/5",
                 background: C.lightGrey,
                 borderRadius: 8,
-                cursor: "pointer",
+                cursor: src ? "pointer" : "default",
                 overflow: "hidden",
                 border: `2px solid ${picked ? C.dark : "transparent"}`,
                 transition: "border-color 0.15s",
               }}
             >
-              <div
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  color: C.mediumGrey,
-                  fontSize: 13,
-                  background: `repeating-linear-gradient(45deg, ${C.lightGrey}, ${C.lightGrey} 20px, ${C.border} 20px, ${C.border} 40px)`,
-                }}
-              >
+              {src ? (
+                <>
+                  <img
+                    src={src}
+                    alt={`Headshot variation ${i + 1}`}
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "cover",
+                      display: "block",
+                    }}
+                  />
+                  {/* Watermark overlay — removed after checkout (Step 6 will
+                      regenerate unwatermarked 2K files server-side). */}
+                  <div
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      pointerEvents: "none",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: "rgba(255,255,255,0.55)",
+                        textShadow: "0 1px 2px rgba(0,0,0,0.4)",
+                        transform: "rotate(-30deg)",
+                        letterSpacing: 2,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      WATERMARK · WATERMARK · WATERMARK
+                    </div>
+                  </div>
+                </>
+              ) : (
+                // Generation failed for this slot — show a clear, non-clickable
+                // placeholder so the user knows which card didn't come back.
                 <div
                   style={{
                     position: "absolute",
-                    fontSize: 11,
+                    inset: 0,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
                     color: C.mediumGrey,
-                    opacity: 0.6,
-                    transform: "rotate(-30deg)",
-                    letterSpacing: 2,
+                    fontSize: 12,
+                    padding: 16,
+                    textAlign: "center",
+                    background: `repeating-linear-gradient(45deg, ${C.lightGrey}, ${C.lightGrey} 20px, ${C.border} 20px, ${C.border} 40px)`,
                   }}
                 >
-                  WATERMARK · WATERMARK
+                  Generation failed. Try regenerating.
                 </div>
-                <div style={{ zIndex: 1, fontSize: 12 }}>Headshot {i + 1} (full photo, 2K)</div>
-              </div>
+              )}
               {picked && (
                 <div
                   style={{
@@ -1340,7 +1597,16 @@ const PaywallModal = ({ onClose }: PaywallModalProps) => (
 
 // -------------------- Root app --------------------
 
-type Screen = "landing" | "upload" | "style" | "grid" | "checkout" | "success";
+type Screen =
+  | "landing"
+  | "upload"
+  | "style"
+  | "loading" // shown while /api/generate runs 6 times in parallel
+  | "grid"
+  | "checkout"
+  | "success";
+
+const TOTAL_HEADSHOTS = 6;
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>("landing");
@@ -1349,8 +1615,17 @@ export default function App() {
   const [regenCount, setRegenCount] = useState(0);
   const [showPaywall, setShowPaywall] = useState(false);
   // Photos are lifted to App scope so the Blob URLs survive navigating forward
-  // into Style / Grid / Checkout. Generation in Step 4 will read from here.
+  // into Style / Grid / Checkout. /api/generate reads their blobUrl values.
   const [photos, setPhotos] = useState<UploadedPhoto[]>([]);
+  // Generated headshots. Indexed 0..5. A given slot may be undefined if that
+  // particular API call failed — GridScreen renders missing slots as
+  // "generation failed" placeholders rather than hiding them.
+  const [generatedImages, setGeneratedImages] = useState<string[]>([]);
+  // How many of the 6 parallel requests have returned successfully so far.
+  // Drives the "Generating headshot N of 6" copy on the loading screen.
+  const [readyCount, setReadyCount] = useState(0);
+  // Set only if ALL 6 calls fail, so LoadingScreen can offer a way back.
+  const [generationError, setGenerationError] = useState<string | null>(null);
   const MAX_REGENS = 2;
 
   const reset = () => {
@@ -1358,6 +1633,9 @@ export default function App() {
     setCartCount(0);
     setRegenCount(0);
     setPhotos([]);
+    setGeneratedImages([]);
+    setReadyCount(0);
+    setGenerationError(null);
   };
 
   const handleRegenerate = () => {
@@ -1366,6 +1644,89 @@ export default function App() {
       return;
     }
     setRegenCount(regenCount + 1);
+  };
+
+  // Kicks off the 6 parallel /api/generate calls. Runs after the user picks
+  // Style + Attire + Lighting + Background and clicks "Generate 6 headshots".
+  //
+  // Architecture note: we fire 6 separate requests (not one request that loops
+  // inside the server) for two reasons —
+  //   1. Real per-image progress: each returning request increments the
+  //      counter so the user sees "Generating headshot 3 of 6" honestly.
+  //   2. Timeout safety on Vercel Hobby: each call only needs to fit inside
+  //      its own 60s ceiling, rather than all 6 squeezing into one window.
+  const handleGenerate = async (selections: StyleSelections) => {
+    // Only send the photos that successfully uploaded to Blob. Silently drop
+    // any that are still pending or errored — the user shouldn't be blocked
+    // on a stray failed upload if they have 3+ good ones.
+    const photoUrls = photos
+      .filter((p) => p.status === "done" && p.blobUrl)
+      .map((p) => p.blobUrl as string);
+
+    if (photoUrls.length < 3) {
+      setGenerationError(
+        "We need at least 3 uploaded photos to generate. Go back and add more.",
+      );
+      setScreen("loading");
+      return;
+    }
+
+    // Reset prior generation state in case the user regenerated.
+    setGeneratedImages([]);
+    setReadyCount(0);
+    setGenerationError(null);
+    setRegenCount(0);
+    setScreen("loading");
+
+    const requestBody = {
+      photoUrls,
+      style: selections.style,
+      attire: selections.attire,
+      lighting: selections.lighting,
+      background: selections.background,
+    };
+
+    // Fire 6 parallel calls. Each resolves independently.
+    const calls = Array.from({ length: TOTAL_HEADSHOTS }, async (_, index) => {
+      try {
+        const response = await fetch("/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestBody),
+        });
+        if (!response.ok) {
+          const err = (await response.json().catch(() => ({}))) as { error?: string };
+          throw new Error(err.error || `HTTP ${response.status}`);
+        }
+        const data = (await response.json()) as { image: string };
+        // Write this image into its fixed slot AND bump the counter. Using
+        // functional setState so the six overlapping callbacks compose cleanly.
+        setGeneratedImages((prev) => {
+          const next = [...prev];
+          next[index] = data.image;
+          return next;
+        });
+        setReadyCount((n) => n + 1);
+        return data.image;
+      } catch (err) {
+        // Swallow per-call errors — we'll surface them only if ALL 6 fail.
+        return null;
+      }
+    });
+
+    const results = await Promise.all(calls);
+    const successCount = results.filter((r) => r !== null).length;
+
+    if (successCount === 0) {
+      setGenerationError(
+        "All 6 generations failed. Please try again — if it keeps happening, check your uploaded photos are clear headshots.",
+      );
+      return;
+    }
+
+    // At least one succeeded → move on to the grid even if some failed. The
+    // grid renders a "generation failed" placeholder for any missing slots.
+    setScreen("grid");
   };
 
   return (
@@ -1383,15 +1744,25 @@ export default function App() {
       )}
       {screen === "style" && (
         <StyleScreen
-          onGenerate={() => {
-            setRegenCount(0);
-            setScreen("grid");
-          }}
+          onGenerate={handleGenerate}
           onBack={() => setScreen("upload")}
+        />
+      )}
+      {screen === "loading" && (
+        <LoadingScreen
+          readyCount={readyCount}
+          readyImages={generatedImages}
+          totalCount={TOTAL_HEADSHOTS}
+          errorMessage={generationError}
+          onBack={() => {
+            setGenerationError(null);
+            setScreen("style");
+          }}
         />
       )}
       {screen === "grid" && (
         <GridScreen
+          images={generatedImages}
           onCheckout={(n) => {
             setCartCount(n);
             setScreen("checkout");
