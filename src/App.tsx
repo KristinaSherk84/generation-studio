@@ -1,5 +1,16 @@
 import { useState, type CSSProperties, type ReactNode } from "react";
 import { Upload, Check, X, ArrowLeft, Mail } from "lucide-react";
+import { upload } from "@vercel/blob/client";
+
+// A photo the user has picked on the Upload screen. Lives in App-level state
+// so the Blob URLs survive navigating forward into Style / Grid / etc.
+export type UploadedPhoto = {
+  id: string;                        // local unique id, stable across rerenders
+  localPreview: string;              // object URL for instant thumbnail
+  blobUrl: string | null;            // populated when upload to Blob completes
+  status: "uploading" | "done" | "error";
+  errorMessage: string | null;
+};
 
 // Design tokens — strict grey palette per brief.
 // Do not add colors, gradients, or shadows without updating the brief first.
@@ -240,20 +251,89 @@ const Landing = ({ onStart }: LandingProps) => (
 type UploadScreenProps = {
   onNext: () => void;
   onBack: () => void;
+  photos: UploadedPhoto[];
+  setPhotos: React.Dispatch<React.SetStateAction<UploadedPhoto[]>>;
 };
 
-const UploadScreen = ({ onNext, onBack }: UploadScreenProps) => {
-  const [files, setFiles] = useState<File[]>([]);
+// Small helper to generate a stable-ish per-file id without pulling in uuid.
+const makePhotoId = () =>
+  `p_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+
+const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) => {
+  // Upload files one at a time to Vercel Blob via our /api/upload endpoint.
+  // Each photo flows through three states: uploading → done (with blobUrl) or error.
+  const handleNewFiles = (incoming: File[]) => {
+    const remainingSlots = 8 - photos.length;
+    if (remainingSlots <= 0) return;
+    const batch = incoming.slice(0, remainingSlots);
+
+    // Optimistically add placeholders so the thumbnails appear instantly.
+    const placeholders: UploadedPhoto[] = batch.map((file) => ({
+      id: makePhotoId(),
+      localPreview: URL.createObjectURL(file),
+      blobUrl: null,
+      status: "uploading",
+      errorMessage: null,
+    }));
+    setPhotos((prev) => [...prev, ...placeholders]);
+
+    // Kick off each upload in parallel and update the matching placeholder.
+    placeholders.forEach((placeholder, idx) => {
+      const file = batch[idx];
+      upload(file.name, file, {
+        access: "public",
+        handleUploadUrl: "/api/upload",
+      })
+        .then((result) => {
+          setPhotos((prev) =>
+            prev.map((p) =>
+              p.id === placeholder.id
+                ? { ...p, status: "done", blobUrl: result.url }
+                : p,
+            ),
+          );
+        })
+        .catch((err: unknown) => {
+          const message =
+            err instanceof Error ? err.message : "Upload failed. Try again.";
+          setPhotos((prev) =>
+            prev.map((p) =>
+              p.id === placeholder.id
+                ? { ...p, status: "error", errorMessage: message }
+                : p,
+            ),
+          );
+        });
+    });
+  };
 
   const onDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
-    const dropped = Array.from(e.dataTransfer.files).slice(0, 8 - files.length);
-    setFiles([...files, ...dropped]);
+    handleNewFiles(Array.from(e.dataTransfer.files));
   };
   const onPick = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const picked = Array.from(e.target.files ?? []).slice(0, 8 - files.length);
-    setFiles([...files, ...picked]);
+    handleNewFiles(Array.from(e.target.files ?? []));
+    // Reset the input so picking the same file again still triggers onChange.
+    e.target.value = "";
   };
+  const removePhoto = (id: string) => {
+    setPhotos((prev) => prev.filter((p) => p.id !== id));
+  };
+
+  const uploadingCount = photos.filter((p) => p.status === "uploading").length;
+  const doneCount = photos.filter((p) => p.status === "done").length;
+  const hasError = photos.some((p) => p.status === "error");
+  const enoughPhotos = doneCount >= 3;
+  const canContinue = enoughPhotos && uploadingCount === 0;
+
+  let ctaLabel: string;
+  if (uploadingCount > 0) {
+    ctaLabel = `Uploading ${uploadingCount}…`;
+  } else if (!enoughPhotos) {
+    ctaLabel = `Upload ${3 - doneCount} more to continue`;
+  } else {
+    ctaLabel = "Continue to style selection";
+  }
 
   return (
     <div style={{ maxWidth: 720, margin: "0 auto", padding: "64px 32px", ...font }}>
@@ -286,7 +366,42 @@ const UploadScreen = ({ onNext, onBack }: UploadScreenProps) => {
       >
         Upload your photos
       </h2>
-      <p style={{ fontSize: 15, color: C.mediumGrey, marginTop: 12, lineHeight: 1.6 }}>
+
+      <div
+        style={{
+          marginTop: 20,
+          padding: "20px 24px",
+          background: C.white,
+          border: `1px solid ${C.border}`,
+          borderRadius: 8,
+        }}
+      >
+        <div
+          style={{
+            fontSize: 22,
+            fontWeight: 500,
+            color: C.dark,
+            lineHeight: 1.3,
+            letterSpacing: -0.3,
+          }}
+        >
+          Upload a minimum of 3 photos.
+        </div>
+        <div
+          style={{
+            fontSize: 22,
+            fontWeight: 500,
+            color: C.dark,
+            lineHeight: 1.3,
+            letterSpacing: -0.3,
+            marginTop: 8,
+          }}
+        >
+          Crop tightly to your face, head, and torso for best results.
+        </div>
+      </div>
+
+      <p style={{ fontSize: 15, color: C.mediumGrey, marginTop: 16, lineHeight: 1.6 }}>
         3 to 8 photos works best. Faces clearly visible, varied angles and expressions.
       </p>
 
@@ -309,19 +424,20 @@ const UploadScreen = ({ onNext, onBack }: UploadScreenProps) => {
           Drop photos here, or click to browse
         </div>
         <div style={{ fontSize: 13, color: C.mediumGrey, marginTop: 6 }}>
-          JPG or PNG · {files.length}/8 uploaded
+          JPG or PNG · {photos.length}/8 added
+          {uploadingCount > 0 && ` · ${uploadingCount} uploading`}
         </div>
         <input
           id="file-input"
           type="file"
           multiple
-          accept="image/*"
+          accept="image/jpeg,image/png,image/webp"
           onChange={onPick}
           style={{ display: "none" }}
         />
       </div>
 
-      {files.length > 0 && (
+      {photos.length > 0 && (
         <div
           style={{
             display: "grid",
@@ -330,9 +446,9 @@ const UploadScreen = ({ onNext, onBack }: UploadScreenProps) => {
             marginTop: 24,
           }}
         >
-          {files.map((f, i) => (
+          {photos.map((p) => (
             <div
-              key={i}
+              key={p.id}
               style={{
                 position: "relative",
                 aspectRatio: "1",
@@ -342,12 +458,61 @@ const UploadScreen = ({ onNext, onBack }: UploadScreenProps) => {
               }}
             >
               <img
-                src={URL.createObjectURL(f)}
+                src={p.localPreview}
                 alt=""
-                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                  opacity: p.status === "done" ? 1 : 0.55,
+                }}
               />
+
+              {p.status === "uploading" && (
+                <div
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: C.white,
+                    fontSize: 12,
+                    fontWeight: 500,
+                    background: "rgba(44, 44, 42, 0.35)",
+                  }}
+                >
+                  Uploading…
+                </div>
+              )}
+
+              {p.status === "error" && (
+                <div
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: C.white,
+                    fontSize: 11,
+                    fontWeight: 500,
+                    textAlign: "center",
+                    padding: 8,
+                    background: "rgba(44, 44, 42, 0.65)",
+                  }}
+                  title={p.errorMessage ?? "Upload failed"}
+                >
+                  Upload failed
+                  <div style={{ fontSize: 10, marginTop: 4, opacity: 0.8 }}>
+                    Remove & try again
+                  </div>
+                </div>
+              )}
+
               <button
-                onClick={() => setFiles(files.filter((_, j) => j !== i))}
+                onClick={() => removePhoto(p.id)}
                 style={{
                   position: "absolute",
                   top: 6,
@@ -371,6 +536,22 @@ const UploadScreen = ({ onNext, onBack }: UploadScreenProps) => {
         </div>
       )}
 
+      {hasError && (
+        <div
+          style={{
+            marginTop: 16,
+            fontSize: 13,
+            color: C.dark,
+            background: C.white,
+            border: `1px solid ${C.border}`,
+            borderRadius: 8,
+            padding: "10px 14px",
+          }}
+        >
+          One or more photos didn't upload. Remove them with the × and try again.
+        </div>
+      )}
+
       <PhotogTip style={{ marginTop: 24 }}>
         Good light beats everything. Face a window, keep shadows off the face, and skip heavy
         filters — the AI reads what's actually there. Varied expressions give the generator room to
@@ -378,10 +559,8 @@ const UploadScreen = ({ onNext, onBack }: UploadScreenProps) => {
       </PhotogTip>
 
       <div style={{ marginTop: 32 }}>
-        <Button onClick={onNext} disabled={files.length < 3} full>
-          {files.length < 3
-            ? `Upload ${3 - files.length} more to continue`
-            : "Continue to style selection"}
+        <Button onClick={onNext} disabled={!canContinue} full>
+          {ctaLabel}
         </Button>
       </div>
     </div>
@@ -1169,12 +1348,16 @@ export default function App() {
   const [email, setEmail] = useState("");
   const [regenCount, setRegenCount] = useState(0);
   const [showPaywall, setShowPaywall] = useState(false);
+  // Photos are lifted to App scope so the Blob URLs survive navigating forward
+  // into Style / Grid / Checkout. Generation in Step 4 will read from here.
+  const [photos, setPhotos] = useState<UploadedPhoto[]>([]);
   const MAX_REGENS = 2;
 
   const reset = () => {
     setScreen("landing");
     setCartCount(0);
     setRegenCount(0);
+    setPhotos([]);
   };
 
   const handleRegenerate = () => {
@@ -1191,7 +1374,12 @@ export default function App() {
 
       {screen === "landing" && <Landing onStart={() => setScreen("upload")} />}
       {screen === "upload" && (
-        <UploadScreen onNext={() => setScreen("style")} onBack={() => setScreen("landing")} />
+        <UploadScreen
+          onNext={() => setScreen("style")}
+          onBack={() => setScreen("landing")}
+          photos={photos}
+          setPhotos={setPhotos}
+        />
       )}
       {screen === "style" && (
         <StyleScreen
