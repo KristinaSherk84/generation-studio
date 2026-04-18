@@ -3,8 +3,8 @@
  *
  * Takes reference photo URLs (already uploaded to Vercel Blob) plus the user's
  * Style / Attire / Lighting / Background selections, assembles a prompt using
- * Kristi's approved v2 prompt framework, and calls Google Gemini 3 Pro Image
- * to generate six professional headshot variations.
+ * Kristi's approved v2 prompt framework, and calls Google Gemini Flash Image
+ * (Nano Banana) to generate six professional headshot variations.
  *
  * Source of truth for the prompt wording: `prompt-framework-v2.md` at the
  * repo root (approved 2026-04-17). If you edit the wording here, edit the
@@ -160,7 +160,11 @@ async function generateOneHeadshot(
   photos: InlineImage[],
 ): Promise<string> {
   const response = await ai.models.generateContent({
-    model: "gemini-3-pro-image-preview",
+    // Switched from gemini-3-pro-image-preview (Nano Banana Pro) to Flash on
+    // 2026-04-18 due to rate limits (429s) on fresh projects at Tier 1.
+    // Flash has generous Tier 1 limits and still produces commercial-grade
+    // headshots. Can switch back to Pro later once spend qualifies for Tier 2.
+    model: "gemini-2.5-flash-image-preview",
     contents: [
       {
         role: "user",
@@ -172,10 +176,9 @@ async function generateOneHeadshot(
         ],
       },
     ],
-    // Nano Banana Pro requires these config options to actually return an image.
-    // Without responseModalities: ['IMAGE'], the API returns text only (or errors).
-    // aspectRatio 3:4 is the closest supported portrait ratio to the 4:5 grid card.
-    // imageSize 2K hits our 2048px spec from Block 7 Technical.
+    // responseModalities is required — without it the API returns text only.
+    // imageConfig controls aspect ratio and resolution; 3:4 matches our grid
+    // card and 2K hits the 2048px spec from Block 7 Technical.
     config: {
       responseModalities: ["TEXT", "IMAGE"],
       imageConfig: {
