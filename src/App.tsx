@@ -149,11 +149,30 @@ const Landing = ({ onStart }: LandingProps) => (
         letterSpacing: 2,
         color: C.mediumGrey,
         textTransform: "uppercase",
-        marginBottom: 24,
+        marginBottom: 16,
         fontWeight: 500,
       }}
     >
       Made by an actual headshot photographer
+    </div>
+    {/* Speed-focused marketing badge. Generation Studio generates images in
+        ~2 minutes vs. the 30–60 minute training step other AI headshot apps
+        require — this callout leans into that differentiation. */}
+    <div
+      style={{
+        display: "inline-block",
+        background: C.dark,
+        color: C.white,
+        fontSize: 11,
+        letterSpacing: 2,
+        textTransform: "uppercase",
+        padding: "8px 16px",
+        borderRadius: 999,
+        fontWeight: 600,
+        marginBottom: 24,
+      }}
+    >
+      Instant · No wait · Ready in 2 minutes
     </div>
     <h1
       style={{
@@ -165,9 +184,9 @@ const Landing = ({ onStart }: LandingProps) => (
         letterSpacing: -1,
       }}
     >
-      Your professional headshot.
+      Instant Professional Headshots.
       <br />
-      Only pay for what looks like you.
+      Only pay for headshots you like.
     </h1>
     <p
       style={{
@@ -178,8 +197,9 @@ const Landing = ({ onStart }: LandingProps) => (
         maxWidth: 560,
       }}
     >
-      Upload a few photos, pick a style, and get six professional-grade headshots at 2K resolution.
-      You only pay for the ones you actually want — no subscriptions, no surprises.
+      Upload a few photos, pick a style, and in about 2 minutes you'll have six professional-grade
+      headshots at 2K resolution. No 30-minute waits, no model training — just instant results. You
+      only pay for the ones you actually want — no subscriptions, no surprises.
     </p>
 
     <div
