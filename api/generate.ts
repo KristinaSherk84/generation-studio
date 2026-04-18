@@ -172,6 +172,17 @@ async function generateOneHeadshot(
         ],
       },
     ],
+    // Nano Banana Pro requires these config options to actually return an image.
+    // Without responseModalities: ['IMAGE'], the API returns text only (or errors).
+    // aspectRatio 3:4 is the closest supported portrait ratio to the 4:5 grid card.
+    // imageSize 2K hits our 2048px spec from Block 7 Technical.
+    config: {
+      responseModalities: ["TEXT", "IMAGE"],
+      imageConfig: {
+        aspectRatio: "3:4",
+        imageSize: "2K",
+      },
+    },
   });
 
   const candidate = response.candidates?.[0];
