@@ -64,7 +64,12 @@ type InlineImage = { mimeType: string; data: string };
 
 const BLOCK_1_IDENTITY = `Generate a professional headshot of the person shown in the reference photos. Preserve their facial features with absolute precision: face shape, bone structure, eye shape and color, nose, mouth, hairline, skin tone, age, and any distinguishing marks. You may apply the subtle, flattering retouching a professional photographer would do in post-production: up to approximately 5% overall refinement (light skin smoothing while preserving pores and real skin texture, subtle softening of under-eye shadows), and up to approximately 10% structural refinement to the jawline or any double chin if present. Do not exceed those amounts. The goal is to photograph this specific person in a new setting — not to produce a generic, plastic, smooth, attractive, emotionless face that vaguely resembles them. If in doubt, err toward realism over polish. Retain natural skin texture and add it in if not present in the uploaded reference photos. If any reference photo appears to have been taken with a wide-angle lens (phone selfies commonly distort the nose and mid-face), correct that distortion in the generated image so the face appears as if photographed with a prime 85mm or 135mm portrait lens on a full-frame camera — slight compression of features, natural proportions, no bulging nose or elongated jaw.`;
 
-const BLOCK_2_COMPOSITION = `Frame as a professional business headshot. The specific body angle and crop are specified in the variation block at the end of this prompt — follow those instructions precisely. General rules: eye line positioned on the upper third of the frame, strong posture without stiffness, classic subject-to-lens relationship (head rotated slightly back toward the lens) avoiding the flatness of a full-frontal pose.`;
+const BLOCK_2_COMPOSITION = `Frame as a professional business headshot. The specific body angle and crop are specified in the variation block at the end of this prompt — follow those instructions precisely. General rules:
+- Eye line positioned on the upper third of the frame. The subject's eyes should sit approximately one-third of the way down from the top edge of the image — NOT centered vertically.
+- Minimal headroom above the top of the head. The space between the top of the subject's hair and the top edge of the frame should be small — approximately 5–8% of the total frame height. The top of the head must nearly reach the top of the frame. Do NOT leave large empty space above the head.
+- The subject's face should occupy the TOP HALF of the frame. The shoulders/chest/body live in the bottom half.
+- Strong posture without stiffness. Classic subject-to-lens relationship (head rotated slightly back toward the lens), avoiding the flatness of a full-frontal pose.
+- Crop tightly per the variation block's "Framing" instruction. If the variation says "from just above the top of the head to the collarbone," the top of the head should be right near the top edge — not floating in the middle of the frame.`;
 
 // Block 3 Style base text (no background) per style.
 const BLOCK_3_STYLE_BASE: Record<Style, string> = {
@@ -91,7 +96,10 @@ function buildBlock3Style(style: Style, variationIndex: number): string {
 }
 
 const BLOCK_4_ATTIRE: Record<Attire, string> = {
-  formal: `Attire: Suit jacket, crisp collared shirt. Tie optional based on what flatters the subject's face shape and the overall style. Neutral suit colors (charcoal, navy, black). Well-tailored, not boxy.`,
+  formal: `Attire: A polished formal business look, tailored to the subject's apparent gender as determined from the reference photos.
+- If the subject appears to be a MAN: a well-tailored suit jacket in a neutral color (charcoal, navy, or black) over a crisp collared dress shirt. A necktie is optional based on what flatters the subject's face shape and the overall style.
+- If the subject appears to be a WOMAN: a well-tailored slim-fit blazer in a neutral color (charcoal, navy, or black) over a professional blouse, silk top, or fine knit top with a clean, feminine neckline (crew neck, V-neck, open collar, or tasteful scoop). NEVER a necktie. NEVER a men's business shirt with a men's tie. The silhouette should read clearly as women's business attire — softer shoulder, feminine cut, tailored to a woman's frame.
+Well-tailored and intentional in either case — not boxy, not ill-fitting.`,
   casual: `Attire: Smart professional attire without a full suit. Options: blazer over an open-collar shirt, knit polo, tailored sweater, or structured blouse. Relaxed but intentional. Favor attire that creates vertical lines guiding the viewer's eye toward the face — a suit jacket, a dark cardigan forming a V-shape, or a structured collar.`,
   keep: `Attire: Preserve the clothing visible in the reference photos as faithfully as possible. Do not change the garment type, color, neckline, or style.`,
 };

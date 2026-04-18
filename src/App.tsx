@@ -1247,30 +1247,41 @@ const GridScreen = ({
                       display: "block",
                     }}
                   />
-                  {/* Watermark overlay — removed after checkout (Step 6 will
-                      regenerate unwatermarked 2K files server-side). */}
+                  {/* Watermark overlay — a tiled, diagonal grid of repeating
+                      "WATERMARK" text that fully blankets the thumbnail so it's
+                      physically impossible to crop out without obscuring the
+                      face. Removed after checkout when Step 6 regenerates the
+                      unwatermarked 2K files server-side. Future: swap the text
+                      for Kristina Sherk's logo mark once one exists. */}
                   <div
                     style={{
                       position: "absolute",
-                      inset: 0,
+                      inset: "-25%",
                       display: "flex",
+                      flexDirection: "column",
+                      justifyContent: "space-between",
                       alignItems: "center",
-                      justifyContent: "center",
                       pointerEvents: "none",
+                      transform: "rotate(-30deg)",
+                      transformOrigin: "center",
+                      overflow: "hidden",
                     }}
                   >
-                    <div
-                      style={{
-                        fontSize: 11,
-                        color: "rgba(255,255,255,0.55)",
-                        textShadow: "0 1px 2px rgba(0,0,0,0.4)",
-                        transform: "rotate(-30deg)",
-                        letterSpacing: 2,
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      WATERMARK · WATERMARK · WATERMARK
-                    </div>
+                    {Array.from({ length: 10 }).map((_, row) => (
+                      <div
+                        key={row}
+                        style={{
+                          fontSize: 10,
+                          color: "rgba(255,255,255,0.55)",
+                          textShadow: "0 1px 1px rgba(0,0,0,0.35)",
+                          letterSpacing: 1.5,
+                          whiteSpace: "nowrap",
+                          fontWeight: 600,
+                        }}
+                      >
+                        WATERMARK · WATERMARK · WATERMARK · WATERMARK · WATERMARK · WATERMARK
+                      </div>
+                    ))}
                   </div>
                 </>
               ) : (
