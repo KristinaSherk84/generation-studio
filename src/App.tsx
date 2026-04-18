@@ -1273,23 +1273,29 @@ const GridScreen = ({
                   Generation failed. Try regenerating.
                 </div>
               )}
-              {picked && (
+              {/* Selection indicator — always shown when there's a photo.
+                  Unselected = translucent empty circle (affordance that it CAN
+                  be selected). Selected = filled dark circle with checkmark. */}
+              {src && (
                 <div
                   style={{
                     position: "absolute",
                     top: 10,
                     right: 10,
-                    background: C.dark,
+                    background: picked ? C.dark : "rgba(255, 255, 255, 0.35)",
                     color: C.white,
+                    border: picked ? "none" : "1.5px solid rgba(255, 255, 255, 0.9)",
+                    boxShadow: picked ? "none" : "0 1px 3px rgba(0,0,0,0.25)",
                     borderRadius: "50%",
                     width: 28,
                     height: 28,
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
+                    transition: "background 0.15s",
                   }}
                 >
-                  <Check size={16} />
+                  {picked && <Check size={16} />}
                 </div>
               )}
             </div>
