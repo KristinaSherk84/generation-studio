@@ -164,7 +164,7 @@ async function generateOneHeadshot(
     // 2026-04-18 due to rate limits (429s) on fresh projects at Tier 1.
     // Flash has generous Tier 1 limits and still produces commercial-grade
     // headshots. Can switch back to Pro later once spend qualifies for Tier 2.
-    model: "gemini-2.5-flash-image-preview",
+    model: "gemini-2.5-flash-image",
     contents: [
       {
         role: "user",
@@ -261,6 +261,15 @@ export default async function handler(
 
     return res.status(200).json({ image });
   } catch (error) {
+    // Log full error details to Vercel Runtime Logs so we can see exactly what
+    // Google returned (status, message, body). The status-only view in the
+    // "External APIs" widget hides the body.
+    console.error("=== /api/generate FAILED ===");
+    console.error("Error type:", error?.constructor?.name);
+    console.error("Error message:", error instanceof Error ? error.message : String(error));
+    if (error && typeof error === "object") {
+      console.error("Error JSON:", JSON.stringify(error, Object.getOwnPropertyNames(error)));
+    }
     const message = error instanceof Error ? error.message : "Generation failed";
     return res.status(500).json({ error: message });
   }
