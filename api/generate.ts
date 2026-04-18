@@ -66,14 +66,29 @@ const BLOCK_1_IDENTITY = `Generate a professional headshot of the person shown i
 
 const BLOCK_2_COMPOSITION = `Frame as a professional business headshot. The specific body angle and crop are specified in the variation block at the end of this prompt — follow those instructions precisely. General rules: eye line positioned on the upper third of the frame, strong posture without stiffness, classic subject-to-lens relationship (head rotated slightly back toward the lens) avoiding the flatness of a full-frontal pose.`;
 
-const BLOCK_3_STYLE: Record<Style, string> = {
+// Block 3 Style base text (no background) per style.
+const BLOCK_3_STYLE_BASE: Record<Style, string> = {
   corporate: `Style: Clean, neutral, trustworthy. Modern corporate LinkedIn aesthetic. Subtle confidence, approachable but professional — senior individual contributor at a Fortune 500, director-level energy. Background matches the color specified below at approximately 80% fidelity with subtle spot-and-gradient variation within the single image (no hard edges, soft vignette). Absolutely zero expressionless eyes. The eyes must be realistic, active, engaged, and smiling.`,
-  creative: `Style: Warm, approachable, personable. Softer edges than corporate. Hints of personality — a senior creative, a consultant, or a thought leader who does keynote talks. Less "Wall Street," more "TED stage." Background must be as blurry and creamy as possible, as if photographed with a prime 135mm lens at f/1.4 with the background placed 30+ feet behind the subject. Choose ONE of the following TWO background environments for this photograph:
-(1) OUTDOOR TREES: A distant natural setting — trees and foliage 30+ feet behind the subject — photographed with extreme creamy bokeh. Trees must completely dissolve into abstract washes of green and gold — ABSOLUTELY NO identifiable branches, leaves, trunks, or specific objects. Dreamy, painterly color fields only. Imagine the most extreme background blur you have ever seen.
-(2) INDUSTRIAL OFFICE: A bright, modern industrial office interior — exposed concrete, steel beams, polished wood, large windows — completely flooded with natural daylight. Heavily blurred so no specific object is recognizable. Airy, open, minimalist feel with soft grey, white, and light wood tones.
-Pick whichever of the two options will contrast the subject's hair color and skin tone best so the subject pops clearly off the background. Absolutely zero expressionless eyes. The expression must be realistic, active, engaged, and smiling.`,
+  creative: `Style: Warm, approachable, personable. Softer edges than corporate. Hints of personality — a senior creative, a consultant, or a thought leader who does keynote talks. Less "Wall Street," more "TED stage." Absolutely zero expressionless eyes. The expression must be realistic, active, engaged, and smiling.`,
   executive: `Style: Bold, authoritative, commanding. Strong presence — reads as "in charge." Darker tones, higher contrast, more gravitas — C-suite or board member energy. Background is deep and moody: near-black charcoal, deep gradient to black at the edges, or dark architectural backdrop softly blurred. Hair rim light is essential for separation. Directional lighting is welcome (see lighting rule below), but the downward-facing planes of the face must never fall into deep shadow — the eye sockets, under the nose, the nasolabial folds, and under the chin all stay well-filled so the subject's eyes are clearly visible and expressive. The realistic expression leans fierce and captivating rather than warm-and-smiling: "ready to take on the world," the knowing look that says "I have a secret I'm not telling you," a confident realistic half-smile that pulls the viewer in.`,
 };
+
+// Creative-only backgrounds. The frontend passes variationIndex 0-5; even
+// indices get OUTDOOR TREES, odd indices get INDUSTRIAL OFFICE — that way the
+// 6 generated photos always include a 3+3 mix rather than leaving it to
+// stochastic sampling (which was producing all-trees batches).
+const CREATIVE_BG_TREES = `Background: A distant outdoor natural setting, very bokeh heavy — trees and foliage placed 50+ feet behind the subject — photographed with the most extreme creamy bokeh imaginable (as if shot on a 200mm lens at f/1.2 on a full-frame camera). The background must be SO heavily blurred that you CANNOT identify any specific tree, trunk, branch, or leaf. What should be visible: large creamy bokeh orbs, abstract painterly washes of green and gold, soft dappled highlights. What must NOT be visible: any recognizable tree, branch structure, leaf shape, or specific object. If a viewer could point to a tree and say "that's an oak," the blur is not strong enough. Think impressionist painting, not photograph of a forest.`;
+
+const CREATIVE_BG_INDUSTRIAL = `Background: A bright, modern industrial office interior — exposed concrete, steel beams, polished wood, large windows flooded with natural daylight. Photographed with extreme bokeh blur (as if shot on a 200mm lens at f/1.2 with the background 40+ feet behind the subject). The background must be SO heavily blurred that NO specific beam, window, wall, surface, or object is identifiable. What should be visible: soft ambient light, abstract geometric washes in light grey, white, and warm wood tones, gentle out-of-focus highlights. What must NOT be visible: any recognizable architectural detail, specific window mullion, visible beam, door, or piece of furniture. Think "ambient light and color washes," not "photo of an office."`;
+
+function buildBlock3Style(style: Style, variationIndex: number): string {
+  if (style !== "creative") {
+    return BLOCK_3_STYLE_BASE[style];
+  }
+  // Even index (0, 2, 4) = trees; odd index (1, 3, 5) = industrial office.
+  const background = variationIndex % 2 === 0 ? CREATIVE_BG_TREES : CREATIVE_BG_INDUSTRIAL;
+  return `${BLOCK_3_STYLE_BASE.creative}\n\n${background}`;
+}
 
 const BLOCK_4_ATTIRE: Record<Attire, string> = {
   formal: `Attire: Suit jacket, crisp collared shirt. Tie optional based on what flatters the subject's face shape and the overall style. Neutral suit colors (charcoal, navy, black). Well-tailored, not boxy.`,
@@ -170,6 +185,8 @@ function buildBlock8(attire: Attire, variationIndex: number): string {
 - Framing: ${flavor.crop}.
 ${outfitLine}
 
+REFERENCE PHOTO USAGE RULE: The uploaded reference photos are provided ONLY so you can learn the subject's facial likeness — face shape, features, hair, skin tone. You MUST NOT copy, sample, or draw inspiration from the reference photos' backgrounds, environments, colors, lighting, or scenes. The new photograph's background and lighting come ENTIRELY from the direction in the prompt above — ignore anything visible behind or around the subject in the reference photos.
+
 IMPORTANT OUTPUT CONSTRAINT: Return exactly ONE single photograph. Do NOT return a grid, contact sheet, collage, multi-panel image, side-by-side comparison, or any composition containing more than one headshot. One photo only. The most important thing is preserving the subject's real likeness from the reference photos.`;
 }
 
@@ -179,7 +196,7 @@ function assemblePrompt(req: GenerateRequest): string {
   const parts: string[] = [
     BLOCK_1_IDENTITY,
     BLOCK_2_COMPOSITION,
-    BLOCK_3_STYLE[req.style],
+    buildBlock3Style(req.style, req.variationIndex),
     BLOCK_4_ATTIRE[req.attire],
     BLOCK_5_LIGHTING[req.lighting],
   ];
