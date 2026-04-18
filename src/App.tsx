@@ -1678,21 +1678,22 @@ export default function App() {
     setRegenCount(0);
     setScreen("loading");
 
-    const requestBody = {
-      photoUrls,
-      style: selections.style,
-      attire: selections.attire,
-      lighting: selections.lighting,
-      background: selections.background,
-    };
-
-    // Fire 6 parallel calls. Each resolves independently.
+    // Fire 6 parallel calls. Each gets a unique variationIndex (0-5) so the
+    // backend can pick a different "flavor" (expression / pose / crop / outfit
+    // detail) per photo and we get six distinct single headshots.
     const calls = Array.from({ length: TOTAL_HEADSHOTS }, async (_, index) => {
       try {
         const response = await fetch("/api/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(requestBody),
+          body: JSON.stringify({
+            photoUrls,
+            style: selections.style,
+            attire: selections.attire,
+            lighting: selections.lighting,
+            background: selections.background,
+            variationIndex: index,
+          }),
         });
         if (!response.ok) {
           const err = (await response.json().catch(() => ({}))) as { error?: string };
