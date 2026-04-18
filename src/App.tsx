@@ -1,5 +1,5 @@
-import { useState, type CSSProperties, type ReactNode } from "react";
-import { Upload, Check, X, ArrowLeft, Mail } from "lucide-react";
+import { useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
+import { Upload, Check, X, ArrowLeft, Mail, RefreshCw, Loader2 } from "lucide-react";
 import { upload } from "@vercel/blob/client";
 
 // A photo the user has picked on the Upload screen. Lives in App-level state
@@ -1130,18 +1130,20 @@ type GridScreenProps = {
   images: string[]; // base64 data URIs returned from /api/generate, one per card
   onCheckout: (count: number) => void;
   onBack: () => void;
-  onRegenerate: () => void;
+  onRegenerateSlot: (index: number) => void;
   regenCount: number;
   maxRegens: number;
+  regeneratingSlots: Set<number>;
 };
 
 const GridScreen = ({
   images,
   onCheckout,
   onBack,
-  onRegenerate,
+  onRegenerateSlot,
   regenCount,
   maxRegens,
+  regeneratingSlots,
 }: GridScreenProps) => {
   const [cart, setCart] = useState<Set<number>>(new Set());
   // Always render 6 slots. If generation returned fewer than 6 (some failed),
@@ -1157,7 +1159,6 @@ const GridScreen = ({
   };
 
   const total = cart.size * 9.99;
-  const canRegen = regenCount < maxRegens;
 
   return (
     <div style={{ maxWidth: 1100, margin: "0 auto", padding: "64px 32px", ...font }}>
@@ -1204,8 +1205,11 @@ const GridScreen = ({
             $9.99 each. Watermark removed after checkout. Full 2K files delivered to your email.
           </p>
         </div>
-        <div style={{ fontSize: 12, color: C.mediumGrey }}>
+        <div style={{ fontSize: 12, color: C.mediumGrey, textAlign: "right" }}>
           Regenerations used: {regenCount} / {maxRegens}
+          <div style={{ fontSize: 11, marginTop: 4, color: C.mediumGrey }}>
+            Don't love one? Click the refresh icon on any photo.
+          </div>
         </div>
       </div>
 
@@ -1220,16 +1224,30 @@ const GridScreen = ({
         {photos.map((i) => {
           const picked = cart.has(i);
           const src = images[i]; // may be undefined if this slot failed to generate
+          const regenerating = regeneratingSlots.has(i);
+          const canRegenThisSlot = !!src && !regenerating && regenCount < maxRegens;
+          const handleRegenClick = (e: MouseEvent) => {
+            e.stopPropagation(); // don't also toggle selection
+            if (!canRegenThisSlot) return;
+            // If the user had this slot selected, unselect it — the image is
+            // about to change so the old pick no longer applies.
+            if (picked) {
+              const next = new Set(cart);
+              next.delete(i);
+              setCart(next);
+            }
+            onRegenerateSlot(i);
+          };
           return (
             <div
               key={i}
-              onClick={() => src && toggle(i)}
+              onClick={() => src && !regenerating && toggle(i)}
               style={{
                 position: "relative",
                 aspectRatio: "4/5",
                 background: C.lightGrey,
                 borderRadius: 8,
-                cursor: src ? "pointer" : "default",
+                cursor: src && !regenerating ? "pointer" : "default",
                 overflow: "hidden",
                 border: `2px solid ${picked ? C.dark : "transparent"}`,
                 transition: "border-color 0.15s",
@@ -1329,6 +1347,73 @@ const GridScreen = ({
                   {picked && <Check size={16} />}
                 </div>
               )}
+              {/* Per-slot regenerate button — bottom-right corner. Lets users
+                  swap just this one photo instead of burning a bulk regeneration
+                  on all 6. Hidden when budget is exhausted so there's no
+                  confusing disabled state. */}
+              {src && regenCount < maxRegens && !regenerating && (
+                <button
+                  onClick={handleRegenClick}
+                  title="Regenerate this photo"
+                  aria-label="Regenerate this photo"
+                  style={{
+                    position: "absolute",
+                    bottom: 10,
+                    right: 10,
+                    background: "rgba(255, 255, 255, 0.85)",
+                    color: C.dark,
+                    border: "none",
+                    borderRadius: "50%",
+                    width: 32,
+                    height: 32,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: "pointer",
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+                    padding: 0,
+                    transition: "background 0.15s, transform 0.15s",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = C.white;
+                    e.currentTarget.style.transform = "scale(1.08)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "rgba(255, 255, 255, 0.85)";
+                    e.currentTarget.style.transform = "scale(1)";
+                  }}
+                >
+                  <RefreshCw size={16} />
+                </button>
+              )}
+              {/* Loading overlay while this specific slot is regenerating.
+                  Dims the old image and shows a spinner so the user knows
+                  their click was received and this one card is working. */}
+              {regenerating && (
+                <div
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    background: "rgba(0, 0, 0, 0.55)",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 8,
+                    color: C.white,
+                    pointerEvents: "none",
+                    zIndex: 5,
+                  }}
+                >
+                  <Loader2
+                    size={32}
+                    style={{ animation: "spin 1s linear infinite" }}
+                  />
+                  <div style={{ fontSize: 11, letterSpacing: 1, textTransform: "uppercase" }}>
+                    Regenerating…
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}
@@ -1362,14 +1447,20 @@ const GridScreen = ({
           </div>
         </div>
         <div style={{ display: "flex", gap: 12 }}>
-          <Button variant="ghost" onClick={onRegenerate} disabled={!canRegen}>
-            {canRegen ? `Regenerate (${maxRegens - regenCount} left)` : "No regenerations left"}
-          </Button>
           <Button onClick={() => onCheckout(cart.size)} disabled={cart.size === 0}>
             Checkout · ${total.toFixed(2)}
           </Button>
         </div>
       </div>
+
+      {/* Spinner keyframes for the per-slot regeneration loader.
+          Scoped here so the grid is self-contained. */}
+      <style>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   );
 };
@@ -1663,7 +1754,19 @@ export default function App() {
   const [readyCount, setReadyCount] = useState(0);
   // Set only if ALL 6 calls fail, so LoadingScreen can offer a way back.
   const [generationError, setGenerationError] = useState<string | null>(null);
-  const MAX_REGENS = 2;
+  // Remember the last-used Style/Attire/Lighting/Background selections + the
+  // photo URLs that were sent, so per-slot "Regenerate this one" can reuse them
+  // without forcing the user to restart the flow.
+  const [lastSelections, setLastSelections] = useState<StyleSelections | null>(null);
+  const [lastPhotoUrls, setLastPhotoUrls] = useState<string[]>([]);
+  // Which thumbnail slots currently have an in-flight single-slot regeneration.
+  // The GridScreen overlays a loading spinner on these so the rest of the grid
+  // stays interactive.
+  const [regeneratingSlots, setRegeneratingSlots] = useState<Set<number>>(new Set());
+  // Budget of individual-photo regenerations per session. Previously this was
+  // 2 bulk-regens (~12 API calls worth); individual regens are cheaper so we
+  // give users 6 single swaps, which is the same total cost ceiling at most.
+  const MAX_SINGLE_REGENS = 6;
 
   const reset = () => {
     setScreen("landing");
@@ -1673,14 +1776,70 @@ export default function App() {
     setGeneratedImages([]);
     setReadyCount(0);
     setGenerationError(null);
+    setLastSelections(null);
+    setLastPhotoUrls([]);
+    setRegeneratingSlots(new Set());
   };
 
-  const handleRegenerate = () => {
-    if (regenCount >= MAX_REGENS) {
+  // Regenerate a SINGLE thumbnail slot, reusing the most recently-submitted
+  // Style/Attire/Lighting/Background + photo URLs. Fires one /api/generate call
+  // with the slot's variationIndex, and on success overwrites that slot only —
+  // the other 5 thumbnails are untouched.
+  const handleRegenerateSlot = async (index: number) => {
+    if (regenCount >= MAX_SINGLE_REGENS) {
       setShowPaywall(true);
       return;
     }
-    setRegenCount(regenCount + 1);
+    if (!lastSelections || lastPhotoUrls.length < 3) {
+      // Shouldn't happen — we only show the Grid after a successful generate,
+      // which always sets these. Silent no-op safety net.
+      return;
+    }
+    if (regeneratingSlots.has(index)) {
+      return; // already in flight for this slot
+    }
+
+    setRegenCount((n) => n + 1);
+    setRegeneratingSlots((prev) => {
+      const next = new Set(prev);
+      next.add(index);
+      return next;
+    });
+
+    try {
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          photoUrls: lastPhotoUrls,
+          style: lastSelections.style,
+          attire: lastSelections.attire,
+          lighting: lastSelections.lighting,
+          background: lastSelections.background,
+          variationIndex: index,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const data = (await response.json()) as { image: string };
+      setGeneratedImages((prev) => {
+        const next = [...prev];
+        next[index] = data.image;
+        return next;
+      });
+    } catch {
+      // Silent per-slot failure — the old image stays in that slot. The user
+      // can hit regenerate again; we've already burned a budget increment,
+      // which matches Gemini charging us regardless of whether we liked the
+      // result. (Future: surface a small inline error + refund the budget.)
+    } finally {
+      setRegeneratingSlots((prev) => {
+        const next = new Set(prev);
+        next.delete(index);
+        return next;
+      });
+    }
   };
 
   // Kicks off the 6 parallel /api/generate calls. Runs after the user picks
@@ -1713,6 +1872,11 @@ export default function App() {
     setReadyCount(0);
     setGenerationError(null);
     setRegenCount(0);
+    setRegeneratingSlots(new Set());
+    // Persist selections + URLs so per-slot regeneration can reuse them
+    // without asking the user to reselect anything.
+    setLastSelections(selections);
+    setLastPhotoUrls(photoUrls);
     setScreen("loading");
 
     // Fire 6 parallel calls. Each gets a unique variationIndex (0-5) so the
@@ -1806,9 +1970,10 @@ export default function App() {
             setScreen("checkout");
           }}
           onBack={() => setScreen("style")}
-          onRegenerate={handleRegenerate}
+          onRegenerateSlot={handleRegenerateSlot}
           regenCount={regenCount}
-          maxRegens={MAX_REGENS}
+          maxRegens={MAX_SINGLE_REGENS}
+          regeneratingSlots={regeneratingSlots}
         />
       )}
       {screen === "checkout" && (
