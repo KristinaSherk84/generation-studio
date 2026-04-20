@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
 import { Upload, Check, X, ArrowLeft, RefreshCw, Loader2, Download } from "lucide-react";
 import { upload } from "@vercel/blob/client";
 
@@ -1875,31 +1875,110 @@ type DownloadScreenProps = {
   onHome: () => void;
 };
 
+// localStorage key for the "Don't show again" preference on the download
+// instructions modal. Kept here (not inlined) so search can find it if we
+// ever need to reset the preference.
+const DOWNLOAD_INSTRUCTIONS_SUPPRESS_KEY = "gs_download_instructions_suppressed";
+
+// Safely read the "suppress instructions" preference. Wrapped because
+// localStorage can throw in private browsing / strict environments.
+const readSuppressed = (): boolean => {
+  try {
+    return localStorage.getItem(DOWNLOAD_INSTRUCTIONS_SUPPRESS_KEY) === "1";
+  } catch {
+    return false;
+  }
+};
+
 const DownloadScreen = ({ email, photoUrls, onNewStyle, onHome }: DownloadScreenProps) => {
   const [downloaded, setDownloaded] = useState<Set<number>>(new Set());
+  // Track which tile currently has a download in-flight so we can show a
+  // tiny "Preparing…" state on its button. Separate from `downloaded` so a
+  // user re-downloading doesn't lose their completed ✓ state.
+  const [inFlight, setInFlight] = useState<Set<number>>(new Set());
+  // Show the instructions modal automatically on every mount — UNLESS the
+  // user has previously ticked "Don't show again" (persisted in localStorage
+  // so it survives page reloads and future sessions).
+  const [showInstructions, setShowInstructions] = useState(() => !readSuppressed());
+  // Local "Don't show again" checkbox state. Written to localStorage only
+  // when the user dismisses with it ticked — so they can uncheck before
+  // closing if they change their mind.
+  const [suppressNext, setSuppressNext] = useState(false);
 
-  // Use <a download> via a click so the button can both navigate the browser
-  // to the file AND update our local state. Opening in a new tab would lose
-  // the `download` attribute effect on same-origin resources; using a hidden
-  // anchor click keeps it a real file download on every major browser.
-  const handleDownload = (url: string, index: number) => {
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    // Filename the user sees when they save. Blob URLs carry the original
-    // extension in the path, but explicit download attr avoids surprises.
-    const extMatch = url.match(/\.(jpg|jpeg|png|webp)(?:\?|$)/i);
-    const ext = extMatch ? extMatch[1].toLowerCase() : "jpg";
-    anchor.download = `headshot-${index + 1}.${ext}`;
-    anchor.rel = "noopener";
-    // Must be in the DOM for Firefox to honor the download.
-    document.body.appendChild(anchor);
-    anchor.click();
-    document.body.removeChild(anchor);
-    setDownloaded((prev) => {
+  // Dismiss the modal and, if the user ticked the checkbox, persist their
+  // preference so future visits skip the modal.
+  const dismissInstructions = () => {
+    if (suppressNext) {
+      try {
+        localStorage.setItem(DOWNLOAD_INSTRUCTIONS_SUPPRESS_KEY, "1");
+      } catch {
+        // Private browsing or storage blocked — silently ignore; the modal
+        // just won't be suppressed next time, which is acceptable.
+      }
+    }
+    setShowInstructions(false);
+  };
+
+  // Kill body scroll while the instructions modal is up so the background
+  // doesn't fight the overlay on mobile.
+  useEffect(() => {
+    if (showInstructions) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = prev;
+      };
+    }
+  }, [showInstructions]);
+
+  // The naive approach — <a href={url} download> — does NOT work for Vercel
+  // Blob links. The `download` attribute is ignored for cross-origin URLs
+  // unless the server returns Content-Disposition: attachment, which Blob
+  // doesn't by default. So we fetch the bytes ourselves, wrap them in a
+  // same-origin Object URL, and trigger download from THAT. That makes
+  // desktop browsers actually save the file instead of previewing it inline
+  // (or forcing a right-click-save). On iOS Safari, images still open full-
+  // screen — that's the behavior our instructions modal prepares users for.
+  const handleDownload = async (url: string, index: number) => {
+    if (inFlight.has(index)) return;
+    setInFlight((prev) => {
       const next = new Set(prev);
       next.add(index);
       return next;
     });
+    try {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const blob = await response.blob();
+      const extMatch = url.match(/\.(jpg|jpeg|png|webp)(?:\?|$)/i);
+      const ext = extMatch ? extMatch[1].toLowerCase() : "jpg";
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = `headshot-${index + 1}.${ext}`;
+      anchor.rel = "noopener";
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      // Give the browser a beat to kick off the save before we reclaim
+      // the memory. 1s is plenty for even large JPEGs.
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+      setDownloaded((prev) => {
+        const next = new Set(prev);
+        next.add(index);
+        return next;
+      });
+    } catch {
+      // Last-ditch fallback: open the raw URL in a new tab so the user can
+      // right-click-save. Not pretty, but beats a silent failure.
+      window.open(url, "_blank", "noopener");
+    } finally {
+      setInFlight((prev) => {
+        const next = new Set(prev);
+        next.delete(index);
+        return next;
+      });
+    }
   };
 
   return (
@@ -1959,6 +2038,7 @@ const DownloadScreen = ({ email, photoUrls, onNewStyle, onHome }: DownloadScreen
       >
         {photoUrls.map((url, i) => {
           const isDownloaded = downloaded.has(i);
+          const isLoading = inFlight.has(i);
           return (
             <div
               key={i}
@@ -1991,12 +2071,13 @@ const DownloadScreen = ({ email, photoUrls, onNewStyle, onHome }: DownloadScreen
               </div>
               <button
                 onClick={() => handleDownload(url, i)}
+                disabled={isLoading}
                 style={{
                   border: "none",
                   padding: "12px 14px",
                   fontSize: 13,
                   fontWeight: 500,
-                  cursor: "pointer",
+                  cursor: isLoading ? "default" : "pointer",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
@@ -2007,7 +2088,12 @@ const DownloadScreen = ({ email, photoUrls, onNewStyle, onHome }: DownloadScreen
                   ...font,
                 }}
               >
-                {isDownloaded ? (
+                {isLoading ? (
+                  <>
+                    <Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} />
+                    <span>Preparing…</span>
+                  </>
+                ) : isDownloaded ? (
                   <>
                     <Check size={16} color="#2F7A3E" />
                     <span>Downloaded</span>
@@ -2023,6 +2109,15 @@ const DownloadScreen = ({ email, photoUrls, onNewStyle, onHome }: DownloadScreen
           );
         })}
       </div>
+
+      {/* Spinner keyframes so the in-flight button can use the same rotation
+          animation as other loaders across the app. */}
+      <style>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
 
       <div
         style={{
@@ -2046,6 +2141,187 @@ const DownloadScreen = ({ email, photoUrls, onNewStyle, onHome }: DownloadScreen
           </Button>
         </div>
       </div>
+
+      {/* Auto-show instructions the first time DownloadScreen renders.
+          Covers both desktop and mobile behavior in plain, non-technical
+          language — Kristi's audience is photography clients, not devs. */}
+      {showInstructions && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="How to save your headshots"
+          onClick={dismissInstructions}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(44, 44, 42, 0.55)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 200,
+            padding: 24,
+            ...font,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: C.white,
+              borderRadius: 12,
+              padding: 32,
+              maxWidth: 480,
+              width: "100%",
+              maxHeight: "90vh",
+              overflowY: "auto",
+              boxSizing: "border-box",
+            }}
+          >
+            <div
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: "50%",
+                background: C.dark,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                marginBottom: 20,
+              }}
+            >
+              <Download size={22} color={C.white} />
+            </div>
+            <h3
+              style={{
+                fontSize: 22,
+                fontWeight: 500,
+                color: C.dark,
+                margin: 0,
+                letterSpacing: -0.3,
+              }}
+            >
+              How to save your headshots
+            </h3>
+            <p
+              style={{
+                fontSize: 14,
+                color: C.mediumGrey,
+                marginTop: 10,
+                lineHeight: 1.6,
+              }}
+            >
+              A quick heads-up before you tap the Download buttons — saving
+              works a little differently on each device.
+            </p>
+
+            <div
+              style={{
+                marginTop: 24,
+                padding: 16,
+                background: C.pageBg,
+                borderRadius: 8,
+                border: `1px solid ${C.border}`,
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: C.dark,
+                  marginBottom: 8,
+                  textTransform: "uppercase",
+                  letterSpacing: 1,
+                }}
+              >
+                On your phone
+              </div>
+              <div style={{ fontSize: 14, color: C.dark, lineHeight: 1.6 }}>
+                Tapping Download opens the photo full-screen.{" "}
+                <span style={{ fontWeight: 500 }}>
+                  Press and hold the photo
+                </span>
+                , then tap <em>Save to Photos</em> (iPhone) or{" "}
+                <em>Download image</em> (Android). Tap the back arrow to return
+                and save the next one.
+              </div>
+            </div>
+
+            <div
+              style={{
+                marginTop: 12,
+                padding: 16,
+                background: C.pageBg,
+                borderRadius: 8,
+                border: `1px solid ${C.border}`,
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: C.dark,
+                  marginBottom: 8,
+                  textTransform: "uppercase",
+                  letterSpacing: 1,
+                }}
+              >
+                On your computer
+              </div>
+              <div style={{ fontSize: 14, color: C.dark, lineHeight: 1.6 }}>
+                Tapping Download opens the photo in a new tab.{" "}
+                <span style={{ fontWeight: 500 }}>Right-click the photo</span>{" "}
+                and choose <em>Save Image As…</em> to save it to your device.
+              </div>
+            </div>
+
+            <p
+              style={{
+                fontSize: 12,
+                color: C.mediumGrey,
+                marginTop: 20,
+                lineHeight: 1.5,
+              }}
+            >
+              Don't close this page until you've saved every photo you want —
+              this download page is the delivery.
+            </p>
+
+            {/* "Don't show again" checkbox — persists to localStorage when
+                the user dismisses with it ticked. Unticked by default so
+                first-time visitors always see the explanation. */}
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                marginTop: 20,
+                cursor: "pointer",
+                fontSize: 13,
+                color: C.mediumGrey,
+                userSelect: "none",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={suppressNext}
+                onChange={(e) => setSuppressNext(e.target.checked)}
+                style={{
+                  width: 16,
+                  height: 16,
+                  accentColor: C.dark,
+                  cursor: "pointer",
+                }}
+              />
+              Don't show this again
+            </label>
+
+            <div style={{ marginTop: 16 }}>
+              <Button onClick={dismissInstructions} full>
+                Got it, let's go
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
