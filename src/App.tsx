@@ -65,6 +65,155 @@ type PhotogTipProps = {
   style?: CSSProperties;
 };
 
+// Full-screen modal shown the first time the user lands on the Upload screen
+// in a session. Shows photographer's fundamentals before they start uploading
+// so their source photos lead to better generations. Dismiss closes the modal;
+// we track "seen" at the App level so navigating back to Landing and starting
+// over will show it again (fresh session mental model).
+type PhotographerTipsModalProps = {
+  onDismiss: () => void;
+};
+
+const PHOTOG_TIPS = [
+  {
+    title: "Turn off overhead lights.",
+    body: "Face a window. Natural daylight is best — overhead lights cast unflattering shadows under the eyes.",
+  },
+  {
+    title: "No low-res photos.",
+    body: "The AI can only work with what it can see. Blurry, pixelated, or heavily compressed inputs produce blurry, distorted results.",
+  },
+  {
+    title: "Variety matters.",
+    body: "Different expressions, angles, and outfits. Four to eight photos is the sweet spot — more isn't always better.",
+  },
+  {
+    title: "The wider the lens, the more distorted your face.",
+    body: "Have a friend take the photo using the regular (rear) camera on the phone — NOT the selfie camera. Selfie cameras use wide lenses that stretch your nose and face.",
+  },
+];
+
+const PhotographerTipsModal = ({ onDismiss }: PhotographerTipsModalProps) => (
+  <div
+    role="dialog"
+    aria-modal="true"
+    aria-label="Photographer's tips before upload"
+    style={{
+      position: "fixed",
+      inset: 0,
+      background: "rgba(0, 0, 0, 0.85)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 24,
+      zIndex: 1000,
+      ...font,
+    }}
+  >
+    <div
+      style={{
+        background: C.white,
+        borderRadius: 12,
+        padding: "48px 40px",
+        maxWidth: 640,
+        width: "100%",
+        maxHeight: "90vh",
+        overflowY: "auto",
+        boxShadow: "0 20px 60px rgba(0, 0, 0, 0.4)",
+      }}
+    >
+      <div
+        style={{
+          fontSize: 11,
+          letterSpacing: 2,
+          color: C.mediumGrey,
+          textTransform: "uppercase",
+          fontWeight: 500,
+          marginBottom: 12,
+        }}
+      >
+        Photographer's tips
+      </div>
+      <h2
+        style={{
+          fontSize: 28,
+          fontWeight: 500,
+          color: C.dark,
+          margin: "0 0 8px",
+          letterSpacing: -0.5,
+        }}
+      >
+        Before you upload
+      </h2>
+      <p
+        style={{
+          fontSize: 15,
+          color: C.mediumGrey,
+          marginTop: 0,
+          marginBottom: 32,
+          lineHeight: 1.6,
+        }}
+      >
+        A few fundamentals from Kristi — twenty years behind the lens — that'll meaningfully
+        improve the photos the AI gives you back.
+      </p>
+
+      <ol style={{ paddingLeft: 0, listStyle: "none", margin: 0 }}>
+        {PHOTOG_TIPS.map((tip, idx) => (
+          <li
+            key={idx}
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 16,
+              marginBottom: 20,
+              paddingBottom: 20,
+              borderBottom: idx < PHOTOG_TIPS.length - 1 ? `1px solid ${C.border}` : "none",
+            }}
+          >
+            <div
+              style={{
+                flexShrink: 0,
+                width: 32,
+                height: 32,
+                borderRadius: "50%",
+                background: C.dark,
+                color: C.white,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 14,
+                fontWeight: 500,
+              }}
+            >
+              {idx + 1}
+            </div>
+            <div>
+              <div
+                style={{
+                  fontSize: 16,
+                  fontWeight: 500,
+                  color: C.dark,
+                  marginBottom: 4,
+                }}
+              >
+                {tip.title}
+              </div>
+              <div style={{ fontSize: 14, color: C.mediumGrey, lineHeight: 1.6 }}>{tip.body}</div>
+            </div>
+          </li>
+        ))}
+      </ol>
+
+      <div style={{ marginTop: 32 }}>
+        <Button onClick={onDismiss} full>
+          Got it — let's upload
+        </Button>
+      </div>
+    </div>
+  </div>
+);
+
 const PhotogTip = ({ children, style = {} }: PhotogTipProps) => (
   <div
     style={{
@@ -590,8 +739,8 @@ const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) 
 // -------------------- Screen 3: Style Selection --------------------
 
 const STYLES = [
-  { id: "corporate", name: "Corporate", desc: "Clean neutral bg", swatch: "#D3D1C7" },
   { id: "creative", name: "Creative", desc: "Soft creamy bokeh", swatch: "#9C9A91", bokeh: true },
+  { id: "corporate", name: "Corporate", desc: "Clean neutral bg", swatch: "#D3D1C7" },
   { id: "executive", name: "Executive", desc: "Bold, authoritative", swatch: "#444441" },
 ] as const;
 
@@ -613,6 +762,16 @@ const STUDIO_BGS = [
   { id: "dark", color: "#444441", label: "Dark" },
   { id: "blue", color: "#B5D4F4", label: "Soft blue" },
   { id: "green", color: "#C0DD97", label: "Soft green" },
+  // Rainbow generates 6 different backgrounds instead of the same color six
+  // times — 3 from the above swatches (light grey, dark, blue) plus 3 new
+  // accent colors (warm beige, burgundy, deep teal). Shown as a conic
+  // gradient swatch in the UI so it reads as "all of them" at a glance.
+  {
+    id: "rainbow",
+    color:
+      "conic-gradient(from 0deg, #D3D1C7, #444441, #B5D4F4, #E8D8C0, #8B4049, #2F5C60, #D3D1C7)",
+    label: "Rainbow (all 6 colors)",
+  },
 ] as const;
 
 const ATTIRE = [
@@ -683,7 +842,7 @@ export type StyleSelections = {
   style: "corporate" | "creative" | "executive";
   attire: "formal" | "casual" | "keep";
   lighting: "studio" | "natural" | "dramatic" | "golden";
-  background?: "white" | "lightgrey" | "midgrey" | "dark" | "blue" | "green";
+  background?: "white" | "lightgrey" | "midgrey" | "dark" | "blue" | "green" | "rainbow";
 };
 
 type StyleScreenProps = {
@@ -1265,39 +1424,38 @@ const GridScreen = ({
                       display: "block",
                     }}
                   />
-                  {/* Watermark overlay — a tiled, diagonal grid of repeating
-                      "WATERMARK" text that fully blankets the thumbnail so it's
-                      physically impossible to crop out without obscuring the
-                      face. Removed after checkout when Step 6 regenerates the
+                  {/* Watermark overlay — two diagonal lines of thin text,
+                      one at upper-third height and one at lower-third height.
+                      Light enough not to drown the image, but placed across
+                      the two main focal bands so cropping can't cleanly remove
+                      both. Removed after checkout when Step 6 regenerates the
                       unwatermarked 2K files server-side. Future: swap the text
                       for Kristina Sherk's logo mark once one exists. */}
                   <div
                     style={{
                       position: "absolute",
-                      inset: "-25%",
-                      display: "flex",
-                      flexDirection: "column",
-                      justifyContent: "space-between",
-                      alignItems: "center",
+                      inset: 0,
                       pointerEvents: "none",
-                      transform: "rotate(-30deg)",
-                      transformOrigin: "center",
                       overflow: "hidden",
                     }}
                   >
-                    {Array.from({ length: 10 }).map((_, row) => (
+                    {[33, 67].map((topPercent, row) => (
                       <div
                         key={row}
                         style={{
-                          fontSize: 10,
+                          position: "absolute",
+                          top: `${topPercent}%`,
+                          left: "50%",
+                          transform: "translate(-50%, -50%) rotate(-30deg)",
+                          fontSize: 11,
                           color: "rgba(255,255,255,0.55)",
-                          textShadow: "0 1px 1px rgba(0,0,0,0.35)",
-                          letterSpacing: 1.5,
+                          textShadow: "0 1px 2px rgba(0,0,0,0.4)",
+                          letterSpacing: 2,
                           whiteSpace: "nowrap",
-                          fontWeight: 600,
+                          fontWeight: 400,
                         }}
                       >
-                        WATERMARK · WATERMARK · WATERMARK · WATERMARK · WATERMARK · WATERMARK
+                        WATERMARK · WATERMARK · WATERMARK
                       </div>
                     ))}
                   </div>
@@ -1767,6 +1925,11 @@ export default function App() {
   // 2 bulk-regens (~12 API calls worth); individual regens are cheaper so we
   // give users 6 single swaps, which is the same total cost ceiling at most.
   const MAX_SINGLE_REGENS = 6;
+  // Photographer's tips modal: shown the first time the user arrives at the
+  // Upload screen in a given session. Resets when reset() fires so starting
+  // over from Landing shows it again.
+  const [hasSeenTips, setHasSeenTips] = useState(false);
+  const [showTipsModal, setShowTipsModal] = useState(false);
 
   const reset = () => {
     setScreen("landing");
@@ -1779,6 +1942,22 @@ export default function App() {
     setLastSelections(null);
     setLastPhotoUrls([]);
     setRegeneratingSlots(new Set());
+    setHasSeenTips(false);
+    setShowTipsModal(false);
+  };
+
+  // Landing → Upload: if this is the user's first time landing on Upload in
+  // this session, show the photographer's tips modal as an overlay.
+  const handleStart = () => {
+    setScreen("upload");
+    if (!hasSeenTips) {
+      setShowTipsModal(true);
+    }
+  };
+
+  const handleDismissTips = () => {
+    setShowTipsModal(false);
+    setHasSeenTips(true);
   };
 
   // Regenerate a SINGLE thumbnail slot, reusing the most recently-submitted
@@ -1935,7 +2114,7 @@ export default function App() {
     <div style={{ minHeight: "100vh", background: C.pageBg, ...font }}>
       <Navbar cartCount={cartCount} onLogoClick={reset} />
 
-      {screen === "landing" && <Landing onStart={() => setScreen("upload")} />}
+      {screen === "landing" && <Landing onStart={handleStart} />}
       {screen === "upload" && (
         <UploadScreen
           onNext={() => setScreen("style")}
@@ -1999,6 +2178,10 @@ export default function App() {
       )}
 
       {showPaywall && <PaywallModal onClose={() => setShowPaywall(false)} />}
+
+      {/* Photographer's tips modal — shown once per session on Landing→Upload.
+          Overlays the Upload screen until the user clicks "Got it." */}
+      {showTipsModal && <PhotographerTipsModal onDismiss={handleDismissTips} />}
     </div>
   );
 }

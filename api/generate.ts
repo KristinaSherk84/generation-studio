@@ -42,7 +42,8 @@ type Background =
   | "midgrey"
   | "dark"
   | "blue"
-  | "green";
+  | "green"
+  | "rainbow"; // rainbow = generate each of 6 variations with a different color
 
 type GenerateRequest = {
   photoUrls: string[]; // Vercel Blob URLs from Step 3
@@ -113,7 +114,7 @@ const BLOCK_5_LIGHTING: Record<Lighting, string> = {
 
 // Block 6 is only used for Corporate. Creative and Executive get background
 // direction from Block 3 (self-contained).
-const BLOCK_6_BACKGROUND: Record<Background, string> = {
+const BLOCK_6_BACKGROUND: Record<Exclude<Background, "rainbow">, string> = {
   white: `Background: Seamless white, clean, slight gradient to avoid pure flat. Subject clearly separated from background.`,
   lightgrey: `Background: Neutral light grey seamless, gentle vignette, hint of texture (not solid color), subtle spot-and-gradient variation within the single image.`,
   midgrey: `Background: Medium grey seamless, classic editorial portrait feel, subtle gradient within the single image. Hair light to separate from the background.`,
@@ -121,6 +122,33 @@ const BLOCK_6_BACKGROUND: Record<Background, string> = {
   blue: `Background: Muted dusty blue, tranquil but professional. Not saturated. Subtle spot-and-gradient variation within the single image. Subject must always pop from the background.`,
   green: `Background: Muted sage / moss green, natural and warm without tipping into "outdoor" feel. Subtle spot-and-gradient variation within the single image. Subject must always pop from the background.`,
 };
+
+// Three accent colors used ONLY by Rainbow — they aren't offered as standalone
+// swatches in the Corporate background picker. Kept here so Rainbow has 6
+// distinct colors (3 from BLOCK_6_BACKGROUND above + these 3).
+const BG_BEIGE = `Background: Warm beige / cream seamless, a soft neutral with warm undertones. Subtle spot-and-gradient variation within the single image, gentle vignette. Skin tones should look warm and flattering against it. Subject must pop from the background.`;
+const BG_BURGUNDY = `Background: Deep muted burgundy seamless — a rich, slightly desaturated wine/oxblood tone. Sophisticated, classic, not aggressive. Subtle spot-and-gradient variation within the single image, gentle vignette. Hair rim light to separate the subject from the background.`;
+const BG_TEAL = `Background: Deep muted teal seamless — a cool, refined blue-green, not saturated. Professional editorial feel. Subtle spot-and-gradient variation within the single image. Hair rim light essential for separation.`;
+
+// Rainbow chooses a different color for each variationIndex so a single batch
+// of 6 generations returns 6 different backgrounds — three from the standard
+// swatches, three new accent colors. The fixed ordering below makes the grid
+// read predictably: light → dark → cool → warm → bold → refined.
+function buildBlock6Background(background: Background, variationIndex: number): string {
+  if (background !== "rainbow") {
+    return BLOCK_6_BACKGROUND[background];
+  }
+  const rainbow = [
+    BLOCK_6_BACKGROUND.lightgrey, // 0: light neutral
+    BLOCK_6_BACKGROUND.dark,      // 1: dark neutral
+    BLOCK_6_BACKGROUND.blue,      // 2: cool (dusty blue)
+    BG_BEIGE,                     // 3: warm neutral
+    BG_BURGUNDY,                  // 4: warm accent
+    BG_TEAL,                      // 5: cool accent
+  ];
+  // Safe fallback: if somehow variationIndex is out of range, default to light grey.
+  return rainbow[variationIndex] ?? BLOCK_6_BACKGROUND.lightgrey;
+}
 
 const BLOCK_7_TECHNICAL = `Technical quality: 2048-pixel resolution, sharp focus on the eyes, eyelashes visible, realistic natural skin texture preserved (no plastic smoothing, no over-softening). Very shallow depth of field — subject's face in perfect focus, shoulders softly falling off, background noticeably blurred. Professional color grading: accurate skin tones, no color cast, slight warmth in shadows. No visible artifacts, no uncanny valley, no AI-tell signs. This is a commercial-grade photograph, extremely realistic — not an illustration, render, or composite.`;
 
@@ -210,9 +238,10 @@ function assemblePrompt(req: GenerateRequest): string {
   ];
 
   // Block 6 Background is ONLY for Corporate. Creative / Executive get their
-  // background direction embedded in Block 3 itself.
+  // background direction embedded in Block 3 itself. Rainbow routes through
+  // buildBlock6Background so each variationIndex gets a different color.
   if (req.style === "corporate" && req.background) {
-    parts.push(BLOCK_6_BACKGROUND[req.background]);
+    parts.push(buildBlock6Background(req.background, req.variationIndex));
   }
 
   parts.push(BLOCK_7_TECHNICAL);
@@ -318,7 +347,7 @@ export default async function handler(
   if (
     body.style === "corporate" &&
     body.background &&
-    !["white", "lightgrey", "midgrey", "dark", "blue", "green"].includes(body.background)
+    !["white", "lightgrey", "midgrey", "dark", "blue", "green", "rainbow"].includes(body.background)
   ) {
     return res.status(400).json({ error: "Invalid background" });
   }
