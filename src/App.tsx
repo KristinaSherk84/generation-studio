@@ -1,5 +1,5 @@
 import { useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
-import { Upload, Check, X, ArrowLeft, Mail, RefreshCw, Loader2 } from "lucide-react";
+import { Upload, Check, X, ArrowLeft, RefreshCw, Loader2, Download } from "lucide-react";
 import { upload } from "@vercel/blob/client";
 
 // A photo the user has picked on the Upload screen. Lives in App-level state
@@ -55,7 +55,7 @@ const Navbar = ({ cartCount = 0, onLogoClick }: NavbarProps) => (
       Generation Studio
     </div>
     <div style={{ fontSize: 14, color: C.dark, fontWeight: 400 }}>
-      Cart ({cartCount})
+      Selected ({cartCount})
     </div>
   </div>
 );
@@ -1287,7 +1287,10 @@ const LoadingScreen = ({
 
 type GridScreenProps = {
   images: string[]; // base64 data URIs returned from /api/generate, one per card
-  onCheckout: (count: number) => void;
+  // Called when the user clicks "Get my photos" — passes the INDICES of the
+  // selected thumbnails so the App can pull the matching base64 images out of
+  // the generated-images array and forward them to /api/deliver.
+  onDeliver: (selectedIndices: number[]) => void;
   onBack: () => void;
   onRegenerateSlot: (index: number) => void;
   regenCount: number;
@@ -1297,7 +1300,7 @@ type GridScreenProps = {
 
 const GridScreen = ({
   images,
-  onCheckout,
+  onDeliver,
   onBack,
   onRegenerateSlot,
   regenCount,
@@ -1316,8 +1319,6 @@ const GridScreen = ({
     else next.add(i);
     setCart(next);
   };
-
-  const total = cart.size * 9.99;
 
   return (
     <div style={{ maxWidth: 1100, margin: "0 auto", padding: "64px 32px", ...font }}>
@@ -1361,7 +1362,7 @@ const GridScreen = ({
             Pick the ones you want
           </h2>
           <p style={{ fontSize: 15, color: C.mediumGrey, marginTop: 12, lineHeight: 1.6 }}>
-            $9.99 each. Watermark removed after checkout. Full 2K files delivered to your email.
+            Tap your favorites. You'll get the clean, unwatermarked 2K files to download on the next screen.
           </p>
         </div>
         <div style={{ fontSize: 12, color: C.mediumGrey, textAlign: "right" }}>
@@ -1597,16 +1598,19 @@ const GridScreen = ({
         }}
       >
         <div>
-          <div style={{ fontSize: 13, color: C.mediumGrey }}>
-            {cart.size} selected · ${total.toFixed(2)}
+          <div style={{ fontSize: 13, color: C.dark, fontWeight: 500 }}>
+            {cart.size} selected
           </div>
           <div style={{ fontSize: 11, color: C.mediumGrey, marginTop: 4 }}>
-            Session fee already paid · No bundles, flat $9.99 each
+            Enter your email on the next screen, then download your clean 2K files.
           </div>
         </div>
         <div style={{ display: "flex", gap: 12 }}>
-          <Button onClick={() => onCheckout(cart.size)} disabled={cart.size === 0}>
-            Checkout · ${total.toFixed(2)}
+          <Button
+            onClick={() => onDeliver(Array.from(cart))}
+            disabled={cart.size === 0}
+          >
+            Get my photos
           </Button>
         </div>
       </div>
@@ -1623,40 +1627,100 @@ const GridScreen = ({
   );
 };
 
-// -------------------- Screen 5: Pay & Deliver --------------------
+// -------------------- Screen 5: Deliver --------------------
+//
+// Beta delivery screen. No Stripe, no email sending. Asks for the user's
+// email (for our marketing archive — we'll send a before/after graphic later)
+// and posts the selected clean 2K images + the reference photo URLs + their
+// style selections to /api/deliver, which:
+//   1. Stores the images in Vercel Blob under deliveries/<id>/photo-N.jpg
+//   2. Stores a manifest.json next to them recording email, selections, and
+//      reference photo URLs
+//   3. Returns public Blob URLs we hand to the next screen as download links.
+//
+// When Stripe gets added post-beta this screen is where that work lands.
 
 type CheckoutScreenProps = {
-  count: number;
-  onComplete: (email: string) => void;
+  // Base64 data URLs of the clean (unwatermarked) 2K images the user picked on
+  // the Grid screen. We forward these to /api/deliver verbatim.
+  selectedImages: string[];
+  // Blob URLs of the reference photos the user uploaded in Step 3. Stored in
+  // the delivery manifest so Kristi can build a "before vs. after" graphic
+  // from the manifest later.
+  referencePhotoUrls: string[];
+  // Style selections that produced these images; recorded in the manifest for
+  // posterity (and to help diagnose if someone reports bad output).
+  selections: StyleSelections;
+  // On success: parent navigates to the download screen with the email the
+  // user typed + the public Blob URLs for the delivered photos.
+  onComplete: (args: { email: string; photoUrls: string[] }) => void;
   onBack: () => void;
 };
 
-const CheckoutScreen = ({ count, onComplete, onBack }: CheckoutScreenProps) => {
+const CheckoutScreen = ({
+  selectedImages,
+  referencePhotoUrls,
+  selections,
+  onComplete,
+  onBack,
+}: CheckoutScreenProps) => {
   const [email, setEmail] = useState("");
   const [processing, setProcessing] = useState(false);
-  const total = count * 9.99;
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const count = selectedImages.length;
 
-  const submit = () => {
-    if (!email.includes("@")) return;
+  // Same regex as api/deliver.ts. Kept in sync deliberately — client-side
+  // check catches typos before we burn a round-trip; server-side check is
+  // the real gate.
+  const emailLooksValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+  const submit = async () => {
+    if (!emailLooksValid || processing) return;
     setProcessing(true);
-    setTimeout(() => onComplete(email), 1400);
+    setErrorMessage(null);
+    try {
+      const response = await fetch("/api/deliver", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          images: selectedImages,
+          referencePhotoUrls,
+          style: selections.style,
+          attire: selections.attire,
+          lighting: selections.lighting,
+          background: selections.background,
+        }),
+      });
+      if (!response.ok) {
+        const err = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(err.error || `Delivery failed (HTTP ${response.status})`);
+      }
+      const data = (await response.json()) as { photoUrls: string[] };
+      onComplete({ email, photoUrls: data.photoUrls });
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : "Delivery failed");
+      setProcessing(false);
+    }
   };
 
   return (
     <div style={{ maxWidth: 560, margin: "0 auto", padding: "64px 32px", ...font }}>
       <button
         onClick={onBack}
+        disabled={processing}
         style={{
           background: "none",
           border: "none",
           color: C.mediumGrey,
-          cursor: "pointer",
+          cursor: processing ? "default" : "pointer",
           fontSize: 13,
           display: "flex",
           alignItems: "center",
           gap: 6,
           marginBottom: 32,
           padding: 0,
+          opacity: processing ? 0.5 : 1,
           ...font,
         }}
       >
@@ -1671,70 +1735,23 @@ const CheckoutScreen = ({ count, onComplete, onBack }: CheckoutScreenProps) => {
           letterSpacing: -0.5,
         }}
       >
-        Checkout
+        Almost there
       </h2>
       <p style={{ fontSize: 15, color: C.mediumGrey, marginTop: 12, lineHeight: 1.6 }}>
-        {count} headshot{count !== 1 ? "s" : ""} at $9.99 each
+        {count} headshot{count !== 1 ? "s" : ""} ready. Drop your email below and
+        we'll take you straight to the download page.
       </p>
 
-      <div
-        style={{
-          background: C.white,
-          border: `1px solid ${C.border}`,
-          borderRadius: 8,
-          padding: 24,
-          marginTop: 32,
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            fontSize: 14,
-            color: C.dark,
-            marginBottom: 12,
-          }}
-        >
-          <div>{count} × $9.99</div>
-          <div>${total.toFixed(2)}</div>
-        </div>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            fontSize: 14,
-            color: C.mediumGrey,
-            marginBottom: 16,
-          }}
-        >
-          <div>Session fee (already paid)</div>
-          <div>$0.00</div>
-        </div>
-        <div
-          style={{
-            borderTop: `1px solid ${C.border}`,
-            paddingTop: 16,
-            display: "flex",
-            justifyContent: "space-between",
-            fontSize: 16,
-            fontWeight: 500,
-            color: C.dark,
-          }}
-        >
-          <div>Total</div>
-          <div>${total.toFixed(2)}</div>
-        </div>
-      </div>
-
-      <div style={{ marginTop: 24 }}>
+      <div style={{ marginTop: 32 }}>
         <label style={{ fontSize: 13, color: C.mediumGrey, fontWeight: 500 }}>
-          Email for delivery
+          Email
         </label>
         <input
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="you@email.com"
+          disabled={processing}
           style={{
             width: "100%",
             padding: "12px 14px",
@@ -1749,101 +1766,233 @@ const CheckoutScreen = ({ count, onComplete, onBack }: CheckoutScreenProps) => {
             ...font,
           }}
         />
-        <div style={{ fontSize: 12, color: C.mediumGrey, marginTop: 8 }}>
-          High-res 2K files will be sent here.
+        <div style={{ fontSize: 12, color: C.mediumGrey, marginTop: 8, lineHeight: 1.5 }}>
+          We'll never spam you. Kristi will use this to send you a before/after
+          graphic you can share.
         </div>
       </div>
 
-      <div
-        style={{
-          marginTop: 24,
-          padding: 16,
-          background: C.white,
-          border: `1px solid ${C.border}`,
-          borderRadius: 8,
-          fontSize: 12,
-          color: C.mediumGrey,
-          lineHeight: 1.6,
-        }}
-      >
-        Stripe payment form appears here in production build.
-      </div>
+      {errorMessage && (
+        <div
+          style={{
+            marginTop: 20,
+            padding: 12,
+            background: "#FDECEC",
+            border: "1px solid #F5C7C5",
+            borderRadius: 8,
+            fontSize: 13,
+            color: "#7A1F1B",
+            lineHeight: 1.5,
+          }}
+        >
+          {errorMessage}
+        </div>
+      )}
 
       <div style={{ marginTop: 24 }}>
-        <Button onClick={submit} disabled={!email.includes("@") || processing} full>
-          {processing ? "Processing..." : `Pay $${total.toFixed(2)} & deliver to email`}
+        <Button onClick={submit} disabled={!emailLooksValid || processing} full>
+          {processing ? "Preparing your download…" : "Take me to my photos"}
         </Button>
       </div>
     </div>
   );
 };
 
-// -------------------- Success screen --------------------
+// -------------------- Download screen --------------------
+//
+// Final screen of the beta flow. Renders one download button per delivered
+// photo URL. Buttons visually track "already downloaded" state via a Set of
+// indices — when a user clicks a download button, its index is added to the
+// set and the button transitions to a muted background + green checkmark +
+// "Downloaded" label. The button stays clickable so the user can re-download
+// if they need to.
+//
+// State is session-only (no persistence). A page reload loses it, which is
+// fine — if the user comes back, the email they got has the links anyway
+// (once we turn on email delivery post-beta). During beta we tell them
+// clearly that these links are their delivery; save the files locally.
 
-type SuccessProps = {
+type DownloadScreenProps = {
   email: string;
+  photoUrls: string[];
   onNewStyle: () => void;
   onHome: () => void;
 };
 
-const Success = ({ email, onNewStyle, onHome }: SuccessProps) => (
-  <div style={{ maxWidth: 560, margin: "0 auto", padding: "96px 32px", textAlign: "center", ...font }}>
-    <div
-      style={{
-        width: 56,
-        height: 56,
-        borderRadius: "50%",
-        background: C.dark,
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        marginBottom: 24,
-      }}
-    >
-      <Mail size={24} color={C.white} />
-    </div>
-    <h2
-      style={{
-        fontSize: 28,
-        fontWeight: 500,
-        color: C.dark,
-        margin: 0,
-        letterSpacing: -0.5,
-      }}
-    >
-      On the way to your inbox
-    </h2>
-    <p style={{ fontSize: 15, color: C.mediumGrey, marginTop: 16, lineHeight: 1.6 }}>
-      Your 2K headshots are being delivered to <span style={{ color: C.dark }}>{email}</span>. Check
-      your inbox in a few minutes.
-    </p>
+const DownloadScreen = ({ email, photoUrls, onNewStyle, onHome }: DownloadScreenProps) => {
+  const [downloaded, setDownloaded] = useState<Set<number>>(new Set());
 
-    <div
-      style={{
-        background: C.white,
-        border: `1px solid ${C.border}`,
-        borderRadius: 8,
-        padding: 24,
-        marginTop: 32,
-        textAlign: "left",
-      }}
-    >
-      <div style={{ fontSize: 13, fontWeight: 500, color: C.dark, marginBottom: 8 }}>
-        Want to try a different style?
+  // Use <a download> via a click so the button can both navigate the browser
+  // to the file AND update our local state. Opening in a new tab would lose
+  // the `download` attribute effect on same-origin resources; using a hidden
+  // anchor click keeps it a real file download on every major browser.
+  const handleDownload = (url: string, index: number) => {
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    // Filename the user sees when they save. Blob URLs carry the original
+    // extension in the path, but explicit download attr avoids surprises.
+    const extMatch = url.match(/\.(jpg|jpeg|png|webp)(?:\?|$)/i);
+    const ext = extMatch ? extMatch[1].toLowerCase() : "jpg";
+    anchor.download = `headshot-${index + 1}.${ext}`;
+    anchor.rel = "noopener";
+    // Must be in the DOM for Firefox to honor the download.
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    setDownloaded((prev) => {
+      const next = new Set(prev);
+      next.add(index);
+      return next;
+    });
+  };
+
+  return (
+    <div style={{ maxWidth: 720, margin: "0 auto", padding: "64px 32px", ...font }}>
+      <div style={{ textAlign: "center" }}>
+        <div
+          style={{
+            width: 56,
+            height: 56,
+            borderRadius: "50%",
+            background: C.dark,
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            marginBottom: 24,
+          }}
+        >
+          <Download size={24} color={C.white} />
+        </div>
+        <h2
+          style={{
+            fontSize: 28,
+            fontWeight: 500,
+            color: C.dark,
+            margin: 0,
+            letterSpacing: -0.5,
+          }}
+        >
+          Your headshots are ready
+        </h2>
+        <p
+          style={{
+            fontSize: 15,
+            color: C.mediumGrey,
+            marginTop: 16,
+            lineHeight: 1.6,
+            maxWidth: 520,
+            marginLeft: "auto",
+            marginRight: "auto",
+          }}
+        >
+          We've saved a copy tied to <span style={{ color: C.dark }}>{email}</span>.
+          Download each file to your device now — this page is the delivery,
+          so don't close it until you have them all saved.
+        </p>
       </div>
-      <div style={{ fontSize: 13, color: C.mediumGrey, lineHeight: 1.6, marginBottom: 16 }}>
-        A new style set is a new session ($4.99). Keeps things clean — your previous purchases stay
-        yours.
+
+      {/* Download grid — one thumbnail + button per delivered photo.
+          Button shows "Download" by default, "Downloaded ✓" after click. */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+          gap: 16,
+          marginTop: 40,
+        }}
+      >
+        {photoUrls.map((url, i) => {
+          const isDownloaded = downloaded.has(i);
+          return (
+            <div
+              key={i}
+              style={{
+                background: C.white,
+                border: `1px solid ${C.border}`,
+                borderRadius: 8,
+                overflow: "hidden",
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              <div
+                style={{
+                  aspectRatio: "4/5",
+                  background: C.lightGrey,
+                  overflow: "hidden",
+                }}
+              >
+                <img
+                  src={url}
+                  alt={`Headshot ${i + 1}`}
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                    display: "block",
+                  }}
+                />
+              </div>
+              <button
+                onClick={() => handleDownload(url, i)}
+                style={{
+                  border: "none",
+                  padding: "12px 14px",
+                  fontSize: 13,
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
+                  background: isDownloaded ? C.border : C.dark,
+                  color: isDownloaded ? C.dark : C.buttonText,
+                  transition: "background 0.2s, color 0.2s",
+                  ...font,
+                }}
+              >
+                {isDownloaded ? (
+                  <>
+                    <Check size={16} color="#2F7A3E" />
+                    <span>Downloaded</span>
+                  </>
+                ) : (
+                  <>
+                    <Download size={16} />
+                    <span>Download photo {i + 1}</span>
+                  </>
+                )}
+              </button>
+            </div>
+          );
+        })}
       </div>
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-        <Button onClick={onNewStyle}>Start new session — $4.99</Button>
-        <Button variant="ghost" onClick={onHome}>
-          Back to home
-        </Button>
+
+      <div
+        style={{
+          background: C.white,
+          border: `1px solid ${C.border}`,
+          borderRadius: 8,
+          padding: 24,
+          marginTop: 32,
+        }}
+      >
+        <div style={{ fontSize: 13, fontWeight: 500, color: C.dark, marginBottom: 8 }}>
+          Want to try a different style?
+        </div>
+        <div style={{ fontSize: 13, color: C.mediumGrey, lineHeight: 1.6, marginBottom: 16 }}>
+          Start a fresh session to generate a new set in a different look.
+        </div>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <Button onClick={onNewStyle}>Start new session</Button>
+          <Button variant="ghost" onClick={onHome}>
+            Back to home
+          </Button>
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 // -------------------- Regeneration paywall --------------------
 
@@ -1896,8 +2045,14 @@ const TOTAL_HEADSHOTS = 6;
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>("landing");
-  const [cartCount, setCartCount] = useState(0);
+  // Indices of the thumbnails the user selected on the Grid screen. Passed to
+  // CheckoutScreen so we can forward the matching clean base64 images to
+  // /api/deliver. Navbar "Selected (N)" reads this set's size.
+  const [selectedImageIndices, setSelectedImageIndices] = useState<number[]>([]);
   const [email, setEmail] = useState("");
+  // Public Blob URLs returned by /api/deliver — handed to DownloadScreen so
+  // each photo gets its own Download button.
+  const [deliveredPhotoUrls, setDeliveredPhotoUrls] = useState<string[]>([]);
   const [regenCount, setRegenCount] = useState(0);
   const [showPaywall, setShowPaywall] = useState(false);
   // Photos are lifted to App scope so the Blob URLs survive navigating forward
@@ -1933,7 +2088,9 @@ export default function App() {
 
   const reset = () => {
     setScreen("landing");
-    setCartCount(0);
+    setSelectedImageIndices([]);
+    setDeliveredPhotoUrls([]);
+    setEmail("");
     setRegenCount(0);
     setPhotos([]);
     setGeneratedImages([]);
@@ -2112,7 +2269,7 @@ export default function App() {
 
   return (
     <div style={{ minHeight: "100vh", background: C.pageBg, ...font }}>
-      <Navbar cartCount={cartCount} onLogoClick={reset} />
+      <Navbar cartCount={selectedImageIndices.length} onLogoClick={reset} />
 
       {screen === "landing" && <Landing onStart={handleStart} />}
       {screen === "upload" && (
@@ -2144,8 +2301,8 @@ export default function App() {
       {screen === "grid" && (
         <GridScreen
           images={generatedImages}
-          onCheckout={(n) => {
-            setCartCount(n);
+          onDeliver={(indices) => {
+            setSelectedImageIndices(indices);
             setScreen("checkout");
           }}
           onBack={() => setScreen("style")}
@@ -2155,20 +2312,25 @@ export default function App() {
           regeneratingSlots={regeneratingSlots}
         />
       )}
-      {screen === "checkout" && (
+      {screen === "checkout" && lastSelections && (
         <CheckoutScreen
-          count={cartCount}
-          onComplete={(e) => {
-            setEmail(e);
-            setCartCount(0);
+          selectedImages={selectedImageIndices
+            .map((i) => generatedImages[i])
+            .filter((img): img is string => !!img)}
+          referencePhotoUrls={lastPhotoUrls}
+          selections={lastSelections}
+          onComplete={({ email: submittedEmail, photoUrls }) => {
+            setEmail(submittedEmail);
+            setDeliveredPhotoUrls(photoUrls);
             setScreen("success");
           }}
           onBack={() => setScreen("grid")}
         />
       )}
       {screen === "success" && (
-        <Success
+        <DownloadScreen
           email={email}
+          photoUrls={deliveredPhotoUrls}
           onNewStyle={() => {
             reset();
             setScreen("upload");
