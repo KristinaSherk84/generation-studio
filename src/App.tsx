@@ -1657,6 +1657,22 @@ type CheckoutScreenProps = {
   onBack: () => void;
 };
 
+// Turn a "data:image/jpeg;base64,AAAA" URL into a real File the browser can
+// stream directly to Vercel Blob. Returns null if the data URL is malformed
+// — shouldn't happen with our own /api/generate output, but we guard anyway
+// so a single bad slot can't silently break the whole delivery.
+const dataUrlToFile = (dataUrl: string, filename: string): File | null => {
+  const match = dataUrl.match(/^data:(image\/(?:jpeg|png|webp));base64,(.+)$/);
+  if (!match) return null;
+  const [, mime, base64] = match;
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return new File([bytes], filename, { type: mime });
+};
+
 const CheckoutScreen = ({
   selectedImages,
   referencePhotoUrls,
@@ -1666,6 +1682,9 @@ const CheckoutScreen = ({
 }: CheckoutScreenProps) => {
   const [email, setEmail] = useState("");
   const [processing, setProcessing] = useState(false);
+  // Human-readable progress line shown on the button while we're uploading
+  // each image to Blob. Cleared when not in-flight.
+  const [progressLabel, setProgressLabel] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const count = selectedImages.length;
 
@@ -1679,12 +1698,46 @@ const CheckoutScreen = ({
     setProcessing(true);
     setErrorMessage(null);
     try {
+      // -----------------------------------------------------------------
+      // STEP 1 — Upload each selected base64 image directly to Vercel Blob.
+      //
+      // We MUST do this client-side, not through /api/deliver. Vercel caps
+      // serverless function request payloads at 4.5 MB; two 2K JPEGs encoded
+      // as base64 exceed that and the edge returns 413 FUNCTION_PAYLOAD_TOO_
+      // LARGE before our function even runs. Uploading directly via the
+      // client SDK bypasses the function entirely and goes straight to Blob.
+      //
+      // Same upload token endpoint (/api/upload) we use for reference
+      // photos on the Upload screen.
+      // -----------------------------------------------------------------
+      const uploadedUrls: string[] = [];
+      for (let i = 0; i < selectedImages.length; i++) {
+        setProgressLabel(`Uploading photo ${i + 1} of ${selectedImages.length}…`);
+        const file = dataUrlToFile(selectedImages[i], `headshot-${i + 1}.jpg`);
+        if (!file) {
+          throw new Error(`Photo ${i + 1} was in an unrecognized format.`);
+        }
+        // Pathname prefix keeps delivered images visually grouped in the
+        // Blob dashboard; the token endpoint still adds a random suffix,
+        // so the full key will look like `delivered/headshot-1-<hash>.jpg`.
+        const result = await upload(`delivered/${file.name}`, file, {
+          access: "public",
+          handleUploadUrl: "/api/upload",
+        });
+        uploadedUrls.push(result.url);
+      }
+
+      // -----------------------------------------------------------------
+      // STEP 2 — Tell /api/deliver to record the manifest. Tiny JSON body,
+      // no 413 risk; images are already in Blob at this point.
+      // -----------------------------------------------------------------
+      setProgressLabel("Finalizing delivery…");
       const response = await fetch("/api/deliver", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email,
-          images: selectedImages,
+          photoUrls: uploadedUrls,
           referencePhotoUrls,
           style: selections.style,
           attire: selections.attire,
@@ -1701,6 +1754,7 @@ const CheckoutScreen = ({
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : "Delivery failed");
       setProcessing(false);
+      setProgressLabel("");
     }
   };
 
@@ -1791,7 +1845,9 @@ const CheckoutScreen = ({
 
       <div style={{ marginTop: 24 }}>
         <Button onClick={submit} disabled={!emailLooksValid || processing} full>
-          {processing ? "Preparing your download…" : "Take me to my photos"}
+          {processing
+            ? progressLabel || "Preparing your download…"
+            : "Take me to my photos"}
         </Button>
       </div>
     </div>
