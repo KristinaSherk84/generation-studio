@@ -272,11 +272,18 @@ async function generateOneHeadshot(
   photos: InlineImage[],
 ): Promise<string> {
   const response = await ai.models.generateContent({
-    // Switched from gemini-3-pro-image-preview (Nano Banana Pro) to Flash on
-    // 2026-04-18 due to rate limits (429s) on fresh projects at Tier 1.
-    // Flash has generous Tier 1 limits and still produces commercial-grade
-    // headshots. Can switch back to Pro later once spend qualifies for Tier 2.
-    model: "gemini-2.5-flash-image",
+    // Model history on this project:
+    //  - gemini-3-pro-image-preview (Nano Banana Pro): hit 429 rate limits on
+    //    fresh Tier 1 projects (2026-04-18). Swapped out.
+    //  - gemini-2.5-flash-image (Nano Banana 1): worked but delivered
+    //    occasional 503 UNAVAILABLE capacity errors (2026-04-20) and had
+    //    weaker face-likeness than we wanted.
+    //  - gemini-3.1-flash-image-preview (Nano Banana 2, current): released
+    //    2026-02-26. Same Flash tier / same Tier 1 limits, but noticeably
+    //    better subject consistency (directly addresses the #1 AI-headshot
+    //    complaint — loss of likeness). Keep this model unless it regresses.
+    //    If Google deprecates the preview suffix, revert to 2.5 flash image.
+    model: "gemini-3.1-flash-image-preview",
     contents: [
       {
         role: "user",
@@ -310,6 +317,63 @@ async function generateOneHeadshot(
   }
   const mime = imagePart.inlineData.mimeType || "image/png";
   return `data:${mime};base64,${imagePart.inlineData.data}`;
+}
+
+// -------------------- Retry wrapper --------------------
+//
+// Google's image models occasionally return transient errors — most commonly
+// 503 UNAVAILABLE (model overloaded) and 429 RESOURCE_EXHAUSTED (rate limits
+// for the quota window). Both usually clear within a couple of seconds. We
+// retry up to 3 times total with exponential backoff. Non-transient errors
+// (bad prompt, auth failure, wrong model name, validation errors) propagate
+// immediately — retrying won't help and just wastes the user's time.
+
+function isRetryableGeminiError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const msg = error.message;
+  // The @google/genai SDK serializes the API error body into .message, so the
+  // JSON "code" and "status" fields are literally present in the string.
+  if (msg.includes('"code":503') || msg.includes("UNAVAILABLE")) return true;
+  if (msg.includes('"code":429') || msg.includes("RESOURCE_EXHAUSTED")) return true;
+  // Transient network hiccups also worth one more try.
+  if (msg.includes("ECONNRESET") || msg.includes("ETIMEDOUT")) return true;
+  if (msg.includes("fetch failed")) return true;
+  return false;
+}
+
+async function generateOneHeadshotWithRetry(
+  ai: GoogleGenAI,
+  prompt: string,
+  photos: InlineImage[],
+  maxAttempts = 3,
+): Promise<string> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await generateOneHeadshot(ai, prompt, photos);
+    } catch (error) {
+      lastError = error;
+      // Give up immediately if this isn't the kind of error that benefits from
+      // a retry, or if we're already on the last attempt.
+      if (attempt === maxAttempts || !isRetryableGeminiError(error)) {
+        throw error;
+      }
+      // Exponential backoff: 1s, 2s. Plus up to 500ms jitter so six parallel
+      // callers don't all hit Google again at exactly the same millisecond.
+      const baseDelay = 1000 * Math.pow(2, attempt - 1); // 1000, 2000
+      const jitter = Math.floor(Math.random() * 500);
+      const delay = baseDelay + jitter;
+      console.warn(
+        `Gemini returned transient error on attempt ${attempt}/${maxAttempts}; ` +
+          `retrying in ${delay}ms: ` +
+          (error instanceof Error ? error.message : String(error)),
+      );
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+  // Unreachable in practice — the loop either returns on success or throws on
+  // failure. The explicit throw keeps TypeScript happy about the return type.
+  throw lastError;
 }
 
 // -------------------- Handler --------------------
@@ -375,9 +439,10 @@ export default async function handler(
     const prompt = assemblePrompt(body as GenerateRequest);
 
     // ---- Generate ONE headshot. The frontend calls this six times in
-    //      parallel so it can show real per-image progress to the user. ----
+    //      parallel so it can show real per-image progress to the user. The
+    //      retry wrapper absorbs transient 503/429 hiccups from Google. ----
     const ai = new GoogleGenAI({ apiKey });
-    const image = await generateOneHeadshot(ai, prompt, photos);
+    const image = await generateOneHeadshotWithRetry(ai, prompt, photos);
 
     return res.status(200).json({ image });
   } catch (error) {
