@@ -1880,6 +1880,17 @@ type DownloadScreenProps = {
 // ever need to reset the preference.
 const DOWNLOAD_INSTRUCTIONS_SUPPRESS_KEY = "gs_download_instructions_suppressed";
 
+// Detect mobile (iOS + Android) via user-agent. Not perfect, but good enough:
+// desktop browsers never advertise iPhone/iPad/iPod/Android strings, so any
+// false positive lands on the mobile path which opens the image in a new tab
+// — a path that works fine on desktop too, it just loses the auto-download
+// nicety. False negatives would send a touch device down the desktop path;
+// right-click-save fallback still works with long-press there.
+const isMobileDevice = (): boolean => {
+  if (typeof navigator === "undefined") return false;
+  return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+};
+
 // Safely read the "suppress instructions" preference. Wrapped because
 // localStorage can throw in private browsing / strict environments.
 const readSuppressed = (): boolean => {
@@ -1931,16 +1942,52 @@ const DownloadScreen = ({ email, photoUrls, onNewStyle, onHome }: DownloadScreen
     }
   }, [showInstructions]);
 
-  // The naive approach — <a href={url} download> — does NOT work for Vercel
-  // Blob links. The `download` attribute is ignored for cross-origin URLs
-  // unless the server returns Content-Disposition: attachment, which Blob
-  // doesn't by default. So we fetch the bytes ourselves, wrap them in a
-  // same-origin Object URL, and trigger download from THAT. That makes
-  // desktop browsers actually save the file instead of previewing it inline
-  // (or forcing a right-click-save). On iOS Safari, images still open full-
-  // screen — that's the behavior our instructions modal prepares users for.
+  // Two totally different download strategies depending on device:
+  //
+  // MOBILE (iPhone / iPad / Android)
+  //   Just open the image URL in a new tab. Safari/Chrome render the JPEG
+  //   inline, and the user long-presses → "Save to Photos" (iOS) or "Save
+  //   image" (Android) which drops the file STRAIGHT into the camera roll /
+  //   gallery. This is the flow real users expect.
+  //
+  //   What we do NOT do on mobile: fetch-and-blob with the download attribute.
+  //   Why: iOS Safari honors the download attribute too aggressively and
+  //   triggers its native "Download headshot-1.jpg" file-save prompt, which
+  //   drops the file into iCloud Drive's Files → Downloads folder. Users
+  //   have no idea how to move it from Files into Photos. We got a real
+  //   report of this from a beta user on 2026-04-20.
+  //
+  // DESKTOP (everything else)
+  //   Vercel Blob is cross-origin from our app domain, so a bare
+  //   <a href={url} download> is ignored — desktop browsers just preview the
+  //   image inline and the user has to right-click-save. Fix: fetch the
+  //   bytes into JS, wrap them in a same-origin Object URL, and trigger the
+  //   download from THAT. Same-origin means the download attribute is honored,
+  //   so the file actually saves to the Downloads folder in one click.
   const handleDownload = async (url: string, index: number) => {
     if (inFlight.has(index)) return;
+
+    // --- Mobile path: open in a new tab, let the user long-press ---
+    if (isMobileDevice()) {
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.target = "_blank";
+      anchor.rel = "noopener";
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      // Mark as "handled" so the button flips to the Downloaded ✓ state.
+      // This reflects "you've tapped this one" rather than "the file is
+      // definitively on your device" — we can't know the latter on mobile.
+      setDownloaded((prev) => {
+        const next = new Set(prev);
+        next.add(index);
+        return next;
+      });
+      return;
+    }
+
+    // --- Desktop path: fetch-and-blob to force the save ---
     setInFlight((prev) => {
       const next = new Set(prev);
       next.add(index);
@@ -2235,13 +2282,14 @@ const DownloadScreen = ({ email, photoUrls, onNewStyle, onHome }: DownloadScreen
                 On your phone
               </div>
               <div style={{ fontSize: 14, color: C.dark, lineHeight: 1.6 }}>
-                Tapping Download opens the photo full-screen.{" "}
+                Tapping Download opens the photo in a new tab.{" "}
                 <span style={{ fontWeight: 500 }}>
                   Press and hold the photo
                 </span>
                 , then tap <em>Save to Photos</em> (iPhone) or{" "}
-                <em>Download image</em> (Android). Tap the back arrow to return
-                and save the next one.
+                <em>Download image</em> (Android) — this drops it straight
+                into your camera roll. Close the tab to return and save the
+                next one.
               </div>
             </div>
 
