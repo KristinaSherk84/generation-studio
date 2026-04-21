@@ -2149,8 +2149,9 @@ const DownloadScreen = ({
   // completes).
   // ------------------------------------------------------------------
 
-  // Which two styles are "other" relative to the one the user chose. Order
-  // is stable (alphabetical), so bonus[0] and bonus[1] always line up.
+  // Which two styles are "other" relative to the one the user chose. We
+  // randomly pick ONE of them to preview below (alternates per page load)
+  // so the bonus row is a single human teaser + a pet example card.
   const OTHER_STYLES: StyleSelections["style"][] = chosenStyle
     ? (["corporate", "creative", "executive"] as const).filter(
         (s): s is StyleSelections["style"] => s !== chosenStyle,
@@ -2163,12 +2164,14 @@ const DownloadScreen = ({
     loading: boolean;
     error: string | null;
   };
-  const [bonus, setBonus] = useState<BonusSlot[]>(() =>
-    OTHER_STYLES.map((s) => ({ style: s, image: null, loading: false, error: null })),
-  );
-  // Guard against React 19 StrictMode double-invocation firing 4 API calls
-  // instead of 2 in development. Survives strict-mode's simulated remount
-  // because useRef state persists across effect re-runs of the same instance.
+  const [bonus, setBonus] = useState<BonusSlot[]>(() => {
+    if (OTHER_STYLES.length === 0) return [];
+    const pick = OTHER_STYLES[Math.floor(Math.random() * OTHER_STYLES.length)];
+    return [{ style: pick, image: null, loading: false, error: null }];
+  });
+  // Guard against React 19 StrictMode double-invocation firing the bonus API
+  // call twice in development. Survives strict-mode's simulated remount because
+  // useRef state persists across effect re-runs of the same instance.
   const bonusFired = useRef(false);
 
   useEffect(() => {
@@ -2182,66 +2185,65 @@ const DownloadScreen = ({
       referencePhotoUrls.length === 0 ||
       !attire ||
       !lighting ||
-      OTHER_STYLES.length === 0
+      bonus.length === 0
     ) {
       return;
     }
     bonusFired.current = true;
 
-    OTHER_STYLES.forEach((bonusStyle, idx) => {
-      // Mark this slot as loading up front so the UI shows a spinner while
-      // the request is in flight. Using functional setState so parallel
-      // updates across the two slots don't clobber each other.
-      setBonus((prev) => {
-        const next = [...prev];
-        next[idx] = { ...next[idx], loading: true, error: null };
-        return next;
-      });
-
-      fetch("/api/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          photoUrls: referencePhotoUrls,
-          style: bonusStyle,
-          attire,
-          lighting,
-          // Corporate needs a background; Creative/Executive pull their
-          // background direction from the style prompt itself. Default to
-          // lightgrey for a safe, clean look that flatters any skin tone.
-          background: bonusStyle === "corporate" ? "lightgrey" : undefined,
-          // variationIndex 0 = Duchenne-eye-smile, slight left lean. Best
-          // single-frame flavor to show off each bonus style.
-          variationIndex: 0,
-          hasWideAngle: hasWideAngle ?? false,
-        }),
-      })
-        .then(async (r) => {
-          if (!r.ok) {
-            const err = (await r.json().catch(() => ({}))) as { error?: string };
-            throw new Error(err.error || `HTTP ${r.status}`);
-          }
-          return r.json() as Promise<{ image: string }>;
-        })
-        .then((data) => {
-          setBonus((prev) => {
-            const next = [...prev];
-            next[idx] = { ...next[idx], loading: false, image: data.image, error: null };
-            return next;
-          });
-        })
-        .catch((e: unknown) => {
-          setBonus((prev) => {
-            const next = [...prev];
-            next[idx] = {
-              ...next[idx],
-              loading: false,
-              error: e instanceof Error ? e.message : "Generation failed",
-            };
-            return next;
-          });
-        });
+    const idx = 0;
+    const bonusStyle = bonus[idx].style;
+    // Mark the slot as loading up front so the UI shows a spinner while the
+    // request is in flight.
+    setBonus((prev) => {
+      const next = [...prev];
+      next[idx] = { ...next[idx], loading: true, error: null };
+      return next;
     });
+
+    fetch("/api/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        photoUrls: referencePhotoUrls,
+        style: bonusStyle,
+        attire,
+        lighting,
+        // Corporate needs a background; Creative/Executive pull their
+        // background direction from the style prompt itself. Default to
+        // lightgrey for a safe, clean look that flatters any skin tone.
+        background: bonusStyle === "corporate" ? "lightgrey" : undefined,
+        // variationIndex 0 = Duchenne-eye-smile, slight left lean. Best
+        // single-frame flavor to show off the bonus style.
+        variationIndex: 0,
+        hasWideAngle: hasWideAngle ?? false,
+      }),
+    })
+      .then(async (r) => {
+        if (!r.ok) {
+          const err = (await r.json().catch(() => ({}))) as { error?: string };
+          throw new Error(err.error || `HTTP ${r.status}`);
+        }
+        return r.json() as Promise<{ image: string }>;
+      })
+      .then((data) => {
+        setBonus((prev) => {
+          const next = [...prev];
+          next[idx] = { ...next[idx], loading: false, image: data.image, error: null };
+          return next;
+        });
+      })
+      .catch((e: unknown) => {
+        setBonus((prev) => {
+          const next = [...prev];
+          next[idx] = {
+            ...next[idx],
+            loading: false,
+            error: e instanceof Error ? e.message : "Generation failed",
+          };
+          return next;
+        });
+      });
     // Mount-only: DownloadScreen is rendered once per delivery and unmounted
     // when the user navigates away, so a deps array here would add noise.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2419,7 +2421,7 @@ const DownloadScreen = ({
                 letterSpacing: -0.2,
               }}
             >
-              See your face in the other two styles
+              See what else you can do
             </h3>
             <p
               style={{
@@ -2436,9 +2438,8 @@ const DownloadScreen = ({
               <span style={{ color: C.dark, fontWeight: 500 }}>
                 {STYLE_LABEL[chosenStyle]}
               </span>
-              . Here's a watermarked preview of your photos in the other two
-              styles. Regenerate a fresh set of 6 in either style to get
-              downloadable versions.
+              . Here's a watermarked preview of your photos in another style —
+              and a reminder that this works for pets too.
             </p>
           </div>
 
@@ -2558,11 +2559,103 @@ const DownloadScreen = ({
                 </div>
               );
             })}
+
+            {/* Pet card — static example + CTA. Clicking anywhere on the card
+                resets the flow back to Landing so the user can upload their
+                pet and run a fresh set. */}
+            <button
+              type="button"
+              onClick={onHome}
+              style={{
+                background: C.white,
+                border: `1px solid ${C.border}`,
+                borderRadius: 8,
+                overflow: "hidden",
+                display: "flex",
+                flexDirection: "column",
+                flex: "0 0 240px",
+                maxWidth: 240,
+                padding: 0,
+                cursor: "pointer",
+                textAlign: "left",
+                ...font,
+              }}
+            >
+              <div
+                style={{
+                  aspectRatio: "4/5",
+                  background: C.lightGrey,
+                  overflow: "hidden",
+                  position: "relative",
+                }}
+              >
+                <img
+                  src="/ai-headshot-generator-pet-example.jpg"
+                  alt="AI headshot generator example — dog in a suit and tie"
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                    display: "block",
+                  }}
+                  draggable={false}
+                />
+                {/* PETS badge top-left to match the style badge on the sibling
+                    human-preview card. */}
+                <div
+                  style={{
+                    position: "absolute",
+                    top: 10,
+                    left: 10,
+                    background: "rgba(44, 44, 42, 0.82)",
+                    color: C.white,
+                    fontSize: 11,
+                    fontWeight: 500,
+                    letterSpacing: 0.5,
+                    padding: "4px 10px",
+                    borderRadius: 999,
+                    textTransform: "uppercase",
+                  }}
+                >
+                  Pets
+                </div>
+              </div>
+              <div
+                style={{
+                  padding: "12px 14px",
+                  background: C.dark,
+                  color: C.buttonText,
+                  fontSize: 13,
+                  fontWeight: 500,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
+                }}
+              >
+                <Upload size={16} />
+                <span>Upload your pet</span>
+              </div>
+            </button>
           </div>
 
-          {/* Shared CTA under both bonus previews. Sends the user back to the
-              Style screen (reference photos preserved) to buy a fresh set of 6
-              in whichever style they want to unlock. */}
+          {/* Tagline under the row, explaining what the pet card does if a
+              user didn't catch it from the CTA alone. */}
+          <div
+            style={{
+              marginTop: 14,
+              fontSize: 13,
+              color: C.mediumGrey,
+              textAlign: "center",
+              lineHeight: 1.6,
+            }}
+          >
+            Upload your pet and generate similar portraits of them.
+          </div>
+
+          {/* Shared CTA under the two cards. Sends the user back to the Style
+              screen (reference photos preserved) to buy a fresh set of 6 in a
+              different style. */}
           <div style={{ marginTop: 20, display: "flex", justifyContent: "center" }}>
             <Button
               onClick={onNewStyle}
