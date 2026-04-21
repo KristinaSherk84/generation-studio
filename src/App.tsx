@@ -358,6 +358,11 @@ const Landing = ({ onStart }: LandingProps) => (
       only pay for the ones you actually want — no subscriptions, no surprises.
     </p>
 
+    {/* Landing hero before/after gallery — three real headshot transformations.
+        Filenames and alt text front-load Kristi's highest-volume target
+        keywords ("AI headshot generator", "AI headshots") for image-search
+        discoverability. Files live in /public/ so Vite serves them at the
+        site root. aspectRatio 3/4 matches the 1200x1600 composite dimensions. */}
     <div
       style={{
         display: "grid",
@@ -366,21 +371,40 @@ const Landing = ({ onStart }: LandingProps) => (
         margin: "48px 0",
       }}
     >
-      {[1, 2, 3].map((i) => (
+      {[
+        {
+          src: "/ai-headshot-generator-man-suit-tie.jpg",
+          alt: "AI headshot generator result — casual outdoor photo transformed into professional headshot in navy suit and tie",
+        },
+        {
+          src: "/ai-headshot-generator-woman-blue-blazer.jpg",
+          alt: "AI headshot generator result — phone selfie transformed into professional headshot of woman in blue blazer",
+        },
+        {
+          src: "/ai-headshot-generator-man-glasses.jpg",
+          alt: "AI headshot generator result — casual photo transformed into professional headshot of man with glasses and long hair",
+        },
+      ].map((img) => (
         <div
-          key={i}
+          key={img.src}
           style={{
-            aspectRatio: "4/5",
+            aspectRatio: "3/4",
             background: C.lightGrey,
             borderRadius: 8,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: C.mediumGrey,
-            fontSize: 12,
+            overflow: "hidden",
           }}
         >
-          Sample headshot {i}
+          <img
+            src={img.src}
+            alt={img.alt}
+            loading="lazy"
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              display: "block",
+            }}
+          />
         </div>
       ))}
     </div>
