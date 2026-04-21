@@ -52,6 +52,11 @@ type GenerateRequest = {
   lighting: Lighting;
   background?: Background; // only used when style === "corporate"
   variationIndex: number; // 0-5; frontend fires 6 parallel calls, each with a unique index
+  // True if the client read EXIF from any reference photo and found a focal
+  // length <40mm (35mm-equivalent). In that case we append a stronger lens-
+  // distortion correction block to the prompt. See BLOCK_LENS_CORRECTION below.
+  // Defaults to false when the client couldn't read EXIF (e.g. stripped images).
+  hasWideAngle?: boolean;
 };
 
 type InlineImage = { mimeType: string; data: string };
@@ -67,7 +72,7 @@ const BLOCK_1_IDENTITY = `Generate a professional headshot of the person shown i
 
 const BLOCK_2_COMPOSITION = `Frame as a professional business headshot. The specific body angle and crop are specified in the variation block at the end of this prompt — follow those instructions precisely. General rules:
 - Eye line positioned on the upper third of the frame. The subject's eyes should sit approximately one-third of the way down from the top edge of the image — NOT centered vertically.
-- Minimal headroom above the top of the head. The space between the top of the subject's hair and the top edge of the frame should be small — approximately 5–8% of the total frame height. The top of the head must nearly reach the top of the frame. Do NOT leave large empty space above the head.
+- Minimal headroom above the top of the head. The space between the top of the subject's hair and the top edge of the frame should be extremely small — approximately 2–3% of the total frame height. The top of the head should nearly touch the top of the frame. Do NOT leave empty space above the head.
 - The subject's face should occupy the TOP HALF of the frame. The shoulders/chest/body live in the bottom half.
 - Strong posture without stiffness. Classic subject-to-lens relationship (head rotated slightly back toward the lens), avoiding the flatness of a full-frontal pose.
 - Crop tightly per the variation block's "Framing" instruction. If the variation says "from just above the top of the head to the collarbone," the top of the head should be right near the top edge — not floating in the middle of the frame.`;
@@ -155,6 +160,33 @@ function buildBlock6Background(background: Background, variationIndex: number): 
 
 const BLOCK_7_TECHNICAL = `Technical quality: 2048-pixel resolution, sharp focus on the eyes, eyelashes visible, realistic natural skin texture preserved (no plastic smoothing, no over-softening). Very shallow depth of field — subject's face in perfect focus, shoulders softly falling off, background noticeably blurred. Professional color grading: accurate skin tones, no color cast, slight warmth in shadows. No visible artifacts, no uncanny valley, no AI-tell signs. This is a commercial-grade photograph, extremely realistic — not an illustration, render, or composite.`;
 
+// Block LENS_CORRECTION — fires ONLY when the client's EXIF read found
+// focal length <40mm (35mm-equivalent) on any reference photo. This is much
+// stronger wording than Block 1's "if it APPEARS wide-angle..." because here
+// we KNOW it was. Shoots straight for "phone selfie" distortion patterns.
+//
+// Added 2026-04-21. Client flag wired in App.tsx via the exifr library.
+const BLOCK_LENS_CORRECTION = `CRITICAL LENS CORRECTION: The reference photos were CONFIRMED via EXIF metadata to be shot with a wide-angle lens (35mm-equivalent focal length under 40mm — typically a phone selfie camera at 24–28mm equivalent). Wide-angle lenses create predictable facial distortion: the nose appears ENLARGED and pushed forward, the mid-face (cheeks, forehead) appears stretched and bulged toward the viewer, and the ears / jawline appear pushed back and foreshortened. FULLY CORRECT this distortion in the generated headshot. Render the subject's face as if photographed with a prime 85mm or 135mm portrait lens on a full-frame camera: the nose sits in correct proportion to the cheeks and jaw, the face reads naturally compressed and flattering, no bulging nose or mid-face, no stretched forehead, no "selfie face." This correction is MANDATORY — it is a bigger problem than any other quality issue in the output.`;
+
+// Block EYEWEAR — quick-win glasses-preservation rule (added 2026-04-20).
+//
+// Context: beta tester's reference photos ALL showed him wearing glasses (one
+// clear-frame professional pair, one pink-tinted casual sunglasses). V1
+// generated headshots with no glasses. This block tells Gemini to keep the
+// glasses when the subject consistently wears them — without us having to run
+// a separate detection pass. Roadmap item #11 tracks the full detection-based
+// V1.1 version; this is the "tide us over" fix.
+//
+// Preference rules baked in:
+//   1. Only preserve glasses if the subject appears to wear them in most/all
+//      reference photos (keeps the prompt from hallucinating glasses onto
+//      someone who isn't wearing any).
+//   2. Prefer clear-lens professional frames over tinted/sunglasses frames,
+//      because headshots are almost always a clear-lens context.
+//   3. Do NOT add glasses if the subject isn't wearing any in the reference
+//      photos — this must never become an accessory invention.
+const BLOCK_EYEWEAR = `Eyewear: If the subject is wearing glasses (prescription eyeglasses, not sunglasses) in most or all of the reference photos, preserve the same glasses in the generated headshot — match the frame shape, color, and material as closely as possible. If the reference photos show a mix of clear-lens glasses and tinted/sunglasses frames, default to the clear-lens professional pair — a proper business headshot should have clear lenses so the subject's eyes are fully visible. If the subject is NOT wearing glasses in the reference photos, do NOT add any — never invent eyewear that isn't in the reference set.`;
+
 // Block 8 — Single-photo variation instruction.
 //
 // The frontend fires SIX parallel requests, each with a different variationIndex
@@ -172,14 +204,14 @@ type Flavor = {
 
 const FLAVORS: Flavor[] = [
   {
-    expression: "subtle closed-mouth realistic smile, warm and composed",
+    expression: "subtle closed-mouth realistic smile, warm and composed — the mouth stays gentle, but the EYES smile clearly: slight crinkle at the outer corners, upper cheeks lifted, the unmistakable warm-eye Duchenne smile that reads as genuine joy. Under no circumstances flat, neutral, or blank eyes",
     bodyPose: "body squared to camera, shoulders relaxed",
     crop: "tighter crop — from just above the top of the head to the collarbone",
     attireHint: "shirt or top in crisp white",
   },
   {
     expression: "soft realistic open smile, approachable",
-    bodyPose: "body turned approximately 15 degrees to the subject's left, head rotated slightly back toward the lens",
+    bodyPose: "body turned approximately 10 degrees to the subject's left, head rotated slightly back toward the lens",
     crop: "medium crop — from just above the top of the head to the upper chest",
     attireHint: "shirt or top in a soft light blue",
   },
@@ -190,14 +222,14 @@ const FLAVORS: Flavor[] = [
     attireHint: "shirt or top in a soft pastel tone (blush, cream, or pale grey)",
   },
   {
-    expression: "knowing realistic half-smile, confident and poised",
+    expression: "knowing realistic half-smile, confident and poised — mouth stays composed with a subtle lift on one side, but the EYES smile clearly: slight crinkle at the outer corners, upper cheeks lifted, warm Duchenne-style smile-eyes that read as engaged and in-on-the-moment. Under no circumstances flat, neutral, or blank eyes",
     bodyPose: "body squared to camera, shoulders relaxed",
     crop: "wider crop — more shoulder and upper chest visible",
     attireHint: "a subtly different jacket or top in a mid-tone, well-tailored",
   },
   {
     expression: "confident warm realistic expression with slight smile, engaged eyes",
-    bodyPose: "body turned approximately 10 degrees to the subject's right",
+    bodyPose: "body turned approximately 5 degrees to the subject's right",
     crop: "tighter crop — from just above the top of the head to the collarbone",
     attireHint: "a darker-tone option — charcoal or deep navy",
   },
@@ -237,8 +269,16 @@ function assemblePrompt(req: GenerateRequest): string {
     BLOCK_2_COMPOSITION,
     buildBlock3Style(req.style, req.variationIndex),
     BLOCK_4_ATTIRE[req.attire],
+    BLOCK_EYEWEAR,
     BLOCK_5_LIGHTING[req.lighting],
   ];
+
+  // Wide-angle lens detected on the client via EXIF? Append the stronger
+  // correction block so Gemini KNOWS the distortion is present rather than
+  // guessing from pixels.
+  if (req.hasWideAngle) {
+    parts.push(BLOCK_LENS_CORRECTION);
+  }
 
   // Block 6 Background is ONLY for Corporate. Creative / Executive get their
   // background direction embedded in Block 3 itself. Rainbow routes through

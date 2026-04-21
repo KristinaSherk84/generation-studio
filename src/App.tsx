@@ -1,6 +1,7 @@
 import { useEffect, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
 import { Upload, Check, X, ArrowLeft, RefreshCw, Loader2, Download } from "lucide-react";
 import { upload } from "@vercel/blob/client";
+import exifr from "exifr";
 
 // A photo the user has picked on the Upload screen. Lives in App-level state
 // so the Blob URLs survive navigating forward into Style / Grid / etc.
@@ -10,6 +11,12 @@ export type UploadedPhoto = {
   blobUrl: string | null;            // populated when upload to Blob completes
   status: "uploading" | "done" | "error";
   errorMessage: string | null;
+  // EXIF-derived wide-angle flag, read in the browser via `exifr` as soon as
+  // the file is picked. True = focal length < 40mm (35mm-equivalent), so the
+  // generate-time prompt should include the stronger lens-correction block.
+  // Null = EXIF couldn't be read or didn't contain focal length data; we fall
+  // back to Block 1's generic "if it appears wide-angle..." language.
+  isWideAngle: boolean | null;
 };
 
 // Design tokens — strict grey palette per brief.
@@ -428,6 +435,44 @@ type UploadScreenProps = {
 const makePhotoId = () =>
   `p_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
+// Wide-angle lens detection threshold, in 35mm-equivalent millimeters.
+// Anything shorter than this is "wide" enough to produce visible selfie-style
+// distortion at portrait distances. Typical phone selfie cameras report
+// 24–28mm in FocalLengthIn35mmFormat, so they all get flagged.
+const WIDE_ANGLE_THRESHOLD_MM = 40;
+
+// Best-effort browser EXIF read. Returns:
+//   true  — EXIF present AND shows focal length < WIDE_ANGLE_THRESHOLD_MM
+//   false — EXIF present AND shows focal length ≥ WIDE_ANGLE_THRESHOLD_MM
+//   null  — no EXIF, unreadable EXIF, no focal length field, or a read error.
+// The null case lets /api/generate fall back to Block 1's generic wording.
+const readWideAngleFromFile = async (file: File): Promise<boolean | null> => {
+  try {
+    const exif = (await exifr.parse(file, {
+      pick: ["FocalLengthIn35mmFormat", "FocalLength"],
+    })) as { FocalLengthIn35mmFormat?: number; FocalLength?: number } | undefined;
+    if (!exif) return null;
+    // Prefer the 35mm-equivalent field — phone cameras report both and the
+    // 35mm figure is what "40mm" means in photographic terms.
+    if (typeof exif.FocalLengthIn35mmFormat === "number") {
+      return exif.FocalLengthIn35mmFormat < WIDE_ANGLE_THRESHOLD_MM;
+    }
+    // Fallback: raw focal length in mm (actual lens spec, not 35mm-equiv).
+    // Phone lenses are physically short — 6–8mm actual — so anything under
+    // 20mm actual is almost certainly wide at portrait distances. This is a
+    // conservative heuristic; it'll miss some crop-sensor cameras but won't
+    // false-positive on true 85mm portrait lenses.
+    if (typeof exif.FocalLength === "number") {
+      return exif.FocalLength < 20;
+    }
+    return null;
+  } catch {
+    // Any parse failure (corrupt EXIF, stripped metadata, unsupported format)
+    // → silently null so the generic Block 1 wording handles it.
+    return null;
+  }
+};
+
 const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) => {
   // Upload files one at a time to Vercel Blob via our /api/upload endpoint.
   // Each photo flows through three states: uploading → done (with blobUrl) or error.
@@ -443,10 +488,14 @@ const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) 
       blobUrl: null,
       status: "uploading",
       errorMessage: null,
+      isWideAngle: null, // filled in by the EXIF read below once it resolves
     }));
     setPhotos((prev) => [...prev, ...placeholders]);
 
     // Kick off each upload in parallel and update the matching placeholder.
+    // We also fire an EXIF read in parallel so the wide-angle flag is ready
+    // by the time the user clicks "Generate 6 headshots" on the Style screen.
+    // EXIF reads are local and near-instant; upload is the long pole.
     placeholders.forEach((placeholder, idx) => {
       const file = batch[idx];
       upload(file.name, file, {
@@ -473,6 +522,16 @@ const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) 
             ),
           );
         });
+
+      // EXIF read — independent of upload result. Even if the upload fails,
+      // the flag isn't load-bearing; the UI doesn't surface it to the user.
+      readWideAngleFromFile(file).then((isWideAngle) => {
+        setPhotos((prev) =>
+          prev.map((p) =>
+            p.id === placeholder.id ? { ...p, isWideAngle } : p,
+          ),
+        );
+      });
     });
   };
 
@@ -2452,6 +2511,10 @@ export default function App() {
   // without forcing the user to restart the flow.
   const [lastSelections, setLastSelections] = useState<StyleSelections | null>(null);
   const [lastPhotoUrls, setLastPhotoUrls] = useState<string[]>([]);
+  // Whether the client EXIF read found a wide-angle lens on any reference
+  // photo. Cached at generate time so per-slot regenerations use the same
+  // prompt-correction flag. See /api/generate BLOCK_LENS_CORRECTION.
+  const [lastHasWideAngle, setLastHasWideAngle] = useState(false);
   // Which thumbnail slots currently have an in-flight single-slot regeneration.
   // The GridScreen overlays a loading spinner on these so the rest of the grid
   // stays interactive.
@@ -2478,6 +2541,7 @@ export default function App() {
     setGenerationError(null);
     setLastSelections(null);
     setLastPhotoUrls([]);
+    setLastHasWideAngle(false);
     setRegeneratingSlots(new Set());
     setHasSeenTips(false);
     setShowTipsModal(false);
@@ -2533,6 +2597,7 @@ export default function App() {
           lighting: lastSelections.lighting,
           background: lastSelections.background,
           variationIndex: index,
+          hasWideAngle: lastHasWideAngle,
         }),
       });
       if (!response.ok) {
@@ -2571,9 +2636,13 @@ export default function App() {
     // Only send the photos that successfully uploaded to Blob. Silently drop
     // any that are still pending or errored — the user shouldn't be blocked
     // on a stray failed upload if they have 3+ good ones.
-    const photoUrls = photos
-      .filter((p) => p.status === "done" && p.blobUrl)
-      .map((p) => p.blobUrl as string);
+    const usablePhotos = photos.filter((p) => p.status === "done" && p.blobUrl);
+    const photoUrls = usablePhotos.map((p) => p.blobUrl as string);
+    // Wide-angle flag: true if ANY usable reference photo was detected as
+    // wide via EXIF. `null` (EXIF unreadable) and `false` (confirmed ≥40mm)
+    // both count as "not wide" — the server will fall back to Block 1's
+    // generic "if it appears wide-angle..." wording in those cases.
+    const hasWideAngle = usablePhotos.some((p) => p.isWideAngle === true);
 
     if (photoUrls.length < 3) {
       setGenerationError(
@@ -2593,6 +2662,7 @@ export default function App() {
     // without asking the user to reselect anything.
     setLastSelections(selections);
     setLastPhotoUrls(photoUrls);
+    setLastHasWideAngle(hasWideAngle);
     setScreen("loading");
 
     // Fire 6 parallel calls. Each gets a unique variationIndex (0-5) so the
@@ -2610,6 +2680,7 @@ export default function App() {
             lighting: selections.lighting,
             background: selections.background,
             variationIndex: index,
+            hasWideAngle,
           }),
         });
         if (!response.ok) {
