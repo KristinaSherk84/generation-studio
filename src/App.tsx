@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
 import { Upload, Check, X, ArrowLeft, RefreshCw, Loader2, Download } from "lucide-react";
 import { upload } from "@vercel/blob/client";
 import exifr from "exifr";
@@ -1930,8 +1930,20 @@ const CheckoutScreen = ({
 type DownloadScreenProps = {
   email: string;
   photoUrls: string[];
+  // "Generate a different Style" — takes the user back to the Style screen
+  // with their reference photos preserved (no re-upload required).
   onNewStyle: () => void;
   onHome: () => void;
+  // Inputs for the post-purchase cross-style bonus block. When all present,
+  // DownloadScreen fires 2 extra /api/generate calls on mount (one per style
+  // the user did NOT pick) and renders them as 2 additional download cards.
+  // Optional so the component still renders if called from a code path that
+  // doesn't have these (e.g. a future preview screen).
+  chosenStyle?: StyleSelections["style"];
+  referencePhotoUrls?: string[];
+  hasWideAngle?: boolean;
+  attire?: StyleSelections["attire"];
+  lighting?: StyleSelections["lighting"];
 };
 
 // localStorage key for the "Don't show again" preference on the download
@@ -1960,7 +1972,17 @@ const readSuppressed = (): boolean => {
   }
 };
 
-const DownloadScreen = ({ email, photoUrls, onNewStyle, onHome }: DownloadScreenProps) => {
+const DownloadScreen = ({
+  email,
+  photoUrls,
+  onNewStyle,
+  onHome,
+  chosenStyle,
+  referencePhotoUrls,
+  hasWideAngle,
+  attire,
+  lighting,
+}: DownloadScreenProps) => {
   const [downloaded, setDownloaded] = useState<Set<number>>(new Set());
   // Track which tile currently has a download in-flight so we can show a
   // tiny "Preparing…" state on its button. Separate from `downloaded` so a
@@ -2085,6 +2107,191 @@ const DownloadScreen = ({ email, photoUrls, onNewStyle, onHome }: DownloadScreen
         return next;
       });
     }
+  };
+
+  // ------------------------------------------------------------------
+  // CROSS-STYLE BONUS GENERATIONS
+  //
+  // After a purchase, we give the user 2 free single headshots rendered
+  // in the two styles they DIDN'T pick. So if they bought Executive, we
+  // generate 1 Corporate + 1 Creative preview. Fires on DownloadScreen
+  // mount using the same reference photos + attire/lighting they chose,
+  // and renders as 2 additional download cards below the main grid.
+  //
+  // Cost: 2 extra Gemini calls per successful purchase. Ok during the
+  // last 24h of free beta; once Stripe is in we'll want to confirm these
+  // only fire post-payment (they already do, since DownloadScreen only
+  // renders from the "success" screen state after CheckoutScreen
+  // completes).
+  // ------------------------------------------------------------------
+
+  // Which two styles are "other" relative to the one the user chose. Order
+  // is stable (alphabetical), so bonus[0] and bonus[1] always line up.
+  const OTHER_STYLES: StyleSelections["style"][] = chosenStyle
+    ? (["corporate", "creative", "executive"] as const).filter(
+        (s): s is StyleSelections["style"] => s !== chosenStyle,
+      )
+    : [];
+
+  type BonusSlot = {
+    style: StyleSelections["style"];
+    image: string | null; // data URL from /api/generate, or null while pending/errored
+    loading: boolean;
+    error: string | null;
+  };
+  const [bonus, setBonus] = useState<BonusSlot[]>(() =>
+    OTHER_STYLES.map((s) => ({ style: s, image: null, loading: false, error: null })),
+  );
+  const [bonusDownloaded, setBonusDownloaded] = useState<Set<number>>(new Set());
+  const [bonusInFlight, setBonusInFlight] = useState<Set<number>>(new Set());
+
+  // Guard against React 19 StrictMode double-invocation firing 4 API calls
+  // instead of 2 in development. Survives strict-mode's simulated remount
+  // because useRef state persists across effect re-runs of the same instance.
+  const bonusFired = useRef(false);
+
+  useEffect(() => {
+    if (bonusFired.current) return;
+    // Need enough inputs to actually generate. If any are missing (e.g. a
+    // direct navigation to /success that skipped checkout), just silently
+    // omit the bonus section.
+    if (
+      !chosenStyle ||
+      !referencePhotoUrls ||
+      referencePhotoUrls.length === 0 ||
+      !attire ||
+      !lighting ||
+      OTHER_STYLES.length === 0
+    ) {
+      return;
+    }
+    bonusFired.current = true;
+
+    OTHER_STYLES.forEach((bonusStyle, idx) => {
+      // Mark this slot as loading up front so the UI shows a spinner while
+      // the request is in flight. Using functional setState so parallel
+      // updates across the two slots don't clobber each other.
+      setBonus((prev) => {
+        const next = [...prev];
+        next[idx] = { ...next[idx], loading: true, error: null };
+        return next;
+      });
+
+      fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          photoUrls: referencePhotoUrls,
+          style: bonusStyle,
+          attire,
+          lighting,
+          // Corporate needs a background; Creative/Executive pull their
+          // background direction from the style prompt itself. Default to
+          // lightgrey for a safe, clean look that flatters any skin tone.
+          background: bonusStyle === "corporate" ? "lightgrey" : undefined,
+          // variationIndex 0 = Duchenne-eye-smile, slight left lean. Best
+          // single-frame flavor to show off each bonus style.
+          variationIndex: 0,
+          hasWideAngle: hasWideAngle ?? false,
+        }),
+      })
+        .then(async (r) => {
+          if (!r.ok) {
+            const err = (await r.json().catch(() => ({}))) as { error?: string };
+            throw new Error(err.error || `HTTP ${r.status}`);
+          }
+          return r.json() as Promise<{ image: string }>;
+        })
+        .then((data) => {
+          setBonus((prev) => {
+            const next = [...prev];
+            next[idx] = { ...next[idx], loading: false, image: data.image, error: null };
+            return next;
+          });
+        })
+        .catch((e: unknown) => {
+          setBonus((prev) => {
+            const next = [...prev];
+            next[idx] = {
+              ...next[idx],
+              loading: false,
+              error: e instanceof Error ? e.message : "Generation failed",
+            };
+            return next;
+          });
+        });
+    });
+    // Mount-only: DownloadScreen is rendered once per delivery and unmounted
+    // when the user navigates away, so a deps array here would add noise.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Download a bonus headshot. Same mobile/desktop branching as the main
+  // grid's handleDownload, just with separate in-flight / downloaded state
+  // so the two sections don't interfere.
+  const handleBonusDownload = async (idx: number) => {
+    if (bonusInFlight.has(idx)) return;
+    const slot = bonus[idx];
+    if (!slot || !slot.image) return;
+
+    // Mobile: open in a new tab, user long-presses to save to Photos.
+    if (isMobileDevice()) {
+      const anchor = document.createElement("a");
+      anchor.href = slot.image;
+      anchor.target = "_blank";
+      anchor.rel = "noopener";
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      setBonusDownloaded((prev) => {
+        const next = new Set(prev);
+        next.add(idx);
+        return next;
+      });
+      return;
+    }
+
+    // Desktop: fetch-and-blob so the download attribute actually triggers
+    // a save to Downloads. Works with both data URLs and remote URLs.
+    setBonusInFlight((prev) => {
+      const next = new Set(prev);
+      next.add(idx);
+      return next;
+    });
+    try {
+      const response = await fetch(slot.image);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = `headshot-${slot.style}.jpg`;
+      anchor.rel = "noopener";
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+      setBonusDownloaded((prev) => {
+        const next = new Set(prev);
+        next.add(idx);
+        return next;
+      });
+    } catch {
+      window.open(slot.image, "_blank", "noopener");
+    } finally {
+      setBonusInFlight((prev) => {
+        const next = new Set(prev);
+        next.delete(idx);
+        return next;
+      });
+    }
+  };
+
+  // Pretty label for each style used in the bonus section headings.
+  const STYLE_LABEL: Record<StyleSelections["style"], string> = {
+    corporate: "Corporate",
+    creative: "Creative",
+    executive: "Executive",
   };
 
   return (
@@ -2225,6 +2432,200 @@ const DownloadScreen = ({ email, photoUrls, onNewStyle, onHome }: DownloadScreen
         }
       `}</style>
 
+      {/* Cross-style bonus: two single headshots rendered in the styles the
+          user didn't pick. Each has its own loading / ready / error state and
+          its own download button with Downloaded ✓ confirmation. Only shown
+          if we actually have the inputs needed to fire the requests. */}
+      {bonus.length > 0 && chosenStyle && (
+        <div style={{ marginTop: 48 }}>
+          <div style={{ textAlign: "center", marginBottom: 20 }}>
+            <div
+              style={{
+                fontSize: 11,
+                letterSpacing: 2,
+                color: C.mediumGrey,
+                textTransform: "uppercase",
+                marginBottom: 8,
+              }}
+            >
+              Bonus
+            </div>
+            <h3
+              style={{
+                fontSize: 20,
+                fontWeight: 500,
+                color: C.dark,
+                margin: 0,
+                letterSpacing: -0.2,
+              }}
+            >
+              See your face in the other two styles
+            </h3>
+            <p
+              style={{
+                fontSize: 13,
+                color: C.mediumGrey,
+                marginTop: 8,
+                lineHeight: 1.6,
+                maxWidth: 480,
+                marginLeft: "auto",
+                marginRight: "auto",
+              }}
+            >
+              You picked{" "}
+              <span style={{ color: C.dark, fontWeight: 500 }}>
+                {STYLE_LABEL[chosenStyle]}
+              </span>
+              . Here's one free single headshot in each of the other two styles —
+              on the house.
+            </p>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+              gap: 16,
+            }}
+          >
+            {bonus.map((slot, i) => {
+              const isDownloaded = bonusDownloaded.has(i);
+              const isDownloading = bonusInFlight.has(i);
+              return (
+                <div
+                  key={slot.style}
+                  style={{
+                    background: C.white,
+                    border: `1px solid ${C.border}`,
+                    borderRadius: 8,
+                    overflow: "hidden",
+                    display: "flex",
+                    flexDirection: "column",
+                  }}
+                >
+                  <div
+                    style={{
+                      aspectRatio: "4/5",
+                      background: C.lightGrey,
+                      overflow: "hidden",
+                      position: "relative",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    {slot.image ? (
+                      <img
+                        src={slot.image}
+                        alt={`${STYLE_LABEL[slot.style]} bonus headshot`}
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          objectFit: "cover",
+                          display: "block",
+                        }}
+                      />
+                    ) : slot.loading ? (
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "center",
+                          gap: 10,
+                          color: C.mediumGrey,
+                          fontSize: 12,
+                        }}
+                      >
+                        <Loader2 size={22} style={{ animation: "spin 1s linear infinite" }} />
+                        <span>Generating {STYLE_LABEL[slot.style]}…</span>
+                      </div>
+                    ) : slot.error ? (
+                      <div
+                        style={{
+                          padding: 16,
+                          textAlign: "center",
+                          color: C.mediumGrey,
+                          fontSize: 12,
+                          lineHeight: 1.5,
+                        }}
+                      >
+                        Couldn't generate the {STYLE_LABEL[slot.style]} version. Your paid
+                        headshots above are unaffected.
+                      </div>
+                    ) : null}
+                    {/* Style badge in the top-left corner so users can tell at a
+                        glance which style this card represents. */}
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: 10,
+                        left: 10,
+                        background: "rgba(44, 44, 42, 0.82)",
+                        color: C.white,
+                        fontSize: 11,
+                        fontWeight: 500,
+                        letterSpacing: 0.5,
+                        padding: "4px 10px",
+                        borderRadius: 999,
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      {STYLE_LABEL[slot.style]}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleBonusDownload(i)}
+                    disabled={!slot.image || isDownloading}
+                    style={{
+                      border: "none",
+                      padding: "12px 14px",
+                      fontSize: 13,
+                      fontWeight: 500,
+                      cursor: !slot.image || isDownloading ? "default" : "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
+                      background: !slot.image
+                        ? C.lightGrey
+                        : isDownloaded
+                        ? C.border
+                        : C.dark,
+                      color: !slot.image
+                        ? C.mediumGrey
+                        : isDownloaded
+                        ? C.dark
+                        : C.buttonText,
+                      transition: "background 0.2s, color 0.2s",
+                      ...font,
+                    }}
+                  >
+                    {isDownloading ? (
+                      <>
+                        <Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} />
+                        <span>Preparing…</span>
+                      </>
+                    ) : isDownloaded ? (
+                      <>
+                        <Check size={16} color="#2F7A3E" />
+                        <span>Downloaded</span>
+                      </>
+                    ) : (
+                      <>
+                        <Download size={16} />
+                        <span>
+                          Download {STYLE_LABEL[slot.style].toLowerCase()}
+                        </span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div
         style={{
           background: C.white,
@@ -2235,13 +2636,14 @@ const DownloadScreen = ({ email, photoUrls, onNewStyle, onHome }: DownloadScreen
         }}
       >
         <div style={{ fontSize: 13, fontWeight: 500, color: C.dark, marginBottom: 8 }}>
-          Want to try a different style?
+          Want a full new set in a different style?
         </div>
         <div style={{ fontSize: 13, color: C.mediumGrey, lineHeight: 1.6, marginBottom: 16 }}>
-          Start a fresh session to generate a new set in a different look.
+          Generate 6 fresh headshots in another style. Your uploaded reference photos
+          are still saved, so you'll go straight to the style picker — no re-uploading.
         </div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <Button onClick={onNewStyle}>Start new session</Button>
+          <Button onClick={onNewStyle}>Generate a different Style</Button>
           <Button variant="ghost" onClick={onHome}>
             Back to home
           </Button>
@@ -2697,7 +3099,7 @@ export default function App() {
         });
         setReadyCount((n) => n + 1);
         return data.image;
-      } catch (err) {
+      } catch {
         // Swallow per-call errors — we'll surface them only if ALL 6 fail.
         return null;
       }
@@ -2778,13 +3180,30 @@ export default function App() {
           onBack={() => setScreen("grid")}
         />
       )}
-      {screen === "success" && (
+      {screen === "success" && lastSelections && (
         <DownloadScreen
           email={email}
           photoUrls={deliveredPhotoUrls}
+          chosenStyle={lastSelections.style}
+          referencePhotoUrls={lastPhotoUrls}
+          hasWideAngle={lastHasWideAngle}
+          attire={lastSelections.attire}
+          lighting={lastSelections.lighting}
           onNewStyle={() => {
-            reset();
-            setScreen("upload");
+            // "Generate a different Style": keep reference photos + EXIF flag
+            // + email, but wipe generated images / cart / selections so the
+            // Style screen is a clean slate. Skips Upload since photos are
+            // already in state and cached in Blob.
+            setGeneratedImages([]);
+            setReadyCount(0);
+            setGenerationError(null);
+            setSelectedImageIndices([]);
+            setDeliveredPhotoUrls([]);
+            setRegenCount(0);
+            setRegeneratingSlots(new Set());
+            setLastSelections(null);
+            // Keep: photos, lastPhotoUrls, lastHasWideAngle, email, hasSeenTips
+            setScreen("style");
           }}
           onHome={reset}
         />
