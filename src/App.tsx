@@ -92,7 +92,7 @@ const PHOTOG_TIPS = [
   },
   {
     title: "Variety matters.",
-    body: "Different expressions, angles, and outfits. Four to eight photos is the sweet spot — more isn't always better.",
+    body: "Different expressions, angles, and outfits. Four to eight photos is the sweet spot — more isn't always better. Include at least one close-cropped shot where your head nearly fills the frame — the AI mirrors your framing.",
   },
   {
     title: "The wider the lens, the more distorted your face.",
@@ -2166,9 +2166,6 @@ const DownloadScreen = ({
   const [bonus, setBonus] = useState<BonusSlot[]>(() =>
     OTHER_STYLES.map((s) => ({ style: s, image: null, loading: false, error: null })),
   );
-  const [bonusDownloaded, setBonusDownloaded] = useState<Set<number>>(new Set());
-  const [bonusInFlight, setBonusInFlight] = useState<Set<number>>(new Set());
-
   // Guard against React 19 StrictMode double-invocation firing 4 API calls
   // instead of 2 in development. Survives strict-mode's simulated remount
   // because useRef state persists across effect re-runs of the same instance.
@@ -2249,67 +2246,6 @@ const DownloadScreen = ({
     // when the user navigates away, so a deps array here would add noise.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Download a bonus headshot. Same mobile/desktop branching as the main
-  // grid's handleDownload, just with separate in-flight / downloaded state
-  // so the two sections don't interfere.
-  const handleBonusDownload = async (idx: number) => {
-    if (bonusInFlight.has(idx)) return;
-    const slot = bonus[idx];
-    if (!slot || !slot.image) return;
-
-    // Mobile: open in a new tab, user long-presses to save to Photos.
-    if (isMobileDevice()) {
-      const anchor = document.createElement("a");
-      anchor.href = slot.image;
-      anchor.target = "_blank";
-      anchor.rel = "noopener";
-      document.body.appendChild(anchor);
-      anchor.click();
-      document.body.removeChild(anchor);
-      setBonusDownloaded((prev) => {
-        const next = new Set(prev);
-        next.add(idx);
-        return next;
-      });
-      return;
-    }
-
-    // Desktop: fetch-and-blob so the download attribute actually triggers
-    // a save to Downloads. Works with both data URLs and remote URLs.
-    setBonusInFlight((prev) => {
-      const next = new Set(prev);
-      next.add(idx);
-      return next;
-    });
-    try {
-      const response = await fetch(slot.image);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const blob = await response.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = objectUrl;
-      anchor.download = `headshot-${slot.style}.jpg`;
-      anchor.rel = "noopener";
-      document.body.appendChild(anchor);
-      anchor.click();
-      document.body.removeChild(anchor);
-      setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
-      setBonusDownloaded((prev) => {
-        const next = new Set(prev);
-        next.add(idx);
-        return next;
-      });
-    } catch {
-      window.open(slot.image, "_blank", "noopener");
-    } finally {
-      setBonusInFlight((prev) => {
-        const next = new Set(prev);
-        next.delete(idx);
-        return next;
-      });
-    }
-  };
 
   // Pretty label for each style used in the bonus section headings.
   const STYLE_LABEL: Record<StyleSelections["style"], string> = {
@@ -2500,21 +2436,21 @@ const DownloadScreen = ({
               <span style={{ color: C.dark, fontWeight: 500 }}>
                 {STYLE_LABEL[chosenStyle]}
               </span>
-              . Here's one free single headshot in each of the other two styles —
-              on the house.
+              . Here's a watermarked preview of your photos in the other two
+              styles. Regenerate a fresh set of 6 in either style to get
+              downloadable versions.
             </p>
           </div>
 
           <div
             style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+              display: "flex",
+              flexWrap: "wrap",
+              justifyContent: "center",
               gap: 16,
             }}
           >
-            {bonus.map((slot, i) => {
-              const isDownloaded = bonusDownloaded.has(i);
-              const isDownloading = bonusInFlight.has(i);
+            {bonus.map((slot) => {
               return (
                 <div
                   key={slot.style}
@@ -2525,6 +2461,8 @@ const DownloadScreen = ({
                     overflow: "hidden",
                     display: "flex",
                     flexDirection: "column",
+                    flex: "0 0 240px",
+                    maxWidth: 240,
                   }}
                 >
                   <div
@@ -2539,16 +2477,36 @@ const DownloadScreen = ({
                     }}
                   >
                     {slot.image ? (
-                      <img
-                        src={slot.image}
-                        alt={`${STYLE_LABEL[slot.style]} bonus headshot`}
-                        style={{
-                          width: "100%",
-                          height: "100%",
-                          objectFit: "cover",
-                          display: "block",
-                        }}
-                      />
+                      <>
+                        <img
+                          src={slot.image}
+                          alt={`${STYLE_LABEL[slot.style]} bonus headshot — watermarked preview`}
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "cover",
+                            display: "block",
+                            userSelect: "none",
+                            pointerEvents: "none",
+                          }}
+                          draggable={false}
+                          onContextMenu={(e) => e.preventDefault()}
+                        />
+                        {/* Diagonal repeating "PREVIEW" watermark. Rendered as
+                            an SVG background-image pattern so the watermark
+                            appears even on any screenshot the user takes. */}
+                        <div
+                          aria-hidden
+                          style={{
+                            position: "absolute",
+                            inset: 0,
+                            pointerEvents: "none",
+                            backgroundImage:
+                              "url(\"data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='110'%3E%3Ctext x='90' y='65' font-family='Arial, sans-serif' font-size='18' font-weight='700' fill='rgba(255,255,255,0.55)' stroke='rgba(0,0,0,0.25)' stroke-width='0.6' text-anchor='middle' letter-spacing='3' transform='rotate(-28 90 65)'%3EPREVIEW%3C/text%3E%3C/svg%3E\")",
+                            backgroundRepeat: "repeat",
+                          }}
+                        />
+                      </>
                     ) : slot.loading ? (
                       <div
                         style={{
@@ -2597,55 +2555,22 @@ const DownloadScreen = ({
                       {STYLE_LABEL[slot.style]}
                     </div>
                   </div>
-                  <button
-                    onClick={() => handleBonusDownload(i)}
-                    disabled={!slot.image || isDownloading}
-                    style={{
-                      border: "none",
-                      padding: "12px 14px",
-                      fontSize: 13,
-                      fontWeight: 500,
-                      cursor: !slot.image || isDownloading ? "default" : "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: 8,
-                      background: !slot.image
-                        ? C.lightGrey
-                        : isDownloaded
-                        ? C.border
-                        : C.dark,
-                      color: !slot.image
-                        ? C.mediumGrey
-                        : isDownloaded
-                        ? C.dark
-                        : C.buttonText,
-                      transition: "background 0.2s, color 0.2s",
-                      ...font,
-                    }}
-                  >
-                    {isDownloading ? (
-                      <>
-                        <Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} />
-                        <span>Preparing…</span>
-                      </>
-                    ) : isDownloaded ? (
-                      <>
-                        <Check size={16} color="#2F7A3E" />
-                        <span>Downloaded</span>
-                      </>
-                    ) : (
-                      <>
-                        <Download size={16} />
-                        <span>
-                          Download {STYLE_LABEL[slot.style].toLowerCase()}
-                        </span>
-                      </>
-                    )}
-                  </button>
                 </div>
               );
             })}
+          </div>
+
+          {/* Shared CTA under both bonus previews. Sends the user back to the
+              Style screen (reference photos preserved) to buy a fresh set of 6
+              in whichever style they want to unlock. */}
+          <div style={{ marginTop: 20, display: "flex", justifyContent: "center" }}>
+            <Button
+              onClick={onNewStyle}
+              style={{ display: "inline-flex", alignItems: "center", gap: 8 }}
+            >
+              <RefreshCw size={16} />
+              Regenerate in a different style
+            </Button>
           </div>
         </div>
       )}
