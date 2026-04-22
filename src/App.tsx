@@ -2507,8 +2507,8 @@ const DownloadScreen = ({
                 <div
                   key={slot.style}
                   style={{
-                    background: C.white,
-                    border: `1px solid ${C.border}`,
+                    background: C.dark,
+                    border: `1px solid ${C.dark}`,
                     borderRadius: 8,
                     overflow: "hidden",
                     display: "flex",
@@ -2520,7 +2520,7 @@ const DownloadScreen = ({
                   <div
                     style={{
                       aspectRatio: "4/5",
-                      background: C.lightGrey,
+                      background: C.dark,
                       overflow: "hidden",
                       position: "relative",
                       display: "flex",
@@ -2566,7 +2566,7 @@ const DownloadScreen = ({
                           flexDirection: "column",
                           alignItems: "center",
                           gap: 10,
-                          color: C.mediumGrey,
+                          color: C.buttonText,
                           fontSize: 12,
                         }}
                       >
@@ -2578,7 +2578,7 @@ const DownloadScreen = ({
                         style={{
                           padding: 16,
                           textAlign: "center",
-                          color: C.mediumGrey,
+                          color: C.buttonText,
                           fontSize: 12,
                           lineHeight: 1.5,
                         }}
