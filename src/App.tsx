@@ -409,6 +409,24 @@ const Landing = ({ onStart }: LandingProps) => (
       ))}
     </div>
 
+    {/* Pet callout — surfaces the "also works for pets" angle early so
+        users know from the landing page they can use their animals. Kept
+        as a soft centered line so it doesn't fight the before/after gallery
+        above or the pricing card below for attention. */}
+    <div
+      style={{
+        textAlign: "center",
+        fontSize: 14,
+        color: C.mediumGrey,
+        marginTop: -16,
+        marginBottom: 40,
+        lineHeight: 1.6,
+      }}
+    >
+      <span style={{ color: C.dark, fontWeight: 500 }}>It even works for pets.</span>{" "}
+      Upload a few photos of your dog, cat, or horse — same flow, same price.
+    </div>
+
     <div
       style={{
         background: C.white,
@@ -1456,12 +1474,43 @@ const GridScreen = ({
         </div>
       </div>
 
+      {/* Hint above the grid so users discover per-photo regeneration.
+          It's a soft one-liner, not a button — the actual affordance lives
+          on each tile as the refresh icon. */}
       <div
+        style={{
+          marginTop: 24,
+          padding: "12px 16px",
+          borderRadius: 8,
+          background: C.lightGrey,
+          color: C.dark,
+          fontSize: 13,
+          lineHeight: 1.6,
+          textAlign: "center",
+        }}
+      >
+        <span style={{ fontWeight: 500 }}>Don't love one?</span>{" "}
+        Tap the <RefreshCw size={12} style={{ display: "inline", verticalAlign: "middle", marginBottom: 2 }} />{" "}
+        icon on any photo to regenerate just that one.
+      </div>
+
+      {/* Responsive 3x2 on desktop, 2x3 on mobile. Inline style sets the
+          desktop default; the <style> block below overrides to 2 columns
+          when the viewport is narrow so each watermarked thumbnail stays
+          large enough to see on a phone. The !important is required
+          because inline gridTemplateColumns would otherwise win. */}
+      <style>{`
+        @media (max-width: 600px) {
+          .gen-grid { grid-template-columns: repeat(2, 1fr) !important; }
+        }
+      `}</style>
+      <div
+        className="gen-grid"
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(3, 1fr)",
           gap: 16,
-          marginTop: 32,
+          marginTop: 16,
         }}
       >
         {photos.map((i) => {
@@ -2302,11 +2351,13 @@ const DownloadScreen = ({
       </div>
 
       {/* Download grid — one thumbnail + button per delivered photo.
-          Button shows "Download" by default, "Downloaded ✓" after click. */}
+          Button shows "Download" by default, "Downloaded ✓" after click.
+          auto-fit + minmax(140, 1fr) so mobile fits 2 cols side-by-side (~155px
+          each) and desktop collapses empty tracks so 2 items stretch to fill. */}
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
           gap: 16,
           marginTop: 40,
         }}
