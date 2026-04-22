@@ -330,33 +330,24 @@ const Landing = ({ onStart }: LandingProps) => (
     >
       Instant · No wait · Ready in 2 minutes
     </div>
+    {/* H1 fontSize uses clamp() so the title scales with viewport width.
+        On narrow mobile (~390px) it resolves to ~22px — roughly 1/3 of its
+        desktop size — which keeps the title from dominating the first screen.
+        On desktop (≥1040px wide) it hits the 52px ceiling and looks as before. */}
     <h1
       style={{
-        fontSize: 52,
+        fontSize: "clamp(22px, 5vw, 52px)",
         fontWeight: 500,
         color: C.dark,
-        lineHeight: 1.1,
+        lineHeight: 1.15,
         margin: 0,
-        letterSpacing: -1,
+        letterSpacing: -0.5,
       }}
     >
       Instant Professional Headshots.
       <br />
       Only pay for headshots you like.
     </h1>
-    <p
-      style={{
-        fontSize: 17,
-        color: C.mediumGrey,
-        lineHeight: 1.6,
-        marginTop: 24,
-        maxWidth: 560,
-      }}
-    >
-      Upload a few photos, pick a style, and in about 2 minutes you'll have six professional-grade
-      headshots at 2K resolution. No 30-minute waits, no model training — just instant results. You
-      only pay for the ones you actually want — no subscriptions, no surprises.
-    </p>
 
     {/* Landing hero before/after gallery — three real headshot transformations.
         Filenames and alt text front-load Kristi's highest-volume target
@@ -367,8 +358,10 @@ const Landing = ({ onStart }: LandingProps) => (
       style={{
         display: "grid",
         gridTemplateColumns: "repeat(3, 1fr)",
-        gap: 16,
-        margin: "48px 0",
+        gap: 12,
+        // Vertical margin scales down on mobile so the title→gallery→copy
+        // stack stays tight on a phone and breathes on desktop.
+        margin: "clamp(20px, 4vw, 48px) 0",
       }}
     >
       {[
@@ -409,6 +402,25 @@ const Landing = ({ onStart }: LandingProps) => (
       ))}
     </div>
 
+    {/* Description copy — moved below the gallery on 2026-04-22 so the
+        first-screen stack on mobile is: title → real results → explainer.
+        Showing the proof images above the copy makes the value legible in
+        the first glance instead of forcing users to scroll past a paragraph. */}
+    <p
+      style={{
+        fontSize: 16,
+        color: C.mediumGrey,
+        lineHeight: 1.6,
+        marginTop: 0,
+        marginBottom: 24,
+        maxWidth: 560,
+      }}
+    >
+      Upload a few photos, pick a style, and in about 2 minutes you'll have six professional-grade
+      headshots at 2K resolution. No 30-minute waits, no model training — just instant results. You
+      only pay for the ones you actually want — no subscriptions, no surprises.
+    </p>
+
     {/* Pet callout — surfaces the "also works for pets" angle early so
         users know from the landing page they can use their animals. Kept
         as a soft centered line so it doesn't fight the before/after gallery
@@ -418,8 +430,8 @@ const Landing = ({ onStart }: LandingProps) => (
         textAlign: "center",
         fontSize: 14,
         color: C.mediumGrey,
-        marginTop: -16,
-        marginBottom: 40,
+        marginTop: 0,
+        marginBottom: 32,
         lineHeight: 1.6,
       }}
     >
@@ -427,27 +439,37 @@ const Landing = ({ onStart }: LandingProps) => (
       Upload a few photos of your dog, cat, or horse — same flow, same price.
     </div>
 
+    {/* Pricing box padding, internal gap, and vertical spacing all use
+        clamp() so the card compresses on mobile (less negative space,
+        prices sit closer together) while keeping desktop unchanged. */}
     <div
       style={{
         background: C.white,
         border: `1px solid ${C.border}`,
         borderRadius: 8,
-        padding: 32,
+        padding: "clamp(18px, 4vw, 32px)",
         marginBottom: 24,
       }}
     >
-      <div style={{ fontSize: 13, color: C.mediumGrey, marginBottom: 12, fontWeight: 500 }}>
+      <div style={{ fontSize: 13, color: C.mediumGrey, marginBottom: 10, fontWeight: 500 }}>
         Simple pricing
       </div>
-      <div style={{ display: "flex", gap: 48, flexWrap: "wrap", marginBottom: 24 }}>
+      <div
+        style={{
+          display: "flex",
+          gap: "clamp(20px, 5vw, 48px)",
+          flexWrap: "wrap",
+          marginBottom: "clamp(14px, 3vw, 24px)",
+        }}
+      >
         <div>
-          <div style={{ fontSize: 28, fontWeight: 500, color: C.dark }}>$4.99</div>
+          <div style={{ fontSize: 26, fontWeight: 500, color: C.dark }}>$4.99</div>
           <div style={{ fontSize: 12, color: C.mediumGrey, marginTop: 4 }}>
             Session fee · generates 6 headshots
           </div>
         </div>
         <div>
-          <div style={{ fontSize: 28, fontWeight: 500, color: C.dark }}>$9.99</div>
+          <div style={{ fontSize: 26, fontWeight: 500, color: C.dark }}>$9.99</div>
           <div style={{ fontSize: 12, color: C.mediumGrey, marginTop: 4 }}>
             Per headshot you keep · 2K resolution
           </div>
