@@ -1331,6 +1331,40 @@ const LoadingScreen = ({
         </div>
       )}
 
+      {/* Pre-announce the per-photo regenerate feature while the user waits.
+          Same wording pattern as the Grid screen hint so when they land on
+          the Grid they recognize the icon immediately. Only shown while
+          generation is in-flight (hidden on error or after all 6 finish). */}
+      {!errorMessage && !allDone && (
+        <div
+          style={{
+            marginTop: 24,
+            marginLeft: "auto",
+            marginRight: "auto",
+            maxWidth: 480,
+            padding: "14px 18px",
+            borderRadius: 8,
+            background: C.lightGrey,
+            color: C.dark,
+            fontSize: 14,
+            lineHeight: 1.6,
+            textAlign: "center",
+          }}
+        >
+          <span style={{ fontWeight: 500 }}>Not happy with one of your 6?</span>{" "}
+          Use the{" "}
+          <RefreshCw
+            size={14}
+            style={{
+              display: "inline",
+              verticalAlign: "middle",
+              marginBottom: 2,
+            }}
+          />{" "}
+          icon on any photo to get a better result.
+        </div>
+      )}
+
       {/* Thumbnails appear here as each one finishes */}
       {readyImages.length > 0 && (
         <div
