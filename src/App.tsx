@@ -2516,27 +2516,36 @@ const DownloadScreen = ({
             </p>
           </div>
 
+          {/* Two equal-weight CTAs side-by-side: bonus preview (click =
+              regenerate in a different style) and pet card (click = restart
+              with pet photos). Grid keeps them paired on every viewport —
+              cards shrink together on mobile instead of stacking. */}
           <div
             style={{
-              display: "flex",
-              flexWrap: "wrap",
-              justifyContent: "center",
+              display: "grid",
+              gridTemplateColumns: "repeat(2, 1fr)",
               gap: 16,
+              maxWidth: 520,
+              margin: "0 auto",
             }}
           >
             {bonus.map((slot) => {
               return (
-                <div
+                <button
+                  type="button"
                   key={slot.style}
+                  onClick={onNewStyle}
                   style={{
-                    background: C.dark,
-                    border: `1px solid ${C.dark}`,
+                    background: C.white,
+                    border: `1px solid ${C.border}`,
                     borderRadius: 8,
                     overflow: "hidden",
                     display: "flex",
                     flexDirection: "column",
-                    flex: "0 0 240px",
-                    maxWidth: 240,
+                    padding: 0,
+                    cursor: "pointer",
+                    textAlign: "left",
+                    ...font,
                   }}
                 >
                   <div
@@ -2629,7 +2638,27 @@ const DownloadScreen = ({
                       {STYLE_LABEL[slot.style]}
                     </div>
                   </div>
-                </div>
+                  {/* Dark footer mirrors the pet card's footer so the two
+                      cards read as equal-weight CTAs. Clicking anywhere on
+                      the card fires onNewStyle (back to the Style screen
+                      with reference photos preserved). */}
+                  <div
+                    style={{
+                      padding: "12px 14px",
+                      background: C.dark,
+                      color: C.buttonText,
+                      fontSize: 13,
+                      fontWeight: 500,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
+                    }}
+                  >
+                    <RefreshCw size={16} />
+                    <span>Regenerate in a different style</span>
+                  </div>
+                </button>
               );
             })}
 
@@ -2646,8 +2675,6 @@ const DownloadScreen = ({
                 overflow: "hidden",
                 display: "flex",
                 flexDirection: "column",
-                flex: "0 0 240px",
-                maxWidth: 240,
                 padding: 0,
                 cursor: "pointer",
                 textAlign: "left",
@@ -2712,32 +2739,9 @@ const DownloadScreen = ({
             </button>
           </div>
 
-          {/* Tagline under the row, explaining what the pet card does if a
-              user didn't catch it from the CTA alone. */}
-          <div
-            style={{
-              marginTop: 14,
-              fontSize: 13,
-              color: C.mediumGrey,
-              textAlign: "center",
-              lineHeight: 1.6,
-            }}
-          >
-            Upload your pet and generate similar portraits of them.
-          </div>
-
-          {/* Shared CTA under the two cards. Sends the user back to the Style
-              screen (reference photos preserved) to buy a fresh set of 6 in a
-              different style. */}
-          <div style={{ marginTop: 20, display: "flex", justifyContent: "center" }}>
-            <Button
-              onClick={onNewStyle}
-              style={{ display: "inline-flex", alignItems: "center", gap: 8 }}
-            >
-              <RefreshCw size={16} />
-              Regenerate in a different style
-            </Button>
-          </div>
+          {/* No tagline or standalone button here anymore — both cards are
+              self-explanatory via their own footer CTAs ("Regenerate in a
+              different style" / "Upload your pet"). */}
         </div>
       )}
 
