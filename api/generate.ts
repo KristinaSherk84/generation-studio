@@ -70,6 +70,16 @@ type InlineImage = { mimeType: string; data: string };
 
 const BLOCK_1_IDENTITY = `Generate a professional headshot of the person shown in the reference photos. Preserve their facial features with absolute precision: face shape, bone structure, eye shape and color, nose, mouth, hairline, skin tone, age, and any distinguishing marks. You may apply the subtle, flattering retouching a professional photographer would do in post-production: up to approximately 5% overall refinement (light skin smoothing while preserving pores and real skin texture, subtle softening of under-eye shadows), and up to approximately 10% structural refinement to the jawline or any double chin if present. Do not exceed those amounts. The goal is to photograph this specific person in a new setting — not to produce a generic, plastic, smooth, attractive, emotionless face that vaguely resembles them. If in doubt, err toward realism over polish. Retain natural skin texture and add it in if not present in the uploaded reference photos. If any reference photo appears to have been taken with a wide-angle lens (phone selfies commonly distort the nose and mid-face), correct that distortion in the generated image so the face appears as if photographed with a prime 85mm or 135mm portrait lens on a full-frame camera — slight compression of features, natural proportions, no bulging nose or elongated jaw.`;
 
+// Block PET — conditional override that only applies when the subject is an
+// animal rather than a human. Added 2026-04-23 to support the #professionalpets
+// virality angle Kristi is leaning into on the landing page. The dignified
+// (not costume-y) framing is load-bearing: the gag only shares widely if the
+// portrait is plausibly real, so we lean hard into "real tailoring" and "LinkedIn
+// headshot a working photographer might take." Gemini self-detects whether the
+// reference photos show a human or an animal and applies the rule accordingly,
+// so this block is always present in the prompt — it simply no-ops for humans.
+const BLOCK_PET = `If the subject in the reference photos is an animal (dog, cat, horse, or other pet) rather than a human, still generate a dignified professional portrait of that specific animal. Preserve the animal's exact species, breed, coloring, markings, ear shape, and any distinguishing features with absolute precision — this is a specific animal, not a generic one. Always dress the animal in visibly tailored professional attire convincingly scaled to their body: a collared dress shirt and necktie, a small blazer, a cardigan over a collared shirt, or a silk bow tie. The clothes must be clearly visible and read as real tailoring — not a costume, not a hat, not a sticker. All other direction in this prompt (lighting, background, framing, expression) still applies, adapted to the animal's anatomy. The final portrait should look like a real LinkedIn headshot that a working photographer might take — dignified, not comedic. That plausibility is what makes it share-worthy.`;
+
 const BLOCK_2_COMPOSITION = `Frame as a professional business headshot. The specific body angle and crop are specified in the variation block at the end of this prompt — follow those instructions precisely. General rules:
 - Eye line positioned on the upper third of the frame. The subject's eyes should sit approximately one-third of the way down from the top edge of the image — NOT centered vertically.
 - Minimal headroom above the top of the head. The space between the top of the subject's hair and the top edge of the frame should be extremely small — approximately 2–3% of the total frame height. The top of the head should nearly touch the top of the frame. Do NOT leave empty space above the head.
@@ -266,6 +276,11 @@ IMPORTANT OUTPUT CONSTRAINT: Return exactly ONE single photograph. Do NOT return
 function assemblePrompt(req: GenerateRequest): string {
   const parts: string[] = [
     BLOCK_1_IDENTITY,
+    // BLOCK_PET sits right after identity so Gemini evaluates "is this a
+    // pet?" before it starts applying gendered-human attire rules from
+    // Block 4. Order matters: if Block 4 fires first, the model is already
+    // committed to a human interpretation by the time it reads the pet rule.
+    BLOCK_PET,
     BLOCK_2_COMPOSITION,
     buildBlock3Style(req.style, req.variationIndex),
     BLOCK_4_ATTIRE[req.attire],
