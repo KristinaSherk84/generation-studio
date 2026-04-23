@@ -2824,12 +2824,16 @@ const DownloadScreen = ({
             ...font,
           }}
         >
+          {/* Compact modal — tuned so the "Got it" button lands above the
+              fold on an iPhone viewport (~670px usable after Safari chrome).
+              Intro paragraph removed (heading + cards carry the message),
+              icon shrunk, padding + margins + font sizes tightened. */}
           <div
             onClick={(e) => e.stopPropagation()}
             style={{
               background: C.white,
               borderRadius: 12,
-              padding: 32,
+              padding: 22,
               maxWidth: 480,
               width: "100%",
               maxHeight: "90vh",
@@ -2839,21 +2843,21 @@ const DownloadScreen = ({
           >
             <div
               style={{
-                width: 48,
-                height: 48,
+                width: 36,
+                height: 36,
                 borderRadius: "50%",
                 background: C.dark,
                 display: "inline-flex",
                 alignItems: "center",
                 justifyContent: "center",
-                marginBottom: 20,
+                marginBottom: 12,
               }}
             >
-              <Download size={22} color={C.white} />
+              <Download size={18} color={C.white} />
             </div>
             <h3
               style={{
-                fontSize: 22,
+                fontSize: 18,
                 fontWeight: 500,
                 color: C.dark,
                 margin: 0,
@@ -2862,22 +2866,11 @@ const DownloadScreen = ({
             >
               How to save your headshots
             </h3>
-            <p
-              style={{
-                fontSize: 14,
-                color: C.mediumGrey,
-                marginTop: 10,
-                lineHeight: 1.6,
-              }}
-            >
-              A quick heads-up before you tap the Download buttons — saving
-              works a little differently on each device.
-            </p>
 
             <div
               style={{
-                marginTop: 24,
-                padding: 16,
+                marginTop: 14,
+                padding: 12,
                 background: C.pageBg,
                 borderRadius: 8,
                 border: `1px solid ${C.border}`,
@@ -2885,32 +2878,32 @@ const DownloadScreen = ({
             >
               <div
                 style={{
-                  fontSize: 13,
+                  fontSize: 12,
                   fontWeight: 600,
                   color: C.dark,
-                  marginBottom: 8,
+                  marginBottom: 4,
                   textTransform: "uppercase",
                   letterSpacing: 1,
                 }}
               >
                 On your phone
               </div>
-              <div style={{ fontSize: 14, color: C.dark, lineHeight: 1.6 }}>
-                Tapping Download opens the photo in a new tab.{" "}
+              <div style={{ fontSize: 13, color: C.dark, lineHeight: 1.5 }}>
+                Tapping{" "}
                 <span style={{ fontWeight: 500 }}>
-                  Press and hold the photo
-                </span>
-                , then tap <em>Save to Photos</em> (iPhone) or{" "}
-                <em>Download image</em> (Android) — this drops it straight
-                into your camera roll. Close the tab to return and save the
-                next one.
+                  Download beneath each photo
+                </span>{" "}
+                opens it in a new tab. Press and hold the photo, then tap{" "}
+                <em>Save to Photos</em> (iPhone) or <em>Download image</em>{" "}
+                (Android) — this drops it straight into your camera roll.
+                Close the tab to return and save the next one.
               </div>
             </div>
 
             <div
               style={{
-                marginTop: 12,
-                padding: 16,
+                marginTop: 8,
+                padding: 12,
                 background: C.pageBg,
                 borderRadius: 8,
                 border: `1px solid ${C.border}`,
@@ -2918,29 +2911,33 @@ const DownloadScreen = ({
             >
               <div
                 style={{
-                  fontSize: 13,
+                  fontSize: 12,
                   fontWeight: 600,
                   color: C.dark,
-                  marginBottom: 8,
+                  marginBottom: 4,
                   textTransform: "uppercase",
                   letterSpacing: 1,
                 }}
               >
                 On your computer
               </div>
-              <div style={{ fontSize: 14, color: C.dark, lineHeight: 1.6 }}>
-                Tapping Download opens the photo in a new tab.{" "}
-                <span style={{ fontWeight: 500 }}>Right-click the photo</span>{" "}
-                and choose <em>Save Image As…</em> to save it to your device.
+              <div style={{ fontSize: 13, color: C.dark, lineHeight: 1.5 }}>
+                Tapping{" "}
+                <span style={{ fontWeight: 500 }}>
+                  Download beneath each photo
+                </span>{" "}
+                opens it in a new tab. Right-click the photo and choose{" "}
+                <em>Save Image As…</em> to save it to your device.
               </div>
             </div>
 
             <p
               style={{
-                fontSize: 12,
+                fontSize: 11,
                 color: C.mediumGrey,
-                marginTop: 20,
-                lineHeight: 1.5,
+                marginTop: 10,
+                marginBottom: 0,
+                lineHeight: 1.4,
               }}
             >
               Don't close this page until you've saved every photo you want —
@@ -2955,9 +2952,9 @@ const DownloadScreen = ({
                 display: "flex",
                 alignItems: "center",
                 gap: 10,
-                marginTop: 20,
+                marginTop: 12,
                 cursor: "pointer",
-                fontSize: 13,
+                fontSize: 12,
                 color: C.mediumGrey,
                 userSelect: "none",
               }}
@@ -2976,7 +2973,7 @@ const DownloadScreen = ({
               Don't show this again
             </label>
 
-            <div style={{ marginTop: 16 }}>
+            <div style={{ marginTop: 12 }}>
               <Button onClick={dismissInstructions} full>
                 Got it, let's go
               </Button>
