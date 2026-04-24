@@ -2792,11 +2792,33 @@ const DownloadScreen = ({
                 flexDirection: "column",
               }}
             >
+              {/* Photo itself is now a button — clicking anywhere on the
+                  image triggers the same download flow as the grey button
+                  below, so users don't have to aim for the small bar. On
+                  mobile this also makes the long-press path more intuitive
+                  (tap triggers handleDownload which opens the image in a
+                  new tab, where the native save-to-Photos long-press works).
+                  Role=button + keyboard handlers keep it accessible. */}
               <div
+                role="button"
+                tabIndex={isLoading ? -1 : 0}
+                onClick={() => {
+                  if (!isLoading) handleDownload(url, i);
+                }}
+                onKeyDown={(e) => {
+                  if (isLoading) return;
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    handleDownload(url, i);
+                  }
+                }}
+                aria-label={`Download headshot ${i + 1}`}
                 style={{
                   aspectRatio: "4/5",
                   background: C.lightGrey,
                   overflow: "hidden",
+                  cursor: isLoading ? "default" : "pointer",
+                  position: "relative",
                 }}
               >
                 <img
@@ -3617,9 +3639,20 @@ export default function App() {
         const deliverData = (await deliverResp.json()) as {
           photoUrls: string[];
         };
-        // Advance to the Success / Download screen with the delivered URLs.
+        // Restore ALL state DownloadScreen needs. The Stripe redirect is a
+        // full page navigation, which wipes React in-memory state — so
+        // lastSelections/lastPhotoUrls come back null on return and the
+        // `screen === "success" && lastSelections` render gate fails (blank
+        // page). We restore them from the stash so the guard passes.
+        //
+        // hasWideAngle isn't in the stash currently — defaulting to false
+        // is safe; it only affects bonus cross-style previews' lens
+        // correction language (soft downgrade, not broken).
         setEmail(stash.email);
         setDeliveredPhotoUrls(deliverData.photoUrls);
+        setLastSelections(stash.selections);
+        setLastPhotoUrls(stash.referencePhotoUrls);
+        setLastHasWideAngle(false);
         setScreen("success");
       } catch (err) {
         console.error("deliver after Stripe payment failed:", err);
