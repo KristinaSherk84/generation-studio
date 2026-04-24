@@ -295,9 +295,50 @@ const Button = ({
 
 // -------------------- Screen 1: Landing --------------------
 
-type LandingProps = { onStart: () => void };
+type LandingProps = {
+  onStart: () => void;
+  // Fires after the user successfully validates a promo code. Parent marks
+  // the paywall as unlocked in sessionStorage and advances to Upload.
+  onPromoUnlock: () => void;
+};
 
-const Landing = ({ onStart }: LandingProps) => (
+const Landing = ({ onStart, onPromoUnlock }: LandingProps) => {
+  // Promo code state — scoped to Landing so it resets if the user navigates
+  // away and comes back. The unlock flag itself lives in App/sessionStorage.
+  const [showPromoInput, setShowPromoInput] = useState(false);
+  const [promoCode, setPromoCode] = useState("");
+  const [promoStatus, setPromoStatus] =
+    useState<"idle" | "submitting" | "success" | "error">("idle");
+  const [promoErrMsg, setPromoErrMsg] = useState("");
+
+  const submitPromo = async () => {
+    const trimmed = promoCode.trim();
+    if (!trimmed) return;
+    setPromoStatus("submitting");
+    setPromoErrMsg("");
+    try {
+      const resp = await fetch("/api/verify-promo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: trimmed }),
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = (await resp.json()) as { valid?: boolean };
+      if (data.valid) {
+        setPromoStatus("success");
+        // Brief pause so the "Unlocked" flash is visible before navigation.
+        setTimeout(() => onPromoUnlock(), 700);
+      } else {
+        setPromoStatus("error");
+        setPromoErrMsg("That code isn't recognized.");
+      }
+    } catch {
+      setPromoStatus("error");
+      setPromoErrMsg("Something went wrong. Try again in a moment.");
+    }
+  };
+
+  return (
   <div style={{ maxWidth: 960, margin: "0 auto", padding: "80px 32px", ...font }}>
     <div
       style={{
@@ -483,8 +524,102 @@ const Landing = ({ onStart }: LandingProps) => (
       choice, every subtle expression cue was tuned by a working portrait photographer — not a
       generic AI template.
     </PhotogTip>
+
+    {/* Promo code — tucked at the very bottom so normal users never notice it.
+        Click the link to reveal the input; successful code flips the paywall
+        unlock flag in sessionStorage and auto-advances to Upload. The code
+        itself lives as an env var in Vercel (PROMO_CODE) and is validated
+        server-side via /api/verify-promo, so it never ships in the JS bundle. */}
+    <div style={{ marginTop: 64, textAlign: "center", opacity: 0.75 }}>
+      {!showPromoInput ? (
+        <button
+          type="button"
+          onClick={() => setShowPromoInput(true)}
+          style={{
+            background: "transparent",
+            border: "none",
+            color: C.mediumGrey,
+            fontSize: 11,
+            letterSpacing: 1,
+            textTransform: "uppercase",
+            cursor: "pointer",
+            textDecoration: "underline",
+            padding: 4,
+          }}
+        >
+          Got a promo code?
+        </button>
+      ) : (
+        <div
+          style={{
+            display: "inline-flex",
+            flexDirection: "column",
+            gap: 8,
+            alignItems: "center",
+          }}
+        >
+          {promoStatus === "success" ? (
+            <span style={{ fontSize: 13, color: C.dark, fontWeight: 500 }}>
+              Unlocked — continuing…
+            </span>
+          ) : (
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <input
+                type="text"
+                value={promoCode}
+                onChange={(e) => setPromoCode(e.target.value)}
+                placeholder="Enter code"
+                disabled={promoStatus === "submitting"}
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") submitPromo();
+                }}
+                style={{
+                  padding: "8px 12px",
+                  fontSize: 13,
+                  border: `1px solid ${C.border}`,
+                  borderRadius: 6,
+                  fontFamily: "inherit",
+                  background: C.white,
+                  color: C.dark,
+                  outline: "none",
+                }}
+              />
+              <button
+                type="button"
+                onClick={submitPromo}
+                disabled={promoStatus === "submitting" || !promoCode.trim()}
+                style={{
+                  padding: "8px 14px",
+                  fontSize: 12,
+                  letterSpacing: 1,
+                  textTransform: "uppercase",
+                  border: `1px solid ${C.dark}`,
+                  background: C.dark,
+                  color: C.buttonText,
+                  borderRadius: 6,
+                  cursor:
+                    promoStatus === "submitting" || !promoCode.trim()
+                      ? "not-allowed"
+                      : "pointer",
+                  fontFamily: "inherit",
+                  opacity:
+                    promoStatus === "submitting" || !promoCode.trim() ? 0.5 : 1,
+                }}
+              >
+                {promoStatus === "submitting" ? "…" : "Unlock"}
+              </button>
+            </div>
+          )}
+          {promoStatus === "error" && (
+            <span style={{ fontSize: 11, color: "#c0392b" }}>{promoErrMsg}</span>
+          )}
+        </div>
+      )}
+    </div>
   </div>
-);
+  );
+};
 
 // -------------------- Screen 2: Upload --------------------
 
@@ -3081,6 +3216,73 @@ export default function App() {
   const [hasSeenTips, setHasSeenTips] = useState(false);
   const [showTipsModal, setShowTipsModal] = useState(false);
 
+  // --------- Paywall unlock state ---------
+  //
+  // The entry paywall is considered "unlocked" for this session once EITHER:
+  //   (a) the user completed Stripe Checkout for the $4.99 entry fee, or
+  //   (b) the user entered a valid promo code on the landing page.
+  //
+  // Persisted via sessionStorage so a refresh mid-flow doesn't kick them back
+  // to Stripe. sessionStorage (not localStorage) intentionally — unlock should
+  // only survive the current browser tab/session, not forever.
+  //
+  // Phase 1 scope: this flag only gates the UI flow. /api/generate is NOT
+  // gated on paid state yet — Phase 2 will tighten that alongside the $9.99
+  // per-photo checkout at the Grid screen.
+  const [isUnlocked, setIsUnlocked] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.sessionStorage.getItem("paywall_unlocked") === "true";
+  });
+  const markUnlocked = () => {
+    if (typeof window !== "undefined") {
+      window.sessionStorage.setItem("paywall_unlocked", "true");
+    }
+    setIsUnlocked(true);
+  };
+
+  // On mount, check whether we're returning from Stripe Checkout. Stripe
+  // redirects back to `${origin}/?paid=1&session_id=<cs_xxx>` — we verify
+  // server-side before trusting the query param (users can forge ?paid=1
+  // by hand, but they can't forge a paid session ID against our secret key).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    const paidParam = url.searchParams.get("paid");
+    const sessionId = url.searchParams.get("session_id");
+    if (paidParam !== "1" || !sessionId) return;
+
+    // Strip the params immediately so refresh doesn't re-run verify or leave
+    // ?paid=1 in the URL bar if verification fails.
+    const cleanUrl = `${url.origin}${url.pathname}`;
+    window.history.replaceState({}, "", cleanUrl);
+
+    (async () => {
+      try {
+        const resp = await fetch("/api/verify-checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session_id: sessionId }),
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = (await resp.json()) as { paid?: boolean };
+        if (data.paid) {
+          markUnlocked();
+          setScreen("upload");
+          setShowTipsModal(true);
+        } else {
+          // Payment didn't complete — stay on Landing. No error toast; the
+          // user either canceled (expected silent return) or payment failed
+          // (Stripe would have shown its own error on their side).
+          console.warn("Stripe session not marked as paid");
+        }
+      } catch (err) {
+        console.error("verify-checkout failed:", err);
+      }
+    })();
+    // Run exactly once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const reset = () => {
     setScreen("landing");
     setSelectedImageIndices([]);
@@ -3099,13 +3301,45 @@ export default function App() {
     setShowTipsModal(false);
   };
 
-  // Landing → Upload: if this is the user's first time landing on Upload in
-  // this session, show the photographer's tips modal as an overlay.
-  const handleStart = () => {
-    setScreen("upload");
-    if (!hasSeenTips) {
-      setShowTipsModal(true);
+  // Landing → Upload. If the user has already unlocked (via Stripe or promo
+  // code earlier in this session), go straight to Upload. Otherwise redirect
+  // to Stripe Checkout for the $4.99 entry fee — on return, the mount-time
+  // useEffect above catches ?paid=1&session_id=... and advances them here.
+  const handleStart = async () => {
+    if (isUnlocked) {
+      setScreen("upload");
+      if (!hasSeenTips) setShowTipsModal(true);
+      return;
     }
+    // Kick off Stripe Checkout.
+    try {
+      const resp = await fetch("/api/create-checkout-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = (await resp.json()) as { url?: string; error?: string };
+      if (data.url) {
+        // Full-page redirect to Stripe's hosted Checkout. Stripe handles the
+        // payment flow and redirects back to success_url when complete.
+        window.location.href = data.url;
+        return;
+      }
+      throw new Error(data.error || "Stripe returned no URL");
+    } catch (err) {
+      console.error("create-checkout-session failed:", err);
+      alert(
+        "Couldn't start checkout — please refresh and try again. If the problem continues, contact kristi@kristinasherk.com.",
+      );
+    }
+  };
+
+  // Promo code success path. Marks the paywall unlocked and advances the user
+  // to Upload, same as a successful Stripe return. Friends skip the fee.
+  const handlePromoUnlock = () => {
+    markUnlocked();
+    setScreen("upload");
+    if (!hasSeenTips) setShowTipsModal(true);
   };
 
   const handleDismissTips = () => {
@@ -3274,7 +3508,9 @@ export default function App() {
     <div style={{ minHeight: "100vh", background: C.pageBg, ...font }}>
       <Navbar cartCount={selectedImageIndices.length} onLogoClick={reset} />
 
-      {screen === "landing" && <Landing onStart={handleStart} />}
+      {screen === "landing" && (
+        <Landing onStart={handleStart} onPromoUnlock={handlePromoUnlock} />
+      )}
       {screen === "upload" && (
         <UploadScreen
           onNext={() => setScreen("style")}
