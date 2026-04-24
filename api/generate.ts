@@ -75,41 +75,46 @@ const BLOCK_1_IDENTITY = `Generate a professional headshot of the person shown i
 // History:
 //   - 2026-04-24 v1: Initial rule — softer under-eye for women <30, preserve
 //     texture for 30+.
-//   - 2026-04-24 v2: Strengthened with "AGGRESSIVELY SMOOTH" / "eliminate ALL"
-//     language. Backfired in prod — results came back WORSE because Block 7's
-//     "no plastic smoothing, no over-softening, no AI-tell signs" defense
-//     triggered against the aggressive directive, causing Gemini to defensively
-//     re-render under-eye texture even more pronounced than v1.
-//   - 2026-04-24 v3: Measured language. "Eliminate 70%" instead of
-//     "ALL." Explicitly REGION-LOCALIZED to the under-eye only — does NOT
-//     smooth cheeks/forehead/nose/jaw. Self-describes as "professional
-//     portrait retouch" so Block 7's anti-AI-tell rule reads it as legitimate
-//     editing rather than uncanny smoothness. Age window stays <35.
-//   - 2026-04-24 v4 (current): 70% → 60% per Kristi's tuning preference.
-//     Same overall framing; just a slightly gentler reduction so more of the
-//     natural under-eye texture is preserved.
+//   - 2026-04-24 v2: "AGGRESSIVELY SMOOTH" / "eliminate ALL" language.
+//     Backfired — Block 7's anti-AI-tell defense triggered.
+//   - 2026-04-24 v3: Measured language, "70% reduction," region-localized,
+//     framed as professional Lightroom retouch.
+//   - 2026-04-24 v4: 70% → 60% per Kristi's tuning.
+//   - 2026-04-24 v5 (current): TIERED by age band. Side-by-side test of two
+//     subjects (one mid-30s, one late-30s/40s) showed v4 worked great on
+//     the younger subject but the older one came back with pronounced lines
+//     because Gemini classified her as 35+ and applied the "preserve" rule.
+//     The 35+ "preserve" tier is where most working-professional headshot
+//     subjects land, and it was producing the most complaints. Split into
+//     three bands so the 35-50 group (where pronounced lines actually appear
+//     and need correction) gets MORE reduction than the under-35 group
+//     (which already has minimal lines and was previously over-corrected
+//     into uncanny territory at 60%).
 //
-// Why the age split: Kristi (professional headshot photographer) wants
-// realistic texture on 35+ women — reads authentic. She explicitly does NOT
-// want that realism applied to young women, who look haggard when Gemini
-// renders normal-retouch under-eye lines they don't actually have.
-const BLOCK_UNDER_EYE = `Under-eye rendering rule (women only).
+// Tiered rates (Kristi confirmed 2026-04-24):
+//   - Under 35   → 40% reduction (light touch — younger skin needs less)
+//   - 35–50      → 55% reduction (heavier — where pronounced lines live)
+//   - 50 or older → preserve natural texture (no softening, reads authentic)
+const BLOCK_UNDER_EYE = `Under-eye rendering rule (women only). The amount of softening applied to the under-eye area depends on the subject's apparent age, evaluated from the reference photos.
 
-Evaluate the subject's apparent age from the reference photos.
+ALL THREE TIERS BELOW ARE REGION-LOCALIZED to the under-eye zone only (the area immediately between the lower lash line and the top of the cheekbone). Do NOT smooth her cheeks, forehead, nose, jawline, or any other facial area — those zones keep full natural skin texture per Blocks 1 and 7. This is a deliberate, professional portrait retouch — the kind a working photographer routinely does in Lightroom — NOT plastic smoothing of the face overall, and Block 7's anti-plasticization rule does not prohibit this localized softening.
 
-IF THE SUBJECT APPEARS TO BE A WOMAN UNDER APPROXIMATELY 35 YEARS OLD:
-- Soften the under-eye area substantially. Eliminate approximately 60% of any visible fine lines, crepey texture, crow's feet, milia, tired-eye darkness, and under-eye puffiness — even those visible in the reference photos. Keep the remaining 40% as subtle natural texture so the result still reads as a real person, not a filter.
-- Render her under-eye zone as smoother, more rested skin that blends naturally into the cheek. Target: "well-rested young adult after a good night's sleep" — not perfectly plastic, just visibly less aged than the reference photos suggest.
-- This directive is REGION-LOCALIZED to the under-eye zone only. Do NOT smooth her cheeks, forehead, nose, jawline, or any other facial area — those zones keep full natural skin texture per Blocks 1 and 7. The 60% softening applies ONLY to the area immediately under the eyes (between the lower lash line and the top of the cheekbone).
-- This is a deliberate, professional under-eye retouch — the kind a portrait photographer routinely does in Lightroom. It is NOT "plastic smoothing" or "over-softening" of the face overall, and Block 7's anti-plasticization rule does not prohibit this localized softening.
+TIER 1 — IF THE SUBJECT APPEARS TO BE A WOMAN UNDER APPROXIMATELY 35 YEARS OLD:
+- Eliminate approximately 40% of any visible fine lines, crepey texture, crow's feet, milia, tired-eye darkness, and under-eye puffiness. Keep the remaining 60% as subtle natural texture.
+- This is a light-touch retouch. Younger skin doesn't have many lines to begin with, so over-correcting (eliminating most or all texture) reads as filter / filler-injected and ages the subject differently. Target: "well-rested young adult after a good night's sleep."
 
-IF THE SUBJECT APPEARS TO BE A WOMAN 35 OR OLDER:
-- Preserve natural under-eye texture per Blocks 1 and 7. Subtle fine lines, gentle crow's feet, and real skin texture remain visible. The 60% softening rule above does NOT apply.
+TIER 2 — IF THE SUBJECT APPEARS TO BE A WOMAN BETWEEN APPROXIMATELY 35 AND 50 YEARS OLD:
+- Eliminate approximately 55% of any visible fine lines, crepey texture, crow's feet, milia, tired-eye darkness, and under-eye puffiness — even those visible in the reference photos. Keep the remaining 45% as subtle natural texture.
+- This tier gets MORE reduction than the under-35 tier on purpose: the 35–50 age band is where pronounced under-eye lines actually appear in real life, and where leaving them unretouched results in a "tired" or "haggard" portrait that customers reject. Target: "well-rested professional in her 40s — she still looks her age, but rested."
+
+TIER 3 — IF THE SUBJECT APPEARS TO BE A WOMAN 50 OR OLDER:
+- Preserve natural under-eye texture per Blocks 1 and 7. Subtle fine lines, gentle crow's feet, and real skin texture remain visible. No additional softening beyond Block 1's standard 5% retouch allowance.
+- At this age, pronounced under-eye texture reads as authentic and refusing to retouch it reads as deliberate craft. Customers in this band typically prefer realistic to "youthful."
 
 FOR MEN of any age:
 - No special under-eye rule. Use the standard Block 1 retouch allowance.
 
-Reasoning for the 60% (not 100%) reduction: full elimination of under-eye texture produces a "filtered" or "filler-injected" look that reads as fake and ages the subject differently. A 60% reduction preserves enough natural texture so the face still looks like a real person — just well-rested.`;
+Why partial (not 100%) reduction across tiers 1 and 2: full elimination of under-eye texture produces a "filtered" or "filler-injected" look that reads as fake. The remaining 45–60% natural texture is what keeps the face reading as a real person rather than an avatar.`;
 
 // Block PET — conditional override that only applies when the subject is an
 // animal rather than a human. Added 2026-04-23 to support the #professionalpets
