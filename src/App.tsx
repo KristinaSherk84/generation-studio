@@ -17,7 +17,25 @@ export type UploadedPhoto = {
   // Null = EXIF couldn't be read or didn't contain focal length data; we fall
   // back to Block 1's generic "if it appears wide-angle..." language.
   isWideAngle: boolean | null;
+  // True when the user uploads a HEIC/HEIF file (iPhone default format).
+  // Chrome and Firefox can't render HEIC natively, so the <img> tag shows a
+  // broken-image icon. We lay a "Upload successful — preview unavailable"
+  // banner on top of that icon so it reads as "worked fine" rather than
+  // "broken app." The upload itself + the Gemini generate step both support
+  // HEIC — only the client-side preview is blocked.
+  isHeic: boolean;
 };
+
+// Detects HEIC / HEIF files. Some browsers don't set file.type on HEIC
+// (particularly older Safari and some drag-drop paths), so we fall back to
+// the filename extension. The returned boolean informs both the preview
+// overlay logic and diagnostic messaging.
+function detectHeic(file: File): boolean {
+  const type = (file.type || "").toLowerCase();
+  if (type === "image/heic" || type === "image/heif") return true;
+  const name = (file.name || "").toLowerCase();
+  return name.endsWith(".heic") || name.endsWith(".heif");
+}
 
 // Design tokens — strict grey palette per brief.
 // Do not add colors, gradients, or shadows without updating the brief first.
@@ -688,6 +706,7 @@ const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) 
       status: "uploading",
       errorMessage: null,
       isWideAngle: null, // filled in by the EXIF read below once it resolves
+      isHeic: detectHeic(file),
     }));
     setPhotos((prev) => [...prev, ...placeholders]);
 
@@ -858,7 +877,7 @@ const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) 
           id="file-input"
           type="file"
           multiple
-          accept="image/jpeg,image/png,image/webp"
+          accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif"
           onChange={onPick}
           style={{ display: "none" }}
         />
@@ -934,6 +953,48 @@ const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) 
                   Upload failed
                   <div style={{ fontSize: 10, marginTop: 4, opacity: 0.8 }}>
                     Remove & try again
+                  </div>
+                </div>
+              )}
+
+              {/* HEIC overlay — Chrome/Firefox can't render HEIC, so the <img>
+                  above shows a broken-image icon. Instead of letting that
+                  confuse the user ("is my upload broken?"), we lay a clear
+                  "Upload successful — preview unavailable" banner over the top
+                  once the blob upload finishes. Only shown on "done" state;
+                  while uploading, the generic "Uploading…" overlay already
+                  covers it. Bypassed on error state by that overlay's stacking.
+                  */}
+              {p.isHeic && p.status === "done" && (
+                <div
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: C.white,
+                    fontSize: 11,
+                    fontWeight: 500,
+                    textAlign: "center",
+                    padding: 8,
+                    background: "rgba(44, 44, 42, 0.78)",
+                    lineHeight: 1.35,
+                  }}
+                  title="HEIC format previews don't render in this browser, but the upload worked and your headshots will generate correctly."
+                >
+                  <Check size={18} style={{ marginBottom: 4 }} />
+                  Upload successful
+                  <div
+                    style={{
+                      fontSize: 10,
+                      marginTop: 2,
+                      opacity: 0.85,
+                      fontWeight: 400,
+                    }}
+                  >
+                    Preview unavailable (HEIC)
                   </div>
                 </div>
               )}

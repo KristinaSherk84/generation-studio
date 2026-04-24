@@ -6,7 +6,11 @@
  * this function — the client only gets a one-time token scoped to one upload.
  *
  * Guardrails (intentionally conservative for V1):
- *   - Only JPEG / PNG / WebP images are accepted
+ *   - JPEG / PNG / WebP / HEIC / HEIF images accepted (HEIC = iPhone default
+ *     format, added 2026-04-24 — Chrome/Firefox can't render HEIC previews
+ *     but the client overlays a "Upload successful — preview unavailable"
+ *     banner so users don't think the app is broken. Gemini accepts HEIC
+ *     as an input format, so the full pipeline still works.)
  *   - Max 15 MB per file
  *   - Random suffix added to every stored file name (so URLs are unguessable)
  *
@@ -64,7 +68,13 @@ export default async function handler(
       onBeforeGenerateToken: async () => {
         // V1: no auth check yet. In Step 6 we'll require a paid session here.
         return {
-          allowedContentTypes: ["image/jpeg", "image/png", "image/webp"],
+          allowedContentTypes: [
+            "image/jpeg",
+            "image/png",
+            "image/webp",
+            "image/heic",
+            "image/heif",
+          ],
           maximumSizeInBytes: 15 * 1024 * 1024, // 15 MB
           tokenPayload: JSON.stringify({}),
           addRandomSuffix: true,
