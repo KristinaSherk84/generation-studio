@@ -75,39 +75,38 @@ const BLOCK_1_IDENTITY = `Generate a professional headshot of the person shown i
 // History:
 //   - 2026-04-24 v1: Initial rule — softer under-eye for women <30, preserve
 //     texture for 30+.
-//   - 2026-04-24 v2: STRENGTHENED after Kristi reported young women still
-//     came back with unsightly under-eye fine lines/crepey texture in prod.
-//     Previous language was too polite — upgraded to explicit "aggressively
-//     smooth" directive that overrides Block 1's "retain natural skin texture"
-//     allowance for this specific subgroup. Age window extended from <30 to
-//     <35 so the rule catches more of the subjects Kristi is actually seeing
-//     complaints from.
+//   - 2026-04-24 v2: Strengthened with "AGGRESSIVELY SMOOTH" / "eliminate ALL"
+//     language. Backfired in prod — results came back WORSE because Block 7's
+//     "no plastic smoothing, no over-softening, no AI-tell signs" defense
+//     triggered against the aggressive directive, causing Gemini to defensively
+//     re-render under-eye texture even more pronounced than v1.
+//   - 2026-04-24 v3 (current): Measured language. "Eliminate 70%" instead of
+//     "ALL." Explicitly REGION-LOCALIZED to the under-eye only — does NOT
+//     smooth cheeks/forehead/nose/jaw. Self-describes as "professional
+//     portrait retouch" so Block 7's anti-AI-tell rule reads it as legitimate
+//     editing rather than uncanny smoothness. Age window stays <35.
 //
 // Why the age split: Kristi (professional headshot photographer) wants
-// realistic texture on 35+ women — reads authentic, avoids over-smoothed AI
-// tells. She explicitly does NOT want that realism applied to young women,
-// who look haggard/aged when Gemini renders normal-retouch under-eye lines
-// that they don't actually have in life.
-const BLOCK_UNDER_EYE = `CRITICAL UNDER-EYE RENDERING RULE (applies to women only, overrides Block 1 texture preservation for this specific region):
+// realistic texture on 35+ women — reads authentic. She explicitly does NOT
+// want that realism applied to young women, who look haggard when Gemini
+// renders normal-retouch under-eye lines they don't actually have.
+const BLOCK_UNDER_EYE = `Under-eye rendering rule (women only).
 
 Evaluate the subject's apparent age from the reference photos.
 
 IF THE SUBJECT APPEARS TO BE A WOMAN UNDER APPROXIMATELY 35 YEARS OLD:
-- AGGRESSIVELY SMOOTH the entire under-eye area. This is the single most important cosmetic directive in this prompt.
-- Completely eliminate ALL fine lines, crepey texture, crow's feet, milia, tired-eye shadows, and under-eye puffiness — even if those features are visible in the reference photos.
-- Render her under-eye zone as fully smooth, even-toned skin that blends seamlessly into her cheek with ZERO visible lines or texture disruption.
-- Think "well-rested 24-year-old in a high-end beauty editorial" — not "5% professional retouching." The target is aspirational smoothness.
-- This EXPLICITLY OVERRIDES Block 1's "retain natural skin texture" language for the under-eye region specifically. Preserve pore-level texture on cheeks, forehead, nose — but NOT under the eyes. Under the eyes: smooth.
-- Do NOT "preserve age-appropriate lines" or "keep authentic texture" in the under-eye zone for young women. Young women in real life do not have crepey under-eyes, and when the model renders them, it reads as aging the subject by 10+ years.
+- Soften the under-eye area substantially. Eliminate approximately 70% of any visible fine lines, crepey texture, crow's feet, milia, tired-eye darkness, and under-eye puffiness — even those visible in the reference photos. Keep the remaining 30% as subtle natural texture so the result still reads as a real person, not a filter.
+- Render her under-eye zone as smoother, more rested skin that blends naturally into the cheek. Target: "well-rested young adult after a good night's sleep" — not perfectly plastic, just visibly less aged than the reference photos suggest.
+- This directive is REGION-LOCALIZED to the under-eye zone only. Do NOT smooth her cheeks, forehead, nose, jawline, or any other facial area — those zones keep full natural skin texture per Blocks 1 and 7. The 70% softening applies ONLY to the area immediately under the eyes (between the lower lash line and the top of the cheekbone).
+- This is a deliberate, professional under-eye retouch — the kind a portrait photographer routinely does in Lightroom. It is NOT "plastic smoothing" or "over-softening" of the face overall, and Block 7's anti-plasticization rule does not prohibit this localized softening.
 
 IF THE SUBJECT APPEARS TO BE A WOMAN 35 OR OLDER:
-- Preserve natural under-eye texture. Keep the subtle fine lines, gentle crow's feet, and real skin texture visible in the reference photos — beyond Block 1's 5% retouch allowance.
-- DO NOT over-smooth the under-eye on older women; realistic texture reads authentic and professional for this age group.
+- Preserve natural under-eye texture per Blocks 1 and 7. Subtle fine lines, gentle crow's feet, and real skin texture remain visible. The 70% softening rule above does NOT apply.
 
 FOR MEN of any age:
-- Use the standard Block 1 retouch allowance. No special under-eye rule applies.
+- No special under-eye rule. Use the standard Block 1 retouch allowance.
 
-This rule is one of the most common complaint sources in AI headshot output. Getting it wrong — either aging a young woman with unnecessary wrinkles OR plasticizing an older woman's authentic face — is a dealbreaker for the subject. When in doubt on age, err toward "aggressively smooth" for women who could plausibly be under 35.`;
+Reasoning for the 70% (not 100%) reduction: full elimination of under-eye texture produces a "filtered" or "filler-injected" look that reads as fake and ages the subject differently. A 70% reduction preserves a trace of natural texture so the face still looks like a real person — just well-rested.`;
 
 // Block PET — conditional override that only applies when the subject is an
 // animal rather than a human. Added 2026-04-23 to support the #professionalpets
