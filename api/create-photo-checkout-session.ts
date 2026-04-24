@@ -39,6 +39,12 @@ const ENTRY_CREDIT_CENTS = 499;
 type CreatePhotoCheckoutBody = {
   count: number;
   creditApplied: boolean;
+  // Optional — the email captured by Stripe during the Phase 1 entry
+  // checkout. When present we pass it as `customer_email` on the Phase 2
+  // session so the Stripe page shows it pre-filled AND so Stripe Link can
+  // auto-recognize the customer and fill their saved card. If omitted,
+  // Stripe just prompts the user to type their email again.
+  customerEmail?: string;
 };
 
 type CreatePhotoCheckoutResponse = {
@@ -63,6 +69,11 @@ export default async function handler(
   const body = req.body as Partial<CreatePhotoCheckoutBody>;
   const count = Number(body?.count);
   const creditApplied = body?.creditApplied === true;
+  const customerEmail =
+    typeof body?.customerEmail === "string" &&
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.customerEmail.trim())
+      ? body.customerEmail.trim()
+      : undefined;
 
   if (
     !Number.isInteger(count) ||
@@ -116,6 +127,13 @@ export default async function handler(
   // to the checkout to try again. We accept this UX for Phase 2 MVP.
   formBody.append("cancel_url", `${origin}/?photo_cancel=1`);
   formBody.append("billing_address_collection", "auto");
+  // Pre-fill the customer's email on the Stripe Checkout page. With Stripe
+  // Link enabled (default on new Sessions), an existing Link user for that
+  // email gets their saved card auto-filled one-tap. If they haven't used
+  // Link before, the email is still pre-filled so they don't retype it.
+  if (customerEmail) {
+    formBody.append("customer_email", customerEmail);
+  }
 
   try {
     const stripeResp = await fetch(

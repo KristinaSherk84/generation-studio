@@ -2064,7 +2064,15 @@ const CheckoutScreen = ({
   onComplete,
   onBack,
 }: CheckoutScreenProps) => {
-  const [email, setEmail] = useState("");
+  // Pre-fill email from Phase 1 Stripe if available. Stripe captured it
+  // during the $4.99 entry checkout; the App's verify useEffect stashed it
+  // in sessionStorage. Saves the user from re-typing the same address, and
+  // the same email gets forwarded into the Phase 2 Stripe Checkout session
+  // so Stripe Link auto-recognizes them and one-taps the card.
+  const [email, setEmail] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
+    return window.sessionStorage.getItem("stripe_customer_email") ?? "";
+  });
   const [processing, setProcessing] = useState(false);
   // Human-readable progress line shown on the button while we're uploading
   // each image to Blob. Cleared when not in-flight.
@@ -2195,6 +2203,11 @@ const CheckoutScreen = ({
           body: JSON.stringify({
             count,
             creditApplied: creditEligible,
+            // Forward the email so Stripe pre-fills it on the Checkout page.
+            // If Stripe Link has a saved card for this email, Link auto-fills
+            // the payment method with one tap — effectively turning the
+            // second payment into "click Pay."
+            customerEmail: email,
           }),
         },
       );
@@ -3477,9 +3490,24 @@ export default function App() {
           body: JSON.stringify({ session_id: sessionId }),
         });
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const data = (await resp.json()) as { paid?: boolean };
+        const data = (await resp.json()) as {
+          paid?: boolean;
+          customerEmail?: string;
+        };
         if (data.paid) {
           markUnlocked("stripe");
+          // Stash the email Stripe captured during Phase 1 checkout so the
+          // CheckoutScreen can pre-fill it later (saves re-typing) and so
+          // Phase 2 Stripe Checkout gets passed the same customer_email
+          // (which lets Stripe Link auto-recognize them and fill their
+          // saved card).
+          if (data.customerEmail) {
+            window.sessionStorage.setItem(
+              "stripe_customer_email",
+              data.customerEmail,
+            );
+            setEmail(data.customerEmail);
+          }
           setScreen("upload");
           setShowTipsModal(true);
         } else {
