@@ -417,7 +417,7 @@ const Landing = ({ onStart }: LandingProps) => (
       }}
     >
       Upload a few photos, pick a style, and in about 2 minutes you'll have six professional-grade
-      headshots at 2K resolution. No 30-minute waits, no model training — just instant results. You
+      headshots in high-rez. No 30-minute waits, no model training — just instant results. You
       only pay for the ones you actually want — no subscriptions, no surprises.
     </p>
 
@@ -465,17 +465,17 @@ const Landing = ({ onStart }: LandingProps) => (
         <div>
           <div style={{ fontSize: 26, fontWeight: 500, color: C.dark }}>$4.99</div>
           <div style={{ fontSize: 12, color: C.mediumGrey, marginTop: 4 }}>
-            Session fee · generates 6 headshots
+            Try it · credited toward your first high-rez download
           </div>
         </div>
         <div>
           <div style={{ fontSize: 26, fontWeight: 500, color: C.dark }}>$9.99</div>
           <div style={{ fontSize: 12, color: C.mediumGrey, marginTop: 4 }}>
-            Per headshot you keep · 2K resolution
+            Per high-rez headshot you keep · minus your $4.99 credit
           </div>
         </div>
       </div>
-      <Button onClick={onStart}>Start session — $4.99</Button>
+      <Button onClick={onStart}>Start — $4.99</Button>
     </div>
 
     <PhotogTip style={{ marginTop: 16 }}>

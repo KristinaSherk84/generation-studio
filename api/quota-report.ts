@@ -34,9 +34,9 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 // Listing ~2000 blobs + one Resend email send is well under this.
 export const maxDuration = 30;
 
-// ---- Thresholds (Kristi confirmed 2026-04-23) ----
-// Hobby plan cap is 1 GB; when she upgrades to Pro, bump this to 100.
-const BLOB_CAP_GB = 1;
+// ---- Thresholds (updated 2026-04-24 after Kristi upgraded to Vercel Pro) ----
+// Pro plan includes 100 GB Blob storage. Warn at 70% = 70 GB used.
+const BLOB_CAP_GB = 100;
 const BLOB_WARN_PCT = 0.7; // red banner once usage crosses 70%
 const RESEND_DAILY_CAP = 100; // free-tier limit
 const RESEND_WARN_COUNT = 50; // red banner once sends cross 50/day
