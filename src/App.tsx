@@ -2077,6 +2077,29 @@ const CheckoutScreen = ({
   // the real gate.
   const emailLooksValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
+  // --- Phase 2 pricing math, mirrored from /api/create-photo-checkout-session ---
+  // Read unlock state from sessionStorage to decide whether this user skips
+  // Stripe (promo) or pays (stripe, with $4.99 credit on first checkout).
+  // Reading at render time (not state) keeps the UI responsive to changes
+  // made in the same tab without extra state plumbing.
+  const unlockSource =
+    typeof window !== "undefined"
+      ? window.sessionStorage.getItem("unlock_source")
+      : null;
+  const creditUsed =
+    typeof window !== "undefined"
+      ? window.sessionStorage.getItem("credit_used") === "true"
+      : false;
+  const isPromoUnlock = unlockSource === "promo";
+  const creditEligible = !isPromoUnlock && !creditUsed;
+
+  const PRICE_PER_PHOTO = 9.99;
+  const CREDIT_AMOUNT = 4.99;
+  const subtotal = PRICE_PER_PHOTO * count;
+  const creditApplied = creditEligible ? CREDIT_AMOUNT : 0;
+  const totalOwed = Math.max(0, subtotal - creditApplied);
+  const fmt = (n: number) => `$${n.toFixed(2)}`;
+
   const submit = async () => {
     if (!emailLooksValid || processing) return;
     setProcessing(true);
@@ -2093,6 +2116,13 @@ const CheckoutScreen = ({
       //
       // Same upload token endpoint (/api/upload) we use for reference
       // photos on the Upload screen.
+      //
+      // We upload BEFORE the Stripe redirect so the Blob URLs are ready to
+      // hand to /api/deliver when the user returns from Stripe. The Stripe
+      // redirect navigates the page away, which would clear the base64
+      // `selectedImages` prop from React state. Stashing the already-uploaded
+      // URLs in sessionStorage lets the return-handler pick up where we
+      // left off.
       // -----------------------------------------------------------------
       const uploadedUrls: string[] = [];
       for (let i = 0; i < selectedImages.length; i++) {
@@ -2101,9 +2131,6 @@ const CheckoutScreen = ({
         if (!file) {
           throw new Error(`Photo ${i + 1} was in an unrecognized format.`);
         }
-        // Pathname prefix keeps delivered images visually grouped in the
-        // Blob dashboard; the token endpoint still adds a random suffix,
-        // so the full key will look like `delivered/headshot-1-<hash>.jpg`.
         const result = await upload(`delivered/${file.name}`, file, {
           access: "public",
           handleUploadUrl: "/api/upload",
@@ -2112,29 +2139,81 @@ const CheckoutScreen = ({
       }
 
       // -----------------------------------------------------------------
-      // STEP 2 — Tell /api/deliver to record the manifest. Tiny JSON body,
-      // no 413 risk; images are already in Blob at this point.
+      // STEP 2 — Branch on unlock source.
+      //   - Promo user: skip Stripe, call /api/deliver directly (as V1).
+      //   - Paid user: stash the delivery payload in sessionStorage and
+      //     redirect to Stripe for the per-photo charge. App-level return
+      //     handler picks up after Stripe redirects back and calls
+      //     /api/deliver from there.
       // -----------------------------------------------------------------
-      setProgressLabel("Finalizing delivery…");
-      const response = await fetch("/api/deliver", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email,
-          photoUrls: uploadedUrls,
-          referencePhotoUrls,
-          style: selections.style,
-          attire: selections.attire,
-          lighting: selections.lighting,
-          background: selections.background,
-        }),
-      });
-      if (!response.ok) {
-        const err = (await response.json().catch(() => ({}))) as { error?: string };
-        throw new Error(err.error || `Delivery failed (HTTP ${response.status})`);
+      if (isPromoUnlock) {
+        setProgressLabel("Finalizing delivery…");
+        const response = await fetch("/api/deliver", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email,
+            photoUrls: uploadedUrls,
+            referencePhotoUrls,
+            style: selections.style,
+            attire: selections.attire,
+            lighting: selections.lighting,
+            background: selections.background,
+          }),
+        });
+        if (!response.ok) {
+          const err = (await response.json().catch(() => ({}))) as {
+            error?: string;
+          };
+          throw new Error(
+            err.error || `Delivery failed (HTTP ${response.status})`,
+          );
+        }
+        const data = (await response.json()) as { photoUrls: string[] };
+        onComplete({ email, photoUrls: data.photoUrls });
+        return;
       }
-      const data = (await response.json()) as { photoUrls: string[] };
-      onComplete({ email, photoUrls: data.photoUrls });
+
+      // Paid path — stash the pending delivery and redirect to Stripe.
+      setProgressLabel("Redirecting to secure checkout…");
+      const stash = {
+        email,
+        uploadedUrls,
+        referencePhotoUrls,
+        selections,
+      };
+      window.sessionStorage.setItem(
+        "pending_delivery",
+        JSON.stringify(stash),
+      );
+
+      const checkoutResp = await fetch(
+        "/api/create-photo-checkout-session",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            count,
+            creditApplied: creditEligible,
+          }),
+        },
+      );
+      if (!checkoutResp.ok) {
+        const err = (await checkoutResp.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        throw new Error(
+          err.error || `Checkout setup failed (HTTP ${checkoutResp.status})`,
+        );
+      }
+      const checkoutData = (await checkoutResp.json()) as { url?: string };
+      if (!checkoutData.url) {
+        throw new Error("Stripe returned no checkout URL");
+      }
+      // Full-page redirect to Stripe. Don't reset processing state — we're
+      // navigating away. On return, App's photo_paid useEffect finishes
+      // the delivery and routes to the Success screen.
+      window.location.href = checkoutData.url;
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : "Delivery failed");
       setProcessing(false);
@@ -2179,6 +2258,65 @@ const CheckoutScreen = ({
         {count} headshot{count !== 1 ? "s" : ""} ready. Drop your email below and
         we'll take you straight to the download page.
       </p>
+
+      {/* Pricing breakdown — skipped entirely for promo-unlocked users, who
+          pay nothing. Paid users see subtotal + optional credit + total owed
+          so there's zero surprise when Stripe loads. */}
+      {!isPromoUnlock && (
+        <div
+          style={{
+            marginTop: 24,
+            background: C.white,
+            border: `1px solid ${C.border}`,
+            borderRadius: 10,
+            padding: "14px 16px",
+            fontSize: 14,
+            color: C.dark,
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              color: C.mediumGrey,
+              fontSize: 13,
+            }}
+          >
+            <span>
+              {count} high-rez headshot{count !== 1 ? "s" : ""} × $9.99
+            </span>
+            <span>{fmt(subtotal)}</span>
+          </div>
+          {creditEligible && (
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                color: C.mediumGrey,
+                fontSize: 13,
+                marginTop: 6,
+              }}
+            >
+              <span>$4.99 entry credit applied</span>
+              <span>−{fmt(creditApplied)}</span>
+            </div>
+          )}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              fontWeight: 500,
+              fontSize: 16,
+              marginTop: 10,
+              paddingTop: 10,
+              borderTop: `1px solid ${C.border}`,
+            }}
+          >
+            <span>Total due</span>
+            <span>{fmt(totalOwed)}</span>
+          </div>
+        </div>
+      )}
 
       <div style={{ marginTop: 32 }}>
         <label style={{ fontSize: 13, color: C.mediumGrey, fontWeight: 500 }}>
@@ -2231,7 +2369,9 @@ const CheckoutScreen = ({
         <Button onClick={submit} disabled={!emailLooksValid || processing} full>
           {processing
             ? progressLabel || "Preparing your download…"
-            : "Take me to my photos"}
+            : isPromoUnlock
+              ? "Take me to my photos"
+              : `Pay ${fmt(totalOwed)} → unlock downloads`}
         </Button>
       </div>
     </div>
@@ -2558,39 +2698,49 @@ const DownloadScreen = ({
   };
 
   return (
-    <div style={{ maxWidth: 720, margin: "0 auto", padding: "64px 32px", ...font }}>
+    <div
+      style={{
+        maxWidth: 720,
+        margin: "0 auto",
+        padding: "24px 32px 48px",
+        ...font,
+      }}
+    >
+      {/* Inline header — download icon on either side of the title. Replaces
+          the earlier stacked "big circle icon above heading" layout which
+          pushed the download thumbnails below the fold on most mobile
+          screens. Icons are decorative here; the real download buttons live
+          per-tile in the grid below. */}
       <div style={{ textAlign: "center" }}>
         <div
           style={{
-            width: 56,
-            height: 56,
-            borderRadius: "50%",
-            background: C.dark,
             display: "inline-flex",
             alignItems: "center",
             justifyContent: "center",
-            marginBottom: 24,
+            gap: 14,
           }}
         >
-          <Download size={24} color={C.white} />
+          <Download size={22} color={C.dark} strokeWidth={1.6} />
+          <h2
+            style={{
+              fontSize: 26,
+              fontWeight: 500,
+              color: C.dark,
+              margin: 0,
+              letterSpacing: -0.5,
+              lineHeight: 1.2,
+            }}
+          >
+            Your headshots are ready
+          </h2>
+          <Download size={22} color={C.dark} strokeWidth={1.6} />
         </div>
-        <h2
-          style={{
-            fontSize: 28,
-            fontWeight: 500,
-            color: C.dark,
-            margin: 0,
-            letterSpacing: -0.5,
-          }}
-        >
-          Your headshots are ready
-        </h2>
         <p
           style={{
-            fontSize: 15,
+            fontSize: 14,
             color: C.mediumGrey,
-            marginTop: 16,
-            lineHeight: 1.6,
+            marginTop: 10,
+            lineHeight: 1.55,
             maxWidth: 520,
             marginLeft: "auto",
             marginRight: "auto",
@@ -2611,7 +2761,7 @@ const DownloadScreen = ({
           display: "grid",
           gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
           gap: 16,
-          marginTop: 40,
+          marginTop: 24,
         }}
       >
         {photoUrls.map((url, i) => {
@@ -3287,16 +3437,18 @@ export default function App() {
   // to Stripe. sessionStorage (not localStorage) intentionally — unlock should
   // only survive the current browser tab/session, not forever.
   //
-  // Phase 1 scope: this flag only gates the UI flow. /api/generate is NOT
-  // gated on paid state yet — Phase 2 will tighten that alongside the $9.99
-  // per-photo checkout at the Grid screen.
+  // unlock_source distinguishes the two paths so Phase 2 (the per-photo
+  // checkout at CheckoutScreen) knows whether to skip Stripe entirely
+  // (promo = free everything) or charge minus a $4.99 credit (stripe = paid
+  // entry, credit eligible on first photo purchase).
   const [isUnlocked, setIsUnlocked] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     return window.sessionStorage.getItem("paywall_unlocked") === "true";
   });
-  const markUnlocked = () => {
+  const markUnlocked = (source: "stripe" | "promo") => {
     if (typeof window !== "undefined") {
       window.sessionStorage.setItem("paywall_unlocked", "true");
+      window.sessionStorage.setItem("unlock_source", source);
     }
     setIsUnlocked(true);
   };
@@ -3327,7 +3479,7 @@ export default function App() {
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const data = (await resp.json()) as { paid?: boolean };
         if (data.paid) {
-          markUnlocked();
+          markUnlocked("stripe");
           setScreen("upload");
           setShowTipsModal(true);
         } else {
@@ -3338,6 +3490,114 @@ export default function App() {
         }
       } catch (err) {
         console.error("verify-checkout failed:", err);
+      }
+    })();
+    // Run exactly once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // --------- Phase 2 return handler ---------
+  //
+  // After the CheckoutScreen redirects the user to Stripe for the per-photo
+  // purchase, Stripe redirects back with `?photo_paid=1&session_id=...`. The
+  // CheckoutScreen stashed the pending delivery payload in sessionStorage
+  // under "pending_delivery" before redirecting — we pick it up here,
+  // verify payment server-side, call /api/deliver, then advance to success.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    const photoPaid = url.searchParams.get("photo_paid");
+    const sessionId = url.searchParams.get("session_id");
+    const photoCancel = url.searchParams.get("photo_cancel");
+
+    // Cancel path: Stripe back-button returns with ?photo_cancel=1. Just
+    // strip the param and leave the user on Landing — they can re-navigate.
+    // (Their selections are gone with the redirect; that's acceptable MVP UX.)
+    if (photoCancel === "1") {
+      const cleanUrl = `${url.origin}${url.pathname}`;
+      window.history.replaceState({}, "", cleanUrl);
+      return;
+    }
+
+    if (photoPaid !== "1" || !sessionId) return;
+
+    const cleanUrl = `${url.origin}${url.pathname}`;
+    window.history.replaceState({}, "", cleanUrl);
+
+    (async () => {
+      // Verify the Stripe session was actually paid.
+      try {
+        const verifyResp = await fetch("/api/verify-checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session_id: sessionId }),
+        });
+        if (!verifyResp.ok) throw new Error(`HTTP ${verifyResp.status}`);
+        const verifyData = (await verifyResp.json()) as { paid?: boolean };
+        if (!verifyData.paid) {
+          console.warn("Photo Stripe session not marked as paid");
+          return;
+        }
+      } catch (err) {
+        console.error("verify-checkout (photo) failed:", err);
+        return;
+      }
+
+      // Payment confirmed — mark the entry credit as consumed so a future
+      // grid checkout in this same session gets charged full price.
+      window.sessionStorage.setItem("credit_used", "true");
+
+      // Read the pending delivery payload stashed by CheckoutScreen.
+      const stashRaw = window.sessionStorage.getItem("pending_delivery");
+      if (!stashRaw) {
+        console.error(
+          "photo_paid return without pending_delivery in sessionStorage",
+        );
+        return;
+      }
+      window.sessionStorage.removeItem("pending_delivery");
+      let stash: {
+        email: string;
+        uploadedUrls: string[];
+        referencePhotoUrls: string[];
+        selections: StyleSelections;
+      };
+      try {
+        stash = JSON.parse(stashRaw);
+      } catch {
+        console.error("pending_delivery JSON parse failed");
+        return;
+      }
+
+      // Call /api/deliver with the stashed data — same shape the CheckoutScreen
+      // would have sent directly in the promo/unpaid path.
+      try {
+        const deliverResp = await fetch("/api/deliver", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: stash.email,
+            photoUrls: stash.uploadedUrls,
+            referencePhotoUrls: stash.referencePhotoUrls,
+            style: stash.selections.style,
+            attire: stash.selections.attire,
+            lighting: stash.selections.lighting,
+            background: stash.selections.background,
+          }),
+        });
+        if (!deliverResp.ok) throw new Error(`HTTP ${deliverResp.status}`);
+        const deliverData = (await deliverResp.json()) as {
+          photoUrls: string[];
+        };
+        // Advance to the Success / Download screen with the delivered URLs.
+        setEmail(stash.email);
+        setDeliveredPhotoUrls(deliverData.photoUrls);
+        setScreen("success");
+      } catch (err) {
+        console.error("deliver after Stripe payment failed:", err);
+        alert(
+          "Your payment went through but the delivery step hit a snag. Contact kristi@kristinasherk.com with your email and we'll send your files directly.",
+        );
       }
     })();
     // Run exactly once on mount.
@@ -3395,10 +3655,11 @@ export default function App() {
     }
   };
 
-  // Promo code success path. Marks the paywall unlocked and advances the user
-  // to Upload, same as a successful Stripe return. Friends skip the fee.
+  // Promo code success path. Marks the paywall unlocked with source="promo"
+  // so the Phase 2 per-photo checkout can skip Stripe entirely (promo users
+  // get free everything). Friends skip both fees.
   const handlePromoUnlock = () => {
-    markUnlocked();
+    markUnlocked("promo");
     setScreen("upload");
     if (!hasSeenTips) setShowTipsModal(true);
   };
