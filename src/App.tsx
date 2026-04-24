@@ -118,6 +118,24 @@ const PHOTOG_TIPS = [
   },
 ];
 
+// Tips that cycle on the LoadingScreen while the 6 headshots are generating.
+// Pulled from PHOTOG_TIPS so they stay in sync with the pre-upload modal,
+// plus two loading-specific tips: the regenerate icon hint (was the only
+// thing shown before) and Kristi's "crap in = crap out" reminder. The user
+// sees one tip for a few seconds, then it rotates to the next — turns the
+// wait from "staring at a spinner" into "learning how to get a better result."
+const LOADING_TIPS: { title: string; body: string }[] = [
+  {
+    title: "Don't love one? Regenerate just that one.",
+    body: "Once your grid is ready, tap the refresh icon on any photo to swap only that headshot — no need to restart the batch.",
+  },
+  {
+    title: "Remember — crap in = crap out.",
+    body: "Low-resolution photos of your face don't work for realistic generations. The AI can only mirror what it can clearly see.",
+  },
+  ...PHOTOG_TIPS,
+];
+
 const PhotographerTipsModal = ({ onDismiss }: PhotographerTipsModalProps) => (
   <div
     role="dialog"
@@ -1445,6 +1463,20 @@ const LoadingScreen = ({
   const currentlyGenerating = Math.min(readyCount + 1, totalCount);
   const allDone = readyCount >= totalCount;
 
+  // Rotate through LOADING_TIPS while the user waits. ~7 seconds per tip is
+  // long enough to read + absorb but short enough that waiting users cycle
+  // through 3–5 tips over a typical 2–3 minute generation. Pauses on error
+  // and when all 6 are done — at those points the tip is irrelevant.
+  const [tipIndex, setTipIndex] = useState(0);
+  useEffect(() => {
+    if (errorMessage || allDone) return;
+    const id = setInterval(() => {
+      setTipIndex((i) => (i + 1) % LOADING_TIPS.length);
+    }, 7000);
+    return () => clearInterval(id);
+  }, [errorMessage, allDone]);
+  const activeTip = LOADING_TIPS[tipIndex];
+
   return (
     <div
       style={{
@@ -1527,37 +1559,35 @@ const LoadingScreen = ({
         </div>
       )}
 
-      {/* Pre-announce the per-photo regenerate feature while the user waits.
-          Same wording pattern as the Grid screen hint so when they land on
-          the Grid they recognize the icon immediately. Only shown while
-          generation is in-flight (hidden on error or after all 6 finish). */}
-      {!errorMessage && !allDone && (
+      {/* Cycling tip carousel — rotates through LOADING_TIPS every ~7s while
+          generation is in-flight. Gives the user something useful to read
+          during the 2–3 minute wait instead of a static message. Fades on
+          error state and after all 6 finish (tips become irrelevant). */}
+      {!errorMessage && !allDone && activeTip && (
         <div
           style={{
             marginTop: 24,
             marginLeft: "auto",
             marginRight: "auto",
-            maxWidth: 480,
-            padding: "14px 18px",
+            maxWidth: 520,
+            padding: "16px 20px",
             borderRadius: 8,
             background: C.lightGrey,
             color: C.dark,
             fontSize: 14,
             lineHeight: 1.6,
             textAlign: "center",
+            minHeight: 72,
+            transition: "opacity 0.3s",
           }}
+          key={tipIndex} // forces re-mount on tip change so transition plays
         >
-          <span style={{ fontWeight: 500 }}>Not happy with one of your 6?</span>{" "}
-          Use the{" "}
-          <RefreshCw
-            size={14}
-            style={{
-              display: "inline",
-              verticalAlign: "middle",
-              marginBottom: 2,
-            }}
-          />{" "}
-          icon on any photo to get a better result.
+          <div style={{ fontWeight: 500, marginBottom: 4 }}>
+            {activeTip.title}
+          </div>
+          <div style={{ color: C.mediumGrey, fontSize: 13 }}>
+            {activeTip.body}
+          </div>
         </div>
       )}
 
@@ -1893,8 +1923,11 @@ const GridScreen = ({
               {/* Per-slot regenerate button — bottom-right corner. Lets users
                   swap just this one photo instead of burning a bulk regeneration
                   on all 6. Hidden when budget is exhausted so there's no
-                  confusing disabled state. */}
-              {src && regenCount < maxRegens && !regenerating && (
+                  confusing disabled state. Also rendered on FAILED slots so
+                  users can retry slots that didn't come back on the first
+                  pass — previously those slots only showed "Generation
+                  failed" with no action affordance. */}
+              {regenCount < maxRegens && !regenerating && (
                 <button
                   onClick={handleRegenClick}
                   title="Regenerate this photo"

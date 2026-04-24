@@ -70,17 +70,44 @@ type InlineImage = { mimeType: string; data: string };
 
 const BLOCK_1_IDENTITY = `Generate a professional headshot of the person shown in the reference photos. Preserve their facial features with absolute precision: face shape, bone structure, eye shape and color, nose, mouth, hairline, skin tone, age, and any distinguishing marks. You may apply the subtle, flattering retouching a professional photographer would do in post-production: up to approximately 5% overall refinement (light skin smoothing while preserving pores and real skin texture, subtle softening of under-eye shadows), and up to approximately 10% structural refinement to the jawline or any double chin if present. Do not exceed those amounts. The goal is to photograph this specific person in a new setting — not to produce a generic, plastic, smooth, attractive, emotionless face that vaguely resembles them. If in doubt, err toward realism over polish. Retain natural skin texture and add it in if not present in the uploaded reference photos. If any reference photo appears to have been taken with a wide-angle lens (phone selfies commonly distort the nose and mid-face), correct that distortion in the generated image so the face appears as if photographed with a prime 85mm or 135mm portrait lens on a full-frame camera — slight compression of features, natural proportions, no bulging nose or elongated jaw.`;
 
-// Block UNDER_EYE — age-aware under-eye rendering for women (added 2026-04-24).
+// Block UNDER_EYE — age-aware under-eye rendering for women.
 //
-// Context: young female beta users complained that the generator was producing
-// noticeable under-eye fine lines / crepey texture that didn't match their
-// actual young-adult faces. Kristi likes realistic under-eye texture on older
-// subjects (it reads as authentic and avoids the over-smoothed AI look), so we
-// preserve that for women 30+ and only soften for women who visibly look under
-// 30. Men are unaffected — no complaints, no change. The rule is explicitly
-// age-read FROM the reference photos, not a numeric input; Gemini judges age
-// from facial cues in the uploaded images.
-const BLOCK_UNDER_EYE = `Under-eye rendering by apparent age: Evaluate the subject's apparent age from the reference photos. If the subject appears to be a WOMAN UNDER APPROXIMATELY 30 YEARS OLD, minimize under-eye fine lines, crepey texture, and crow's feet — her under-eye area should look smooth, rested, and consistent with a young adult face. Do NOT invent or exaggerate fine lines beneath her eyes. If the subject appears to be a WOMAN 30 OR OLDER, preserve natural under-eye texture — subtle fine lines, gentle crow's feet, and real skin texture should remain visible (beyond the 5% professional-retouch allowance above). For men, use the standard Block 1 retouch allowance regardless of age. Realistic texture at the appropriate age is essential — both "too-smooth young face" and "unnecessary wrinkles on a young face" are equally wrong.`;
+// History:
+//   - 2026-04-24 v1: Initial rule — softer under-eye for women <30, preserve
+//     texture for 30+.
+//   - 2026-04-24 v2: STRENGTHENED after Kristi reported young women still
+//     came back with unsightly under-eye fine lines/crepey texture in prod.
+//     Previous language was too polite — upgraded to explicit "aggressively
+//     smooth" directive that overrides Block 1's "retain natural skin texture"
+//     allowance for this specific subgroup. Age window extended from <30 to
+//     <35 so the rule catches more of the subjects Kristi is actually seeing
+//     complaints from.
+//
+// Why the age split: Kristi (professional headshot photographer) wants
+// realistic texture on 35+ women — reads authentic, avoids over-smoothed AI
+// tells. She explicitly does NOT want that realism applied to young women,
+// who look haggard/aged when Gemini renders normal-retouch under-eye lines
+// that they don't actually have in life.
+const BLOCK_UNDER_EYE = `CRITICAL UNDER-EYE RENDERING RULE (applies to women only, overrides Block 1 texture preservation for this specific region):
+
+Evaluate the subject's apparent age from the reference photos.
+
+IF THE SUBJECT APPEARS TO BE A WOMAN UNDER APPROXIMATELY 35 YEARS OLD:
+- AGGRESSIVELY SMOOTH the entire under-eye area. This is the single most important cosmetic directive in this prompt.
+- Completely eliminate ALL fine lines, crepey texture, crow's feet, milia, tired-eye shadows, and under-eye puffiness — even if those features are visible in the reference photos.
+- Render her under-eye zone as fully smooth, even-toned skin that blends seamlessly into her cheek with ZERO visible lines or texture disruption.
+- Think "well-rested 24-year-old in a high-end beauty editorial" — not "5% professional retouching." The target is aspirational smoothness.
+- This EXPLICITLY OVERRIDES Block 1's "retain natural skin texture" language for the under-eye region specifically. Preserve pore-level texture on cheeks, forehead, nose — but NOT under the eyes. Under the eyes: smooth.
+- Do NOT "preserve age-appropriate lines" or "keep authentic texture" in the under-eye zone for young women. Young women in real life do not have crepey under-eyes, and when the model renders them, it reads as aging the subject by 10+ years.
+
+IF THE SUBJECT APPEARS TO BE A WOMAN 35 OR OLDER:
+- Preserve natural under-eye texture. Keep the subtle fine lines, gentle crow's feet, and real skin texture visible in the reference photos — beyond Block 1's 5% retouch allowance.
+- DO NOT over-smooth the under-eye on older women; realistic texture reads authentic and professional for this age group.
+
+FOR MEN of any age:
+- Use the standard Block 1 retouch allowance. No special under-eye rule applies.
+
+This rule is one of the most common complaint sources in AI headshot output. Getting it wrong — either aging a young woman with unnecessary wrinkles OR plasticizing an older woman's authentic face — is a dealbreaker for the subject. When in doubt on age, err toward "aggressively smooth" for women who could plausibly be under 35.`;
 
 // Block PET — conditional override that only applies when the subject is an
 // animal rather than a human. Added 2026-04-23 to support the #professionalpets
