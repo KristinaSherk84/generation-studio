@@ -80,11 +80,14 @@ const BLOCK_1_IDENTITY = `Generate a professional headshot of the person shown i
 //     "no plastic smoothing, no over-softening, no AI-tell signs" defense
 //     triggered against the aggressive directive, causing Gemini to defensively
 //     re-render under-eye texture even more pronounced than v1.
-//   - 2026-04-24 v3 (current): Measured language. "Eliminate 70%" instead of
+//   - 2026-04-24 v3: Measured language. "Eliminate 70%" instead of
 //     "ALL." Explicitly REGION-LOCALIZED to the under-eye only — does NOT
 //     smooth cheeks/forehead/nose/jaw. Self-describes as "professional
 //     portrait retouch" so Block 7's anti-AI-tell rule reads it as legitimate
 //     editing rather than uncanny smoothness. Age window stays <35.
+//   - 2026-04-24 v4 (current): 70% → 60% per Kristi's tuning preference.
+//     Same overall framing; just a slightly gentler reduction so more of the
+//     natural under-eye texture is preserved.
 //
 // Why the age split: Kristi (professional headshot photographer) wants
 // realistic texture on 35+ women — reads authentic. She explicitly does NOT
@@ -95,18 +98,18 @@ const BLOCK_UNDER_EYE = `Under-eye rendering rule (women only).
 Evaluate the subject's apparent age from the reference photos.
 
 IF THE SUBJECT APPEARS TO BE A WOMAN UNDER APPROXIMATELY 35 YEARS OLD:
-- Soften the under-eye area substantially. Eliminate approximately 70% of any visible fine lines, crepey texture, crow's feet, milia, tired-eye darkness, and under-eye puffiness — even those visible in the reference photos. Keep the remaining 30% as subtle natural texture so the result still reads as a real person, not a filter.
+- Soften the under-eye area substantially. Eliminate approximately 60% of any visible fine lines, crepey texture, crow's feet, milia, tired-eye darkness, and under-eye puffiness — even those visible in the reference photos. Keep the remaining 40% as subtle natural texture so the result still reads as a real person, not a filter.
 - Render her under-eye zone as smoother, more rested skin that blends naturally into the cheek. Target: "well-rested young adult after a good night's sleep" — not perfectly plastic, just visibly less aged than the reference photos suggest.
-- This directive is REGION-LOCALIZED to the under-eye zone only. Do NOT smooth her cheeks, forehead, nose, jawline, or any other facial area — those zones keep full natural skin texture per Blocks 1 and 7. The 70% softening applies ONLY to the area immediately under the eyes (between the lower lash line and the top of the cheekbone).
+- This directive is REGION-LOCALIZED to the under-eye zone only. Do NOT smooth her cheeks, forehead, nose, jawline, or any other facial area — those zones keep full natural skin texture per Blocks 1 and 7. The 60% softening applies ONLY to the area immediately under the eyes (between the lower lash line and the top of the cheekbone).
 - This is a deliberate, professional under-eye retouch — the kind a portrait photographer routinely does in Lightroom. It is NOT "plastic smoothing" or "over-softening" of the face overall, and Block 7's anti-plasticization rule does not prohibit this localized softening.
 
 IF THE SUBJECT APPEARS TO BE A WOMAN 35 OR OLDER:
-- Preserve natural under-eye texture per Blocks 1 and 7. Subtle fine lines, gentle crow's feet, and real skin texture remain visible. The 70% softening rule above does NOT apply.
+- Preserve natural under-eye texture per Blocks 1 and 7. Subtle fine lines, gentle crow's feet, and real skin texture remain visible. The 60% softening rule above does NOT apply.
 
 FOR MEN of any age:
 - No special under-eye rule. Use the standard Block 1 retouch allowance.
 
-Reasoning for the 70% (not 100%) reduction: full elimination of under-eye texture produces a "filtered" or "filler-injected" look that reads as fake and ages the subject differently. A 70% reduction preserves a trace of natural texture so the face still looks like a real person — just well-rested.`;
+Reasoning for the 60% (not 100%) reduction: full elimination of under-eye texture produces a "filtered" or "filler-injected" look that reads as fake and ages the subject differently. A 60% reduction preserves enough natural texture so the face still looks like a real person — just well-rested.`;
 
 // Block PET — conditional override that only applies when the subject is an
 // animal rather than a human. Added 2026-04-23 to support the #professionalpets
