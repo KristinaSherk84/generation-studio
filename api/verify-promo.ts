@@ -62,6 +62,11 @@ export default async function handler(
     return res.status(400).json({ error: "Invalid code" });
   }
 
-  const valid = safeEquals(submitted, expected.trim());
+  // Case-insensitive compare so capitalization typos still unlock — Kristi
+  // shares the code verbally with friends and over text where capitalization
+  // gets inconsistent. "kristi-vip-xyz", "Kristi-vip-xyz", and
+  // "KRISTI-VIP-XYZ" all unlock equally. Constant-time comparison still
+  // applies to the lowercased form.
+  const valid = safeEquals(submitted.toLowerCase(), expected.trim().toLowerCase());
   return res.status(200).json({ valid });
 }
