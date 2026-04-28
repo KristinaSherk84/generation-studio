@@ -45,6 +45,8 @@ type Background =
   | "green"
   | "rainbow"; // rainbow = generate each of 6 variations with a different color
 
+type Skin = "realistic" | "polished";
+
 type GenerateRequest = {
   photoUrls: string[]; // Vercel Blob URLs from Step 3
   style: Style;
@@ -57,6 +59,12 @@ type GenerateRequest = {
   // distortion correction block to the prompt. See BLOCK_LENS_CORRECTION below.
   // Defaults to false when the client couldn't read EXIF (e.g. stripped images).
   hasWideAngle?: boolean;
+  // "realistic" (default) keeps current behavior — no extra block injected.
+  // "polished" adds BLOCK_SKIN_POLISHED, which is gender-gated inside the
+  // prompt itself (only fires for women; ignored for men). Added 2026-04-26
+  // after three female beta users complained the default treatment made
+  // them look older.
+  skin?: Skin;
 };
 
 type InlineImage = { mimeType: string; data: string };
@@ -115,6 +123,32 @@ FOR MEN of any age:
 - No special under-eye rule. Use the standard Block 1 retouch allowance.
 
 Why partial (not 100%) reduction across tiers 1 and 2: full elimination of under-eye texture produces a "filtered" or "filler-injected" look that reads as fake. The remaining 45–60% natural texture is what keeps the face reading as a real person rather than an avatar.`;
+
+// Block SKIN_POLISHED — overall skin treatment override for women, fires
+// only when the user picked the "Polished" skin toggle on the Style screen
+// (added 2026-04-26 after 3 female beta users said the default treatment
+// made them look older).
+//
+// Kristi's wording, lightly structured for clarity. Key idea: this is NOT
+// "smooth out the face." It's "even out skin tone but keep / re-add pore
+// detail." The gotcha to avoid is plastic skin — Gemini's default behavior
+// when asked to "smooth" anything is to default to a TikTok-filter look,
+// which is exactly what we don't want.
+//
+// Block is gender-gated inside the prompt itself: it only fires for women.
+// For men the block is injected but the body says "ignore for men" — so
+// Gemini reads it, evaluates apparent gender, and applies as appropriate.
+const BLOCK_SKIN_POLISHED = `Skin treatment override (women only — ignore entirely if subject appears to be a man, regardless of any other instruction in this block).
+
+For women: Polished skin with lots of pore structure and detail. Smooth out color inconsistencies in skintones — uneven redness, blotchiness, post-acne marks, sunspots, hyperpigmentation patches, and tone variation between forehead / cheeks / chin — but keep visible skin texture intact. NO plastic skin. NO airbrushed or filter-smoothed appearance. NO doll-like or AI-tell smoothness.
+
+CRITICAL: Add pore structure and detail even if the reference photos do not show clear skin texture (low-resolution phone selfies, harsh lighting, heavy compression). The end result must read as a real human face with real skin — pores visible at normal viewing distance, with the only "retouch" being even tone, not erased texture.
+
+This treatment applies to face, neck, and any visible décolletage. It overrides Block 1's "retain natural skin texture" allowance for women specifically — the polished version actively SMOOTHS color irregularities while PRESERVING (or re-adding) structural texture.
+
+This block coexists with Block UNDER_EYE — apply both. The under-eye softening rules from Block UNDER_EYE still apply by tier; this block governs the rest of the face's tone evenness.
+
+For men: ignore this block entirely. Apply the standard Block 1 skin treatment unchanged.`;
 
 // Block PET — conditional override that only applies when the subject is an
 // animal rather than a human. Added 2026-04-23 to support the #professionalpets
@@ -374,6 +408,13 @@ function assemblePrompt(req: GenerateRequest): string {
     parts.push(BLOCK_LENS_CORRECTION);
   }
 
+  // Skin "Polished" toggle (women only — block self-gates internally for
+  // men). When the user picked "Realistic" (default) we don't inject this
+  // block at all, preserving prior behavior exactly.
+  if (req.skin === "polished") {
+    parts.push(BLOCK_SKIN_POLISHED);
+  }
+
   // Block 6 Background is ONLY for Corporate. Creative / Executive get their
   // background direction embedded in Block 3 itself. Rainbow routes through
   // buildBlock6Background so each variationIndex gets a different color.
@@ -559,6 +600,11 @@ export default async function handler(
     !Number.isInteger(body.variationIndex)
   ) {
     return res.status(400).json({ error: "variationIndex must be an integer between 0 and 5" });
+  }
+  // skin is optional; if present, must be a known value. Default behavior
+  // (no block injected) when omitted or set to "realistic".
+  if (body.skin && !["realistic", "polished"].includes(body.skin)) {
+    return res.status(400).json({ error: "Invalid skin" });
   }
 
   const apiKey = process.env.GEMINI_API_KEY;

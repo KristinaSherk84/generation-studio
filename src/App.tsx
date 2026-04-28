@@ -101,6 +101,10 @@ type PhotographerTipsModalProps = {
 
 const PHOTOG_TIPS = [
   {
+    title: "Upload your favorite shot first.",
+    body: "The AI gives extra weight to the first photo when learning your face. Lead with the photo that looks most like the version of yourself you want generated — clear, well-lit, recent.",
+  },
+  {
     title: "Turn off overhead lights.",
     body: "Face a window. Natural daylight is best — overhead lights cast unflattering shadows under the eyes.",
   },
@@ -1180,6 +1184,13 @@ export type StyleSelections = {
   attire: "formal" | "casual" | "keep";
   lighting: "studio" | "natural" | "dramatic" | "golden";
   background?: "white" | "lightgrey" | "midgrey" | "dark" | "blue" | "green" | "rainbow";
+  // Skin treatment toggle (added 2026-04-26).
+  // - "realistic" (default) — current behavior, no extra block.
+  // - "polished" — applies BLOCK_SKIN_POLISHED, which smooths color
+  //   inconsistencies in skintones while preserving / re-adding pore texture.
+  // Only affects WOMEN; men's skin treatment is unchanged regardless of
+  // this setting (the backend block is gender-gated).
+  skin?: "realistic" | "polished";
 };
 
 type StyleScreenProps = {
@@ -1192,6 +1203,10 @@ const StyleScreen = ({ onGenerate, onBack }: StyleScreenProps) => {
   const [background, setBackground] = useState<string>("lightgrey");
   const [attire, setAttire] = useState<string | null>(null);
   const [lighting, setLighting] = useState<string | null>(null);
+  // Skin treatment defaults to "realistic" (current behavior). "polished"
+  // applies the BLOCK_SKIN_POLISHED override server-side, which only fires
+  // for women — men's skin treatment is unchanged regardless of this toggle.
+  const [skin, setSkin] = useState<"realistic" | "polished">("realistic");
 
   const canGenerate = Boolean(style && attire && lighting);
 
@@ -1393,6 +1408,30 @@ const StyleScreen = ({ onGenerate, onBack }: StyleScreenProps) => {
         ))}
       </div>
 
+      {/* Skin (women only — men's treatment unchanged regardless of this
+          toggle, but the toggle is shown to everyone since we don't ask for
+          gender). Defaults to Realistic = current behavior. Polished applies
+          a tone-evening + pore-preserving treatment for women. */}
+      <SectionLabel>Skin</SectionLabel>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <Chip selected={skin === "realistic"} onClick={() => setSkin("realistic")}>
+          Realistic
+        </Chip>
+        <Chip selected={skin === "polished"} onClick={() => setSkin("polished")}>
+          Polished
+        </Chip>
+      </div>
+      <div
+        style={{
+          marginTop: 6,
+          fontSize: 12,
+          color: C.mediumGrey,
+          lineHeight: 1.5,
+        }}
+      >
+        For women: Polished evens out skin tones while keeping natural pore detail. Has no effect on men.
+      </div>
+
       {/* Photographer's tip */}
       <PhotogTip style={{ marginTop: 24 }}>
         For the most natural results, choose Creative style with natural lighting. The AI will
@@ -1415,6 +1454,7 @@ const StyleScreen = ({ onGenerate, onBack }: StyleScreenProps) => {
                 style === "corporate"
                   ? (background as StyleSelections["background"])
                   : undefined,
+              skin,
             });
           }}
           disabled={!canGenerate}
@@ -3800,6 +3840,7 @@ export default function App() {
           background: lastSelections.background,
           variationIndex: index,
           hasWideAngle: lastHasWideAngle,
+          skin: lastSelections.skin,
         }),
       });
       if (!response.ok) {
@@ -3896,6 +3937,7 @@ export default function App() {
             background: selections.background,
             variationIndex: index,
             hasWideAngle,
+            skin: selections.skin,
           }),
         });
         if (!response.ok) {
