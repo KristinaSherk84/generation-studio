@@ -351,6 +351,23 @@ const Landing = ({ onStart, onPromoUnlock }: LandingProps) => {
     useState<"idle" | "submitting" | "success" | "error">("idle");
   const [promoErrMsg, setPromoErrMsg] = useState("");
 
+  // Track viewport width so we can serve a mobile-optimized layout where
+  // pricing + Start button sit ABOVE the description paragraph (above the
+  // fold on a phone). Desktop keeps the original layout — 2-column pricing
+  // card with the Start button embedded inside.
+  // 640px breakpoint matches Tailwind's "sm" / common phone-vs-tablet split.
+  const [isMobile, setIsMobile] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia("(max-width: 640px)").matches;
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(max-width: 640px)");
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+
   const submitPromo = async () => {
     const trimmed = promoCode.trim();
     if (!trimmed) return;
@@ -483,6 +500,35 @@ const Landing = ({ onStart, onPromoUnlock }: LandingProps) => {
       ))}
     </div>
 
+    {/* MOBILE-ONLY: compact one-line pricing + full-width Start button,
+        rendered ABOVE the description paragraph so the price + commit
+        button are visible on first scroll without needing to read a full
+        paragraph first. Desktop renders the longer 2-column pricing card
+        further down (after the description), preserving the prior layout
+        on screens wide enough to see everything in one glance.
+        Reordered 2026-04-28 per Kristi's mobile-first restructure. */}
+    {isMobile && (
+      <>
+        <div
+          style={{
+            textAlign: "center",
+            fontSize: 14,
+            color: C.mediumGrey,
+            marginBottom: 12,
+            lineHeight: 1.5,
+          }}
+        >
+          <span style={{ color: C.dark, fontWeight: 500 }}>Try it $4.99</span>
+          {" · then $9.99 per high-rez headshot you keep"}
+        </div>
+        <div style={{ marginBottom: 32 }}>
+          <Button onClick={onStart} full>
+            Start — $4.99
+          </Button>
+        </div>
+      </>
+    )}
+
     {/* Description copy — moved below the gallery on 2026-04-22 so the
         first-screen stack on mobile is: title → real results → explainer.
         Showing the proof images above the copy makes the value legible in
@@ -520,44 +566,47 @@ const Landing = ({ onStart, onPromoUnlock }: LandingProps) => {
       Upload a few photos of your dog, cat, or horse — same flow, same price.
     </div>
 
-    {/* Pricing box padding, internal gap, and vertical spacing all use
-        clamp() so the card compresses on mobile (less negative space,
-        prices sit closer together) while keeping desktop unchanged. */}
-    <div
-      style={{
-        background: C.white,
-        border: `1px solid ${C.border}`,
-        borderRadius: 8,
-        padding: "clamp(18px, 4vw, 32px)",
-        marginBottom: 24,
-      }}
-    >
-      <div style={{ fontSize: 13, color: C.mediumGrey, marginBottom: 10, fontWeight: 500 }}>
-        Simple pricing
-      </div>
+    {/* DESKTOP-ONLY: full 2-column pricing card with the Start button
+        embedded. On mobile the equivalent (compact one-liner + Button)
+        was rendered above, so we hide this card to avoid duplicating
+        the price/CTA. */}
+    {!isMobile && (
       <div
         style={{
-          display: "flex",
-          gap: "clamp(20px, 5vw, 48px)",
-          flexWrap: "wrap",
-          marginBottom: "clamp(14px, 3vw, 24px)",
+          background: C.white,
+          border: `1px solid ${C.border}`,
+          borderRadius: 8,
+          padding: "clamp(18px, 4vw, 32px)",
+          marginBottom: 24,
         }}
       >
-        <div>
-          <div style={{ fontSize: 26, fontWeight: 500, color: C.dark }}>$4.99</div>
-          <div style={{ fontSize: 12, color: C.mediumGrey, marginTop: 4 }}>
-            Try it · credited toward your first high-rez download
+        <div style={{ fontSize: 13, color: C.mediumGrey, marginBottom: 10, fontWeight: 500 }}>
+          Simple pricing
+        </div>
+        <div
+          style={{
+            display: "flex",
+            gap: "clamp(20px, 5vw, 48px)",
+            flexWrap: "wrap",
+            marginBottom: "clamp(14px, 3vw, 24px)",
+          }}
+        >
+          <div>
+            <div style={{ fontSize: 26, fontWeight: 500, color: C.dark }}>$4.99</div>
+            <div style={{ fontSize: 12, color: C.mediumGrey, marginTop: 4 }}>
+              Try it · credited toward your first high-rez download
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 26, fontWeight: 500, color: C.dark }}>$9.99</div>
+            <div style={{ fontSize: 12, color: C.mediumGrey, marginTop: 4 }}>
+              Per high-rez headshot you keep · minus your $4.99 credit
+            </div>
           </div>
         </div>
-        <div>
-          <div style={{ fontSize: 26, fontWeight: 500, color: C.dark }}>$9.99</div>
-          <div style={{ fontSize: 12, color: C.mediumGrey, marginTop: 4 }}>
-            Per high-rez headshot you keep · minus your $4.99 credit
-          </div>
-        </div>
+        <Button onClick={onStart}>Start — $4.99</Button>
       </div>
-      <Button onClick={onStart}>Start — $4.99</Button>
-    </div>
+    )}
 
     <PhotogTip style={{ marginTop: 16 }}>
       Twenty years behind the lens photographing headshots in DC. Every style preset, every lighting
