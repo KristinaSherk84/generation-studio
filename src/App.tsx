@@ -1470,16 +1470,6 @@ const StyleScreen = ({ onGenerate, onBack }: StyleScreenProps) => {
           Polished
         </Chip>
       </div>
-      <div
-        style={{
-          marginTop: 6,
-          fontSize: 12,
-          color: C.mediumGrey,
-          lineHeight: 1.5,
-        }}
-      >
-        For women: Polished evens out skin tones while keeping natural pore detail. Has no effect on men.
-      </div>
 
       {/* Photographer's tip */}
       <PhotogTip style={{ marginTop: 24 }}>
