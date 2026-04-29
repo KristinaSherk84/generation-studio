@@ -48,6 +48,7 @@ type Background =
   | "blue"
   | "green"
   | "rainbow";
+type Skin = "realistic" | "polished";
 
 type DeliverRequest = {
   email: string;
@@ -59,6 +60,7 @@ type DeliverRequest = {
   attire: Attire;
   lighting: Lighting;
   background?: Background;
+  skin?: Skin; // added 2026-04-28; surfaces the Realistic/Polished choice
 };
 
 type DeliveryManifest = {
@@ -69,6 +71,7 @@ type DeliveryManifest = {
   attire: Attire;
   lighting: Lighting;
   background?: Background;
+  skin?: Skin;
   referencePhotoUrls: string[];
   deliveredHeadshotUrls: string[];
 };
@@ -156,6 +159,7 @@ async function sendUsageAlertEmail(args: {
         <strong>Attire:</strong> ${escapeHtml(manifest.attire)} &nbsp;·&nbsp;
         <strong>Lighting:</strong> ${escapeHtml(manifest.lighting)}
         ${manifest.background ? `&nbsp;·&nbsp; <strong>Background:</strong> ${escapeHtml(manifest.background)}` : ""}
+        ${manifest.skin ? `&nbsp;·&nbsp; <strong>Skin:</strong> ${escapeHtml(manifest.skin)}` : ""}
       </p>
 
       <h3 style="margin:20px 0 8px 0;font-size:14px;text-transform:uppercase;letter-spacing:1px;color:#999;">Before (reference photos)</h3>
@@ -269,6 +273,9 @@ export default async function handler(
   ) {
     return res.status(400).json({ error: "Invalid background" });
   }
+  if (body.skin && !["realistic", "polished"].includes(body.skin)) {
+    return res.status(400).json({ error: "Invalid skin" });
+  }
 
   const deliveryId = newDeliveryId();
   const timestamp = new Date().toISOString();
@@ -286,6 +293,7 @@ export default async function handler(
       attire: body.attire,
       lighting: body.lighting,
       background: body.background,
+      skin: body.skin,
       referencePhotoUrls: body.referencePhotoUrls,
       deliveredHeadshotUrls: body.photoUrls,
     };

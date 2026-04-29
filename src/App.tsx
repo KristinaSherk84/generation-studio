@@ -2279,6 +2279,7 @@ const CheckoutScreen = ({
             attire: selections.attire,
             lighting: selections.lighting,
             background: selections.background,
+            skin: selections.skin,
           }),
         });
         if (!response.ok) {
@@ -3745,6 +3746,7 @@ export default function App() {
             attire: stash.selections.attire,
             lighting: stash.selections.lighting,
             background: stash.selections.background,
+            skin: stash.selections.skin,
           }),
         });
         if (!deliverResp.ok) throw new Error(`HTTP ${deliverResp.status}`);
