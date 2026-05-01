@@ -172,16 +172,23 @@ For men: ignore this block entirely. Apply the standard Block 1 skin treatment u
 // treatment never changes.
 const BLOCK_SKIN_GLAM = `GLAMOROUS EDITORIAL SKIN treatment override (women only — ignore entirely if subject appears to be a man, regardless of any other instruction in this block).
 
-For women: Apply targeted wrinkle-only retouching with FULL skin texture preservation. The aesthetic target is "red-carpet luxury beauty editorial that hasn't erased the human" — Vogue cover where the model still has visible pores under close inspection. Polished, glowing, aspirational — but real skin.
+For women: Apply aggressive wrinkle-and-tone retouching with FULL skin texture preservation. The aesthetic target is "red-carpet luxury beauty editorial that hasn't erased the human" — Vogue cover where the model still has visible pores under close inspection. Polished, even-toned, glowing, aspirational — but real skin.
 
 Specific direction:
-- WRINKLES AND FINE LINES: Apply approximately 85% reduction across the whole face — under-eye lines, crow's feet, forehead lines, smile lines / nasolabial folds, lip lines, neck lines. The remaining ~15% subtle line texture stays so the face reads as a real adult, not a 3D render.
-- PORE STRUCTURE AND SKIN TEXTURE: PRESERVE FULLY. Visible pores everywhere — cheeks, forehead, nose, chin, neck, décolletage. The skin should still read as actual human skin under close inspection, not airbrushed or filtered. Pore detail at 100% — this is non-negotiable.
-- TONE EVENING: Smooth out color inconsistencies — redness, blotchiness, post-acne marks, hyperpigmentation, sunspots. The face reads as one even, luminous tone but the texture beneath that tone is intact.
+
+- WRINKLES AND FINE LINES (~95% REDUCTION): Aggressively eliminate visible wrinkles and fine lines across the entire face — under-eye lines, crow's feet, forehead lines, smile lines / nasolabial folds, lip lines, neck lines. Only the subtlest hint (~5%) of line texture should remain, ONLY where needed to keep the face from reading as a 3D render. When in doubt about a particular line, remove it. This is more aggressive than Polished — Glam customers explicitly chose this look.
+
+- PORE STRUCTURE AND SKIN TEXTURE: PRESERVE FULLY at 100%. Visible pores across cheeks, forehead, nose, chin, neck, décolletage — the skin should still read as actual human skin under close inspection. CRITICAL DISTINCTION: pore preservation refers to the physical 3D micro-texture of the skin surface (the raised / recessed terrain of pores at close magnification). It does NOT mean preserving color inconsistencies that happen to occur in the same regions. Pores stay; redness/blotchiness goes. Treat these as TWO SEPARATE concerns — texture and color — and only the texture is preserved.
+
+- TONE EVENING (AGGRESSIVE): Completely eliminate color inconsistencies across the entire face — redness on cheeks and nose, blotchiness, post-acne marks, hyperpigmentation, sunspots, melasma, broken capillaries, and color variation between forehead/cheeks/chin/neck. The end result reads as ONE EVEN luminous tone across the entire face. If the reference photos show patchy color, that patchiness is THE THING being retouched away — do not preserve it as "authentic." The whole face should read as a single skin tone with subtle dimensional shading from the lighting, not blotchy color zones.
+
 - Skin should look luminous and softly glowing, as though professionally lit. Healthy radiance, not matte, not greasy.
-- This treatment EXPLICITLY OVERRIDES Block UNDER_EYE — when Glam is active, the under-eye gets the same 85%-wrinkle/100%-pore treatment as the rest of the face, not the age-tiered preservation rules.
-- This treatment partially overrides Block 1 — wrinkles are reduced beyond Block 1's 5% allowance, but Block 1's "retain natural skin texture" rule still applies (and is enforced by the pore-preservation directive above).
-- It does NOT override Block 7's anti-plastic rule — Glam should NEVER produce plastic, doll-like, or filter-smoothed skin. The pore preservation is the safeguard.
+
+- This treatment EXPLICITLY OVERRIDES Block UNDER_EYE — when Glam is active, the under-eye gets the same 95%-wrinkle / 100%-pore / 100%-tone-evening treatment as the rest of the face, not the age-tiered preservation rules.
+
+- This treatment partially overrides Block 1 — wrinkles are reduced far beyond Block 1's 5% allowance, but Block 1's "retain natural skin texture" rule still applies (and is enforced by the pore-preservation directive above).
+
+- It does NOT override Block 7's anti-plastic rule — Glam should NEVER produce plastic, doll-like, or filter-smoothed skin. The pore preservation is the safeguard against that.
 
 For men: ignore this block entirely. Apply the standard Block 1 skin treatment unchanged.`;
 
@@ -388,12 +395,17 @@ const BLOCK_EYEWEAR = `Eyewear: If the subject is wearing glasses (prescription 
 // hair is the more flattering and editorial choice for a professional
 // portrait, so when the reference set is mixed, we tell Gemini to prefer
 // down. When unanimous (all down or all tied back), match the reference.
-const BLOCK_HAIR = `Hair styling: Evaluate how the subject is wearing their hair across the reference photos.
-- If the references show the SAME style consistently (all hair down OR all hair tied back), match that style in the generated headshot.
-- If the references show a MIX of styles (some down, some tied back / up / clipped), render the generated headshot with hair DOWN — loose, flowing, framing the face. Hair down is more flattering and editorial for a professional portrait than tied-back.
+const BLOCK_HAIR = `CRITICAL HAIR STYLING RULE: Evaluate how the subject is wearing their hair across the reference photos.
+
+- If the references show the SAME style consistently (all hair down OR all hair tied back / up / clipped), match that style exactly.
+
+- If the references show a MIX of styles (some down, some tied back / up / pulled away from face / in a ponytail or bun or clip), the generated headshot MUST render hair DOWN — loose, flowing, framing the face. This is non-negotiable when the references are mixed. Hair down is the more flattering and editorial choice for a professional portrait, and the customer benefits from the more polished option. Do not default to "easier to render" tied-back styles when the references give you the option of down.
+
 - If only one or two reference photos exist and the styling is ambiguous, default to hair DOWN.
 
-Always match the subject's actual hair length, color, texture, density, and natural part. Do NOT invent a different cut, lengthen / shorten the hair, or change its natural flow or color.
+When generating hair-down: render the hair as the subject's natural length and texture would actually look when worn down — not slicked back, not pulled tight, not held off the face. Frame the face naturally with the hair.
+
+Always match the subject's actual hair length, color, texture, density, and natural part. Do NOT invent a different cut, lengthen or shorten the hair, or change its natural flow or color.
 
 For subjects with very short hair (under approximately chin length), no styling decision applies — just match the reference photos exactly.`;
 

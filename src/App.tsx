@@ -1882,6 +1882,9 @@ type GridScreenProps = {
   regenCount: number;
   maxRegens: number;
   regeneratingSlots: Set<number>;
+  // One-line error banner shown above the grid when a per-slot regen
+  // call fails on the server. App owns the state; GridScreen just renders.
+  regenError: string | null;
 };
 
 const GridScreen = ({
@@ -1892,6 +1895,7 @@ const GridScreen = ({
   regenCount,
   maxRegens,
   regeneratingSlots,
+  regenError,
 }: GridScreenProps) => {
   const [cart, setCart] = useState<Set<number>>(new Set());
   // Always render 6 slots. If generation returned fewer than 6 (some failed),
@@ -1958,6 +1962,26 @@ const GridScreen = ({
           </div>
         </div>
       </div>
+
+      {/* Inline error banner — appears when a per-slot regenerate API call
+          fails. Budget is automatically refunded by the App handler before
+          this renders, so the user can try again immediately. */}
+      {regenError && (
+        <div
+          style={{
+            margin: "12px 0",
+            padding: "10px 14px",
+            background: "#FDECEC",
+            border: "1px solid #F5C7C5",
+            borderRadius: 8,
+            fontSize: 13,
+            color: "#7A1F1B",
+            lineHeight: 1.5,
+          }}
+        >
+          {regenError}
+        </div>
+      )}
 
       {/* Hint above the grid so users discover per-photo regeneration.
           It's a soft one-liner, not a button — the actual affordance lives
@@ -3664,6 +3688,13 @@ export default function App() {
   // each photo gets its own Download button.
   const [deliveredPhotoUrls, setDeliveredPhotoUrls] = useState<string[]>([]);
   const [regenCount, setRegenCount] = useState(0);
+  // Surfaces a one-line error to the user when a per-slot regenerate call
+  // fails on the backend (Gemini timeout / 500 / safety filter / etc).
+  // Without this, the failure was silent — user clicked Refresh, nothing
+  // visible changed, and the regen budget ticked down with no result.
+  // Now: refund the budget, show this banner. Cleared when user starts
+  // another regen or navigates away. Added 2026-05-01.
+  const [regenError, setRegenError] = useState<string | null>(null);
   const [showPaywall, setShowPaywall] = useState(false);
   // Photos are lifted to App scope so the Blob URLs survive navigating forward
   // into Style / Grid / Checkout. /api/generate reads their blobUrl values.
@@ -3987,6 +4018,9 @@ export default function App() {
       return; // already in flight for this slot
     }
 
+    // Clear any prior error and burn one regen — we'll refund this if the
+    // call fails so the user doesn't lose budget on a server-side problem.
+    setRegenError(null);
     setRegenCount((n) => n + 1);
     setRegeneratingSlots((prev) => {
       const next = new Set(prev);
@@ -4018,11 +4052,16 @@ export default function App() {
         next[index] = data.image;
         return next;
       });
-    } catch {
-      // Silent per-slot failure — the old image stays in that slot. The user
-      // can hit regenerate again; we've already burned a budget increment,
-      // which matches Gemini charging us regardless of whether we liked the
-      // result. (Future: surface a small inline error + refund the budget.)
+    } catch (err) {
+      // Surface a visible error AND refund the regen budget — Gemini charged
+      // us regardless, but charging the user a regen budget for a failure
+      // they had no control over is the wrong UX.
+      setRegenCount((n) => Math.max(0, n - 1));
+      const msg =
+        err instanceof Error && err.message.includes("HTTP")
+          ? `Regeneration failed (server returned ${err.message.replace("HTTP ", "")}). Try again in a few seconds — if it keeps failing, refresh the page.`
+          : `Regeneration failed for slot ${index + 1}. Try again in a few seconds — if it keeps failing, refresh the page.`;
+      setRegenError(msg);
     } finally {
       setRegeneratingSlots((prev) => {
         const next = new Set(prev);
@@ -4183,6 +4222,7 @@ export default function App() {
           }}
           onBack={() => setScreen("style")}
           onRegenerateSlot={handleRegenerateSlot}
+          regenError={regenError}
           regenCount={regenCount}
           maxRegens={MAX_SINGLE_REGENS}
           regeneratingSlots={regeneratingSlots}
