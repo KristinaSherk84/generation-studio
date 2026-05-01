@@ -1650,6 +1650,13 @@ type LoadingScreenProps = {
   totalCount: number;            // always 6 for V1 — passed explicitly so it can change later
   errorMessage: string | null;   // shown if all 6 failed
   onBack: () => void;            // cancel / go back to the style screen
+  // Called when the user clicks "Continue with what's ready" — fires only
+  // when readyCount >= 5 < totalCount, so the user can advance to the grid
+  // while the last call is still in flight. Slot 6 frequently gets queue-
+  // placed last by Gemini's Tier 1 burst limiter and adds 60–120s of wait
+  // for nothing. The 6th call keeps firing in the background and populates
+  // its slot when it returns.
+  onContinueWithReady: () => void;
 };
 
 const LoadingScreen = ({
@@ -1658,6 +1665,7 @@ const LoadingScreen = ({
   totalCount,
   errorMessage,
   onBack,
+  onContinueWithReady,
 }: LoadingScreenProps) => {
   // The counter message says "Generating headshot N of 6" where N = the
   // image currently being worked on. With parallel requests all 6 are
@@ -1759,6 +1767,30 @@ const LoadingScreen = ({
           }}
         >
           {readyCount} of {totalCount} ready
+        </div>
+      )}
+
+      {/* Early-advance button — fires when at least 5 of 6 are ready but the
+          last one is still in flight. Slot 6 frequently gets queue-placed
+          last by Gemini's Tier 1 burst limiter and can take 60–120s longer
+          than the rest, so this lets users move on rather than stare at a
+          spinner. The remaining call keeps running in the background and
+          populates its slot in the grid when it returns; until then the
+          grid renders a spinner on that slot (not the "failed" placeholder). */}
+      {!errorMessage && !allDone && readyCount >= totalCount - 1 && (
+        <div style={{ marginTop: 24 }}>
+          <Button onClick={onContinueWithReady} full>
+            Continue with {readyCount} ready →
+          </Button>
+          <div
+            style={{
+              marginTop: 8,
+              fontSize: 12,
+              color: C.mediumGrey,
+            }}
+          >
+            The last one will appear on the next screen as soon as it's done.
+          </div>
         </div>
       )}
 
@@ -1885,6 +1917,13 @@ type GridScreenProps = {
   // One-line error banner shown above the grid when a per-slot regen
   // call fails on the server. App owns the state; GridScreen just renders.
   regenError: string | null;
+  // Slots from the INITIAL 6-image batch that are still in flight. Set when
+  // the user advanced to the grid early via "Continue with what's ready" on
+  // the loading screen. Drives a spinner on those slots instead of the
+  // "Generation failed" placeholder, and hides the regen button until the
+  // call resolves (so users don't burn a regen on a slot that's about to
+  // populate naturally).
+  initialBatchInFlight: Set<number>;
 };
 
 const GridScreen = ({
@@ -1896,6 +1935,7 @@ const GridScreen = ({
   maxRegens,
   regeneratingSlots,
   regenError,
+  initialBatchInFlight,
 }: GridScreenProps) => {
   const [cart, setCart] = useState<Set<number>>(new Set());
   // Always render 6 slots. If generation returned fewer than 6 (some failed),
@@ -2026,13 +2066,20 @@ const GridScreen = ({
           const picked = cart.has(i);
           const src = images[i]; // may be undefined if this slot failed to generate
           const regenerating = regeneratingSlots.has(i);
+          // True only for slots whose ORIGINAL /api/generate call hasn't come
+          // back yet — i.e., the user advanced via "Continue with what's ready"
+          // on the loading screen and one (or more) calls are still in flight.
+          // We render a spinner on these (not the failed-placeholder) and
+          // hide the regen button so the user doesn't burn a regen on a slot
+          // that's about to populate naturally.
+          const stillLoadingFromInitial = !src && initialBatchInFlight.has(i);
           // Note: deliberately NOT requiring `!!src`. An errored slot (src
-          // undefined) is exactly the case where the user MOST needs the
-          // regen button — that's the slot the initial batch failed on.
-          // Earlier `!!src &&` here silently blocked clicks on failed slots
-          // even though the button was rendered (per the comment near the
-          // button below). 2026-05-01 fix.
-          const canRegenThisSlot = !regenerating && regenCount < maxRegens;
+          // undefined and NOT in initialBatchInFlight) is exactly the case
+          // where the user MOST needs the regen button — that's the slot
+          // the initial batch failed on. 2026-05-01 fix. We do still hide
+          // the button for slots stillLoadingFromInitial.
+          const canRegenThisSlot =
+            !regenerating && !stillLoadingFromInitial && regenCount < maxRegens;
           const handleRegenClick = (e: MouseEvent) => {
             e.stopPropagation(); // don't also toggle selection
             if (!canRegenThisSlot) return;
@@ -2108,6 +2155,42 @@ const GridScreen = ({
                     ))}
                   </div>
                 </>
+              ) : stillLoadingFromInitial ? (
+                // The user advanced from the loading screen at 5/6 ready, and
+                // this slot's original generate call hasn't returned yet.
+                // Show a spinner + "Still generating…" instead of the failed
+                // placeholder. When the call resolves, App writes the image
+                // into images[i] and removes i from initialBatchInFlight, at
+                // which point this branch falls through to the image render.
+                <div
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: C.mediumGrey,
+                    fontSize: 12,
+                    gap: 10,
+                    padding: 16,
+                    textAlign: "center",
+                    background: C.lightGrey,
+                  }}
+                >
+                  <span
+                    style={{
+                      display: "inline-block",
+                      width: 24,
+                      height: 24,
+                      borderRadius: "50%",
+                      border: `2.5px solid ${C.mediumGrey}`,
+                      borderTopColor: "transparent",
+                      animation: "spin 0.8s linear infinite",
+                    }}
+                  />
+                  Still generating…
+                </div>
               ) : (
                 // Generation failed for this slot — show a clear, non-clickable
                 // placeholder so the user knows which card didn't come back.
@@ -2159,8 +2242,10 @@ const GridScreen = ({
                   confusing disabled state. Also rendered on FAILED slots so
                   users can retry slots that didn't come back on the first
                   pass — previously those slots only showed "Generation
-                  failed" with no action affordance. */}
-              {regenCount < maxRegens && !regenerating && (
+                  failed" with no action affordance. Hidden on slots still
+                  in flight from the initial batch so the user doesn't burn
+                  a regen on a slot that's about to populate naturally. */}
+              {regenCount < maxRegens && !regenerating && !stillLoadingFromInitial && (
                 <button
                   onClick={handleRegenClick}
                   title="Regenerate this photo"
@@ -3727,6 +3812,16 @@ export default function App() {
   // The GridScreen overlays a loading spinner on these so the rest of the grid
   // stays interactive.
   const [regeneratingSlots, setRegeneratingSlots] = useState<Set<number>>(new Set());
+  // Which slots from the INITIAL 6-image batch are still in flight. Distinct
+  // from regeneratingSlots (which tracks per-slot regen clicks from the grid).
+  // Used so the user can advance to the grid early — once 5 of 6 are ready,
+  // a "Continue with what's ready" button appears on the loading screen.
+  // The 6th call keeps firing in the background; the grid renders a spinner
+  // (not a "Generation failed" placeholder) on slots in this set, then swaps
+  // in the image when it returns. Added 2026-05-01 because slot 6 frequently
+  // gets queue-placed last by Gemini's Tier 1 burst limiter and takes 60–120s
+  // longer than slots 1–5.
+  const [initialBatchInFlight, setInitialBatchInFlight] = useState<Set<number>>(new Set());
   // Budget of individual-photo regenerations per session. Previously this was
   // 2 bulk-regens (~12 API calls worth); individual regens are cheaper so we
   // give users 6 single swaps, which is the same total cost ceiling at most.
@@ -4112,6 +4207,10 @@ export default function App() {
     setGenerationError(null);
     setRegenCount(0);
     setRegeneratingSlots(new Set());
+    // All 6 slots are about to start firing — record them as in-flight.
+    // Each call removes its own index in its `finally` block so the grid
+    // can swap a spinner for the failed-placeholder at the right moment.
+    setInitialBatchInFlight(new Set([0, 1, 2, 3, 4, 5]));
     // Persist selections + URLs so per-slot regeneration can reuse them
     // without asking the user to reselect anything.
     setLastSelections(selections);
@@ -4168,6 +4267,15 @@ export default function App() {
       } catch {
         // Swallow per-call errors — we'll surface them only if ALL 6 fail.
         return null;
+      } finally {
+        // Whether this call succeeded or failed, it's no longer in flight.
+        // The GridScreen reads this set to decide whether to show a spinner
+        // (still in flight) or "Generation failed" (returned + no image).
+        setInitialBatchInFlight((prev) => {
+          const next = new Set(prev);
+          next.delete(index);
+          return next;
+        });
       }
     });
 
@@ -4175,15 +4283,23 @@ export default function App() {
     const successCount = results.filter((r) => r !== null).length;
 
     if (successCount === 0) {
+      // Edge case: if the user has already advanced to the grid via the
+      // "Continue with what's ready" button by the time all calls fail,
+      // we still want to surface this — but they're not on the loading
+      // screen anymore. setGenerationError() is a no-op for the grid
+      // (regenError handles per-slot grid errors instead). We still set
+      // it here so a user who's still on /loading sees the message.
       setGenerationError(
         "All 6 generations failed. Please try again — if it keeps happening, check your uploaded photos are clear headshots.",
       );
       return;
     }
 
-    // At least one succeeded → move on to the grid even if some failed. The
-    // grid renders a "generation failed" placeholder for any missing slots.
-    setScreen("grid");
+    // At least one succeeded → advance to the grid IF the user hasn't
+    // already advanced early via the 5-of-6 "Continue" button. Functional
+    // setScreen lets us check the latest screen value without a stale
+    // closure on the captured `screen` from when handleGenerate fired.
+    setScreen((s) => (s === "loading" ? "grid" : s));
   };
 
   return (
@@ -4217,6 +4333,7 @@ export default function App() {
             setGenerationError(null);
             setScreen("style");
           }}
+          onContinueWithReady={() => setScreen("grid")}
         />
       )}
       {screen === "grid" && (
@@ -4232,6 +4349,7 @@ export default function App() {
           regenCount={regenCount}
           maxRegens={MAX_SINGLE_REGENS}
           regeneratingSlots={regeneratingSlots}
+          initialBatchInFlight={initialBatchInFlight}
         />
       )}
       {screen === "checkout" && lastSelections && (
