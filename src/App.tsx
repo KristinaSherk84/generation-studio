@@ -518,12 +518,12 @@ const Landing = ({ onStart, onPromoUnlock }: LandingProps) => {
             lineHeight: 1.5,
           }}
         >
-          <span style={{ color: C.dark, fontWeight: 500 }}>Try it $4.99</span>
+          <span style={{ color: C.dark, fontWeight: 500 }}>Try it $2.99</span>
           {" · then $9.99 per high-rez headshot you keep"}
         </div>
         <div style={{ marginBottom: 32 }}>
           <Button onClick={onStart} full>
-            Start — $4.99
+            Start — $2.99
           </Button>
         </div>
       </>
@@ -592,7 +592,7 @@ const Landing = ({ onStart, onPromoUnlock }: LandingProps) => {
           }}
         >
           <div>
-            <div style={{ fontSize: 26, fontWeight: 500, color: C.dark }}>$4.99</div>
+            <div style={{ fontSize: 26, fontWeight: 500, color: C.dark }}>$2.99</div>
             <div style={{ fontSize: 12, color: C.mediumGrey, marginTop: 4 }}>
               Try it · credited toward your first high-rez download
             </div>
@@ -600,11 +600,11 @@ const Landing = ({ onStart, onPromoUnlock }: LandingProps) => {
           <div>
             <div style={{ fontSize: 26, fontWeight: 500, color: C.dark }}>$9.99</div>
             <div style={{ fontSize: 12, color: C.mediumGrey, marginTop: 4 }}>
-              Per high-rez headshot you keep · minus your $4.99 credit
+              Per high-rez headshot you keep · minus your $2.99 credit
             </div>
           </div>
         </div>
-        <Button onClick={onStart}>Start — $4.99</Button>
+        <Button onClick={onStart}>Start — $2.99</Button>
       </div>
     )}
 
@@ -2214,7 +2214,7 @@ const CheckoutScreen = ({
   const creditEligible = !isPromoUnlock && !creditUsed;
 
   const PRICE_PER_PHOTO = 9.99;
-  const CREDIT_AMOUNT = 4.99;
+  const CREDIT_AMOUNT = 2.99;
   const subtotal = PRICE_PER_PHOTO * count;
   const creditApplied = creditEligible ? CREDIT_AMOUNT : 0;
   const totalOwed = Math.max(0, subtotal - creditApplied);
@@ -2423,7 +2423,7 @@ const CheckoutScreen = ({
                 marginTop: 6,
               }}
             >
-              <span>$4.99 entry credit applied</span>
+              <span>$2.99 entry credit applied</span>
               <span>−{fmt(creditApplied)}</span>
             </div>
           )}

@@ -34,7 +34,10 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 export const maxDuration = 15;
 
 const PRICE_PER_PHOTO_CENTS = 999;
-const ENTRY_CREDIT_CENTS = 499;
+// Lowered 2026-04-30: $4.99 → $2.99 entry to lower top-of-funnel friction.
+// Same total per converting customer (still $9.99 per photo all-in) — entry
+// is just a smaller buy-in with a smaller credit applied to the first photo.
+const ENTRY_CREDIT_CENTS = 299;
 
 type CreatePhotoCheckoutBody = {
   count: number;
@@ -107,7 +110,7 @@ export default async function handler(
   // Line item name shows on the Stripe page. Make it descriptive so the user
   // recognizes what they're paying for and sees the credit reflected.
   const itemName = `${count} high-rez AI headshot${count > 1 ? "s" : ""}${
-    creditApplied ? " (includes $4.99 credit from your entry purchase)" : ""
+    creditApplied ? " (includes $2.99 credit from your entry purchase)" : ""
   }`;
 
   const formBody = new URLSearchParams();
