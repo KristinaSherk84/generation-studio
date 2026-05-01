@@ -45,7 +45,7 @@ type Background =
   | "green"
   | "rainbow"; // rainbow = generate each of 6 variations with a different color
 
-type Skin = "realistic" | "polished";
+type Skin = "realistic" | "polished" | "glam";
 
 type GenerateRequest = {
   photoUrls: string[]; // Vercel Blob URLs from Step 3
@@ -147,6 +147,33 @@ CRITICAL: Add pore structure and detail even if the reference photos do not show
 This treatment applies to face, neck, and any visible décolletage. It overrides Block 1's "retain natural skin texture" allowance for women specifically — the polished version actively SMOOTHS color irregularities while PRESERVING (or re-adding) structural texture.
 
 This block coexists with Block UNDER_EYE — apply both. The under-eye softening rules from Block UNDER_EYE still apply by tier; this block governs the rest of the face's tone evenness.
+
+For men: ignore this block entirely. Apply the standard Block 1 skin treatment unchanged.`;
+
+// Block SKIN_GLAM — heaviest skin retouching tier. Added 2026-05-01 after
+// continued feedback from women that even Polished left visible wrinkles
+// they didn't want to see. Glam targets a magazine-cover / red-carpet
+// editorial finish: smooth out ALL fine lines and wrinkles substantially,
+// keep just enough pore detail (~20%) to avoid a 3D-render or doll look.
+//
+// Glam is more aggressive than Polished AND more aggressive than the
+// age-tiered Block UNDER_EYE rules. When Glam is the user's choice, the
+// under-eye gets glam-level smoothing regardless of apparent age — block
+// UNDER_EYE is NOT injected alongside Glam by assemblePrompt below.
+//
+// Like the other skin blocks, Glam is gender-gated internally. Men's
+// treatment never changes.
+const BLOCK_SKIN_GLAM = `GLAMOROUS EDITORIAL SKIN treatment override (women only — ignore entirely if subject appears to be a man, regardless of any other instruction in this block).
+
+For women: Apply heavy magazine-cover retouching to ALL visible skin (face, neck, décolletage). The aesthetic target is "red-carpet luxury beauty editorial" — Vogue cover, Vanity Fair feature, high-end perfume campaign. The model should look polished, glowing, aspirational, flawless.
+
+Specific direction:
+- SUBSTANTIALLY smooth all fine lines and wrinkles across the entire face: under-eye lines, crow's feet, forehead lines, smile lines / nasolabial folds, lip lines, neck lines. Aim for approximately 85% reduction. The remaining ~15% of subtle texture exists only to keep the face from reading as a 3D render or doll.
+- Completely even out skin tone — eliminate redness, blotchiness, hyperpigmentation, post-acne marks, sunspots, and color variation between forehead/cheeks/chin.
+- Keep a hint of natural pore structure (about 20% retention) so close-up viewing still reads as human skin, not plastic — but err strongly on the side of smoother.
+- Skin should look luminous and softly glowing, as though professionally lit and gently dewy. Healthy radiance, not matte.
+- This treatment EXPLICITLY OVERRIDES Block UNDER_EYE — when Glam is active, the under-eye is part of the overall glamorous smoothing, not subject to the age-tiered preservation rules.
+- This treatment EXPLICITLY OVERRIDES Block 1's "retain natural skin texture" allowance and Block 7's "no plastic smoothing, no over-softening" wording — Glam is a deliberate departure from realistic-photo retouch toward editorial magazine-cover finish. The customer asked for this look explicitly.
 
 For men: ignore this block entirely. Apply the standard Block 1 skin treatment unchanged.`;
 
@@ -380,26 +407,29 @@ IMPORTANT OUTPUT CONSTRAINT: Return exactly ONE single photograph. Do NOT return
 // -------------------- Prompt assembly --------------------
 
 function assemblePrompt(req: GenerateRequest): string {
-  const parts: string[] = [
-    BLOCK_1_IDENTITY,
-    // BLOCK_UNDER_EYE refines Block 1's under-eye behavior based on the
-    // subject's apparent age — young women get smoother under-eye rendering;
-    // women 30+ keep realistic texture. Must sit adjacent to Block 1 since
-    // both are "how to render the face" rules.
-    BLOCK_UNDER_EYE,
-    // buildBlockPet sits right after identity so Gemini evaluates "is this a
-    // pet?" before it starts applying gendered-human attire rules from
-    // Block 4. Order matters: if Block 4 fires first, the model is already
-    // committed to a human interpretation by the time it reads the pet rule.
-    // variationIndex picks one of 6 attire options (3 feminine + 3 masculine)
-    // so a full batch returns a varied grid.
-    buildBlockPet(req.variationIndex),
-    BLOCK_2_COMPOSITION,
-    buildBlock3Style(req.style, req.variationIndex),
-    BLOCK_4_ATTIRE[req.attire],
-    BLOCK_EYEWEAR,
-    BLOCK_5_LIGHTING[req.lighting],
-  ];
+  const parts: string[] = [BLOCK_1_IDENTITY];
+
+  // BLOCK_UNDER_EYE refines Block 1's under-eye behavior based on the
+  // subject's apparent age — young women get smoother under-eye rendering;
+  // women 30+ keep realistic texture. We DO NOT inject this when the user
+  // selected Glam — Glam handles the under-eye as part of overall heavy
+  // smoothing and the per-age rules would just confuse Gemini.
+  if (req.skin !== "glam") {
+    parts.push(BLOCK_UNDER_EYE);
+  }
+
+  // buildBlockPet sits right after identity so Gemini evaluates "is this a
+  // pet?" before it starts applying gendered-human attire rules from
+  // Block 4. Order matters: if Block 4 fires first, the model is already
+  // committed to a human interpretation by the time it reads the pet rule.
+  // variationIndex picks one of 6 attire options (3 feminine + 3 masculine)
+  // so a full batch returns a varied grid.
+  parts.push(buildBlockPet(req.variationIndex));
+  parts.push(BLOCK_2_COMPOSITION);
+  parts.push(buildBlock3Style(req.style, req.variationIndex));
+  parts.push(BLOCK_4_ATTIRE[req.attire]);
+  parts.push(BLOCK_EYEWEAR);
+  parts.push(BLOCK_5_LIGHTING[req.lighting]);
 
   // Wide-angle lens detected on the client via EXIF? Append the stronger
   // correction block so Gemini KNOWS the distortion is present rather than
@@ -408,11 +438,16 @@ function assemblePrompt(req: GenerateRequest): string {
     parts.push(BLOCK_LENS_CORRECTION);
   }
 
-  // Skin "Polished" toggle (women only — block self-gates internally for
-  // men). When the user picked "Realistic" (default) we don't inject this
-  // block at all, preserving prior behavior exactly.
+  // Skin toggle (women only — each block self-gates internally for men).
+  // - "realistic" or unset: no extra block injected (Block 1 + UNDER_EYE
+  //   alone, current default behavior).
+  // - "polished": layered on top of UNDER_EYE — tone-evening + pore preserve.
+  // - "glam": OVERRIDES UNDER_EYE (we already skipped injecting UNDER_EYE
+  //   above) — magazine-cover heavy retouch with ~85% wrinkle reduction.
   if (req.skin === "polished") {
     parts.push(BLOCK_SKIN_POLISHED);
+  } else if (req.skin === "glam") {
+    parts.push(BLOCK_SKIN_GLAM);
   }
 
   // Block 6 Background is ONLY for Corporate. Creative / Executive get their
@@ -603,7 +638,7 @@ export default async function handler(
   }
   // skin is optional; if present, must be a known value. Default behavior
   // (no block injected) when omitted or set to "realistic".
-  if (body.skin && !["realistic", "polished"].includes(body.skin)) {
+  if (body.skin && !["realistic", "polished", "glam"].includes(body.skin)) {
     return res.status(400).json({ error: "Invalid skin" });
   }
 

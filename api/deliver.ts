@@ -48,7 +48,7 @@ type Background =
   | "blue"
   | "green"
   | "rainbow";
-type Skin = "realistic" | "polished";
+type Skin = "realistic" | "polished" | "glam";
 
 type DeliverRequest = {
   email: string;
@@ -273,7 +273,7 @@ export default async function handler(
   ) {
     return res.status(400).json({ error: "Invalid background" });
   }
-  if (body.skin && !["realistic", "polished"].includes(body.skin)) {
+  if (body.skin && !["realistic", "polished", "glam"].includes(body.skin)) {
     return res.status(400).json({ error: "Invalid skin" });
   }
 

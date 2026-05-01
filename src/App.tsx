@@ -1233,13 +1233,17 @@ export type StyleSelections = {
   attire: "formal" | "casual" | "keep";
   lighting: "studio" | "natural" | "dramatic" | "golden";
   background?: "white" | "lightgrey" | "midgrey" | "dark" | "blue" | "green" | "rainbow";
-  // Skin treatment toggle (added 2026-04-26).
+  // Skin treatment toggle (added 2026-04-26, expanded 2026-05-01 to add glam).
   // - "realistic" (default) — current behavior, no extra block.
-  // - "polished" — applies BLOCK_SKIN_POLISHED, which smooths color
-  //   inconsistencies in skintones while preserving / re-adding pore texture.
-  // Only affects WOMEN; men's skin treatment is unchanged regardless of
-  // this setting (the backend block is gender-gated).
-  skin?: "realistic" | "polished";
+  // - "polished" — BLOCK_SKIN_POLISHED smooths color inconsistencies while
+  //   preserving / re-adding pore texture. Still age-aware on under-eye via
+  //   BLOCK_UNDER_EYE.
+  // - "glam" — heavy magazine-cover retouching for women who want
+  //   minimal-wrinkles editorial finish. Overrides BLOCK_UNDER_EYE entirely
+  //   (no age-tiered preservation; smooth full face including under-eye).
+  // All three only affect WOMEN; men's skin treatment is unchanged
+  // regardless of this setting (each backend block is gender-gated).
+  skin?: "realistic" | "polished" | "glam";
 };
 
 type StyleScreenProps = {
@@ -1253,9 +1257,11 @@ const StyleScreen = ({ onGenerate, onBack }: StyleScreenProps) => {
   const [attire, setAttire] = useState<string | null>(null);
   const [lighting, setLighting] = useState<string | null>(null);
   // Skin treatment defaults to "realistic" (current behavior). "polished"
-  // applies the BLOCK_SKIN_POLISHED override server-side, which only fires
-  // for women — men's skin treatment is unchanged regardless of this toggle.
-  const [skin, setSkin] = useState<"realistic" | "polished">("realistic");
+  // and "glam" apply backend overrides that only fire for women —
+  // men's skin treatment is unchanged regardless of this toggle.
+  const [skin, setSkin] = useState<"realistic" | "polished" | "glam">(
+    "realistic",
+  );
 
   const canGenerate = Boolean(style && attire && lighting);
 
@@ -1468,6 +1474,9 @@ const StyleScreen = ({ onGenerate, onBack }: StyleScreenProps) => {
         </Chip>
         <Chip selected={skin === "polished"} onClick={() => setSkin("polished")}>
           Polished
+        </Chip>
+        <Chip selected={skin === "glam"} onClick={() => setSkin("glam")}>
+          Glam
         </Chip>
       </div>
 
