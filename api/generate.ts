@@ -83,7 +83,26 @@ type InlineImage = { mimeType: string; data: string };
 // the change here. The markdown is the source of truth for Kristi's review,
 // but these constants are what actually get sent to Gemini at runtime.
 
-const BLOCK_1_IDENTITY = `Generate a professional headshot of the person shown in the reference photos. Preserve their facial features with absolute precision: face shape, bone structure, eye shape and color, nose, mouth, hairline, skin tone, age, and any distinguishing marks. You may apply the subtle, flattering retouching a professional photographer would do in post-production: up to approximately 5% overall refinement (light skin smoothing while preserving pores and real skin texture, subtle softening of under-eye shadows), and up to approximately 10% structural refinement to the jawline or any double chin if present. Do not exceed those amounts. The goal is to photograph this specific person in a new setting — not to produce a generic, plastic, smooth, attractive, emotionless face that vaguely resembles them. If in doubt, err toward realism over polish. Retain natural skin texture and add it in if not present in the uploaded reference photos. If any reference photo appears to have been taken with a wide-angle lens (phone selfies commonly distort the nose and mid-face), correct that distortion in the generated image so the face appears as if photographed with a prime 85mm or 135mm portrait lens on a full-frame camera — slight compression of features, natural proportions, no bulging nose or elongated jaw.`;
+// Block 1 IDENTITY — the foundational "this is who the person is" directive.
+// Now skin-aware (added 2026-05-01) because Block 1's default "5% retouch
+// cap" + "err toward realism" + "preserve age" language was overriding
+// the Glam block's 95% wrinkle reduction. Gemini reads Block 1 first,
+// calibrates to the 5% cap, and then averages with Glam's later directive.
+//
+// When skin === "glam":
+//   - "preserve age" is removed (Glam customers want a less-aged look)
+//   - "5% retouch cap" → "Glam-tier retouch is permitted (see Glam block)"
+//   - "err toward realism over polish" is removed (Glam IS the chosen polish)
+//   - "retain natural skin texture" stays — pore preservation is core to Glam
+//
+// When skin !== "glam" (realistic / polished / unset): unchanged from prior.
+function buildBlock1Identity(skin: Skin | undefined): string {
+  if (skin === "glam") {
+    return `Generate a professional headshot of the person shown in the reference photos. Preserve their facial features with absolute precision: face shape, bone structure, eye shape and color, nose, mouth, hairline, skin tone, and any distinguishing marks. The customer has explicitly chosen the GLAM skin treatment (see the GLAMOROUS EDITORIAL SKIN block later in this prompt for specifics) — that block's substantial wrinkle-reduction and tone-evening directives OVERRIDE Block 1's normal 5% retouch cap. You may apply Glam-tier retouching beyond the standard 5% allowance. Apply approximately 10% structural refinement to the jawline or any double chin if present. Retain natural skin texture (pores) per the Glam block's pore-preservation directive — Glam is NOT plastic skin. If any reference photo appears to have been taken with a wide-angle lens (phone selfies commonly distort the nose and mid-face), correct that distortion in the generated image so the face appears as if photographed with a prime 85mm or 135mm portrait lens on a full-frame camera — slight compression of features, natural proportions, no bulging nose or elongated jaw.`;
+  }
+  // Default (realistic / polished / unset) — original Block 1 unchanged.
+  return `Generate a professional headshot of the person shown in the reference photos. Preserve their facial features with absolute precision: face shape, bone structure, eye shape and color, nose, mouth, hairline, skin tone, age, and any distinguishing marks. You may apply the subtle, flattering retouching a professional photographer would do in post-production: up to approximately 5% overall refinement (light skin smoothing while preserving pores and real skin texture, subtle softening of under-eye shadows), and up to approximately 10% structural refinement to the jawline or any double chin if present. Do not exceed those amounts. The goal is to photograph this specific person in a new setting — not to produce a generic, plastic, smooth, attractive, emotionless face that vaguely resembles them. If in doubt, err toward realism over polish. Retain natural skin texture and add it in if not present in the uploaded reference photos. If any reference photo appears to have been taken with a wide-angle lens (phone selfies commonly distort the nose and mid-face), correct that distortion in the generated image so the face appears as if photographed with a prime 85mm or 135mm portrait lens on a full-frame camera — slight compression of features, natural proportions, no bulging nose or elongated jaw.`;
+}
 
 // Block UNDER_EYE — age-aware under-eye rendering for women.
 //
@@ -359,7 +378,20 @@ function buildBlock6Background(background: Background, variationIndex: number): 
   return rainbow[variationIndex] ?? BLOCK_6_BACKGROUND.lightgrey;
 }
 
-const BLOCK_7_TECHNICAL = `Technical quality: 2048-pixel resolution, sharp focus on the eyes, eyelashes visible, realistic natural skin texture preserved (no plastic smoothing, no over-softening). Very shallow depth of field — subject's face in perfect focus, shoulders softly falling off, background noticeably blurred. Professional color grading: accurate skin tones, no color cast, slight warmth in shadows. No visible artifacts, no uncanny valley, no AI-tell signs. This is a commercial-grade photograph, extremely realistic — not an illustration, render, or composite.`;
+// Block 7 TECHNICAL — fires LAST in the prompt, so its language has strong
+// "final word" weight on Gemini. The "no plastic smoothing, no over-softening"
+// phrase was canceling Glam's wrinkle reduction. Made skin-aware 2026-05-01:
+// when Glam is active, the anti-smoothing wording is replaced with "the
+// Glam-tier smoothing requested by the customer is permitted; pore
+// preservation prevents plastic appearance" so Gemini doesn't end up
+// averaging the conflicting directives.
+function buildBlock7Technical(skin: Skin | undefined): string {
+  if (skin === "glam") {
+    return `Technical quality: 2048-pixel resolution, sharp focus on the eyes, eyelashes visible. Skin texture: pores preserved per the Glam block's 100% pore-detail directive. The Glam-tier wrinkle reduction (~95%) and tone evening explicitly chosen by the customer ARE permitted — those are NOT "over-softening" in this context, they are the requested editorial finish. The pore-preservation requirement prevents plastic skin. Very shallow depth of field — subject's face in perfect focus, shoulders softly falling off, background noticeably blurred. Professional color grading: accurate skin tones, no color cast, slight warmth in shadows. No visible artifacts, no uncanny valley. This is a commercial-grade beauty editorial photograph — luminous, polished, but real (real pores, real eyes, real skin under the smoothed wrinkles).`;
+  }
+  // Default — original Block 7 unchanged.
+  return `Technical quality: 2048-pixel resolution, sharp focus on the eyes, eyelashes visible, realistic natural skin texture preserved (no plastic smoothing, no over-softening). Very shallow depth of field — subject's face in perfect focus, shoulders softly falling off, background noticeably blurred. Professional color grading: accurate skin tones, no color cast, slight warmth in shadows. No visible artifacts, no uncanny valley, no AI-tell signs. This is a commercial-grade photograph, extremely realistic — not an illustration, render, or composite.`;
+}
 
 // Block LENS_CORRECTION — fires ONLY when the client's EXIF read found
 // focal length <40mm (35mm-equivalent) on any reference photo. This is much
@@ -486,7 +518,7 @@ IMPORTANT OUTPUT CONSTRAINT: Return exactly ONE single photograph. Do NOT return
 // -------------------- Prompt assembly --------------------
 
 function assemblePrompt(req: GenerateRequest): string {
-  const parts: string[] = [BLOCK_1_IDENTITY];
+  const parts: string[] = [buildBlock1Identity(req.skin)];
 
   // BLOCK_UNDER_EYE refines Block 1's under-eye behavior based on the
   // subject's apparent age — young women get smoother under-eye rendering;
@@ -537,7 +569,7 @@ function assemblePrompt(req: GenerateRequest): string {
     parts.push(buildBlock6Background(req.background, req.variationIndex));
   }
 
-  parts.push(BLOCK_7_TECHNICAL);
+  parts.push(buildBlock7Technical(req.skin));
   parts.push(buildBlock8(req.attire, req.variationIndex));
 
   return parts.join("\n\n");
