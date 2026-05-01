@@ -103,21 +103,35 @@ type InlineImage = { mimeType: string; data: string };
 // The Skin Polished and Skin Glam blocks (still injected based on user
 // choice) now focus only on tone-evening direction — the smoothing
 // percentage is owned exclusively by Block 1.
-const BLOCK_1_IDENTITY = `Generate a professional headshot of the person shown in the reference photos. Preserve their facial features with absolute precision: face shape, bone structure, eye shape and color, nose, mouth, hairline, skin tone, and any distinguishing marks.
+const BLOCK_1_IDENTITY = `Generate a professional headshot of the person shown in the reference photos.
 
-SKIN SMOOTHING DIRECTIVE — apply based on BOTH the user's chosen Skin option (provided elsewhere in this prompt as the user's skin selection) AND the subject's apparent gender from the reference photos:
+IDENTITY PRESERVATION (RULE #1 — NON-NEGOTIABLE, OVERRIDES EVERY OTHER DIRECTIVE IN THIS PROMPT INCLUDING THE SKIN SMOOTHING DIRECTIVE BELOW):
 
-- If the user chose "Realistic" skin, OR the subject appears to be a MAN regardless of choice: apply the standard professional photographer's retouch — up to approximately 5% overall refinement (light skin smoothing while preserving pores and real skin texture, subtle softening of under-eye shadows). Do not exceed 5% in this case. Err toward realism over polish.
+Preserve the subject's facial features with 100% precision. The generated face must be UNMISTAKABLY the same person — a coworker, friend, or family member viewing the headshot would recognize them immediately with zero hesitation. Match the reference photos EXACTLY for:
+- Face shape and overall facial proportions
+- Bone structure (cheekbones, jawline, brow ridge, chin shape)
+- Eye shape, eye color, eyelid shape, eye spacing, brow shape
+- Nose shape, nose width, nostril shape, nose tip
+- Mouth shape, lip thickness, lip width, mouth corners
+- Hairline (where the hair meets the forehead)
+- Underlying skin tone and ethnicity (the base shade — surface unevenness is separately handled by the smoothing directive)
+- Any distinguishing marks: freckles, beauty marks, moles, scars, dimples, asymmetries
 
-- If the subject appears to be a WOMAN AND the user chose "Polished" skin: apply approximately 35% skin smoothing across the face — substantially reduce fine lines and crepey texture, even out tone, but keep the face reading as a real person.
+DO NOT idealize features. DO NOT blend toward generic "attractive" proportions, the conventional Instagram look, or AI-default beauty patterns. DO NOT smooth away the small irregularities and asymmetries that make this person them. A real human face is slightly asymmetrical and has specific proportions — keep all of that. The smoothing directive below operates ONLY on wrinkles, fine lines, and surface tone unevenness — it NEVER touches facial structure, proportions, feature placement, or distinguishing characteristics.
 
-- If the subject appears to be a WOMAN AND the user chose "Glam" skin: apply approximately 70% skin smoothing across the face — heavily reduce fine lines and wrinkles, target a luminous editorial finish.
+SKIN SMOOTHING DIRECTIVE — apply based on BOTH the user's chosen Skin option (provided elsewhere in this prompt) AND the subject's apparent gender from the reference photos. This directive operates STRICTLY on the skin SURFACE — wrinkles, fine lines, surface tone unevenness — and never on facial structure or features (Rule #1 above):
 
-CRITICAL FOR ALL CASES (men, women, all three skin tiers): PRESERVE skin texture and pore structure at 100%. Pores must remain visible across the face, neck, and any visible décolletage in EVERY generated image regardless of which Skin treatment level applies. The smoothing applies to wrinkles, fine lines, and tone unevenness — NOT to pores or skin micro-texture. Show pores and real skin texture in every generated image.
+- If the user chose "Realistic" skin, OR the subject appears to be a MAN regardless of choice: apply the standard professional photographer's retouch — up to approximately 5% overall refinement (light skin smoothing while preserving pores and real skin texture, subtle softening of under-eye shadows). Do not exceed 5%. Err toward realism over polish.
+
+- If the subject appears to be a WOMAN AND the user chose "Polished" skin: apply approximately 35% skin smoothing across the face — substantially reduce fine lines and crepey texture, even out tone — but the face must still read as a real person AND unmistakably this specific real person.
+
+- If the subject appears to be a WOMAN AND the user chose "Glam" skin: apply approximately 70% skin smoothing across the face — heavily reduce fine lines and wrinkles, target a luminous editorial finish. CRITICAL IDENTITY GUARDRAIL FOR THIS TIER: at 70% smoothing the model has a strong tendency to drift toward generic-pretty / AI-default features and lose the subject's actual identity — do NOT let that happen. The 70% only applies to LINE TEXTURE and TONE evenness. Every facial feature, every proportion, every distinguishing mark, the eye shape, the nose, the mouth, the bone structure, the asymmetries — all of those remain UNMISTAKABLY the subject's own. Smooth the lines, not the person.
+
+CRITICAL FOR ALL CASES (men, women, all three skin tiers): PRESERVE skin texture and pore structure at 100%. Pores must remain visible across the face, neck, and any visible décolletage in EVERY generated image regardless of which Skin treatment level applies. The smoothing applies to wrinkles, fine lines, and tone unevenness — NOT to pores, NOT to skin micro-texture, and NOT to facial structure. Show pores and real skin texture in every generated image.
 
 Up to approximately 10% structural refinement to the jawline or any double chin if present. Do not exceed that amount.
 
-The goal is to photograph this specific person in a new setting — not to produce a generic, plastic, smooth, emotionless face that vaguely resembles them.
+The goal is to photograph THIS SPECIFIC PERSON in a new setting — not to produce a generic, plastic, smooth, emotionless face that vaguely resembles them.
 
 If any reference photo appears to have been taken with a wide-angle lens (phone selfies commonly distort the nose and mid-face), correct that distortion in the generated image so the face appears as if photographed with a prime 85mm or 135mm portrait lens on a full-frame camera — slight compression of features, natural proportions, no bulging nose or elongated jaw.`;
 
@@ -438,7 +452,16 @@ const BLOCK_EYEWEAR = `Eyewear: If the subject is wearing glasses (prescription 
 // hair is the more flattering and editorial choice for a professional
 // portrait, so when the reference set is mixed, we tell Gemini to prefer
 // down. When unanimous (all down or all tied back), match the reference.
-const BLOCK_HAIR = `CRITICAL HAIR STYLING RULE: Evaluate how the subject is wearing their hair across the reference photos.
+//
+// 2026-05-01 update: made skin-aware. For Glam (red-carpet / editorial
+// tier) we lean even more toward hair-down. The default rule already
+// handles "any hair down → all down" via the mixed-references branch,
+// but for Glam we additionally do a 50/50 split across the 6 variations
+// when ALL references are hair-back: half match references (hair back)
+// and half render hair down — so a Glam customer who only uploaded
+// hair-up shots still sees 3 hair-down options in their grid. Realistic
+// and Polished keep the original strict-match rule.
+const BLOCK_HAIR_DEFAULT = `CRITICAL HAIR STYLING RULE: Evaluate how the subject is wearing their hair across the reference photos.
 
 - If the references show the SAME style consistently (all hair down OR all hair tied back / up / clipped), match that style exactly.
 
@@ -451,6 +474,39 @@ When generating hair-down: render the hair as the subject's natural length and t
 Always match the subject's actual hair length, color, texture, density, and natural part. Do NOT invent a different cut, lengthen or shorten the hair, or change its natural flow or color.
 
 For subjects with very short hair (under approximately chin length), no styling decision applies — just match the reference photos exactly.`;
+
+function buildBlockHair(skin: Skin | undefined, variationIndex: number): string {
+  if (skin === "glam") {
+    // Even indices (0, 2, 4) render hair DOWN when refs are unanimously back;
+    // odd indices (1, 3, 5) match the references. So a 6-image batch returns
+    // 3 hair-back + 3 hair-down even when no reference shows hair down.
+    const isDownVariant = variationIndex % 2 === 0;
+    const allBackBranch = isDownVariant
+      ? "RENDER HAIR DOWN. Even though no reference photo shows the hair down, the customer chose Glam (the editorial / red-carpet tier) and benefits from seeing some variations with hair down. Use the subject's apparent hair length, color, texture, density, and natural part as inferred from the references — render the hair as it would naturally fall when worn loose. Do NOT invent a different cut, color, or length. Just take the hair the references show pulled back and let it down naturally."
+      : "MATCH THE REFERENCE PHOTOS exactly — render the hair tied back / up in the same specific style shown in the references (ponytail, bun, clip, slicked-back, French twist, whatever the references show). Match the natural hair length, color, texture, density, and part visible in the references.";
+    return `CRITICAL HAIR STYLING RULE (Glam tier — favors editorial hair-down look):
+
+Step 1 — Evaluate the reference photos and determine which case applies:
+
+CASE A: At least ONE reference photo shows the subject's hair DOWN (loose, flowing, or partially framing the face).
+ACTION: Render the generated headshot with hair DOWN, matching the subject's natural length, color, texture, density, and natural part. This is non-negotiable when even one reference photo has hair down — hair down is the more flattering and editorial choice for the Glam tier.
+
+CASE B: ALL reference photos show the subject's hair tied back, up, in a ponytail, bun, clip, slicked back, or otherwise pulled away from the face — NO reference photo shows hair down.
+ACTION: This generation is variation index ${variationIndex} of 6. ${allBackBranch}
+
+CASE C: Only one or two reference photos exist and the styling is ambiguous.
+ACTION: Render hair DOWN.
+
+When generating hair-down: render the hair as the subject's natural length and texture would actually look when worn down — not slicked back, not pulled tight, not held off the face. Frame the face naturally with the hair.
+
+Always match the subject's actual hair length, color, texture, density, and natural part. Do NOT invent a different cut, lengthen or shorten the hair, or change its natural flow or color.
+
+For subjects with very short hair (under approximately chin length), no styling decision applies — just match the reference photos exactly.`;
+  }
+
+  // Realistic and Polished keep the original universal rule.
+  return BLOCK_HAIR_DEFAULT;
+}
 
 // Block 8 — Single-photo variation instruction.
 //
@@ -551,7 +607,7 @@ function assemblePrompt(req: GenerateRequest): string {
   parts.push(buildBlock3Style(req.style, req.variationIndex));
   parts.push(BLOCK_4_ATTIRE[req.attire]);
   parts.push(BLOCK_EYEWEAR);
-  parts.push(BLOCK_HAIR);
+  parts.push(buildBlockHair(req.skin, req.variationIndex));
   parts.push(BLOCK_5_LIGHTING[req.lighting]);
 
   // Wide-angle lens detected on the client via EXIF? Append the stronger

@@ -2026,7 +2026,13 @@ const GridScreen = ({
           const picked = cart.has(i);
           const src = images[i]; // may be undefined if this slot failed to generate
           const regenerating = regeneratingSlots.has(i);
-          const canRegenThisSlot = !!src && !regenerating && regenCount < maxRegens;
+          // Note: deliberately NOT requiring `!!src`. An errored slot (src
+          // undefined) is exactly the case where the user MOST needs the
+          // regen button — that's the slot the initial batch failed on.
+          // Earlier `!!src &&` here silently blocked clicks on failed slots
+          // even though the button was rendered (per the comment near the
+          // button below). 2026-05-01 fix.
+          const canRegenThisSlot = !regenerating && regenCount < maxRegens;
           const handleRegenClick = (e: MouseEvent) => {
             e.stopPropagation(); // don't also toggle selection
             if (!canRegenThisSlot) return;
