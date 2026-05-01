@@ -33,7 +33,14 @@ export const maxDuration = 300;
 
 // -------------------- Types --------------------
 
-type Style = "corporate" | "creative" | "executive";
+// Style values (added "urban" 2026-05-01 — Kristi's style revamp). UI labels:
+//   corporate    → "Corporate"
+//   creative     → "Creative Natural" (renamed from "Creative" — backgrounds
+//                  expanded from 2 to 3: trees, spring garden, fall colored)
+//   executive    → "Executive"
+//   urban        → "Urban Industrial" (NEW — combines the old Creative
+//                  industrial-office background with a new urban-street one)
+type Style = "corporate" | "creative" | "executive" | "urban";
 type Attire = "formal" | "casual" | "keep";
 type Lighting = "studio" | "natural" | "dramatic" | "golden";
 type Background =
@@ -221,27 +228,70 @@ const BLOCK_2_COMPOSITION = `Frame as a professional business headshot. The spec
 - Crop tightly per the variation block's "Framing" instruction. If the variation says "from just above the top of the head to the collarbone," the top of the head should be right near the top edge — not floating in the middle of the frame.`;
 
 // Block 3 Style base text (no background) per style.
+//
+// Style revamp 2026-05-01:
+//   - "creative" is now "Creative Natural" in the UI — purely outdoor nature
+//     backgrounds (trees, spring garden, fall colored). The old industrial-
+//     office background moved out of Creative entirely into the new "urban"
+//     style. Voice still TED-stage / approachable.
+//   - "urban" (NEW) = "Urban Industrial" in the UI — modern lifestyle / on-
+//     location feel with city or modern interior backgrounds. Combines the
+//     old industrial-office bokeh with a new urban-street one.
 const BLOCK_3_STYLE_BASE: Record<Style, string> = {
   corporate: `Style: Clean, neutral, trustworthy. Modern corporate LinkedIn aesthetic. Subtle confidence, approachable but professional — senior individual contributor at a Fortune 500, director-level energy. Background matches the color specified below at approximately 80% fidelity with subtle spot-and-gradient variation within the single image (no hard edges, soft vignette). Absolutely zero expressionless eyes. The eyes must be realistic, active, engaged, and smiling.`,
-  creative: `Style: Warm, approachable, personable. Softer edges than corporate. Hints of personality — a senior creative, a consultant, or a thought leader who does keynote talks. Less "Wall Street," more "TED stage." Absolutely zero expressionless eyes. The expression must be realistic, active, engaged, and smiling.`,
+  creative: `Style: Warm, approachable, personable, with a clear outdoor or natural-environment feel. Softer edges than corporate. Hints of personality — a senior creative, a consultant, or a thought leader who does keynote talks. Less "Wall Street," more "TED stage outdoors." The lighting reads as natural daylight even when shot in a studio — never artificial-fluorescent or harsh-direct. Absolutely zero expressionless eyes. The expression must be realistic, active, engaged, and smiling.`,
   executive: `Style: Bold, authoritative, commanding. Strong presence — reads as "in charge." Darker tones, higher contrast, more gravitas — C-suite or board member energy. Background is deep and moody: near-black charcoal, deep gradient to black at the edges, or dark architectural backdrop softly blurred. Hair rim light is essential for separation. Directional lighting is welcome (see lighting rule below), but the downward-facing planes of the face must never fall into deep shadow — the eye sockets, under the nose, the nasolabial folds, and under the chin all stay well-filled so the subject's eyes are clearly visible and expressive. The realistic expression leans fierce and captivating rather than warm-and-smiling: "ready to take on the world," the knowing look that says "I have a secret I'm not telling you," a confident realistic half-smile that pulls the viewer in.`,
+  urban: `Style: Modern, on-location, lifestyle. Reads as a polished professional photographed in a real city environment — a downtown senior tech leader, a designer, a content creator with executive presence. The "I just walked out for coffee" professional vibe — unstuffy but elevated. Background is always a real urban setting (city street, modern office interior) rendered with extreme bokeh so no specific location is identifiable. Absolutely zero expressionless eyes. The expression must be realistic, active, engaged.`,
 };
 
-// Creative-only backgrounds. The frontend passes variationIndex 0-5; even
-// indices get OUTDOOR TREES, odd indices get INDUSTRIAL OFFICE — that way the
-// 6 generated photos always include a 3+3 mix rather than leaving it to
-// stochastic sampling (which was producing all-trees batches).
-const CREATIVE_BG_TREES = `Background: A distant outdoor natural setting, very bokeh heavy — trees and foliage placed 50+ feet behind the subject — photographed with the most extreme creamy bokeh imaginable (as if shot on a 200mm lens at f/1.2 on a full-frame camera). The background must be SO heavily blurred that you CANNOT identify any specific tree, trunk, branch, or leaf. What should be visible: large creamy bokeh orbs, abstract painterly washes of green and gold, soft dappled highlights. What must NOT be visible: any recognizable tree, branch structure, leaf shape, or specific object. If a viewer could point to a tree and say "that's an oak," the blur is not strong enough. Think impressionist painting, not photograph of a forest.`;
+// Background variants — the frontend passes variationIndex 0-5; the
+// buildBlock3Style logic distributes backgrounds across that range so a full
+// batch of 6 returns a mixed grid rather than 6 of the same scene.
 
-const CREATIVE_BG_INDUSTRIAL = `Background: A bright, modern industrial office interior — exposed concrete, steel beams, polished wood, large windows flooded with natural daylight. Photographed with extreme bokeh blur (as if shot on a 200mm lens at f/1.2 with the background 40+ feet behind the subject). The background must be SO heavily blurred that NO specific beam, window, wall, surface, or object is identifiable. What should be visible: soft ambient light, abstract geometric washes in light grey, white, and warm wood tones, gentle out-of-focus highlights. What must NOT be visible: any recognizable architectural detail, specific window mullion, visible beam, door, or piece of furniture. Think "ambient light and color washes," not "photo of an office."`;
+// CREATIVE NATURAL (3 backgrounds × 2 variations each = 2/2/2 split):
+const CREATIVE_BG_TREES = `Background: A distant outdoor natural setting, very bokeh heavy — green-foliage trees placed 50+ feet behind the subject — photographed with the most extreme creamy bokeh imaginable (as if shot on a 200mm lens at f/1.2 on a full-frame camera). The background must be SO heavily blurred that you CANNOT identify any specific tree, trunk, branch, or leaf. What should be visible: large creamy bokeh orbs, abstract painterly washes of green and gold, soft dappled highlights. What must NOT be visible: any recognizable tree, branch structure, leaf shape, or specific object. If a viewer could point to a tree and say "that's an oak," the blur is not strong enough. Think impressionist painting, not photograph of a forest.`;
+
+const CREATIVE_BG_SPRING_GARDEN = `Background: A spring garden in full bloom — cherry blossoms, magnolias, dogwoods, peonies, or wisteria at the peak of their flowering season — placed 50+ feet behind the subject and photographed with the most extreme creamy bokeh imaginable (as if shot on a 200mm lens at f/1.2 on a full-frame camera). The background must be SO heavily blurred that you CANNOT identify any specific flower, branch, or petal. What should be visible: large creamy bokeh orbs in soft pinks, whites, lavenders, pale corals, with hints of fresh pale-green leaves; abstract painterly washes of color; gentle dappled highlights. What must NOT be visible: any recognizable flower head, individual petal, leaf, or branch. Think impressionist painting of a garden in May — not a photograph of one.`;
+
+const CREATIVE_BG_FALL_TREES = `Background: A distant outdoor autumn setting at peak fall foliage — maples, oaks, and birches in their full color range from gold and amber through burnt orange and deep crimson, with hints of remaining green — placed 50+ feet behind the subject and photographed with the most extreme creamy bokeh imaginable (as if shot on a 200mm lens at f/1.2 on a full-frame camera). The background must be SO heavily blurred that you CANNOT identify any specific tree, branch, or leaf. What should be visible: large creamy bokeh orbs in warm autumn tones (gold, amber, rust, deep red, occasional emerald), abstract painterly washes of warm color, soft dappled highlights. What must NOT be visible: any recognizable tree, branch structure, or leaf shape. Think impressionist painting of New England in October — not a photograph of one.`;
+
+// URBAN INDUSTRIAL (2 backgrounds × 3 variations each = 3/3 split):
+const URBAN_BG_INDUSTRIAL = `Background: A bright, modern industrial office interior — exposed concrete, steel beams, polished wood, large windows flooded with natural daylight. Photographed with extreme bokeh blur (as if shot on a 200mm lens at f/1.2 with the background 40+ feet behind the subject). The background must be SO heavily blurred that NO specific beam, window, wall, surface, or object is identifiable. What should be visible: soft ambient light, abstract geometric washes in light grey, white, and warm wood tones, gentle out-of-focus highlights. What must NOT be visible: any recognizable architectural detail, specific window mullion, visible beam, door, or piece of furniture. Think "ambient light and color washes," not "photo of an office."`;
+
+const URBAN_BG_STREET = `Background: A city sidewalk and storefronts at golden hour — brick facades, shop windows, awnings, railings, the subtle suggestion of distant pedestrians. Architectural elements placed 40+ feet behind the subject, photographed with the most extreme creamy bokeh imaginable (as if shot on a 200mm lens at f/1.2 on a full-frame camera). The background must be SO heavily blurred that NO specific sign, doorway, window mullion, person, or business is identifiable. What should be visible: warm afternoon golden-hour light, soft architectural color washes (warm brick reds, deep stone greys, warm window glows), gentle out-of-focus highlights. What must NOT be visible: any recognizable storefront, sign text, doorway, pedestrian, or vehicle. Think "lifestyle headshot taken on a charming city street" — but the street itself is a soft impressionist wash of warm tones, not a recognizable place.`;
 
 function buildBlock3Style(style: Style, variationIndex: number): string {
-  if (style !== "creative") {
+  // Corporate / Executive: no rotating background — Block 3 is the full style,
+  // and Corporate also gets a separate user-picked Block 6 background appended
+  // later by assemblePrompt.
+  if (style === "corporate" || style === "executive") {
     return BLOCK_3_STYLE_BASE[style];
   }
-  // Even index (0, 2, 4) = trees; odd index (1, 3, 5) = industrial office.
-  const background = variationIndex % 2 === 0 ? CREATIVE_BG_TREES : CREATIVE_BG_INDUSTRIAL;
-  return `${BLOCK_3_STYLE_BASE.creative}\n\n${background}`;
+
+  if (style === "creative") {
+    // 3 outdoor-natural backgrounds × 2 variations each = 2/2/2 split.
+    // Indices 0,3 = trees; 1,4 = spring garden; 2,5 = fall colored trees.
+    const creativeBgs = [
+      CREATIVE_BG_TREES,         // 0
+      CREATIVE_BG_SPRING_GARDEN, // 1
+      CREATIVE_BG_FALL_TREES,    // 2
+      CREATIVE_BG_TREES,         // 3
+      CREATIVE_BG_SPRING_GARDEN, // 4
+      CREATIVE_BG_FALL_TREES,    // 5
+    ];
+    const bg = creativeBgs[variationIndex] ?? CREATIVE_BG_TREES;
+    return `${BLOCK_3_STYLE_BASE.creative}\n\n${bg}`;
+  }
+
+  if (style === "urban") {
+    // 2 backgrounds × 3 variations each = 3/3 split.
+    // Even indices = industrial office, odd = street.
+    const bg = variationIndex % 2 === 0 ? URBAN_BG_INDUSTRIAL : URBAN_BG_STREET;
+    return `${BLOCK_3_STYLE_BASE.urban}\n\n${bg}`;
+  }
+
+  // Defensive default — shouldn't be reachable since Style type is exhaustive.
+  return BLOCK_3_STYLE_BASE[style];
 }
 
 const BLOCK_4_ATTIRE: Record<Attire, string> = {
@@ -609,7 +659,7 @@ export default async function handler(
   ) {
     return res.status(400).json({ error: "At least 3 reference photos required" });
   }
-  if (!body.style || !["corporate", "creative", "executive"].includes(body.style)) {
+  if (!body.style || !["corporate", "creative", "executive", "urban"].includes(body.style)) {
     return res.status(400).json({ error: "Invalid style" });
   }
   if (!body.attire || !["formal", "casual", "keep"].includes(body.attire)) {

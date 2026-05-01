@@ -37,7 +37,7 @@ export const maxDuration = 10;
 
 // -------------------- Types --------------------
 
-type Style = "corporate" | "creative" | "executive";
+type Style = "corporate" | "creative" | "executive" | "urban";
 type Attire = "formal" | "casual" | "keep";
 type Lighting = "studio" | "natural" | "dramatic" | "golden";
 type Background =
@@ -253,7 +253,7 @@ export default async function handler(
   if (!Array.isArray(body.referencePhotoUrls)) {
     return res.status(400).json({ error: "referencePhotoUrls must be an array" });
   }
-  if (!body.style || !["corporate", "creative", "executive"].includes(body.style)) {
+  if (!body.style || !["corporate", "creative", "executive", "urban"].includes(body.style)) {
     return res.status(400).json({ error: "Invalid style" });
   }
   if (!body.attire || !["formal", "casual", "keep"].includes(body.attire)) {

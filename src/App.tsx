@@ -941,7 +941,7 @@ const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) 
           Drop photos here, or click to browse
         </div>
         <div style={{ fontSize: 13, color: C.mediumGrey, marginTop: 6 }}>
-          JPG or PNG · {photos.length}/8 added
+          JPG, PNG, or HEIC · {photos.length}/8 added
           {uploadingCount > 0 && ` · ${uploadingCount} uploading`}
         </div>
         <input
@@ -1128,10 +1128,17 @@ const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) 
 
 // -------------------- Screen 3: Style Selection --------------------
 
+// Style chips on the Style screen. 2026-05-01: revamped to 4 styles —
+// "creative" renamed to "Creative Natural" (now nature-only backgrounds —
+// trees, spring garden, fall colored), and a new "urban" style absorbs
+// the old industrial-office background plus a new urban-street option.
+// IDs stay short for code (creative/urban); display names are the longer
+// "Creative Natural" / "Urban Industrial" form Kristi requested.
 const STYLES = [
-  { id: "creative", name: "Creative", desc: "Soft creamy bokeh", swatch: "#9C9A91", bokeh: true },
+  { id: "creative", name: "Creative Natural", desc: "Soft outdoor bokeh", swatch: "#9C9A91", bokeh: true },
   { id: "corporate", name: "Corporate", desc: "Clean neutral bg", swatch: "#D3D1C7" },
   { id: "executive", name: "Executive", desc: "Bold, authoritative", swatch: "#444441" },
+  { id: "urban", name: "Urban Industrial", desc: "Modern street + office", swatch: "#7A6B5A" },
 ] as const;
 
 // Large bokeh orbs for the Creative swatch. Positions and sizes are hand-placed
@@ -1229,7 +1236,7 @@ const SectionLabel = ({ children, style = {} }: SectionLabelProps) => (
 // except `background` — which is only meaningful for Corporate style. Creative
 // and Executive get their background direction from the style prompt itself.
 export type StyleSelections = {
-  style: "corporate" | "creative" | "executive";
+  style: "corporate" | "creative" | "executive" | "urban";
   attire: "formal" | "casual" | "keep";
   lighting: "studio" | "natural" | "dramatic" | "golden";
   background?: "white" | "lightgrey" | "midgrey" | "dark" | "blue" | "green" | "rainbow";
@@ -2828,7 +2835,8 @@ const DownloadScreen = ({
   // Pretty label for each style used in the bonus section headings.
   const STYLE_LABEL: Record<StyleSelections["style"], string> = {
     corporate: "Corporate",
-    creative: "Creative",
+    creative: "Creative Natural",
+    urban: "Urban Industrial",
     executive: "Executive",
   };
 
