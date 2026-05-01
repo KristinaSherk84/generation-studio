@@ -381,6 +381,22 @@ const BLOCK_LENS_CORRECTION = `CRITICAL LENS CORRECTION: The reference photos we
 //      photos — this must never become an accessory invention.
 const BLOCK_EYEWEAR = `Eyewear: If the subject is wearing glasses (prescription eyeglasses, not sunglasses) in most or all of the reference photos, preserve the same glasses in the generated headshot — match the frame shape, color, and material as closely as possible. If the reference photos show a mix of clear-lens glasses and tinted/sunglasses frames, default to the clear-lens professional pair — a proper business headshot should have clear lenses so the subject's eyes are fully visible. If the subject is NOT wearing glasses in the reference photos, do NOT add any — never invent eyewear that isn't in the reference set.`;
 
+// Block HAIR — same pattern as Block EYEWEAR. Added 2026-05-01 after Kristi
+// noticed that when reference photos showed the subject with hair both DOWN
+// (loose, flowing, framing the face) and TIED BACK (ponytail, bun, clip),
+// Gemini was sometimes picking the tied-back style for the headshot. Down
+// hair is the more flattering and editorial choice for a professional
+// portrait, so when the reference set is mixed, we tell Gemini to prefer
+// down. When unanimous (all down or all tied back), match the reference.
+const BLOCK_HAIR = `Hair styling: Evaluate how the subject is wearing their hair across the reference photos.
+- If the references show the SAME style consistently (all hair down OR all hair tied back), match that style in the generated headshot.
+- If the references show a MIX of styles (some down, some tied back / up / clipped), render the generated headshot with hair DOWN — loose, flowing, framing the face. Hair down is more flattering and editorial for a professional portrait than tied-back.
+- If only one or two reference photos exist and the styling is ambiguous, default to hair DOWN.
+
+Always match the subject's actual hair length, color, texture, density, and natural part. Do NOT invent a different cut, lengthen / shorten the hair, or change its natural flow or color.
+
+For subjects with very short hair (under approximately chin length), no styling decision applies — just match the reference photos exactly.`;
+
 // Block 8 — Single-photo variation instruction.
 //
 // The frontend fires SIX parallel requests, each with a different variationIndex
@@ -480,6 +496,7 @@ function assemblePrompt(req: GenerateRequest): string {
   parts.push(buildBlock3Style(req.style, req.variationIndex));
   parts.push(BLOCK_4_ATTIRE[req.attire]);
   parts.push(BLOCK_EYEWEAR);
+  parts.push(BLOCK_HAIR);
   parts.push(BLOCK_5_LIGHTING[req.lighting]);
 
   // Wide-angle lens detected on the client via EXIF? Append the stronger
