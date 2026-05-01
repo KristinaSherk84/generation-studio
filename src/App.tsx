@@ -2736,7 +2736,7 @@ const DownloadScreen = ({
   // randomly pick ONE of them to preview below (alternates per page load)
   // so the bonus row is a single human teaser + a pet example card.
   const OTHER_STYLES: StyleSelections["style"][] = chosenStyle
-    ? (["corporate", "creative", "executive"] as const).filter(
+    ? (["corporate", "creative", "executive", "urban"] as const).filter(
         (s): s is StyleSelections["style"] => s !== chosenStyle,
       )
     : [];
