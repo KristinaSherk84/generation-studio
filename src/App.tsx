@@ -1134,22 +1134,31 @@ const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) 
 // the old industrial-office background plus a new urban-street option.
 // IDs stay short for code (creative/urban); display names are the longer
 // "Creative Natural" / "Urban Industrial" form Kristi requested.
+// Style chips on the Style screen. 2026-05-01: revamped to 4 styles + new
+// per-style swatch visuals (was: solid color squares, now: gradient/vignette
+// treatments that evoke the actual look of the generated headshots).
+//
+// `swatch` is the base color the inline visual layers on top of.
+// `visual` keys to a render branch in the StyleScreen — see the JSX below.
 const STYLES = [
-  { id: "creative", name: "Creative Natural", desc: "Soft outdoor bokeh", swatch: "#9C9A91", bokeh: true },
-  { id: "corporate", name: "Corporate", desc: "Clean neutral bg", swatch: "#D3D1C7" },
-  { id: "executive", name: "Executive", desc: "Bold, authoritative", swatch: "#444441" },
-  { id: "urban", name: "Urban Industrial", desc: "Modern street + office", swatch: "#7A6B5A" },
+  { id: "creative", name: "Creative Natural", desc: "Outdoor bokeh", swatch: "#7A8A5C", visual: "creative" as const },
+  { id: "corporate", name: "Corporate", desc: "Clean studio", swatch: "#D3D1C7", visual: "corporate" as const },
+  { id: "executive", name: "Executive", desc: "Bold, moody", swatch: "#2A2A28", visual: "executive" as const },
+  { id: "urban", name: "Urban Industrial", desc: "Modern street", swatch: "#6F614F", visual: "urban" as const },
 ] as const;
 
-// Large bokeh orbs for the Creative swatch. Positions and sizes are hand-placed
-// to read as scattered out-of-focus highlights from an f/1.4 lens, not a pattern.
+// Colored bokeh orbs for the Creative Natural swatch — designed to evoke the
+// 3 nature backgrounds (green trees, pink/cream spring blossoms, gold/orange
+// fall foliage) at a glance. Updated 2026-05-01 from white-on-grey to
+// nature-color palette so the swatch reads less "abstract dots" and more
+// "outdoor garden bokeh."
 const CREATIVE_BOKEH = [
-  { top: "8%",  left: "12%", size: 42, opacity: 0.45 },
-  { top: "18%", left: "62%", size: 55, opacity: 0.55 },
-  { top: "48%", left: "8%",  size: 36, opacity: 0.35 },
-  { top: "42%", left: "48%", size: 60, opacity: 0.60 },
-  { top: "68%", left: "72%", size: 46, opacity: 0.50 },
-  { top: "72%", left: "28%", size: 38, opacity: 0.40 },
+  { top: "8%",  left: "12%", size: 36, color: "rgba(180, 200, 130, 0.85)" }, // green
+  { top: "18%", left: "62%", size: 48, color: "rgba(245, 210, 220, 0.82)" }, // soft pink (spring)
+  { top: "48%", left: "8%",  size: 32, color: "rgba(150, 180, 110, 0.80)" }, // green
+  { top: "42%", left: "48%", size: 52, color: "rgba(230, 165, 95, 0.78)" },  // amber/fall
+  { top: "68%", left: "72%", size: 40, color: "rgba(200, 220, 150, 0.85)" }, // pale green
+  { top: "72%", left: "28%", size: 34, color: "rgba(220, 140, 100, 0.75)" }, // rust/fall
 ] as const;
 
 const STUDIO_BGS = [
@@ -1327,9 +1336,20 @@ const StyleScreen = ({ onGenerate, onBack }: StyleScreenProps) => {
         Pick a style, set the scene, and we'll generate 6 varied headshots to choose from.
       </p>
 
-      {/* Style cards */}
+      {/* Style cards — 4-column responsive grid (auto-collapses to 2 cols
+          on narrow phones via minmax). Smaller padding/typography than the
+          earlier 3-col layout so all 4 fit on one row at desktop widths.
+          Each style gets a distinct visual treatment instead of a flat
+          color swatch — per-style rendering branches below evoke the actual
+          generated-headshot aesthetic at a glance. */}
       <SectionLabel>Style</SectionLabel>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
+          gap: 10,
+        }}
+      >
         {STYLES.map((s) => {
           const selected = style === s.id;
           return (
@@ -1339,7 +1359,7 @@ const StyleScreen = ({ onGenerate, onBack }: StyleScreenProps) => {
               style={{
                 background: C.white,
                 borderRadius: 8,
-                padding: 12,
+                padding: 8,
                 border: `1.5px solid ${selected ? C.dark : C.border}`,
                 cursor: "pointer",
                 transition: "border-color 0.15s",
@@ -1349,14 +1369,27 @@ const StyleScreen = ({ onGenerate, onBack }: StyleScreenProps) => {
                 style={{
                   aspectRatio: "1",
                   background: s.swatch,
-                  borderRadius: 6,
+                  borderRadius: 5,
                   position: "relative",
                   overflow: "hidden",
-                  marginBottom: 10,
+                  marginBottom: 8,
                 }}
               >
-                {"bokeh" in s && s.bokeh && (
-                  <div style={{ position: "absolute", inset: 0 }}>
+                {/* Creative Natural — colored bokeh orbs over green base.
+                    Greens for trees, pink for spring blossoms, amber/rust
+                    for fall foliage. A gradient vignette behind softens
+                    the orbs so they read as out-of-focus highlights, not
+                    polka dots. */}
+                {s.visual === "creative" && (
+                  <>
+                    <div
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        background:
+                          "radial-gradient(circle at 50% 45%, rgba(160,180,110,0.35) 0%, rgba(80,100,60,0.55) 100%)",
+                      }}
+                    />
                     {CREATIVE_BOKEH.map((orb, i) => (
                       <div
                         key={i}
@@ -1367,16 +1400,91 @@ const StyleScreen = ({ onGenerate, onBack }: StyleScreenProps) => {
                           width: orb.size,
                           height: orb.size,
                           borderRadius: "50%",
-                          background: `rgba(255, 255, 255, ${orb.opacity})`,
-                          filter: "blur(6px)",
+                          background: orb.color,
+                          filter: "blur(5px)",
                         }}
                       />
                     ))}
-                  </div>
+                  </>
+                )}
+
+                {/* Corporate — clean studio backdrop. Subtle radial
+                    brightening at center + faint vignette at edges, like
+                    a real seamless paper photographed with a soft key. */}
+                {s.visual === "corporate" && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      background:
+                        "radial-gradient(circle at 50% 40%, rgba(255,255,255,0.5) 0%, transparent 50%), radial-gradient(circle at 50% 50%, transparent 60%, rgba(0,0,0,0.18) 100%)",
+                    }}
+                  />
+                )}
+
+                {/* Executive — bold dark backdrop with strong vignette and
+                    a subtle warm hair-rim-light hint from one side, evoking
+                    the moody C-suite aesthetic. */}
+                {s.visual === "executive" && (
+                  <>
+                    <div
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        background:
+                          "radial-gradient(circle at 50% 45%, rgba(80,80,75,0.4) 0%, rgba(0,0,0,0.6) 80%)",
+                      }}
+                    />
+                    {/* Warm rim suggestion from upper-right */}
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: "10%",
+                        right: "5%",
+                        width: "40%",
+                        height: "40%",
+                        background:
+                          "radial-gradient(circle, rgba(200,160,110,0.18) 0%, transparent 70%)",
+                        filter: "blur(6px)",
+                      }}
+                    />
+                  </>
+                )}
+
+                {/* Urban Industrial — warm brown base with a vertical
+                    gradient suggesting industrial-window light, plus a
+                    soft golden-hour wash on one side evoking the street
+                    background option. */}
+                {s.visual === "urban" && (
+                  <>
+                    <div
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        background:
+                          "linear-gradient(180deg, rgba(200,170,130,0.35) 0%, rgba(60,50,40,0.55) 100%)",
+                      }}
+                    />
+                    {/* Warm golden-hour wash from upper left */}
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: "8%",
+                        left: "8%",
+                        width: "55%",
+                        height: "55%",
+                        background:
+                          "radial-gradient(circle, rgba(245,200,140,0.30) 0%, transparent 70%)",
+                        filter: "blur(8px)",
+                      }}
+                    />
+                  </>
                 )}
               </div>
-              <div style={{ fontSize: 14, fontWeight: 500, color: C.dark }}>{s.name}</div>
-              <div style={{ fontSize: 12, color: C.mediumGrey, marginTop: 2 }}>{s.desc}</div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: C.dark, lineHeight: 1.25 }}>
+                {s.name}
+              </div>
+              <div style={{ fontSize: 11, color: C.mediumGrey, marginTop: 2 }}>{s.desc}</div>
             </div>
           );
         })}
