@@ -84,25 +84,42 @@ type InlineImage = { mimeType: string; data: string };
 // but these constants are what actually get sent to Gemini at runtime.
 
 // Block 1 IDENTITY — the foundational "this is who the person is" directive.
-// Now skin-aware (added 2026-05-01) because Block 1's default "5% retouch
-// cap" + "err toward realism" + "preserve age" language was overriding
-// the Glam block's 95% wrinkle reduction. Gemini reads Block 1 first,
-// calibrates to the 5% cap, and then averages with Glam's later directive.
 //
-// When skin === "glam":
-//   - "preserve age" is removed (Glam customers want a less-aged look)
-//   - "5% retouch cap" → "Glam-tier retouch is permitted (see Glam block)"
-//   - "err toward realism over polish" is removed (Glam IS the chosen polish)
-//   - "retain natural skin texture" stays — pore preservation is core to Glam
+// Restructured 2026-05-01 (Kristi's redesign) to be the SINGLE master skin-
+// smoothing rule. Previously Block 1 had a flat 5% retouch cap and the
+// per-skin-tier overrides (Polished, Glam) had to fight against it from
+// later in the prompt. New design: Block 1 itself branches on skin choice
+// + apparent gender, so Gemini gets the smoothing percentage from the
+// FIRST block rather than averaging conflicting directives.
 //
-// When skin !== "glam" (realistic / polished / unset): unchanged from prior.
-function buildBlock1Identity(skin: Skin | undefined): string {
-  if (skin === "glam") {
-    return `Generate a professional headshot of the person shown in the reference photos. Preserve their facial features with absolute precision: face shape, bone structure, eye shape and color, nose, mouth, hairline, skin tone, and any distinguishing marks. The customer has explicitly chosen the GLAM skin treatment (see the GLAMOROUS EDITORIAL SKIN block later in this prompt for specifics) — that block's substantial wrinkle-reduction and tone-evening directives OVERRIDE Block 1's normal 5% retouch cap. You may apply Glam-tier retouching beyond the standard 5% allowance. Apply approximately 10% structural refinement to the jawline or any double chin if present. Retain natural skin texture (pores) per the Glam block's pore-preservation directive — Glam is NOT plastic skin. If any reference photo appears to have been taken with a wide-angle lens (phone selfies commonly distort the nose and mid-face), correct that distortion in the generated image so the face appears as if photographed with a prime 85mm or 135mm portrait lens on a full-frame camera — slight compression of features, natural proportions, no bulging nose or elongated jaw.`;
-  }
-  // Default (realistic / polished / unset) — original Block 1 unchanged.
-  return `Generate a professional headshot of the person shown in the reference photos. Preserve their facial features with absolute precision: face shape, bone structure, eye shape and color, nose, mouth, hairline, skin tone, age, and any distinguishing marks. You may apply the subtle, flattering retouching a professional photographer would do in post-production: up to approximately 5% overall refinement (light skin smoothing while preserving pores and real skin texture, subtle softening of under-eye shadows), and up to approximately 10% structural refinement to the jawline or any double chin if present. Do not exceed those amounts. The goal is to photograph this specific person in a new setting — not to produce a generic, plastic, smooth, attractive, emotionless face that vaguely resembles them. If in doubt, err toward realism over polish. Retain natural skin texture and add it in if not present in the uploaded reference photos. If any reference photo appears to have been taken with a wide-angle lens (phone selfies commonly distort the nose and mid-face), correct that distortion in the generated image so the face appears as if photographed with a prime 85mm or 135mm portrait lens on a full-frame camera — slight compression of features, natural proportions, no bulging nose or elongated jaw.`;
-}
+// Skin × gender matrix (resolved by Gemini at inference from refs + req.skin):
+//   Realistic   OR Male  → 5% (standard professional retouch)
+//   Female + Polished    → 35% smoothing
+//   Female + Glam        → 70% smoothing
+//
+// Pore preservation is universal at 100% across all tiers — smoothing
+// applies to wrinkles/lines/tone, not to pore micro-texture.
+//
+// The Skin Polished and Skin Glam blocks (still injected based on user
+// choice) now focus only on tone-evening direction — the smoothing
+// percentage is owned exclusively by Block 1.
+const BLOCK_1_IDENTITY = `Generate a professional headshot of the person shown in the reference photos. Preserve their facial features with absolute precision: face shape, bone structure, eye shape and color, nose, mouth, hairline, skin tone, and any distinguishing marks.
+
+SKIN SMOOTHING DIRECTIVE — apply based on BOTH the user's chosen Skin option (provided elsewhere in this prompt as the user's skin selection) AND the subject's apparent gender from the reference photos:
+
+- If the user chose "Realistic" skin, OR the subject appears to be a MAN regardless of choice: apply the standard professional photographer's retouch — up to approximately 5% overall refinement (light skin smoothing while preserving pores and real skin texture, subtle softening of under-eye shadows). Do not exceed 5% in this case. Err toward realism over polish.
+
+- If the subject appears to be a WOMAN AND the user chose "Polished" skin: apply approximately 35% skin smoothing across the face — substantially reduce fine lines and crepey texture, even out tone, but keep the face reading as a real person.
+
+- If the subject appears to be a WOMAN AND the user chose "Glam" skin: apply approximately 70% skin smoothing across the face — heavily reduce fine lines and wrinkles, target a luminous editorial finish.
+
+CRITICAL FOR ALL CASES (men, women, all three skin tiers): PRESERVE skin texture and pore structure at 100%. Pores must remain visible across the face, neck, and any visible décolletage in EVERY generated image regardless of which Skin treatment level applies. The smoothing applies to wrinkles, fine lines, and tone unevenness — NOT to pores or skin micro-texture. Show pores and real skin texture in every generated image.
+
+Up to approximately 10% structural refinement to the jawline or any double chin if present. Do not exceed that amount.
+
+The goal is to photograph this specific person in a new setting — not to produce a generic, plastic, smooth, emotionless face that vaguely resembles them.
+
+If any reference photo appears to have been taken with a wide-angle lens (phone selfies commonly distort the nose and mid-face), correct that distortion in the generated image so the face appears as if photographed with a prime 85mm or 135mm portrait lens on a full-frame camera — slight compression of features, natural proportions, no bulging nose or elongated jaw.`;
 
 // Block UNDER_EYE — age-aware under-eye rendering for women.
 //
@@ -150,64 +167,60 @@ FOR MEN of any age:
 
 Why partial (not 100%) reduction across tiers 1 and 2: full elimination of under-eye texture produces a "filtered" or "filler-injected" look that reads as fake. The remaining 45–60% natural texture is what keeps the face reading as a real person rather than an avatar.`;
 
-// Block SKIN_POLISHED — overall skin treatment override for women, fires
-// only when the user picked the "Polished" skin toggle on the Style screen
-// (added 2026-04-26 after 3 female beta users said the default treatment
-// made them look older).
+// Block SKIN_POLISHED — TONE-EVENING companion to Block 1's Polished tier.
 //
-// Kristi's wording, lightly structured for clarity. Key idea: this is NOT
-// "smooth out the face." It's "even out skin tone but keep / re-add pore
-// detail." The gotcha to avoid is plastic skin — Gemini's default behavior
-// when asked to "smooth" anything is to default to a TikTok-filter look,
-// which is exactly what we don't want.
+// Restructured 2026-05-01: Block 1 now owns the smoothing PERCENTAGE for all
+// three skin tiers (Polished women → 35% face smoothing). This block layers
+// TONE direction (color evenness, pore reinforcement) on top of that baseline.
+// Smoothing % is no longer specified here — it's set by Block 1 and Block 7
+// reinforces pore preservation universally.
 //
 // Block is gender-gated inside the prompt itself: it only fires for women.
 // For men the block is injected but the body says "ignore for men" — so
 // Gemini reads it, evaluates apparent gender, and applies as appropriate.
-const BLOCK_SKIN_POLISHED = `Skin treatment override (women only — ignore entirely if subject appears to be a man, regardless of any other instruction in this block).
+const BLOCK_SKIN_POLISHED = `Polished tone treatment (women only — ignore entirely if subject appears to be a man, regardless of any other instruction in this block).
 
-For women: Polished skin with lots of pore structure and detail. Smooth out color inconsistencies in skintones — uneven redness, blotchiness, post-acne marks, sunspots, hyperpigmentation patches, and tone variation between forehead / cheeks / chin — but keep visible skin texture intact. NO plastic skin. NO airbrushed or filter-smoothed appearance. NO doll-like or AI-tell smoothness.
+For women: The wrinkle/line smoothing percentage for the Polished tier is set by Block 1's SKIN SMOOTHING DIRECTIVE (approximately 35% across the face for women who chose Polished). This block layers TONE direction and pore reinforcement on top of that baseline.
 
-CRITICAL: Add pore structure and detail even if the reference photos do not show clear skin texture (low-resolution phone selfies, harsh lighting, heavy compression). The end result must read as a real human face with real skin — pores visible at normal viewing distance, with the only "retouch" being even tone, not erased texture.
+- TONE EVENING: Smooth out color inconsistencies in skintones — uneven redness, blotchiness, post-acne marks, sunspots, hyperpigmentation patches, and tone variation between forehead / cheeks / chin / neck. The end result reads as an even, healthy skin tone across the face — but not so flat that it loses dimension.
 
-This treatment applies to face, neck, and any visible décolletage. It overrides Block 1's "retain natural skin texture" allowance for women specifically — the polished version actively SMOOTHS color irregularities while PRESERVING (or re-adding) structural texture.
+- PORE STRUCTURE: Add or reinforce pore structure and detail across face, neck, and any visible décolletage, even if the reference photos do not show clear skin texture (low-resolution phone selfies, harsh lighting, heavy compression). The end result must read as a real human face with real skin — pores visible at normal viewing distance, with the only "retouch" being even tone and the Block 1 smoothing percentage, not erased texture.
 
-This block coexists with Block UNDER_EYE — apply both. The under-eye softening rules from Block UNDER_EYE still apply by tier; this block governs the rest of the face's tone evenness.
+- NO plastic skin. NO airbrushed or filter-smoothed appearance. NO doll-like or AI-tell smoothness.
+
+This block coexists with Block UNDER_EYE — apply both. The under-eye softening rules from Block UNDER_EYE still apply by tier; this block governs the rest of the face's tone evenness and pore-detail reinforcement.
 
 For men: ignore this block entirely. Apply the standard Block 1 skin treatment unchanged.`;
 
-// Block SKIN_GLAM — heaviest skin retouching tier. Added 2026-05-01 after
-// continued feedback from women that even Polished left visible wrinkles
-// they didn't want to see. Glam targets a magazine-cover / red-carpet
-// editorial finish: smooth out ALL fine lines and wrinkles substantially,
-// keep just enough pore detail (~20%) to avoid a 3D-render or doll look.
+// Block SKIN_GLAM — TONE-EVENING + EDITORIAL FINISH companion to Block 1's
+// Glam tier.
 //
-// Glam is more aggressive than Polished AND more aggressive than the
-// age-tiered Block UNDER_EYE rules. When Glam is the user's choice, the
-// under-eye gets glam-level smoothing regardless of apparent age — block
-// UNDER_EYE is NOT injected alongside Glam by assemblePrompt below.
+// Restructured 2026-05-01: Block 1 now owns the smoothing PERCENTAGE
+// (Glam women → 70% face smoothing). This block layers tone evening, pore-vs-
+// blotchy distinction, and editorial luminosity direction on top of that
+// baseline. The wrinkle-reduction percentage is no longer duplicated here —
+// it's set by Block 1, which avoids the conflicting-directives averaging
+// problem that produced too many wrinkles in earlier Glam outputs.
+//
+// Glam continues to OVERRIDE Block UNDER_EYE — when Glam is the user's
+// choice, the under-eye gets Glam-level smoothing per Block 1 regardless of
+// apparent age, and BLOCK_UNDER_EYE is NOT injected by assemblePrompt below.
 //
 // Like the other skin blocks, Glam is gender-gated internally. Men's
 // treatment never changes.
-const BLOCK_SKIN_GLAM = `GLAMOROUS EDITORIAL SKIN treatment override (women only — ignore entirely if subject appears to be a man, regardless of any other instruction in this block).
+const BLOCK_SKIN_GLAM = `Glamorous editorial tone treatment (women only — ignore entirely if subject appears to be a man, regardless of any other instruction in this block).
 
-For women: Apply aggressive wrinkle-and-tone retouching with FULL skin texture preservation. The aesthetic target is "red-carpet luxury beauty editorial that hasn't erased the human" — Vogue cover where the model still has visible pores under close inspection. Polished, even-toned, glowing, aspirational — but real skin.
-
-Specific direction:
-
-- WRINKLES AND FINE LINES (~95% REDUCTION): Aggressively eliminate visible wrinkles and fine lines across the entire face — under-eye lines, crow's feet, forehead lines, smile lines / nasolabial folds, lip lines, neck lines. Only the subtlest hint (~5%) of line texture should remain, ONLY where needed to keep the face from reading as a 3D render. When in doubt about a particular line, remove it. This is more aggressive than Polished — Glam customers explicitly chose this look.
-
-- PORE STRUCTURE AND SKIN TEXTURE: PRESERVE FULLY at 100%. Visible pores across cheeks, forehead, nose, chin, neck, décolletage — the skin should still read as actual human skin under close inspection. CRITICAL DISTINCTION: pore preservation refers to the physical 3D micro-texture of the skin surface (the raised / recessed terrain of pores at close magnification). It does NOT mean preserving color inconsistencies that happen to occur in the same regions. Pores stay; redness/blotchiness goes. Treat these as TWO SEPARATE concerns — texture and color — and only the texture is preserved.
+For women: The wrinkle/line smoothing percentage for the Glam tier is set by Block 1's SKIN SMOOTHING DIRECTIVE (approximately 70% across the face for women who chose Glam). This block layers TONE direction and editorial finish on top of that baseline. The aesthetic target is "red-carpet luxury beauty editorial that hasn't erased the human" — Vogue cover where the model still has visible pores under close inspection. Polished, even-toned, glowing, aspirational — but real skin.
 
 - TONE EVENING (AGGRESSIVE): Completely eliminate color inconsistencies across the entire face — redness on cheeks and nose, blotchiness, post-acne marks, hyperpigmentation, sunspots, melasma, broken capillaries, and color variation between forehead/cheeks/chin/neck. The end result reads as ONE EVEN luminous tone across the entire face. If the reference photos show patchy color, that patchiness is THE THING being retouched away — do not preserve it as "authentic." The whole face should read as a single skin tone with subtle dimensional shading from the lighting, not blotchy color zones.
 
-- Skin should look luminous and softly glowing, as though professionally lit. Healthy radiance, not matte, not greasy.
+- PORE STRUCTURE AND SKIN TEXTURE: PRESERVE FULLY at 100% per Block 1's pore-preservation directive. Visible pores across cheeks, forehead, nose, chin, neck, décolletage — the skin should still read as actual human skin under close inspection. CRITICAL DISTINCTION: pore preservation refers to the physical 3D micro-texture of the skin surface (the raised / recessed terrain of pores at close magnification). It does NOT mean preserving color inconsistencies that happen to occur in the same regions. Pores stay; redness/blotchiness goes. Treat these as TWO SEPARATE concerns — texture and color — and only the texture is preserved.
 
-- This treatment EXPLICITLY OVERRIDES Block UNDER_EYE — when Glam is active, the under-eye gets the same 95%-wrinkle / 100%-pore / 100%-tone-evening treatment as the rest of the face, not the age-tiered preservation rules.
+- LUMINOUS FINISH: Skin should look luminous and softly glowing, as though professionally lit. Healthy radiance, not matte, not greasy.
 
-- This treatment partially overrides Block 1 — wrinkles are reduced far beyond Block 1's 5% allowance, but Block 1's "retain natural skin texture" rule still applies (and is enforced by the pore-preservation directive above).
+- UNDER-EYE: This treatment EXPLICITLY OVERRIDES Block UNDER_EYE — when Glam is active, the under-eye gets the same Block 1 70% smoothing and aggressive tone-evening treatment as the rest of the face, not the age-tiered preservation rules.
 
-- It does NOT override Block 7's anti-plastic rule — Glam should NEVER produce plastic, doll-like, or filter-smoothed skin. The pore preservation is the safeguard against that.
+- ANTI-PLASTIC GUARDRAIL: Glam should NEVER produce plastic, doll-like, or filter-smoothed skin. The pore preservation is the safeguard against that.
 
 For men: ignore this block entirely. Apply the standard Block 1 skin treatment unchanged.`;
 
@@ -379,19 +392,17 @@ function buildBlock6Background(background: Background, variationIndex: number): 
 }
 
 // Block 7 TECHNICAL — fires LAST in the prompt, so its language has strong
-// "final word" weight on Gemini. The "no plastic smoothing, no over-softening"
-// phrase was canceling Glam's wrinkle reduction. Made skin-aware 2026-05-01:
-// when Glam is active, the anti-smoothing wording is replaced with "the
-// Glam-tier smoothing requested by the customer is permitted; pore
-// preservation prevents plastic appearance" so Gemini doesn't end up
-// averaging the conflicting directives.
-function buildBlock7Technical(skin: Skin | undefined): string {
-  if (skin === "glam") {
-    return `Technical quality: 2048-pixel resolution, sharp focus on the eyes, eyelashes visible. Skin texture: pores preserved per the Glam block's 100% pore-detail directive. The Glam-tier wrinkle reduction (~95%) and tone evening explicitly chosen by the customer ARE permitted — those are NOT "over-softening" in this context, they are the requested editorial finish. The pore-preservation requirement prevents plastic skin. Very shallow depth of field — subject's face in perfect focus, shoulders softly falling off, background noticeably blurred. Professional color grading: accurate skin tones, no color cast, slight warmth in shadows. No visible artifacts, no uncanny valley. This is a commercial-grade beauty editorial photograph — luminous, polished, but real (real pores, real eyes, real skin under the smoothed wrinkles).`;
-  }
-  // Default — original Block 7 unchanged.
-  return `Technical quality: 2048-pixel resolution, sharp focus on the eyes, eyelashes visible, realistic natural skin texture preserved (no plastic smoothing, no over-softening). Very shallow depth of field — subject's face in perfect focus, shoulders softly falling off, background noticeably blurred. Professional color grading: accurate skin tones, no color cast, slight warmth in shadows. No visible artifacts, no uncanny valley, no AI-tell signs. This is a commercial-grade photograph, extremely realistic — not an illustration, render, or composite.`;
-}
+// "final word" weight on Gemini.
+//
+// Restructured 2026-05-01: previously this block contained "no plastic
+// smoothing, no over-softening" as a flat universal rule, which was
+// canceling Glam's wrinkle reduction. The skin-aware function variant that
+// followed was retired when Block 1 was redesigned to own the per-tier
+// smoothing percentage. Block 7 now defers to Block 1 for the smoothing
+// amount and frames the pore preservation as the universal anti-plastic
+// guardrail — compatible with all three tiers because Block 1's smoothing
+// targets wrinkles/lines/tone, not pores or skin micro-texture.
+const BLOCK_7_TECHNICAL = `Technical quality: 2048-pixel resolution, sharp focus on the eyes, eyelashes visible. Skin texture: preserve pore micro-texture and real skin surface per Block 1's SKIN SMOOTHING DIRECTIVE — the smoothing percentages specified there (5% for Realistic or men, ~35% for Polished women, ~70% for Glam women) target wrinkles, fine lines, and tone unevenness, NOT pores or skin micro-texture. Whichever tier applies to this customer, do NOT produce plastic, doll-like, filter-smoothed, or AI-tell skin — the pore preservation is the universal safeguard against that. Very shallow depth of field — subject's face in perfect focus, shoulders softly falling off, background noticeably blurred. Professional color grading: accurate skin tones, no color cast, slight warmth in shadows. No visible artifacts, no uncanny valley. This is a commercial-grade photograph, extremely realistic — not an illustration, render, or composite.`;
 
 // Block LENS_CORRECTION — fires ONLY when the client's EXIF read found
 // focal length <40mm (35mm-equivalent) on any reference photo. This is much
@@ -518,7 +529,7 @@ IMPORTANT OUTPUT CONSTRAINT: Return exactly ONE single photograph. Do NOT return
 // -------------------- Prompt assembly --------------------
 
 function assemblePrompt(req: GenerateRequest): string {
-  const parts: string[] = [buildBlock1Identity(req.skin)];
+  const parts: string[] = [BLOCK_1_IDENTITY];
 
   // BLOCK_UNDER_EYE refines Block 1's under-eye behavior based on the
   // subject's apparent age — young women get smoother under-eye rendering;
@@ -551,11 +562,13 @@ function assemblePrompt(req: GenerateRequest): string {
   }
 
   // Skin toggle (women only — each block self-gates internally for men).
-  // - "realistic" or unset: no extra block injected (Block 1 + UNDER_EYE
-  //   alone, current default behavior).
-  // - "polished": layered on top of UNDER_EYE — tone-evening + pore preserve.
+  // The smoothing PERCENTAGE for each tier lives in Block 1 (5% / 35% / 70%);
+  // these companion blocks add tone-evening and editorial finish direction
+  // on top of that baseline.
+  // - "realistic" or unset: no companion block (Block 1 + UNDER_EYE only).
+  // - "polished": layered on top of UNDER_EYE — tone-evening + pore reinforcement.
   // - "glam": OVERRIDES UNDER_EYE (we already skipped injecting UNDER_EYE
-  //   above) — magazine-cover heavy retouch with ~85% wrinkle reduction.
+  //   above) — aggressive tone evening + editorial luminosity.
   if (req.skin === "polished") {
     parts.push(BLOCK_SKIN_POLISHED);
   } else if (req.skin === "glam") {
@@ -569,7 +582,7 @@ function assemblePrompt(req: GenerateRequest): string {
     parts.push(buildBlock6Background(req.background, req.variationIndex));
   }
 
-  parts.push(buildBlock7Technical(req.skin));
+  parts.push(BLOCK_7_TECHNICAL);
   parts.push(buildBlock8(req.attire, req.variationIndex));
 
   return parts.join("\n\n");
