@@ -513,15 +513,20 @@ const HeroCarousel = () => {
       style={{
         position: "absolute",
         left: `${leftPct}%`,
-        top: "55%",
+        // 64% vertical center matches the grey placeholder circles in the
+        // updated hero photo (ac4ed706-..._copy_2.jpg, May 4 2026 swap).
+        top: "64%",
         transform: "translate(-50%, -50%)",
         textAlign: "center",
       }}
     >
       <div
         style={{
-          width: "clamp(110px, 14vw, 200px)",
-          height: "clamp(110px, 14vw, 200px)",
+          // Sized to match the diameter of the grey placeholder circles in
+          // the new hero photo (~18% of the canvas width). Bigger than the
+          // first guess (14vw) which left the placeholders peeking through.
+          width: "clamp(140px, 18vw, 260px)",
+          height: "clamp(140px, 18vw, 260px)",
           borderRadius: "50%",
           overflow: "hidden",
           border: `4px solid ${BRAND.white}`,
@@ -536,6 +541,11 @@ const HeroCarousel = () => {
             width: "100%",
             height: "100%",
             objectFit: "cover",
+            // Anchor the crop to the TOP of the source photo so foreheads
+            // and hair stay visible — the carousel circles are wider than
+            // they are tall on portrait reference photos, and default
+            // center-crop was clipping faces from above.
+            objectPosition: "top",
             opacity: fading ? 0 : 1,
             transition: `opacity ${FADE_MS}ms ease`,
           }}
@@ -561,8 +571,8 @@ const HeroCarousel = () => {
 
   return (
     <>
-      {circle(HERO_PAIRS[idx].before, "5 min ago", 35.5)}
-      {circle(HERO_PAIRS[idx].after, "5 min from now", 65.5)}
+      {circle(HERO_PAIRS[idx].before, "5 min ago", 35)}
+      {circle(HERO_PAIRS[idx].after, "5 min from now", 66)}
     </>
   );
 };
@@ -665,21 +675,6 @@ const LandingV2 = ({ onStart, onPromoUnlock }: LandingProps) => {
           textAlign: "center",
         }}
       >
-        {/* Gold eyebrow */}
-        <div
-          style={{
-            fontFamily: SANS_STACK,
-            fontSize: 12,
-            fontWeight: 600,
-            letterSpacing: 2.4,
-            textTransform: "uppercase",
-            color: BRAND.gold,
-            marginBottom: 28,
-          }}
-        >
-          From Kristina Sherk · 20 Years Behind the Lens
-        </div>
-
         {/* Big serif headline */}
         <h1
           style={{
@@ -717,7 +712,7 @@ const LandingV2 = ({ onStart, onPromoUnlock }: LandingProps) => {
         >
           Most AI headshot tools are built by coders. This one is built by an
           actual headshot photographer — so the lighting, posing, and
-          expression actually look right.
+          expression actually look like you.
         </p>
 
         {/* Hero photo with overlaid carousel */}
@@ -741,6 +736,24 @@ const LandingV2 = ({ onStart, onPromoUnlock }: LandingProps) => {
             }}
           />
           <HeroCarousel />
+        </div>
+
+        {/* Photographer attribution — relocated below the graphic on
+            2026-05-04 per Kristi. Reads like a magazine caption sitting
+            under the hero photo, instead of competing with the headline
+            for the first read. */}
+        <div
+          style={{
+            fontFamily: SANS_STACK,
+            fontSize: 12,
+            fontWeight: 600,
+            letterSpacing: 2.4,
+            textTransform: "uppercase",
+            color: BRAND.gold,
+            marginTop: 28,
+          }}
+        >
+          From Kristina Sherk · 20 Years Behind the Lens
         </div>
       </section>
 
@@ -4661,7 +4674,12 @@ export default function App() {
 
   return (
     <div style={{ minHeight: "100vh", background: C.pageBg, ...font }}>
-      <Navbar cartCount={selectedImageIndices.length} onLogoClick={reset} />
+      {/* Old "Generation Studio / Selected (N)" navbar — hidden on the
+          landing screen because LandingV2 has its own GenerAItion top nav.
+          Showing both at once stacks two header bars and visually clashes. */}
+      {screen !== "landing" && (
+        <Navbar cartCount={selectedImageIndices.length} onLogoClick={reset} />
+      )}
 
       {/* Stripe verification overlay — shown when the user just returned from
           Stripe Checkout. Card payments resolve instantly so this barely
