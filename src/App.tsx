@@ -342,31 +342,240 @@ type LandingProps = {
   onPromoUnlock: () => void;
 };
 
-const Landing = ({ onStart, onPromoUnlock }: LandingProps) => {
-  // Promo code state — scoped to Landing so it resets if the user navigates
-  // away and comes back. The unlock flag itself lives in App/sessionStorage.
+
+// -------------------- Screen 1: LandingV2 (Direction 3) --------------------
+//
+// New landing page (May 2026 redesign) matching the kristinasherk.com brand
+// language. Editorial masthead with gold eyebrow, big serif headline, hero
+// photo of Kristi with a CYCLING before/after carousel inside the screen
+// frame. Forest green is reserved for the primary CTA only. Charcoal trust
+// strip below. Replaces the original `Landing` component for routing while
+// `Landing` is preserved above as a fallback.
+
+// Brand tokens specific to LandingV2 (do not pollute the C palette which the
+// rest of the app uses for the in-product greys).
+const BRAND = {
+  forestGreen: "#1B4332",
+  forestGreenHover: "#143025",
+  gold: "#C9A961",
+  charcoal: "#2A2A2A",
+  white: "#FFFFFF",
+  cream: "#FAF8F4",
+  bodyText: "#2A2A2A",
+  subText: "#6E6E6A",
+};
+
+// Serif stack for headlines. Tiempos / Cormorant / Didot are the design
+// targets; Georgia is the universally available fallback shipped with V1.
+const SERIF_STACK =
+  "'Tiempos Headline','Cormorant Garamond','Didot',Georgia,'Times New Roman',serif";
+
+// Sans stack for body + UI.
+const SANS_STACK =
+  "system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif";
+
+// Before/after pairs for the cycling hero carousel. Ordered as Kristi
+// approved on 2026-05-04. Files live in /public/marketing/ so they're
+// served from the site root at deploy time.
+const HERO_PAIRS: { before: string; after: string }[] = [
+  { before: "/marketing/pair-09-before.jpg", after: "/marketing/pair-09-after.jpg" },
+  { before: "/marketing/pair-10-before.jpg", after: "/marketing/pair-10-after.jpg" },
+  { before: "/marketing/pair-12-before.jpg", after: "/marketing/pair-12-after.jpg" },
+  { before: "/marketing/pair-13-before.jpg", after: "/marketing/pair-13-after.jpg" },
+  { before: "/marketing/pair-14-before.jpg", after: "/marketing/pair-14-after.jpg" },
+  { before: "/marketing/pair-15-before.jpg", after: "/marketing/pair-15-after.jpg" },
+  { before: "/marketing/pair-27-before.jpg", after: "/marketing/pair-27-after.jpg" },
+];
+
+const CYCLE_MS = 4000; // 4-second auto-advance per the handoff
+const FADE_MS = 600; // 0.6s crossfade
+
+// Wordmark: "GenerAItion" with AI emphasized via italic + gold so it survives
+// at logo size (per brand notes — hyphenated "Gener-AI-tion" disappears).
+const Wordmark = ({ size = 18 }: { size?: number }) => (
+  <span
+    style={{
+      fontFamily: SERIF_STACK,
+      fontSize: size,
+      letterSpacing: 0.2,
+      color: BRAND.charcoal,
+      whiteSpace: "nowrap",
+    }}
+  >
+    Gener
+    <span style={{ fontStyle: "italic", color: BRAND.gold, fontWeight: 600 }}>
+      AI
+    </span>
+    tion <span style={{ fontWeight: 500 }}>Headshots</span>
+  </span>
+);
+
+// Pill button. Two variants: "primary" = forest green (CTA), "secondary"
+// = transparent w/ gold underline (used for nav links acting as buttons).
+type PillProps = {
+  children: ReactNode;
+  onClick?: () => void;
+  variant?: "primary" | "secondary";
+  size?: "sm" | "md" | "lg";
+  fullWidth?: boolean;
+  disabled?: boolean;
+};
+const Pill = ({
+  children,
+  onClick,
+  variant = "primary",
+  size = "md",
+  fullWidth = false,
+  disabled = false,
+}: PillProps) => {
+  const [hover, setHover] = useState(false);
+  const sz = {
+    sm: { px: 16, py: 8, fs: 13 },
+    md: { px: 24, py: 12, fs: 14 },
+    lg: { px: 32, py: 16, fs: 16 },
+  }[size];
+  const bg =
+    variant === "primary"
+      ? hover
+        ? BRAND.forestGreenHover
+        : BRAND.forestGreen
+      : "transparent";
+  const color = variant === "primary" ? BRAND.white : BRAND.charcoal;
+  const border =
+    variant === "primary" ? "none" : `1px solid ${BRAND.charcoal}`;
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      disabled={disabled}
+      style={{
+        background: bg,
+        color,
+        border,
+        borderRadius: 999,
+        padding: `${sz.py}px ${sz.px}px`,
+        fontSize: sz.fs,
+        fontWeight: 500,
+        letterSpacing: variant === "primary" ? 0.6 : 0.2,
+        textTransform: variant === "primary" ? "uppercase" : "none",
+        cursor: disabled ? "not-allowed" : "pointer",
+        opacity: disabled ? 0.6 : 1,
+        width: fullWidth ? "100%" : "auto",
+        fontFamily: SANS_STACK,
+        transition: "background 160ms ease, transform 80ms ease",
+        transform: hover && !disabled ? "translateY(-1px)" : "translateY(0)",
+        boxShadow:
+          variant === "primary"
+            ? "0 1px 2px rgba(0,0,0,0.08)"
+            : "none",
+      }}
+    >
+      {children}
+    </button>
+  );
+};
+
+// Cycling before/after circles. Sit absolutely on top of the hero photo's
+// baked-in placeholder boxes ("you in 2025" / "you in 2026") and crossfade
+// between Kristi's 7 approved pairs every 4 seconds.
+//
+// Positions are percentages of the hero photo's dimensions so they scale
+// with viewport. The percentages are tuned to the specific hero photo file
+// — if Kristi swaps the photo in the future, these need re-measuring.
+const HeroCarousel = () => {
+  const [idx, setIdx] = useState(0);
+  const [fading, setFading] = useState(false);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setFading(true);
+      // Mid-fade swap — image cross-fades through opacity reset.
+      window.setTimeout(() => {
+        setIdx((i) => (i + 1) % HERO_PAIRS.length);
+        setFading(false);
+      }, FADE_MS / 2);
+    }, CYCLE_MS);
+    return () => clearInterval(id);
+  }, []);
+
+  // Preload the next pair so the swap is instant when it fires.
+  useEffect(() => {
+    const next = (idx + 1) % HERO_PAIRS.length;
+    const a = new Image();
+    a.src = HERO_PAIRS[next].before;
+    const b = new Image();
+    b.src = HERO_PAIRS[next].after;
+  }, [idx]);
+
+  const circle = (src: string, label: string, leftPct: number) => (
+    <div
+      style={{
+        position: "absolute",
+        left: `${leftPct}%`,
+        top: "55%",
+        transform: "translate(-50%, -50%)",
+        textAlign: "center",
+      }}
+    >
+      <div
+        style={{
+          width: "clamp(110px, 14vw, 200px)",
+          height: "clamp(110px, 14vw, 200px)",
+          borderRadius: "50%",
+          overflow: "hidden",
+          border: `4px solid ${BRAND.white}`,
+          boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
+          background: BRAND.white,
+        }}
+      >
+        <img
+          src={src}
+          alt={label}
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            opacity: fading ? 0 : 1,
+            transition: `opacity ${FADE_MS}ms ease`,
+          }}
+        />
+      </div>
+      <div
+        style={{
+          marginTop: 12,
+          fontFamily: SANS_STACK,
+          fontWeight: 600,
+          fontSize: "clamp(13px, 1.3vw, 18px)",
+          color: BRAND.charcoal,
+          background: BRAND.white,
+          padding: "4px 10px",
+          borderRadius: 4,
+          display: "inline-block",
+        }}
+      >
+        {label}
+      </div>
+    </div>
+  );
+
+  return (
+    <>
+      {circle(HERO_PAIRS[idx].before, "5 min ago", 35.5)}
+      {circle(HERO_PAIRS[idx].after, "5 min from now", 65.5)}
+    </>
+  );
+};
+
+const LandingV2 = ({ onStart, onPromoUnlock }: LandingProps) => {
+  // Keep promo code functionality alive — discreet "have a code?" link at
+  // the bottom of the page rather than a prominent input. We don't want to
+  // distract from the primary CTA on the new editorial layout.
   const [showPromoInput, setShowPromoInput] = useState(false);
   const [promoCode, setPromoCode] = useState("");
   const [promoStatus, setPromoStatus] =
     useState<"idle" | "submitting" | "success" | "error">("idle");
   const [promoErrMsg, setPromoErrMsg] = useState("");
-
-  // Track viewport width so we can serve a mobile-optimized layout where
-  // pricing + Start button sit ABOVE the description paragraph (above the
-  // fold on a phone). Desktop keeps the original layout — 2-column pricing
-  // card with the Start button embedded inside.
-  // 640px breakpoint matches Tailwind's "sm" / common phone-vs-tablet split.
-  const [isMobile, setIsMobile] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    return window.matchMedia("(max-width: 640px)").matches;
-  });
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const mq = window.matchMedia("(max-width: 640px)");
-    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
-    mq.addEventListener("change", handler);
-    return () => mq.removeEventListener("change", handler);
-  }, []);
 
   const submitPromo = async () => {
     const trimmed = promoCode.trim();
@@ -383,7 +592,6 @@ const Landing = ({ onStart, onPromoUnlock }: LandingProps) => {
       const data = (await resp.json()) as { valid?: boolean };
       if (data.valid) {
         setPromoStatus("success");
-        // Brief pause so the "Unlocked" flash is visible before navigation.
         setTimeout(() => onPromoUnlock(), 700);
       } else {
         setPromoStatus("error");
@@ -396,99 +604,135 @@ const Landing = ({ onStart, onPromoUnlock }: LandingProps) => {
   };
 
   return (
-  <div style={{ maxWidth: 960, margin: "0 auto", padding: "80px 32px", ...font }}>
     <div
       style={{
-        fontSize: 11,
-        letterSpacing: 2,
-        color: C.mediumGrey,
-        textTransform: "uppercase",
-        marginBottom: 16,
-        fontWeight: 500,
+        background: BRAND.white,
+        color: BRAND.bodyText,
+        fontFamily: SANS_STACK,
+        minHeight: "100vh",
       }}
     >
-      Made by an actual headshot photographer
-    </div>
-    {/* Speed-focused marketing badge. Generation Studio generates images in
-        ~2 minutes vs. the 30–60 minute training step other AI headshot apps
-        require — this callout leans into that differentiation. */}
-    <div
-      style={{
-        display: "inline-block",
-        background: C.dark,
-        color: C.white,
-        fontSize: 11,
-        letterSpacing: 2,
-        textTransform: "uppercase",
-        padding: "8px 16px",
-        borderRadius: 999,
-        fontWeight: 600,
-        marginBottom: 24,
-      }}
-    >
-      Instant · No wait · Ready in 2 minutes
-    </div>
-    {/* H1 fontSize uses clamp() so the title scales with viewport width.
-        On narrow mobile (~390px) it resolves to ~22px — roughly 1/3 of its
-        desktop size — which keeps the title from dominating the first screen.
-        On desktop (≥1040px wide) it hits the 52px ceiling and looks as before. */}
-    <h1
-      style={{
-        fontSize: "clamp(22px, 5vw, 52px)",
-        fontWeight: 500,
-        color: C.dark,
-        lineHeight: 1.15,
-        margin: 0,
-        letterSpacing: -0.5,
-      }}
-    >
-      Instant Professional Headshots.
-      <br />
-      Only pay for headshots you like.
-    </h1>
+      {/* ========== TOP NAV ========== */}
+      <nav
+        style={{
+          height: 76,
+          padding: "0 clamp(16px, 4vw, 56px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          borderBottom: `1px solid #EFEAE0`,
+          background: BRAND.white,
+        }}
+      >
+        <Wordmark size={20} />
+        <div style={{ display: "flex", alignItems: "center", gap: 28 }}>
+          <a
+            href="#how"
+            style={{
+              fontSize: 14,
+              color: BRAND.charcoal,
+              textDecoration: "none",
+              borderBottom: `1px solid ${BRAND.gold}`,
+              paddingBottom: 2,
+            }}
+          >
+            How it works
+          </a>
+          <a
+            href="#examples"
+            style={{
+              fontSize: 14,
+              color: BRAND.charcoal,
+              textDecoration: "none",
+              borderBottom: `1px solid ${BRAND.gold}`,
+              paddingBottom: 2,
+            }}
+          >
+            Examples
+          </a>
+          <Pill onClick={onStart} size="sm">
+            Start now
+          </Pill>
+        </div>
+      </nav>
 
-    {/* Landing hero before/after gallery — three real headshot transformations.
-        Filenames and alt text front-load Kristi's highest-volume target
-        keywords ("AI headshot generator", "AI headshots") for image-search
-        discoverability. Files live in /public/ so Vite serves them at the
-        site root. aspectRatio 3/4 matches the 1200x1600 composite dimensions. */}
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(3, 1fr)",
-        gap: 12,
-        // Vertical margin scales down on mobile so the title→gallery→copy
-        // stack stays tight on a phone and breathes on desktop.
-        margin: "clamp(20px, 4vw, 48px) 0",
-      }}
-    >
-      {[
-        {
-          src: "/ai-headshot-generator-man-suit-tie.jpg",
-          alt: "AI headshot generator result — casual outdoor photo transformed into professional headshot in navy suit and tie",
-        },
-        {
-          src: "/ai-headshot-generator-woman-blue-blazer.jpg",
-          alt: "AI headshot generator result — phone selfie transformed into professional headshot of woman in blue blazer",
-        },
-        {
-          src: "/ai-headshot-generator-man-glasses.jpg",
-          alt: "AI headshot generator result — casual photo transformed into professional headshot of man with glasses and long hair",
-        },
-      ].map((img) => (
+      {/* ========== HERO ========== */}
+      <section
+        style={{
+          maxWidth: 1280,
+          margin: "0 auto",
+          padding: "clamp(40px, 7vw, 80px) clamp(20px, 4vw, 56px) 32px",
+          textAlign: "center",
+        }}
+      >
+        {/* Gold eyebrow */}
         <div
-          key={img.src}
           style={{
-            aspectRatio: "3/4",
-            background: C.lightGrey,
-            borderRadius: 8,
-            overflow: "hidden",
+            fontFamily: SANS_STACK,
+            fontSize: 12,
+            fontWeight: 600,
+            letterSpacing: 2.4,
+            textTransform: "uppercase",
+            color: BRAND.gold,
+            marginBottom: 28,
+          }}
+        >
+          From Kristina Sherk · 20 Years Behind the Lens
+        </div>
+
+        {/* Big serif headline */}
+        <h1
+          style={{
+            fontFamily: SERIF_STACK,
+            fontSize: "clamp(34px, 5.5vw, 68px)",
+            fontWeight: 400,
+            lineHeight: 1.08,
+            letterSpacing: -0.5,
+            color: BRAND.charcoal,
+            margin: "0 auto 24px",
+            maxWidth: 980,
+          }}
+        >
+          A professional headshot generator,{" "}
+          <em
+            style={{
+              fontStyle: "italic",
+              fontWeight: 400,
+              color: BRAND.charcoal,
+            }}
+          >
+            finally made by a real photographer.
+          </em>
+        </h1>
+
+        {/* Muted subheadline */}
+        <p
+          style={{
+            fontSize: "clamp(15px, 1.4vw, 18px)",
+            lineHeight: 1.55,
+            color: BRAND.subText,
+            maxWidth: 640,
+            margin: "0 auto 40px",
+          }}
+        >
+          Most AI headshot tools are built by coders. This one is built by an
+          actual headshot photographer — so the lighting, posing, and
+          expression actually look right.
+        </p>
+
+        {/* Hero photo with overlaid carousel */}
+        <div
+          style={{
+            position: "relative",
+            width: "100%",
+            maxWidth: 1100,
+            margin: "0 auto",
+            aspectRatio: "1376 / 740",
           }}
         >
           <img
-            src={img.src}
-            alt={img.alt}
-            loading="lazy"
+            src="/marketing/hero-kristi.jpg"
+            alt="Kristi Sherk holding a camera, with before and after AI headshot examples below"
             style={{
               width: "100%",
               height: "100%",
@@ -496,217 +740,252 @@ const Landing = ({ onStart, onPromoUnlock }: LandingProps) => {
               display: "block",
             }}
           />
+          <HeroCarousel />
         </div>
-      ))}
-    </div>
+      </section>
 
-    {/* MOBILE-ONLY: compact one-line pricing + full-width Start button,
-        rendered ABOVE the description paragraph so the price + commit
-        button are visible on first scroll without needing to read a full
-        paragraph first. Desktop renders the longer 2-column pricing card
-        further down (after the description), preserving the prior layout
-        on screens wide enough to see everything in one glance.
-        Reordered 2026-04-28 per Kristi's mobile-first restructure. */}
-    {isMobile && (
-      <>
-        <div
-          style={{
-            textAlign: "center",
-            fontSize: 14,
-            color: C.mediumGrey,
-            marginBottom: 12,
-            lineHeight: 1.5,
-          }}
-        >
-          <span style={{ color: C.dark, fontWeight: 500 }}>Try it $2.99</span>
-          {" · then $9.99 per high-rez headshot you keep"}
-        </div>
-        <div style={{ marginBottom: 32 }}>
-          <Button onClick={onStart} full>
-            Start — $2.99
-          </Button>
-        </div>
-      </>
-    )}
-
-    {/* Description copy — moved below the gallery on 2026-04-22 so the
-        first-screen stack on mobile is: title → real results → explainer.
-        Showing the proof images above the copy makes the value legible in
-        the first glance instead of forcing users to scroll past a paragraph. */}
-    <p
-      style={{
-        fontSize: 16,
-        color: C.mediumGrey,
-        lineHeight: 1.6,
-        marginTop: 0,
-        marginBottom: 24,
-        maxWidth: 560,
-      }}
-    >
-      Upload a few photos, pick a style, and in about 2 minutes you'll have six professional-grade
-      headshots in high-rez. No 30-minute waits, no model training — just instant results. You
-      only pay for the ones you actually want — no subscriptions, no surprises.
-    </p>
-
-    {/* Pet callout — surfaces the "also works for pets" angle early so
-        users know from the landing page they can use their animals. Kept
-        as a soft centered line so it doesn't fight the before/after gallery
-        above or the pricing card below for attention. */}
-    <div
-      style={{
-        textAlign: "center",
-        fontSize: 14,
-        color: C.mediumGrey,
-        marginTop: 0,
-        marginBottom: 32,
-        lineHeight: 1.6,
-      }}
-    >
-      <span style={{ color: C.dark, fontWeight: 500 }}>It even works for pets.</span>{" "}
-      Upload a few photos of your dog, cat, or horse — same flow, same price.
-    </div>
-
-    {/* DESKTOP-ONLY: full 2-column pricing card with the Start button
-        embedded. On mobile the equivalent (compact one-liner + Button)
-        was rendered above, so we hide this card to avoid duplicating
-        the price/CTA. */}
-    {!isMobile && (
-      <div
+      {/* ========== PRIMARY CTA ========== */}
+      <section
         style={{
-          background: C.white,
-          border: `1px solid ${C.border}`,
-          borderRadius: 8,
-          padding: "clamp(18px, 4vw, 32px)",
-          marginBottom: 24,
+          textAlign: "center",
+          padding: "32px 20px 64px",
         }}
       >
-        <div style={{ fontSize: 13, color: C.mediumGrey, marginBottom: 10, fontWeight: 500 }}>
-          Simple pricing
+        <Pill onClick={onStart} size="lg">
+          Create my headshots
+        </Pill>
+        <div
+          style={{
+            marginTop: 18,
+            fontSize: 13,
+            color: BRAND.subText,
+            letterSpacing: 0.3,
+          }}
+        >
+          Starts at <strong style={{ color: BRAND.charcoal }}>$2.99</strong> ·
+          Money-back guarantee · 5 minutes
+        </div>
+      </section>
+
+      {/* ========== TRUST STRIP (charcoal full-bleed) ========== */}
+      <section
+        style={{
+          background: BRAND.charcoal,
+          color: BRAND.white,
+          padding: "56px clamp(20px, 4vw, 56px)",
+          textAlign: "center",
+        }}
+      >
+        <div
+          style={{
+            fontFamily: SANS_STACK,
+            fontSize: 11,
+            fontWeight: 600,
+            letterSpacing: 2.6,
+            textTransform: "uppercase",
+            color: BRAND.gold,
+            marginBottom: 32,
+          }}
+        >
+          Trusted By · Taught 1M+ to Retouch · Featured On
         </div>
         <div
           style={{
             display: "flex",
-            gap: "clamp(20px, 5vw, 48px)",
             flexWrap: "wrap",
-            marginBottom: "clamp(14px, 3vw, 24px)",
+            justifyContent: "center",
+            alignItems: "center",
+            gap: "clamp(20px, 4vw, 56px)",
+            opacity: 0.85,
           }}
         >
-          <div>
-            <div style={{ fontSize: 26, fontWeight: 500, color: C.dark }}>$2.99</div>
-            <div style={{ fontSize: 12, color: C.mediumGrey, marginTop: 4 }}>
-              Try it · credited toward your first high-rez download
+          {[
+            "Microsoft",
+            "Marriott",
+            "Adobe",
+            "Canon",
+            "CNET",
+            "LinkedIn Learning",
+          ].map((brand) => (
+            <div
+              key={brand}
+              style={{
+                fontFamily: SERIF_STACK,
+                fontSize: "clamp(16px, 1.6vw, 22px)",
+                fontWeight: 400,
+                letterSpacing: 0.5,
+                color: BRAND.white,
+              }}
+            >
+              {brand}
             </div>
-          </div>
-          <div>
-            <div style={{ fontSize: 26, fontWeight: 500, color: C.dark }}>$9.99</div>
-            <div style={{ fontSize: 12, color: C.mediumGrey, marginTop: 4 }}>
-              Per high-rez headshot you keep · minus your $2.99 credit
-            </div>
-          </div>
+          ))}
         </div>
-        <Button onClick={onStart}>Start — $2.99</Button>
-      </div>
-    )}
+      </section>
 
-    <PhotogTip style={{ marginTop: 16 }}>
-      Twenty years behind the lens photographing headshots in DC. Every style preset, every lighting
-      choice, every subtle expression cue was tuned by a working portrait photographer — not a
-      generic AI template.
-    </PhotogTip>
-
-    {/* Promo code — tucked at the very bottom so normal users never notice it.
-        Click the link to reveal the input; successful code flips the paywall
-        unlock flag in sessionStorage and auto-advances to Upload. The code
-        itself lives as an env var in Vercel (PROMO_CODE) and is validated
-        server-side via /api/verify-promo, so it never ships in the JS bundle. */}
-    <div style={{ marginTop: 64, textAlign: "center", opacity: 0.75 }}>
-      {!showPromoInput ? (
-        <button
-          type="button"
-          onClick={() => setShowPromoInput(true)}
-          style={{
-            background: "transparent",
-            border: "none",
-            color: C.mediumGrey,
-            fontSize: 11,
-            letterSpacing: 1,
-            textTransform: "uppercase",
-            cursor: "pointer",
-            textDecoration: "underline",
-            padding: 4,
-          }}
-        >
-          Got a promo code?
-        </button>
-      ) : (
+      {/* ========== EDITORIAL TAGLINE BAND ========== */}
+      <section
+        style={{
+          textAlign: "center",
+          padding: "clamp(56px, 8vw, 100px) 24px",
+          background: BRAND.cream,
+        }}
+      >
         <div
           style={{
-            display: "inline-flex",
-            flexDirection: "column",
-            gap: 8,
-            alignItems: "center",
+            fontFamily: SANS_STACK,
+            fontSize: 11,
+            fontWeight: 600,
+            letterSpacing: 2.4,
+            textTransform: "uppercase",
+            color: BRAND.gold,
+            marginBottom: 20,
           }}
         >
-          {promoStatus === "success" ? (
-            <span style={{ fontSize: 13, color: C.dark, fontWeight: 500 }}>
-              Unlocked — continuing…
-            </span>
+          The Promise
+        </div>
+        <h2
+          style={{
+            fontFamily: SERIF_STACK,
+            fontSize: "clamp(28px, 4vw, 48px)",
+            fontWeight: 400,
+            lineHeight: 1.18,
+            letterSpacing: -0.3,
+            color: BRAND.charcoal,
+            maxWidth: 820,
+            margin: "0 auto",
+          }}
+        >
+          Only pay for the headshots that{" "}
+          <em style={{ fontStyle: "italic" }}>look like you.</em>
+        </h2>
+        <p
+          style={{
+            fontSize: "clamp(15px, 1.3vw, 17px)",
+            lineHeight: 1.6,
+            color: BRAND.subText,
+            maxWidth: 600,
+            margin: "28px auto 0",
+          }}
+        >
+          $2.99 to start your session. $9.99 per keeper. No bundles, no surprise
+          fees, no charges for headshots that don't look like you.
+        </p>
+        <div style={{ marginTop: 36 }}>
+          <Pill onClick={onStart} size="lg">
+            Create my headshots
+          </Pill>
+        </div>
+      </section>
+
+      {/* ========== FOOTER ========== */}
+      <footer
+        style={{
+          padding: "40px 24px 56px",
+          textAlign: "center",
+          background: BRAND.white,
+          borderTop: `1px solid #EFEAE0`,
+        }}
+      >
+        <Wordmark size={16} />
+        <div
+          style={{
+            marginTop: 18,
+            fontSize: 12,
+            color: BRAND.subText,
+            letterSpacing: 0.3,
+          }}
+        >
+          © 2026 GenerAItion Headshots · A Kristina Sherk project
+        </div>
+        <div
+          style={{
+            marginTop: 12,
+            display: "flex",
+            justifyContent: "center",
+            gap: 24,
+            fontSize: 12,
+            color: BRAND.subText,
+          }}
+        >
+          <a href="/privacy" style={{ color: BRAND.subText, textDecoration: "none" }}>
+            Privacy
+          </a>
+          <a href="/terms" style={{ color: BRAND.subText, textDecoration: "none" }}>
+            Terms
+          </a>
+          {!showPromoInput ? (
+            <button
+              onClick={() => setShowPromoInput(true)}
+              style={{
+                background: "none",
+                border: "none",
+                color: BRAND.subText,
+                fontSize: 12,
+                cursor: "pointer",
+                textDecoration: "underline",
+                fontFamily: SANS_STACK,
+                padding: 0,
+              }}
+            >
+              Have a promo code?
+            </button>
           ) : (
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <input
                 type="text"
                 value={promoCode}
-                onChange={(e) => setPromoCode(e.target.value)}
+                onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
                 placeholder="Enter code"
-                disabled={promoStatus === "submitting"}
-                autoFocus
+                style={{
+                  fontSize: 12,
+                  padding: "4px 8px",
+                  border: `1px solid ${BRAND.subText}`,
+                  borderRadius: 4,
+                  fontFamily: SANS_STACK,
+                  width: 120,
+                }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") submitPromo();
                 }}
-                style={{
-                  padding: "8px 12px",
-                  fontSize: 13,
-                  border: `1px solid ${C.border}`,
-                  borderRadius: 6,
-                  fontFamily: "inherit",
-                  background: C.white,
-                  color: C.dark,
-                  outline: "none",
-                }}
               />
               <button
-                type="button"
                 onClick={submitPromo}
                 disabled={promoStatus === "submitting" || !promoCode.trim()}
                 style={{
-                  padding: "8px 14px",
                   fontSize: 12,
-                  letterSpacing: 1,
-                  textTransform: "uppercase",
-                  border: `1px solid ${C.dark}`,
-                  background: C.dark,
-                  color: C.buttonText,
-                  borderRadius: 6,
-                  cursor:
-                    promoStatus === "submitting" || !promoCode.trim()
-                      ? "not-allowed"
-                      : "pointer",
-                  fontFamily: "inherit",
-                  opacity:
-                    promoStatus === "submitting" || !promoCode.trim() ? 0.5 : 1,
+                  padding: "4px 10px",
+                  background: BRAND.charcoal,
+                  color: BRAND.white,
+                  border: "none",
+                  borderRadius: 4,
+                  cursor: "pointer",
+                  fontFamily: SANS_STACK,
                 }}
               >
-                {promoStatus === "submitting" ? "…" : "Unlock"}
+                {promoStatus === "submitting"
+                  ? "..."
+                  : promoStatus === "success"
+                    ? "✓"
+                    : "Apply"}
               </button>
             </div>
           )}
-          {promoStatus === "error" && (
-            <span style={{ fontSize: 11, color: "#c0392b" }}>{promoErrMsg}</span>
-          )}
         </div>
-      )}
+        {promoStatus === "error" && (
+          <div
+            style={{
+              marginTop: 8,
+              fontSize: 11,
+              color: "#B00020",
+              fontFamily: SANS_STACK,
+            }}
+          >
+            {promoErrMsg}
+          </div>
+        )}
+      </footer>
     </div>
-  </div>
   );
 };
 
@@ -4528,7 +4807,7 @@ export default function App() {
       )}
 
       {screen === "landing" && (
-        <Landing onStart={handleStart} onPromoUnlock={handlePromoUnlock} />
+        <LandingV2 onStart={handleStart} onPromoUnlock={handlePromoUnlock} />
       )}
       {screen === "upload" && (
         <UploadScreen
