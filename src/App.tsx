@@ -2698,7 +2698,11 @@ type CheckoutScreenProps = {
   selections: StyleSelections;
   // On success: parent navigates to the download screen with the email the
   // user typed + the public Blob URLs for the delivered photos.
-  onComplete: (args: { email: string; photoUrls: string[] }) => void;
+  onComplete: (args: {
+    email: string;
+    photoUrls: string[];
+    shareGraphicUrls?: string[];
+  }) => void;
   onBack: () => void;
 };
 
@@ -2839,8 +2843,15 @@ const CheckoutScreen = ({
             err.error || `Delivery failed (HTTP ${response.status})`,
           );
         }
-        const data = (await response.json()) as { photoUrls: string[] };
-        onComplete({ email, photoUrls: data.photoUrls });
+        const data = (await response.json()) as {
+          photoUrls: string[];
+          shareGraphicUrls?: string[];
+        };
+        onComplete({
+          email,
+          photoUrls: data.photoUrls,
+          shareGraphicUrls: data.shareGraphicUrls,
+        });
         return;
       }
 
@@ -3070,6 +3081,12 @@ const CheckoutScreen = ({
 type DownloadScreenProps = {
   email: string;
   photoUrls: string[];
+  // Auto-generated share graphics — same array order as photoUrls. Empty
+  // string at [i] means the share graphic failed to composite for photo
+  // [i]; DownloadScreen omits the share UI for that photo. When the
+  // entire array is empty (e.g. a code path that didn't generate any),
+  // the heartstrings card is also hidden.
+  shareGraphicUrls?: string[];
   // "Generate a different Style" — takes the user back to the Style screen
   // with their reference photos preserved (no re-upload required).
   onNewStyle: () => void;
@@ -3115,6 +3132,7 @@ const readSuppressed = (): boolean => {
 const DownloadScreen = ({
   email,
   photoUrls,
+  shareGraphicUrls,
   onNewStyle,
   onHome,
   chosenStyle,
@@ -3556,6 +3574,173 @@ const DownloadScreen = ({
           to { transform: rotate(360deg); }
         }
       `}</style>
+
+      {/* SHARE GRAPHICS section — auto-generated 1200x1740 before/after
+          composites with QR code, one per delivered photo. Heartstrings card
+          sits ABOVE the share-image rows so the customer reads the note
+          before they see the share buttons. Only renders if at least one
+          share graphic was successfully composited (empty array = the
+          /api/deliver auto-share pipeline failed or wasn't run). */}
+      {shareGraphicUrls && shareGraphicUrls.some((u) => !!u) && (
+        <div style={{ marginTop: 40, maxWidth: 480, marginLeft: "auto", marginRight: "auto" }}>
+          {/* Heartstrings card. Gold script title + body in standard sans.
+              Gold thin top border ties it to the kristinasherk.com brand
+              accent. Copy LOCKED — do not edit without Kristi. */}
+          <div
+            style={{
+              background: "#FFFFFF",
+              border: "1px solid #E8E5DD",
+              borderTop: "3px solid #C9A961",
+              borderRadius: 8,
+              padding: "24px 22px 26px",
+              marginBottom: 24,
+            }}
+          >
+            <h3
+              style={{
+                fontFamily: "'Pinyon Script', cursive",
+                fontWeight: 400,
+                color: "#C9A961",
+                fontSize: 32,
+                lineHeight: 1.1,
+                margin: "0 0 14px 0",
+                textAlign: "center",
+              }}
+            >
+              A note from Kristi
+            </h3>
+            <p
+              style={{
+                fontSize: 14,
+                lineHeight: 1.65,
+                color: "#2A2A2A",
+                margin: "0 0 12px 0",
+              }}
+            >
+              Let's face it, AI is changing how headshots get made. I built
+              this generator because I'd rather lead the change than be left
+              behind by it. There's no team of engineers behind this — just
+              me, one photographer, leaning into new tools to keep doing
+              this. Your purchase didn't just buy you a headshot — it
+              supported an independent artist and her small business doing
+              what she loves in a changing world.
+            </p>
+            <p
+              style={{
+                fontSize: 14,
+                lineHeight: 1.65,
+                color: "#2A2A2A",
+                margin: 0,
+              }}
+            >
+              If you'd share one of these images on social, you'd help me
+              reach the next person who needs a headshot but doesn't know I
+              exist yet. I see every share. I'm grateful for every one.
+              Enjoy your new, snazzy headshot!
+            </p>
+          </div>
+
+          {/* Share-graphic download rows. Same mini-row pattern as the main
+              download grid (small thumbnail + wide button). Index offset by
+              1000 in the inFlight/downloaded sets so a share-graphic
+              download doesn't accidentally mark its sibling photo as
+              downloaded (and vice versa). */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {photoUrls.map((_, i) => {
+              const shareUrl = shareGraphicUrls[i];
+              if (!shareUrl) return null;
+              const shareIdx = 1000 + i;
+              const isDownloaded = downloaded.has(shareIdx);
+              const isLoading = inFlight.has(shareIdx);
+              return (
+                <div
+                  key={`share-${i}`}
+                  style={{
+                    background: "#FFFFFF",
+                    border: `1px solid ${C.border}`,
+                    borderRadius: 8,
+                    overflow: "hidden",
+                    display: "flex",
+                    flexDirection: "row",
+                    alignItems: "stretch",
+                    minHeight: 90,
+                  }}
+                >
+                  <div
+                    role="button"
+                    tabIndex={isLoading ? -1 : 0}
+                    onClick={() => {
+                      if (!isLoading) handleDownload(shareUrl, shareIdx);
+                    }}
+                    onKeyDown={(e) => {
+                      if (isLoading) return;
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        handleDownload(shareUrl, shareIdx);
+                      }
+                    }}
+                    aria-label={`Download share image ${i + 1}`}
+                    style={{
+                      flex: "0 0 72px",
+                      background: C.lightGrey,
+                      overflow: "hidden",
+                      cursor: isLoading ? "default" : "pointer",
+                    }}
+                  >
+                    <img
+                      src={shareUrl}
+                      alt={`Share graphic ${i + 1}`}
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "cover",
+                        display: "block",
+                      }}
+                    />
+                  </div>
+                  <button
+                    onClick={() => handleDownload(shareUrl, shareIdx)}
+                    disabled={isLoading}
+                    style={{
+                      flex: "1 1 auto",
+                      border: "none",
+                      padding: "12px 16px",
+                      fontSize: 14,
+                      fontWeight: 500,
+                      cursor: isLoading ? "default" : "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
+                      background: isDownloaded ? "#dde7d8" : "#1B4332",
+                      color: isDownloaded ? "#2F7A3E" : C.buttonText,
+                      transition: "background 0.2s, color 0.2s",
+                      ...font,
+                    }}
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} />
+                        <span>Preparing…</span>
+                      </>
+                    ) : isDownloaded ? (
+                      <>
+                        <Check size={16} color="#2F7A3E" />
+                        <span>Got it</span>
+                      </>
+                    ) : (
+                      <>
+                        <Download size={16} />
+                        <span>Download share image {i + 1}</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Cross-style bonus: two single headshots rendered in the styles the
           user didn't pick. Each has its own loading / ready / error state and
@@ -4100,6 +4285,13 @@ export default function App() {
   // Public Blob URLs returned by /api/deliver — handed to DownloadScreen so
   // each photo gets its own Download button.
   const [deliveredPhotoUrls, setDeliveredPhotoUrls] = useState<string[]>([]);
+  // Auto-generated share graphics, same array order as deliveredPhotoUrls.
+  // Empty string at [i] means the share graphic failed to composite for
+  // photo [i] — DownloadScreen omits the share UI for those entries.
+  // Added 2026-05-04 alongside the auto-share-graphic pipeline.
+  const [deliveredShareGraphicUrls, setDeliveredShareGraphicUrls] = useState<
+    string[]
+  >([]);
   const [regenCount, setRegenCount] = useState(0);
   // Surfaces a one-line error to the user when a per-slot regenerate call
   // fails on the backend (Gemini timeout / 500 / safety filter / etc).
@@ -4395,6 +4587,7 @@ export default function App() {
         if (!deliverResp.ok) throw new Error(`HTTP ${deliverResp.status}`);
         const deliverData = (await deliverResp.json()) as {
           photoUrls: string[];
+          shareGraphicUrls?: string[];
         };
         // Restore ALL state DownloadScreen needs. The Stripe redirect is a
         // full page navigation, which wipes React in-memory state — so
@@ -4407,6 +4600,7 @@ export default function App() {
         // correction language (soft downgrade, not broken).
         setEmail(stash.email);
         setDeliveredPhotoUrls(deliverData.photoUrls);
+        setDeliveredShareGraphicUrls(deliverData.shareGraphicUrls ?? []);
         setLastSelections(stash.selections);
         setLastPhotoUrls(stash.referencePhotoUrls);
         setLastHasWideAngle(false);
@@ -4426,6 +4620,7 @@ export default function App() {
     setScreen("landing");
     setSelectedImageIndices([]);
     setDeliveredPhotoUrls([]);
+    setDeliveredShareGraphicUrls([]);
     setEmail("");
     setRegenCount(0);
     setPhotos([]);
@@ -4895,9 +5090,10 @@ export default function App() {
             .filter((img): img is string => !!img)}
           referencePhotoUrls={lastPhotoUrls}
           selections={lastSelections}
-          onComplete={({ email: submittedEmail, photoUrls }) => {
+          onComplete={({ email: submittedEmail, photoUrls, shareGraphicUrls }) => {
             setEmail(submittedEmail);
             setDeliveredPhotoUrls(photoUrls);
+            setDeliveredShareGraphicUrls(shareGraphicUrls ?? []);
             setScreen("success");
           }}
           onBack={() => setScreen("grid")}
@@ -4907,6 +5103,7 @@ export default function App() {
         <DownloadScreen
           email={email}
           photoUrls={deliveredPhotoUrls}
+          shareGraphicUrls={deliveredShareGraphicUrls}
           chosenStyle={lastSelections.style}
           referencePhotoUrls={lastPhotoUrls}
           hasWideAngle={lastHasWideAngle}
@@ -4922,6 +5119,7 @@ export default function App() {
             setGenerationError(null);
             setSelectedImageIndices([]);
             setDeliveredPhotoUrls([]);
+            setDeliveredShareGraphicUrls([]);
             setRegenCount(0);
             setRegeneratingSlots(new Set());
             setLastSelections(null);

@@ -31,9 +31,13 @@
 
 import { put } from "@vercel/blob";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { buildShareGraphic } from "./lib/compositeBeforeAfter.js";
 
-// Just a manifest.json write + some string work. 10s is plenty.
-export const maxDuration = 10;
+// Bumped from 10s to 60s on 2026-05-04 to accommodate the auto-share-graphic
+// pipeline. Each composite is ~1-2s on Vercel; for 6 photos worst case we
+// need headroom. Vercel Pro supports up to 300s but 60s is plenty since the
+// composites run in parallel.
+export const maxDuration = 60;
 
 // -------------------- Types --------------------
 
@@ -74,6 +78,10 @@ type DeliveryManifest = {
   skin?: Skin;
   referencePhotoUrls: string[];
   deliveredHeadshotUrls: string[];
+  // Auto-generated share graphics, one per delivered photo. Same array
+  // order as deliveredHeadshotUrls so [i] in one corresponds to [i] in
+  // the other. Added 2026-05-04.
+  shareGraphicUrls?: string[];
 };
 
 // -------------------- Helpers --------------------
@@ -218,6 +226,86 @@ async function sendUsageAlertEmail(args: {
   }
 }
 
+// -------------------- Share-graphic generation --------------------
+
+// QR code on every share graphic points to the marketing site so a poster's
+// followers can scan and arrive at the funnel's first conversion surface.
+const SHARE_QR_URL = "https://generationheadshots.com";
+
+// Cryptographically-meh shuffle is fine here — we just want unbiased order
+// for sample-without-replacement on a tiny array. Fisher-Yates.
+function shuffleArrayInPlace<T>(arr: T[]): void {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+}
+
+/**
+ * Generate one before/after share graphic per delivered photo. Random
+ * reference picking, sample-without-replacement so each delivered photo
+ * gets a different "before." If the pool runs out (more delivered photos
+ * than reference photos), reshuffles to refill.
+ *
+ * Returns an array same-length as deliveredPhotoUrls — each entry is the
+ * Vercel Blob URL of the share graphic, or empty string if compositing
+ * failed for that photo. Frontend renders the share UI per photo only
+ * when the URL is non-empty.
+ */
+async function generateShareGraphics(args: {
+  deliveryId: string;
+  deliveredPhotoUrls: string[];
+  referencePhotoUrls: string[];
+}): Promise<string[]> {
+  const { deliveryId, deliveredPhotoUrls, referencePhotoUrls } = args;
+
+  // Build the per-photo "before" pool. Refill by reshuffling when exhausted.
+  if (referencePhotoUrls.length === 0) {
+    return deliveredPhotoUrls.map(() => "");
+  }
+  let pool = [...referencePhotoUrls];
+  shuffleArrayInPlace(pool);
+  const beforeAssignments: string[] = deliveredPhotoUrls.map(() => {
+    if (pool.length === 0) {
+      pool = [...referencePhotoUrls];
+      shuffleArrayInPlace(pool);
+    }
+    return pool.shift() as string;
+  });
+
+  // Composite all in parallel and upload to Blob.
+  const results = await Promise.all(
+    deliveredPhotoUrls.map(async (afterUrl, index) => {
+      try {
+        const buf = await buildShareGraphic({
+          beforeUrl: beforeAssignments[index],
+          afterUrl,
+          qrTargetUrl: SHARE_QR_URL,
+        });
+        const key = `deliveries/${deliveryId}/share-${index + 1}.jpg`;
+        const blob = await put(key, buf, {
+          access: "public",
+          contentType: "image/jpeg",
+          addRandomSuffix: false,
+        });
+        return blob.url;
+      } catch (error) {
+        console.error(
+          JSON.stringify({
+            type: "share_graphic_failed",
+            index,
+            deliveryId,
+            error: error instanceof Error ? error.message : String(error),
+          }),
+        );
+        return "";
+      }
+    }),
+  );
+
+  return results;
+}
+
 // -------------------- Handler --------------------
 
 export default async function handler(
@@ -285,6 +373,31 @@ export default async function handler(
     // Tiny payload (a few KB at most) so we happily do this server-side — no
     // 413 risk here; the bulky image bytes are already in Blob by the time
     // this endpoint is called.
+    // ---- Generate one before/after share graphic per delivered photo. ----
+    //
+    // Random reference picking, sample-without-replacement so each delivered
+    // photo gets a different "before." If the customer bought more photos than
+    // they uploaded references (rare), refill the pool by reshuffling. The
+    // randomness intentionally leans toward unflattering befores — most
+    // uploaded references are casual phone selfies, so a random pick will
+    // usually land on something rough enough to make the AFTER pop. Per
+    // Kristi's spec on 2026-05-04: "I dont mind if the before's look bad.
+    // cause it makes my product look better."
+    //
+    // QR code points to generationheadshots.com (the marketing site).
+    //
+    // Compositing happens IN PARALLEL across all photos to keep the deliver
+    // round-trip fast — sharp + qrcode are both fast in absolute terms (~1-2s
+    // per graphic) but serial would scale poorly. Errors on individual photos
+    // are caught and logged; missing share graphics show up as undefined in
+    // the result array and the frontend gracefully omits the share UI for
+    // those photos.
+    const shareGraphicUrls = await generateShareGraphics({
+      deliveryId,
+      deliveredPhotoUrls: body.photoUrls,
+      referencePhotoUrls: body.referencePhotoUrls,
+    });
+
     const manifest: DeliveryManifest = {
       deliveryId,
       timestamp,
@@ -296,6 +409,7 @@ export default async function handler(
       skin: body.skin,
       referencePhotoUrls: body.referencePhotoUrls,
       deliveredHeadshotUrls: body.photoUrls,
+      shareGraphicUrls,
     };
     const manifestKey = `deliveries/${deliveryId}/manifest.json`;
     const manifestBlob = await put(
@@ -323,7 +437,11 @@ export default async function handler(
       manifestUrl: manifestBlob.url,
     });
 
-    return res.status(200).json({ deliveryId, photoUrls: body.photoUrls });
+    return res.status(200).json({
+      deliveryId,
+      photoUrls: body.photoUrls,
+      shareGraphicUrls,
+    });
   } catch (error) {
     console.error("=== /api/deliver FAILED ===");
     console.error("Error type:", error?.constructor?.name);
