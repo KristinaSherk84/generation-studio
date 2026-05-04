@@ -482,13 +482,17 @@ const Pill = ({
 };
 
 // Cycling before/after circles. Sit absolutely on top of the hero photo's
-// baked-in placeholder boxes ("you in 2025" / "you in 2026") and crossfade
-// between Kristi's 7 approved pairs every 4 seconds.
+// LinkedIn-style frames and crossfade between Kristi's 7 approved pairs
+// every 4 seconds.
 //
 // Positions are percentages of the hero photo's dimensions so they scale
-// with viewport. The percentages are tuned to the specific hero photo file
-// — if Kristi swaps the photo in the future, these need re-measuring.
-const HeroCarousel = () => {
+// with viewport. On MOBILE the photo container uses a tighter aspectRatio
+// (1.2 vs desktop's 1.86) so objectFit:cover crops the dark left/right
+// edges off the photo — making Kristi + the LinkedIn frames fill the
+// screen instead of being squished into a tiny strip. The carousel circle
+// percentages are recalculated for each viewport because the cropped
+// photo's frame centers land at different percentages of the visible area.
+const HeroCarousel = ({ isMobile }: { isMobile: boolean }) => {
   const [idx, setIdx] = useState(0);
   const [fading, setFading] = useState(false);
 
@@ -526,9 +530,11 @@ const HeroCarousel = () => {
         transform: "translate(-50%, -50%)",
         // Width as a percentage of the photo CONTAINER (not the viewport)
         // so circles scale with the photo's display size at every viewport.
-        // 20% target — bigger than prior 16% so the circles actually
-        // dominate the LinkedIn frames the way profile photos do.
-        width: "20%",
+        // 20% on desktop, 22% on mobile — slightly larger on mobile because
+        // the photo gets cropped tighter (mobile aspect 1.2 vs desktop 1.86)
+        // so the LinkedIn frames take up a larger share of the visible area
+        // and the circles need to grow with them.
+        width: isMobile ? "22%" : "20%",
         textAlign: "center",
       }}
     >
@@ -563,10 +569,16 @@ const HeroCarousel = () => {
     </div>
   );
 
+  // Horizontal positions account for the mobile aspect-ratio crop:
+  // mobile = 1.2:1 aspect → 41% of original width is cropped (20.5%
+  // from each side), so frame centers shift inward proportionally.
+  const beforeLeftPct = isMobile ? 28 : 35;
+  const afterLeftPct = isMobile ? 72 : 66;
+
   return (
     <>
-      {circle(HERO_PAIRS[idx].before, "5 min ago", 35)}
-      {circle(HERO_PAIRS[idx].after, "5 min from now", 66)}
+      {circle(HERO_PAIRS[idx].before, "5 min ago", beforeLeftPct)}
+      {circle(HERO_PAIRS[idx].after, "5 min from now", afterLeftPct)}
     </>
   );
 };
@@ -577,7 +589,7 @@ const HeroCarousel = () => {
 // of each LinkedIn frame and looked off (the white pill on the white card
 // was visually awkward). Now they live as a separate row underneath the
 // photo, each label horizontally aligned with its corresponding circle.
-const HeroCarouselLabels = () => (
+const HeroCarouselLabels = ({ isMobile }: { isMobile: boolean }) => (
   <div
     style={{
       position: "relative",
@@ -593,7 +605,11 @@ const HeroCarouselLabels = () => (
         key={label}
         style={{
           position: "absolute",
-          left: i === 0 ? "35%" : "66%",
+          // Match the carousel circle horizontal centers — different on
+          // mobile because the photo gets cropped tighter (see HeroCarousel).
+          left: isMobile
+            ? (i === 0 ? "28%" : "72%")
+            : (i === 0 ? "35%" : "66%"),
           transform: "translateX(-50%)",
           fontFamily: SANS_STACK,
           fontSize: "clamp(13px, 1.3vw, 18px)",
@@ -610,6 +626,24 @@ const HeroCarouselLabels = () => (
 );
 
 const LandingV2 = ({ onStart, onPromoUnlock }: LandingProps) => {
+  // Mobile detection drives the hero photo's aspect-ratio crop. On phones
+  // (<= 640px) we use a tighter aspect (1.2 vs desktop's 1.86) so the dark
+  // empty space on either side of Kristi gets cropped off and the LinkedIn
+  // frames + carousel circles fill the screen instead of being squished
+  // into a thin band. The breakpoint matches what other parts of the app
+  // already use for the mobile/desktop split.
+  const [isMobile, setIsMobile] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia("(max-width: 640px)").matches;
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(max-width: 640px)");
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+
   // Keep promo code functionality alive — discreet "have a code?" link at
   // the bottom of the page rather than a prominent input. We don't want to
   // distract from the primary CTA on the new editorial layout.
@@ -754,7 +788,11 @@ const LandingV2 = ({ onStart, onPromoUnlock }: LandingProps) => {
             width: "100%",
             maxWidth: 1100,
             margin: "0 auto",
-            aspectRatio: "1376 / 740",
+            // Mobile uses a tighter aspect ratio so objectFit:cover crops
+            // the dark left/right edges off the photo, zooming Kristi + the
+            // LinkedIn frames to fill the screen. Desktop keeps the photo's
+            // native aspect.
+            aspectRatio: isMobile ? "1.2 / 1" : "1376 / 740",
           }}
         >
           <img
@@ -767,12 +805,12 @@ const LandingV2 = ({ onStart, onPromoUnlock }: LandingProps) => {
               display: "block",
             }}
           />
-          <HeroCarousel />
+          <HeroCarousel isMobile={isMobile} />
         </div>
 
         {/* Carousel labels live BELOW the photo so they don't overlap the
             LinkedIn frames' bottom edge. Aligned to the circle centers. */}
-        <HeroCarouselLabels />
+        <HeroCarouselLabels isMobile={isMobile} />
       </section>
 
       {/* ========== PRIMARY CTA ========== */}
