@@ -416,7 +416,7 @@ type PillProps = {
   children: ReactNode;
   onClick?: () => void;
   variant?: "primary" | "secondary";
-  size?: "sm" | "md" | "lg";
+  size?: "sm" | "md" | "lg" | "xl";
   fullWidth?: boolean;
   disabled?: boolean;
 };
@@ -429,10 +429,15 @@ const Pill = ({
   disabled = false,
 }: PillProps) => {
   const [hover, setHover] = useState(false);
+  // 'xl' is 1.6× 'lg' for hero CTAs that need to dominate (per Kristi
+  // 2026-05-04 — the standard 'lg' looked underweight under the hero
+  // photo). Padding + font-size scaled together so the pill stays
+  // proportional, not squished.
   const sz = {
     sm: { px: 16, py: 8, fs: 13 },
     md: { px: 24, py: 12, fs: 14 },
     lg: { px: 32, py: 16, fs: 16 },
+    xl: { px: 52, py: 26, fs: 26 },
   }[size];
   const bg =
     variant === "primary"
@@ -555,21 +560,6 @@ const HeroCarousel = () => {
           }}
         />
       </div>
-      <div
-        style={{
-          marginTop: 12,
-          fontFamily: SANS_STACK,
-          fontWeight: 600,
-          fontSize: "clamp(13px, 1.3vw, 18px)",
-          color: BRAND.charcoal,
-          background: BRAND.white,
-          padding: "4px 10px",
-          borderRadius: 4,
-          display: "inline-block",
-        }}
-      >
-        {label}
-      </div>
     </div>
   );
 
@@ -580,6 +570,44 @@ const HeroCarousel = () => {
     </>
   );
 };
+
+// Labels row that sits BELOW the hero photo container, NOT inside the
+// LinkedIn-style frames. Earlier the labels were inside the absolute-
+// positioned circle wrappers, which put them inside the white card area
+// of each LinkedIn frame and looked off (the white pill on the white card
+// was visually awkward). Now they live as a separate row underneath the
+// photo, each label horizontally aligned with its corresponding circle.
+const HeroCarouselLabels = () => (
+  <div
+    style={{
+      position: "relative",
+      width: "100%",
+      marginTop: 18,
+      // Explicit height ensures the labels actually take up vertical space
+      // in the document flow (absolute children don't contribute height).
+      height: "clamp(20px, 1.6vw, 28px)",
+    }}
+  >
+    {(["5 min ago", "5 min from now"] as const).map((label, i) => (
+      <div
+        key={label}
+        style={{
+          position: "absolute",
+          left: i === 0 ? "35%" : "66%",
+          transform: "translateX(-50%)",
+          fontFamily: SANS_STACK,
+          fontSize: "clamp(13px, 1.3vw, 18px)",
+          fontWeight: 600,
+          color: BRAND.charcoal,
+          letterSpacing: 0.2,
+          whiteSpace: "nowrap",
+        }}
+      >
+        {label}
+      </div>
+    ))}
+  </div>
+);
 
 const LandingV2 = ({ onStart, onPromoUnlock }: LandingProps) => {
   // Keep promo code functionality alive — discreet "have a code?" link at
@@ -741,6 +769,10 @@ const LandingV2 = ({ onStart, onPromoUnlock }: LandingProps) => {
           />
           <HeroCarousel />
         </div>
+
+        {/* Carousel labels live BELOW the photo so they don't overlap the
+            LinkedIn frames' bottom edge. Aligned to the circle centers. */}
+        <HeroCarouselLabels />
       </section>
 
       {/* ========== PRIMARY CTA ========== */}
@@ -750,7 +782,7 @@ const LandingV2 = ({ onStart, onPromoUnlock }: LandingProps) => {
           padding: "32px 20px 64px",
         }}
       >
-        <Pill onClick={onStart} size="lg">
+        <Pill onClick={onStart} size="xl">
           Create my headshots
         </Pill>
         <div
