@@ -3118,16 +3118,24 @@ const DownloadScreen = ({
         </p>
       </div>
 
-      {/* Download grid — one thumbnail + button per delivered photo.
-          Button shows "Download" by default, "Downloaded ✓" after click.
-          auto-fit + minmax(140, 1fr) so mobile fits 2 cols side-by-side (~155px
-          each) and desktop collapses empty tracks so 2 items stretch to fill. */}
+      {/* Download list — horizontal "mini rows," one row per delivered photo.
+          Each row: small thumbnail on the LEFT (visual confirmation that the
+          customer is downloading the right file) + wide download button on
+          the RIGHT (color-shifts green-tinted when downloaded).
+          Replaced 2026-05-04 from a 2-col tile grid that was much taller —
+          on mobile, the old grid pushed the cross-style "See what else you
+          can do" bonus block well below the fold, hurting discoverability.
+          Mini rows save ~140px of vertical real estate on mobile so the
+          bonus block now lands above the fold. */}
       <div
         style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
-          gap: 16,
+          display: "flex",
+          flexDirection: "column",
+          gap: 12,
           marginTop: 24,
+          maxWidth: 480,
+          marginLeft: "auto",
+          marginRight: "auto",
         }}
       >
         {photoUrls.map((url, i) => {
@@ -3142,16 +3150,16 @@ const DownloadScreen = ({
                 borderRadius: 8,
                 overflow: "hidden",
                 display: "flex",
-                flexDirection: "column",
+                flexDirection: "row",
+                alignItems: "stretch",
+                minHeight: 90,
               }}
             >
-              {/* Photo itself is now a button — clicking anywhere on the
-                  image triggers the same download flow as the grey button
-                  below, so users don't have to aim for the small bar. On
-                  mobile this also makes the long-press path more intuitive
-                  (tap triggers handleDownload which opens the image in a
-                  new tab, where the native save-to-Photos long-press works).
-                  Role=button + keyboard handlers keep it accessible. */}
+              {/* Thumbnail — fixed 72px width, full row height. Tapping it
+                  triggers download (same as the button), which on mobile
+                  opens the image in a new tab so native long-press save-to-
+                  Photos works. Role=button + keyboard handlers keep it
+                  accessible. */}
               <div
                 role="button"
                 tabIndex={isLoading ? -1 : 0}
@@ -3167,7 +3175,7 @@ const DownloadScreen = ({
                 }}
                 aria-label={`Download headshot ${i + 1}`}
                 style={{
-                  aspectRatio: "4/5",
+                  flex: "0 0 72px",
                   background: C.lightGrey,
                   overflow: "hidden",
                   cursor: isLoading ? "default" : "pointer",
@@ -3185,21 +3193,25 @@ const DownloadScreen = ({
                   }}
                 />
               </div>
+              {/* Download button — fills the rest of the row. Color shift is
+                  the primary "you got this one" signal: dark slab → soft
+                  green-tinted slab with green check + "Downloaded." */}
               <button
                 onClick={() => handleDownload(url, i)}
                 disabled={isLoading}
                 style={{
+                  flex: "1 1 auto",
                   border: "none",
-                  padding: "12px 14px",
-                  fontSize: 13,
+                  padding: "12px 16px",
+                  fontSize: 14,
                   fontWeight: 500,
                   cursor: isLoading ? "default" : "pointer",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
                   gap: 8,
-                  background: isDownloaded ? C.border : C.dark,
-                  color: isDownloaded ? C.dark : C.buttonText,
+                  background: isDownloaded ? "#dde7d8" : C.dark,
+                  color: isDownloaded ? "#2F7A3E" : C.buttonText,
                   transition: "background 0.2s, color 0.2s",
                   ...font,
                 }}
