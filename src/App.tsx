@@ -818,7 +818,7 @@ const LandingV2 = ({ onStart, onPromoUnlock }: LandingProps) => {
             marginBottom: 32,
           }}
         >
-          Trusted By · Taught 1M+ to Retouch · Featured On
+          Kristina Is Trusted By · Taught 1M+ to Retouch · Featured On
         </div>
         <div
           style={{
