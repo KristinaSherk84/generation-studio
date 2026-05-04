@@ -513,21 +513,23 @@ const HeroCarousel = () => {
       style={{
         position: "absolute",
         left: `${leftPct}%`,
-        // 66% vertical center after Kristi's second review — earlier 64%
-        // sat slightly too high and left the LinkedIn icons of the grey
-        // placeholder circles peeking above the new circles.
-        top: "66%",
+        // Vertical center of the grey placeholder circles in the source
+        // photo (1376x740). Centers measured at ~63% from the top.
+        top: "63%",
         transform: "translate(-50%, -50%)",
+        // Width as a percentage of the photo CONTAINER (not the viewport)
+        // so the circles scale exactly with the photo's display size. The
+        // earlier vw-based clamp grew the circles past the photo on wide
+        // viewports because the photo is capped at maxWidth: 1100. 16%
+        // matches the grey placeholder diameter measured from the source.
+        width: "16%",
         textAlign: "center",
       }}
     >
       <div
         style={{
-          // 3% smaller than the previous 18vw target after Kristi's second
-          // review — the new circles were slightly OVER-covering the grey
-          // placeholders. 17.5vw with proportionally-shrunk min/max.
-          width: "clamp(136px, 17.5vw, 252px)",
-          height: "clamp(136px, 17.5vw, 252px)",
+          width: "100%",
+          aspectRatio: "1",
           borderRadius: "50%",
           overflow: "hidden",
           border: `4px solid ${BRAND.white}`,
