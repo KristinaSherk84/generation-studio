@@ -947,6 +947,66 @@ const LandingV2 = ({ onStart, onPromoUnlock }: LandingProps) => {
         </div>
       </section>
 
+      {/* ========== EXAMPLES STRIP ========== */}
+      {/* Three 3:4 example outputs, side-by-side. Sits between the editorial
+          tagline band and the footer so the page closes on actual product
+          proof — three real generated headshots — instead of marketing copy.
+          Kept as a single grid that stays 3-up on every viewport (smaller
+          on phones, but visual rhythm is preserved). */}
+      <section
+        style={{
+          background: BRAND.white,
+          padding: "clamp(48px, 7vw, 88px) clamp(16px, 4vw, 56px)",
+        }}
+      >
+        <div
+          style={{
+            maxWidth: 1100,
+            margin: "0 auto",
+            display: "grid",
+            gridTemplateColumns: "repeat(3, 1fr)",
+            gap: "clamp(8px, 1.5vw, 20px)",
+          }}
+        >
+          {[
+            {
+              src: "/marketing/examples/ai-headshot-generator-man-glasses.jpg",
+              alt: "AI-generated professional headshot of a man with glasses",
+            },
+            {
+              src: "/marketing/examples/ai-headshot-generator-woman-blue-blazer.jpg",
+              alt: "AI-generated professional headshot of a woman in a blue blazer",
+            },
+            {
+              src: "/marketing/examples/ai-headshot-generator-man-suit-tie.jpg",
+              alt: "AI-generated professional headshot of a man in a suit and tie",
+            },
+          ].map((img) => (
+            <div
+              key={img.src}
+              style={{
+                aspectRatio: "3 / 4",
+                overflow: "hidden",
+                borderRadius: 6,
+                background: BRAND.cream,
+              }}
+            >
+              <img
+                src={img.src}
+                alt={img.alt}
+                loading="lazy"
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                  display: "block",
+                }}
+              />
+            </div>
+          ))}
+        </div>
+      </section>
+
       {/* ========== FOOTER ========== */}
       <footer
         style={{
