@@ -513,16 +513,17 @@ const HeroCarousel = () => {
       style={{
         position: "absolute",
         left: `${leftPct}%`,
-        // Vertical center of the grey placeholder circles in the source
-        // photo (1376x740). Centers measured at ~63% from the top.
-        top: "63%",
+        // Vertical center positioned on the boundary between the LinkedIn-
+        // style card's grey banner and white content area in the new hero
+        // photo (copy 3, 2026-05-04 swap). Like a real LinkedIn profile
+        // photo straddling the banner/content border.
+        top: "73%",
         transform: "translate(-50%, -50%)",
         // Width as a percentage of the photo CONTAINER (not the viewport)
-        // so the circles scale exactly with the photo's display size. The
-        // earlier vw-based clamp grew the circles past the photo on wide
-        // viewports because the photo is capped at maxWidth: 1100. 16%
-        // matches the grey placeholder diameter measured from the source.
-        width: "16%",
+        // so circles scale with the photo's display size at every viewport.
+        // 20% target — bigger than prior 16% so the circles actually
+        // dominate the LinkedIn frames the way profile photos do.
+        width: "20%",
         textAlign: "center",
       }}
     >
