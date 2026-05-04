@@ -4218,16 +4218,18 @@ export default function App() {
     setLastHasWideAngle(hasWideAngle);
     setScreen("loading");
 
-    // Fire 6 staggered calls (3s apart). Each gets a unique variationIndex
+    // Fire 6 staggered calls (2s apart). Each gets a unique variationIndex
     // (0-5) so the backend picks a different "flavor" per photo. Staggering
     // matters: firing all 6 at the same instant overwhelms Gemini's Tier 1
     // concurrent-request quota and consistently 429s the last one — even
     // with the per-call retry wrapper, multiple parallel retries collide.
-    // 3s gaps spread the load enough that no more than 2-3 calls are in
-    // flight at once, well under Tier 1's burst limit. Total added wall-
-    // clock = 15s (5 × 3s); individual calls take 20-50s so this is
-    // mostly absorbed by overlap.
-    const STAGGER_MS = 3000;
+    //
+    // Tightened 3s → 2s on 2026-05-04 to shave 5s off slot 6's start time
+    // (start times: 0, 2, 4, 6, 8, 10s instead of 0, 3, 6, 9, 12, 15s).
+    // The retry wrapper in /api/generate absorbs any extra 429s from the
+    // tighter concurrency. If we start seeing systematic 429s on slot 5
+    // or 6 we can dial back to 2.5s.
+    const STAGGER_MS = 2000;
     const calls = Array.from({ length: TOTAL_HEADSHOTS }, async (_, index) => {
       // Each call waits its turn before firing. Promise.all below still
       // collects them in parallel — we're just delaying the START of the
