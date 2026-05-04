@@ -3799,6 +3799,22 @@ export default function App() {
   // another regen or navigates away. Added 2026-05-01.
   const [regenError, setRegenError] = useState<string | null>(null);
   const [showPaywall, setShowPaywall] = useState(false);
+  // Stripe Checkout return state. After Stripe redirects back with
+  // ?paid=1&session_id=cs_..., we POST to /api/verify-checkout. For card
+  // payments verification is instant and this flips through "verifying" →
+  // "idle" almost immediately. For async payment methods (Cash App Pay,
+  // Klarna, ACH), settlement takes a few seconds to a few minutes — we
+  // poll the verify endpoint and keep the user on a "Verifying your
+  // payment…" overlay until it resolves. If polling times out the state
+  // flips to "error" and we surface the session ID so the user can email
+  // support — much better than the silent failure that bit one customer
+  // on 2026-05-04.
+  const [stripeVerifyState, setStripeVerifyState] = useState<
+    "idle" | "verifying" | "error"
+  >("idle");
+  const [stripeVerifyErrorSessionId, setStripeVerifyErrorSessionId] = useState<
+    string | null
+  >(null);
   // Photos are lifted to App scope so the Blob URLs survive navigating forward
   // into Style / Grid / Checkout. /api/generate reads their blobUrl values.
   const [photos, setPhotos] = useState<UploadedPhoto[]>([]);
@@ -3874,6 +3890,13 @@ export default function App() {
   // redirects back to `${origin}/?paid=1&session_id=<cs_xxx>` — we verify
   // server-side before trusting the query param (users can forge ?paid=1
   // by hand, but they can't forge a paid session ID against our secret key).
+  //
+  // Polling: verify-checkout can return paid:true (unlock now), pending:true
+  // (async settlement in progress — Cash App Pay / Klarna / ACH; keep
+  // polling), or paid:false with no pending flag (truly didn't pay — stay
+  // on landing silently). For pending we poll up to ~30s before falling
+  // through to a visible error UI with the session ID, so a customer in
+  // limbo always knows what to do next.
   useEffect(() => {
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
@@ -3886,43 +3909,84 @@ export default function App() {
     const cleanUrl = `${url.origin}${url.pathname}`;
     window.history.replaceState({}, "", cleanUrl);
 
+    setStripeVerifyState("verifying");
+
     (async () => {
-      try {
-        const resp = await fetch("/api/verify-checkout", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ session_id: sessionId }),
-        });
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const data = (await resp.json()) as {
-          paid?: boolean;
-          customerEmail?: string;
-        };
-        if (data.paid) {
-          markUnlocked("stripe");
-          // Stash the email Stripe captured during Phase 1 checkout so the
-          // CheckoutScreen can pre-fill it later (saves re-typing) and so
-          // Phase 2 Stripe Checkout gets passed the same customer_email
-          // (which lets Stripe Link auto-recognize them and fill their
-          // saved card).
-          if (data.customerEmail) {
-            window.sessionStorage.setItem(
-              "stripe_customer_email",
-              data.customerEmail,
-            );
-            setEmail(data.customerEmail);
+      // Cash App Pay typically settles in 2–8s, Klarna similar. ACH can
+      // take days — but for ACH we'd just want the user to see a clear
+      // "we'll email you when it clears" state, which the post-timeout
+      // error UI delivers. ~30s polling catches Cash App / Klarna races
+      // without making the user stare too long.
+      const MAX_ATTEMPTS = 16;
+      const POLL_INTERVAL_MS = 2000;
+
+      let lastEmail: string | undefined;
+
+      for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+        try {
+          const resp = await fetch("/api/verify-checkout", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ session_id: sessionId }),
+          });
+          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+          const data = (await resp.json()) as {
+            paid?: boolean;
+            pending?: boolean;
+            customerEmail?: string;
+          };
+
+          if (data.customerEmail) lastEmail = data.customerEmail;
+
+          if (data.paid) {
+            markUnlocked("stripe");
+            // Stash the email Stripe captured during Phase 1 checkout so the
+            // CheckoutScreen can pre-fill it later (saves re-typing) and so
+            // Phase 2 Stripe Checkout gets passed the same customer_email
+            // (which lets Stripe Link auto-recognize them and fill their
+            // saved card).
+            if (data.customerEmail) {
+              window.sessionStorage.setItem(
+                "stripe_customer_email",
+                data.customerEmail,
+              );
+              setEmail(data.customerEmail);
+            }
+            setStripeVerifyState("idle");
+            setScreen("upload");
+            setShowTipsModal(true);
+            return;
           }
-          setScreen("upload");
-          setShowTipsModal(true);
-        } else {
-          // Payment didn't complete — stay on Landing. No error toast; the
-          // user either canceled (expected silent return) or payment failed
-          // (Stripe would have shown its own error on their side).
-          console.warn("Stripe session not marked as paid");
+
+          if (!data.pending) {
+            // Definitive "not paid" — abandoned, expired, or payment failed
+            // outright. Silent return to landing is correct here; Stripe
+            // would have surfaced any error on its own page.
+            setStripeVerifyState("idle");
+            return;
+          }
+
+          // pending: Stripe says session is complete but settlement is still
+          // in progress. Wait and re-poll.
+        } catch (err) {
+          console.error(
+            `verify-checkout attempt ${attempt + 1}/${MAX_ATTEMPTS} failed:`,
+            err,
+          );
+          // Network/server hiccup → retry on the next loop iteration.
         }
-      } catch (err) {
-        console.error("verify-checkout failed:", err);
+
+        await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
       }
+
+      // All attempts exhausted while still pending. Surface an error UI
+      // with the session ID so the customer can email support — much
+      // better than silently dumping them on the landing page.
+      if (lastEmail) {
+        window.sessionStorage.setItem("stripe_customer_email", lastEmail);
+      }
+      setStripeVerifyErrorSessionId(sessionId);
+      setStripeVerifyState("error");
     })();
     // Run exactly once on mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -4319,6 +4383,149 @@ export default function App() {
   return (
     <div style={{ minHeight: "100vh", background: C.pageBg, ...font }}>
       <Navbar cartCount={selectedImageIndices.length} onLogoClick={reset} />
+
+      {/* Stripe verification overlay — shown when the user just returned from
+          Stripe Checkout. Card payments resolve instantly so this barely
+          flashes; async methods (Cash App Pay / Klarna / ACH) sit here for a
+          few seconds while we poll. The error variant surfaces the session
+          ID and a mailto: support link so a customer in limbo always knows
+          what to do — replacing the silent-failure path that bit one
+          customer on 2026-05-04. */}
+      {stripeVerifyState !== "idle" && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(247, 245, 240, 0.96)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+            padding: 24,
+            ...font,
+          }}
+        >
+          <div style={{ maxWidth: 440, textAlign: "center" }}>
+            {stripeVerifyState === "verifying" ? (
+              <>
+                <div style={{ display: "flex", justifyContent: "center", marginBottom: 20 }}>
+                  <Loader2
+                    size={36}
+                    color={C.dark}
+                    style={{ animation: "spin 1s linear infinite" }}
+                  />
+                </div>
+                <h2
+                  style={{
+                    fontSize: 22,
+                    fontWeight: 500,
+                    color: C.dark,
+                    margin: 0,
+                    letterSpacing: -0.3,
+                  }}
+                >
+                  Verifying your payment…
+                </h2>
+                <p
+                  style={{
+                    fontSize: 14,
+                    color: C.mediumGrey,
+                    marginTop: 12,
+                    lineHeight: 1.6,
+                  }}
+                >
+                  Cash App, Klarna, and bank transfers can take a few seconds
+                  to confirm. Hang tight — don't refresh.
+                </p>
+              </>
+            ) : (
+              <>
+                <h2
+                  style={{
+                    fontSize: 22,
+                    fontWeight: 500,
+                    color: C.dark,
+                    margin: 0,
+                    letterSpacing: -0.3,
+                  }}
+                >
+                  Your payment is still processing
+                </h2>
+                <p
+                  style={{
+                    fontSize: 14,
+                    color: C.mediumGrey,
+                    marginTop: 12,
+                    lineHeight: 1.6,
+                  }}
+                >
+                  Stripe is taking longer than usual to confirm your payment.
+                  This can happen with Cash App, Klarna, or bank transfers.
+                  Your card has NOT been charged twice — please don't try to
+                  pay again.
+                </p>
+                <p
+                  style={{
+                    fontSize: 14,
+                    color: C.mediumGrey,
+                    marginTop: 16,
+                    lineHeight: 1.6,
+                  }}
+                >
+                  Email{" "}
+                  <a
+                    href={`mailto:kristi@kristinasherk.com?subject=AI%20Headshots%20payment%20pending&body=Hi%20Kristi%2C%0A%0AMy%20payment%20is%20stuck%20on%20%22verifying.%22%20Stripe%20session%20ID%3A%20${encodeURIComponent(stripeVerifyErrorSessionId ?? "")}%0A%0AThanks%21`}
+                    style={{ color: C.dark, fontWeight: 500 }}
+                  >
+                    kristi@kristinasherk.com
+                  </a>{" "}
+                  with your session ID and we'll unlock your account
+                  manually.
+                </p>
+                {stripeVerifyErrorSessionId && (
+                  <div
+                    style={{
+                      marginTop: 16,
+                      padding: "10px 14px",
+                      background: C.lightGrey,
+                      border: `1px solid ${C.border}`,
+                      borderRadius: 6,
+                      fontSize: 12,
+                      color: C.dark,
+                      fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+                      wordBreak: "break-all",
+                    }}
+                  >
+                    {stripeVerifyErrorSessionId}
+                  </div>
+                )}
+                <button
+                  onClick={() => setStripeVerifyState("idle")}
+                  style={{
+                    marginTop: 20,
+                    padding: "10px 18px",
+                    background: "transparent",
+                    color: C.mediumGrey,
+                    border: `1px solid ${C.border}`,
+                    borderRadius: 6,
+                    fontSize: 13,
+                    cursor: "pointer",
+                    ...font,
+                  }}
+                >
+                  Close
+                </button>
+              </>
+            )}
+          </div>
+          <style>{`
+            @keyframes spin {
+              from { transform: rotate(0deg); }
+              to { transform: rotate(360deg); }
+            }
+          `}</style>
+        </div>
+      )}
 
       {screen === "landing" && (
         <Landing onStart={handleStart} onPromoUnlock={handlePromoUnlock} />
