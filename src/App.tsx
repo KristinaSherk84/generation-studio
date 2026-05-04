@@ -513,20 +513,21 @@ const HeroCarousel = () => {
       style={{
         position: "absolute",
         left: `${leftPct}%`,
-        // 64% vertical center matches the grey placeholder circles in the
-        // updated hero photo (ac4ed706-..._copy_2.jpg, May 4 2026 swap).
-        top: "64%",
+        // 66% vertical center after Kristi's second review — earlier 64%
+        // sat slightly too high and left the LinkedIn icons of the grey
+        // placeholder circles peeking above the new circles.
+        top: "66%",
         transform: "translate(-50%, -50%)",
         textAlign: "center",
       }}
     >
       <div
         style={{
-          // Sized to match the diameter of the grey placeholder circles in
-          // the new hero photo (~18% of the canvas width). Bigger than the
-          // first guess (14vw) which left the placeholders peeking through.
-          width: "clamp(140px, 18vw, 260px)",
-          height: "clamp(140px, 18vw, 260px)",
+          // 3% smaller than the previous 18vw target after Kristi's second
+          // review — the new circles were slightly OVER-covering the grey
+          // placeholders. 17.5vw with proportionally-shrunk min/max.
+          width: "clamp(136px, 17.5vw, 252px)",
+          height: "clamp(136px, 17.5vw, 252px)",
           borderRadius: "50%",
           overflow: "hidden",
           border: `4px solid ${BRAND.white}`,
@@ -736,24 +737,6 @@ const LandingV2 = ({ onStart, onPromoUnlock }: LandingProps) => {
             }}
           />
           <HeroCarousel />
-        </div>
-
-        {/* Photographer attribution — relocated below the graphic on
-            2026-05-04 per Kristi. Reads like a magazine caption sitting
-            under the hero photo, instead of competing with the headline
-            for the first read. */}
-        <div
-          style={{
-            fontFamily: SANS_STACK,
-            fontSize: 12,
-            fontWeight: 600,
-            letterSpacing: 2.4,
-            textTransform: "uppercase",
-            color: BRAND.gold,
-            marginTop: 28,
-          }}
-        >
-          From Kristina Sherk · 20 Years Behind the Lens
         </div>
       </section>
 
