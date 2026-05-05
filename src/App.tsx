@@ -530,11 +530,13 @@ const HeroCarousel = ({ isMobile }: { isMobile: boolean }) => {
         transform: "translate(-50%, -50%)",
         // Width as a percentage of the photo CONTAINER (not the viewport)
         // so circles scale with the photo's display size at every viewport.
-        // 20% on desktop, 22% on mobile — slightly larger on mobile because
-        // the photo gets cropped tighter (mobile aspect 1.2 vs desktop 1.86)
-        // so the LinkedIn frames take up a larger share of the visible area
-        // and the circles need to grow with them.
-        width: isMobile ? "22%" : "20%",
+        // Desktop: 20%. Mobile: 35% — much bigger because at 22% the faces
+        // were too small to read on a phone (per Kristi 2026-05-04: "circles
+        // need to be much bigger on mobile so we can actually see the goods").
+        // The 35% diameter still fits cleanly between the two LinkedIn frame
+        // centers (which are at 28% and 72% in the cropped view, leaving a
+        // 9% gap between the circles' edges).
+        width: isMobile ? "35%" : "20%",
         textAlign: "center",
       }}
     >
