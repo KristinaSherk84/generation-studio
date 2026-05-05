@@ -2860,9 +2860,18 @@ const CheckoutScreen = ({
   // Stripe (promo) or pays (stripe, with $4.99 credit on first checkout).
   // Reading at render time (not state) keeps the UI responsive to changes
   // made in the same tab without extra state plumbing.
+  // unlock_source moved from sessionStorage → localStorage 2026-05-04
+  // (paired with paywall_unlocked) so a paid customer who lost their tab
+  // session can still re-enter the funnel without paying again.
   const unlockSource =
     typeof window !== "undefined"
-      ? window.sessionStorage.getItem("unlock_source")
+      ? (() => {
+          try {
+            return window.localStorage.getItem("unlock_source");
+          } catch {
+            return null;
+          }
+        })()
       : null;
   const creditUsed =
     typeof window !== "undefined"
@@ -4418,22 +4427,42 @@ export default function App() {
   //   (a) the user completed Stripe Checkout for the $4.99 entry fee, or
   //   (b) the user entered a valid promo code on the landing page.
   //
-  // Persisted via sessionStorage so a refresh mid-flow doesn't kick them back
-  // to Stripe. sessionStorage (not localStorage) intentionally — unlock should
-  // only survive the current browser tab/session, not forever.
+  // Persisted via LOCALSTORAGE (changed from sessionStorage on 2026-05-04).
+  // History: original V1 used sessionStorage so the unlock would only survive
+  // the current browser tab/session and "couldn't" leak across visits. That
+  // backfired hard on the customer who hit browser-back after paying — the
+  // back navigation pulled her browser context to the now-completed Stripe
+  // URL, leaving her stranded on Stripe's "You're all done here" dead-end.
+  // sessionStorage being aggressive about session boundaries meant her paid
+  // unlock was already gone by the time she navigated to the app URL fresh.
+  // With localStorage, the unlock survives tab close + browser-back + brief
+  // navigation away, which is exactly what we want for a paid customer.
+  // Risk: shared device → next user inherits the unlock. Acceptable at the
+  // $2.99 price point; roadmap item #19 plans an email-match server-side
+  // recovery as the cleaner long-term fix.
   //
   // unlock_source distinguishes the two paths so Phase 2 (the per-photo
   // checkout at CheckoutScreen) knows whether to skip Stripe entirely
-  // (promo = free everything) or charge minus a $4.99 credit (stripe = paid
+  // (promo = free everything) or charge minus a $2.99 credit (stripe = paid
   // entry, credit eligible on first photo purchase).
   const [isUnlocked, setIsUnlocked] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
-    return window.sessionStorage.getItem("paywall_unlocked") === "true";
+    try {
+      return window.localStorage.getItem("paywall_unlocked") === "true";
+    } catch {
+      // localStorage can throw in private browsing or strict-mode envs.
+      return false;
+    }
   });
   const markUnlocked = (source: "stripe" | "promo") => {
     if (typeof window !== "undefined") {
-      window.sessionStorage.setItem("paywall_unlocked", "true");
-      window.sessionStorage.setItem("unlock_source", source);
+      try {
+        window.localStorage.setItem("paywall_unlocked", "true");
+        window.localStorage.setItem("unlock_source", source);
+      } catch {
+        // localStorage can throw in private browsing — fall back to in-memory
+        // state only. The user keeps unlock for THIS tab but not after refresh.
+      }
     }
     setIsUnlocked(true);
   };
