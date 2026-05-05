@@ -3247,6 +3247,18 @@ const DownloadScreen = ({
   lighting,
 }: DownloadScreenProps) => {
   const [downloaded, setDownloaded] = useState<Set<number>>(new Set());
+  // In-app full-screen photo viewer — shown on MOBILE when the customer
+  // taps Download. Replaces the prior "open the raw blob URL in a new
+  // tab" behavior, which left the customer stranded on a bare image with
+  // no obvious way back to download the rest. The overlay shows the
+  // photo (long-pressable for "Add to Photos") and a prominent "Back"
+  // button right beneath it. Desktop is unchanged — keeps the auto-
+  // download fetch+blob flow because that's friction-free on a real
+  // file system.
+  const [viewingPhoto, setViewingPhoto] = useState<{
+    url: string;
+    indexLabel: string; // e.g. "1 of 4" — shown in the back button
+  } | null>(null);
   // Track which tile currently has a download in-flight so we can show a
   // tiny "Preparing…" state on its button. Separate from `downloaded` so a
   // user re-downloading doesn't lose their completed ✓ state.
@@ -3311,15 +3323,25 @@ const DownloadScreen = ({
   const handleDownload = async (url: string, index: number) => {
     if (inFlight.has(index)) return;
 
-    // --- Mobile path: open in a new tab, let the user long-press ---
+    // --- Mobile path: open the IN-APP photo viewer, not a new tab ---
+    //
+    // Previously this opened the raw blob URL in a new tab, which left
+    // the customer stranded on a bare image with no obvious way back to
+    // the rest of their photos. Now we render the photo in an in-app
+    // fullscreen overlay with a prominent "Back" button beneath it
+    // (per Kristi's review, 2026-05-04). Long-press save-to-Photos
+    // still works because the overlay renders the image as a normal
+    // <img> tag — Safari's long-press menu is content-source agnostic.
     if (isMobileDevice()) {
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.target = "_blank";
-      anchor.rel = "noopener";
-      document.body.appendChild(anchor);
-      anchor.click();
-      document.body.removeChild(anchor);
+      // Indices for SHARE images are stored at +1000 — strip that for a
+      // user-facing label. Photo indices are 0-based; show 1-based.
+      const isShareImage = index >= 1000;
+      const realIndex = isShareImage ? index - 1000 : index;
+      const total = photoUrls.length;
+      const indexLabel = isShareImage
+        ? `Share image ${realIndex + 1}`
+        : `Photo ${realIndex + 1} of ${total}`;
+      setViewingPhoto({ url, indexLabel });
       // Mark as "handled" so the button flips to the Downloaded ✓ state.
       // This reflects "you've tapped this one" rather than "the file is
       // definitively on your device" — we can't know the latter on mobile.
@@ -3497,6 +3519,88 @@ const DownloadScreen = ({
   };
 
   return (
+    <>
+    {/* In-app fullscreen photo viewer for the mobile download flow. Replaces
+        the previous "open the blob URL in a new tab" path so the customer
+        always has a clear way back to the rest of their downloads. The
+        photo is a regular <img> so iOS Safari's long-press → "Add to
+        Photos" still works. The big forest-green back button below the
+        photo is the user's escape hatch — placed directly under the photo
+        per Kristi's spec. */}
+    {viewingPhoto && (
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "#FFFFFF",
+          zIndex: 9999,
+          overflow: "auto",
+          padding: "24px 16px 48px",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          ...font,
+        }}
+      >
+        <div
+          style={{
+            fontSize: 13,
+            fontWeight: 500,
+            color: "#666",
+            letterSpacing: 1,
+            textTransform: "uppercase",
+            marginBottom: 12,
+          }}
+        >
+          {viewingPhoto.indexLabel}
+        </div>
+        <img
+          src={viewingPhoto.url}
+          alt={viewingPhoto.indexLabel}
+          style={{
+            maxWidth: "100%",
+            maxHeight: "70vh",
+            height: "auto",
+            display: "block",
+            borderRadius: 6,
+            boxShadow: "0 4px 20px rgba(0,0,0,0.12)",
+          }}
+        />
+        <div
+          style={{
+            fontSize: 13,
+            color: "#666",
+            marginTop: 14,
+            textAlign: "center",
+            lineHeight: 1.5,
+            maxWidth: 360,
+          }}
+        >
+          Long-press the photo above and tap <strong>Add to Photos</strong> to
+          save it to your camera roll.
+        </div>
+        <button
+          onClick={() => setViewingPhoto(null)}
+          style={{
+            marginTop: 28,
+            background: "#1B4332",
+            color: "#FFFFFF",
+            border: "none",
+            borderRadius: 999,
+            padding: "16px 28px",
+            fontSize: 15,
+            fontWeight: 600,
+            letterSpacing: 0.4,
+            cursor: "pointer",
+            maxWidth: 480,
+            width: "100%",
+            ...font,
+          }}
+        >
+          ← Back to download my other photos
+        </button>
+      </div>
+    )}
     <div
       style={{
         maxWidth: 720,
@@ -4328,6 +4432,7 @@ const DownloadScreen = ({
         </div>
       )}
     </div>
+    </>
   );
 };
 
