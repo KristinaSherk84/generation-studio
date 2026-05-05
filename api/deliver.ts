@@ -42,7 +42,7 @@ export const maxDuration = 60;
 // -------------------- Types --------------------
 
 type Style = "corporate" | "creative" | "executive" | "urban";
-type Attire = "formal" | "casual" | "keep";
+type Attire = "formal" | "casual" | "keep" | "medical";
 type Lighting = "studio" | "natural" | "dramatic" | "golden";
 type Background =
   | "white"
@@ -567,7 +567,10 @@ export default async function handler(
   if (!body.style || !["corporate", "creative", "executive", "urban"].includes(body.style)) {
     return res.status(400).json({ error: "Invalid style" });
   }
-  if (!body.attire || !["formal", "casual", "keep"].includes(body.attire)) {
+  if (
+    !body.attire ||
+    !["formal", "casual", "keep", "medical"].includes(body.attire)
+  ) {
     return res.status(400).json({ error: "Invalid attire" });
   }
   if (

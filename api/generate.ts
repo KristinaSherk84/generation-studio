@@ -41,7 +41,7 @@ export const maxDuration = 300;
 //   urban        → "Urban Industrial" (NEW — combines the old Creative
 //                  industrial-office background with a new urban-street one)
 type Style = "corporate" | "creative" | "executive" | "urban";
-type Attire = "formal" | "casual" | "keep";
+type Attire = "formal" | "casual" | "keep" | "medical";
 type Lighting = "studio" | "natural" | "dramatic" | "golden";
 type Background =
   | "white"
@@ -348,7 +348,7 @@ function buildBlock3Style(style: Style, variationIndex: number): string {
   return BLOCK_3_STYLE_BASE[style];
 }
 
-const BLOCK_4_ATTIRE: Record<Attire, string> = {
+const BLOCK_4_ATTIRE_STATIC: Record<Exclude<Attire, "medical">, string> = {
   formal: `Attire: A polished formal business look, tailored to the subject's apparent gender as determined from the reference photos.
 - If the subject appears to be a MAN: a well-tailored suit jacket in a neutral color (charcoal, navy, or black) over a crisp collared dress shirt. A necktie is optional based on what flatters the subject's face shape and the overall style.
 - If the subject appears to be a WOMAN: a well-tailored slim-fit blazer in a neutral color (charcoal, navy, or black) over a professional blouse, silk top, or fine knit top with a clean, feminine neckline (crew neck, V-neck, open collar, or tasteful scoop). NEVER a necktie. NEVER a men's business shirt with a men's tie. The silhouette should read clearly as women's business attire — softer shoulder, feminine cut, tailored to a woman's frame.
@@ -356,6 +356,43 @@ Well-tailored and intentional in either case — not boxy, not ill-fitting.`,
   casual: `Attire: Smart professional attire without a full suit. Options: blazer over an open-collar shirt, knit polo, tailored sweater, or structured blouse. Relaxed but intentional. Favor attire that creates vertical lines guiding the viewer's eye toward the face — a suit jacket, a dark cardigan forming a V-shape, or a structured collar.`,
   keep: `Attire: Preserve the clothing visible in the reference photos as faithfully as possible. Do not change the garment type, color, neckline, or style.`,
 };
+
+// Medical attire — 6 distinct variants rotated across the 6-image batch
+// (variationIndex 0-5). Three lab-coat variants + three scrubs colors.
+// Added 2026-05-04 per Kristi for the healthcare-professional vertical.
+//
+// CRITICAL universal rule for ALL medical variants: NO names, badges,
+// hospital logos, embroidered text, ID lanyards, or any other text-bearing
+// element on the garments. Gemini routinely hallucinates gibberish hospital
+// names + fake credentials when given medical attire prompts; we forbid
+// every text-rendering surface explicitly to head this off.
+const MEDICAL_ATTIRE_VARIATIONS: string[] = [
+  // 0 — Lab coat over a dress shirt (executive/clinician look)
+  `A clean, crisp WHITE doctor's lab coat (knee-length, fully buttoned at the top, lapels visible) worn open over a crisp collared dress shirt in a soft neutral color (white, light blue, or pale grey). For a man: collared dress shirt with a small knot tie optional (solid color, no patterns). For a woman: a tailored collared blouse or fine knit top in a clean neckline.`,
+  // 1 — Lab coat over a feminine blouse / soft top (softer clinical look)
+  `A clean, crisp WHITE doctor's lab coat (knee-length, fully buttoned at the top, lapels visible) worn open over a soft feminine blouse, fine-knit top, or silk shell in a muted color (cream, blush, light grey, or pale blue). For a man: substitute a solid soft sweater or knit polo under the lab coat instead. The lab coat's white should be unmistakably crisp and unmarked.`,
+  // 2 — Lab coat over scrubs (clinician-on-shift)
+  `A clean, crisp WHITE doctor's lab coat (knee-length, partially buttoned or open) worn over medical SCRUBS in a clean neutral color (charcoal grey, navy blue, or hospital teal). The scrubs visible at the V-neck under the lab coat should read as classic short-sleeve scrub top. The look reads as a clinician mid-shift.`,
+  // 3 — Scrubs in baby blue (no lab coat)
+  `Medical SCRUBS only — short-sleeve V-neck scrub top in BABY BLUE (a soft, pale, slightly desaturated blue, NOT royal or navy). Clean, unbranded, unmarked. The drape should read as professional medical scrubs, not workout wear or casual t-shirt.`,
+  // 4 — Scrubs in navy blue (no lab coat)
+  `Medical SCRUBS only — short-sleeve V-neck scrub top in NAVY BLUE (deep, classic navy, NOT royal blue, NOT baby blue). Clean, unbranded, unmarked. The drape should read as professional medical scrubs.`,
+  // 5 — Scrubs in medical green (no lab coat)
+  `Medical SCRUBS only — short-sleeve V-neck scrub top in MEDICAL GREEN (the classic surgical-OR muted blue-green / teal-green color, sometimes called "scrub green" or "ceil"). NOT bright kelly green, NOT lime, NOT olive. Clean, unbranded, unmarked. The drape should read as professional medical scrubs.`,
+];
+
+const MEDICAL_NO_TEXT_RULE = `CRITICAL — NO TEXT, BADGES, OR LOGOS on any medical garment in this image. Specifically forbidden: name tags, ID badges, embroidered names or credentials on the lab coat or scrubs, hospital crests/logos, lanyards with text, stethoscopes with engraved text, conference badges, or any other surface that could render as text. Plain unbranded medical garments only. If you would normally add a name embroidered on the chest, DO NOT — leave the chest area clean and unmarked. This rule overrides any default tendency to add identifying text on medical clothing.`;
+
+function buildBlock4Attire(attire: Attire, variationIndex: number): string {
+  if (attire === "medical") {
+    const variant =
+      MEDICAL_ATTIRE_VARIATIONS[
+        Math.max(0, Math.min(MEDICAL_ATTIRE_VARIATIONS.length - 1, variationIndex))
+      ];
+    return `Attire: ${variant}\n\n${MEDICAL_NO_TEXT_RULE}`;
+  }
+  return BLOCK_4_ATTIRE_STATIC[attire];
+}
 
 const BLOCK_5_LIGHTING: Record<Lighting, string> = {
   studio: `Lighting: Broad, soft key light placed slightly above and in front of the subject — a large soft box or beauty dish. A dedicated fill light source (not a passive bounce card — an actual light) on the shadow side at roughly a 1:1.2 ratio with the key, meaning the fill is barely darker than the key. Aggressive under-eye / under-nose / nasolabial fill light from a low frontal position — the goal is to COMPLETELY ELIMINATE shadows in the eye sockets, under the nose, in the nasolabial folds (smile-line creases), under the brow ridge, and on the cheeks. Skin under those features must read as evenly lit as the rest of the face — no shadow at all in those zones, only smooth even illumination. Multiple clean catchlights in the eyes from the key, fill, and under-eye fill sources. THE ONLY PERMITTED SHADOW on the entire face/neck region is a soft, narrow gradient under the jawline (lower jaw + upper neck) — preserve that to give the subject jaw definition and separation from the body. Cheek shadows: zero. Forehead shadows: zero. Nose shadows: zero. Eye-socket shadows: zero. Side-of-face gradient (away from key): preserved only as the gentlest possible falloff, never reading as "shadow side" of the face.`,
@@ -605,7 +642,7 @@ function assemblePrompt(req: GenerateRequest): string {
   parts.push(buildBlockPet(req.variationIndex));
   parts.push(BLOCK_2_COMPOSITION);
   parts.push(buildBlock3Style(req.style, req.variationIndex));
-  parts.push(BLOCK_4_ATTIRE[req.attire]);
+  parts.push(buildBlock4Attire(req.attire, req.variationIndex));
   parts.push(BLOCK_EYEWEAR);
   parts.push(buildBlockHair(req.skin, req.variationIndex));
   parts.push(BLOCK_5_LIGHTING[req.lighting]);
@@ -793,7 +830,7 @@ export default async function handler(
   if (!body.style || !["corporate", "creative", "executive", "urban"].includes(body.style)) {
     return res.status(400).json({ error: "Invalid style" });
   }
-  if (!body.attire || !["formal", "casual", "keep"].includes(body.attire)) {
+  if (!body.attire || !["formal", "casual", "keep", "medical"].includes(body.attire)) {
     return res.status(400).json({ error: "Invalid attire" });
   }
   if (

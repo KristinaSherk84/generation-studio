@@ -1598,6 +1598,7 @@ const STUDIO_BGS = [
 const ATTIRE = [
   { id: "formal", label: "Business formal" },
   { id: "casual", label: "Business casual" },
+  { id: "medical", label: "Healthcare" },
   { id: "keep", label: "Keep my outfit" },
 ] as const;
 
@@ -1661,7 +1662,7 @@ const SectionLabel = ({ children, style = {} }: SectionLabelProps) => (
 // and Executive get their background direction from the style prompt itself.
 export type StyleSelections = {
   style: "corporate" | "creative" | "executive" | "urban";
-  attire: "formal" | "casual" | "keep";
+  attire: "formal" | "casual" | "keep" | "medical";
   lighting: "studio" | "natural" | "dramatic" | "golden";
   background?: "white" | "lightgrey" | "midgrey" | "dark" | "blue" | "green" | "rainbow";
   // Skin treatment toggle (added 2026-04-26, expanded 2026-05-01 to add glam).
