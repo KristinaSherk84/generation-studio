@@ -226,6 +226,197 @@ async function sendUsageAlertEmail(args: {
   }
 }
 
+// -------------------- Customer delivery email --------------------
+//
+// Sends the photos + share graphics + heartstrings note to the customer's
+// email address. Triggered after the manifest is written and share graphics
+// are composited. Replaces the earlier flow where these all lived on the
+// Download screen — moving them to email keeps the Download screen focused
+// on "give me my photos" and uses the email channel for the relationship-
+// building moment (the heartstrings ask + share-graphic delivery).
+//
+// Sender: currently `onboarding@resend.dev` (Resend's free shared sender,
+// no domain verification needed). Once kristinasherk.com (or
+// generationheadshots.com) is verified in Resend's domain settings, swap
+// to a branded sender like `kristi@generationheadshots.com` for better
+// deliverability and trust. The reply_to header points to Kristi's real
+// inbox so customers can reply directly.
+//
+// BCC: kristi@kristinasherk.com receives a copy of every customer email,
+// per roadmap item #9 — gives Kristi a zero-effort audit log she can use
+// to pull marketing content from real customer deliveries.
+async function sendCustomerDeliveryEmail(args: {
+  manifest: DeliveryManifest;
+}): Promise<void> {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    console.log(
+      JSON.stringify({
+        type: "customer_email_skipped",
+        reason: "no_resend_api_key",
+      }),
+    );
+    return;
+  }
+
+  const { manifest } = args;
+  const photoCount = manifest.deliveredHeadshotUrls.length;
+  const hasShareGraphics =
+    manifest.shareGraphicUrls?.some((u) => !!u) ?? false;
+
+  // Photo download row — small thumbnail next to a clear "Download" link.
+  // Inline styles only because email clients strip <style> blocks.
+  const photoRow = (url: string, i: number) => `
+    <tr>
+      <td style="padding: 8px; vertical-align: middle; width: 80px;">
+        <a href="${escapeHtml(url)}" style="text-decoration: none;">
+          <img src="${escapeHtml(url)}" alt="Headshot ${i + 1}" style="width: 72px; height: 90px; object-fit: cover; border-radius: 6px; border: 1px solid #E2DFD8; display: block;" />
+        </a>
+      </td>
+      <td style="padding: 8px 8px 8px 16px; vertical-align: middle;">
+        <a href="${escapeHtml(url)}" style="display: inline-block; background: #1B4332; color: #FFFFFF; padding: 12px 22px; border-radius: 999px; text-decoration: none; font-size: 14px; font-weight: 500; letter-spacing: 0.4px;">
+          Download photo ${i + 1}
+        </a>
+      </td>
+    </tr>`;
+
+  const shareRow = (url: string, i: number) => `
+    <tr>
+      <td style="padding: 8px; vertical-align: middle; width: 80px;">
+        <a href="${escapeHtml(url)}" style="text-decoration: none;">
+          <img src="${escapeHtml(url)}" alt="Share image ${i + 1}" style="width: 72px; height: 100px; object-fit: cover; border-radius: 6px; border: 1px solid #E2DFD8; display: block;" />
+        </a>
+      </td>
+      <td style="padding: 8px 8px 8px 16px; vertical-align: middle;">
+        <a href="${escapeHtml(url)}" style="display: inline-block; background: #1B4332; color: #FFFFFF; padding: 12px 22px; border-radius: 999px; text-decoration: none; font-size: 14px; font-weight: 500; letter-spacing: 0.4px;">
+          Download share image ${i + 1}
+        </a>
+      </td>
+    </tr>`;
+
+  const photoTable =
+    manifest.deliveredHeadshotUrls.length > 0
+      ? `<table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; max-width: 600px; margin: 0 auto;">
+          ${manifest.deliveredHeadshotUrls.map(photoRow).join("")}
+        </table>`
+      : "";
+
+  const shareTable = hasShareGraphics
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; max-width: 600px; margin: 0 auto;">
+        ${(manifest.shareGraphicUrls ?? [])
+          .map((url, i) => (url ? shareRow(url, i) : ""))
+          .join("")}
+      </table>`
+    : "";
+
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; color: #2C2C2A; max-width: 640px; margin: 0 auto; background: #FFFFFF; padding: 32px 24px;">
+
+      <!-- Wordmark header -->
+      <div style="text-align: center; padding-bottom: 28px; border-bottom: 1px solid #EFEAE0;">
+        <span style="font-family: Georgia, 'Times New Roman', serif; font-size: 22px; color: #2A2A2A; letter-spacing: 0.2px;">
+          Gener<span style="color: #C9A961; font-style: italic; font-weight: 600;">AI</span>tion <span style="font-weight: 500;">Headshots</span>
+        </span>
+      </div>
+
+      <!-- Greeting + photos -->
+      <h1 style="font-family: Georgia, 'Times New Roman', serif; font-size: 26px; font-weight: 400; color: #2A2A2A; margin: 32px 0 12px;">
+        Your headshots are ready
+      </h1>
+      <p style="font-size: 15px; line-height: 1.6; color: #2A2A2A; margin: 0 0 20px;">
+        Hi there — your ${photoCount} professional ${photoCount === 1 ? "headshot is" : "headshots are"} ready. Tap any thumbnail or button below to view and save the full-resolution file.
+      </p>
+
+      ${photoTable}
+
+      <!-- Heartstrings note (gold accent top border) -->
+      <div style="margin: 40px 0 32px; padding: 24px 22px; background: #FFFFFF; border: 1px solid #E8E5DD; border-top: 3px solid #C9A961; border-radius: 8px;">
+        <h2 style="font-family: Georgia, 'Times New Roman', serif; font-size: 22px; font-weight: 400; font-style: italic; color: #C9A961; margin: 0 0 14px; text-align: center;">
+          A note from Kristi
+        </h2>
+        <p style="font-size: 14px; line-height: 1.7; color: #2A2A2A; margin: 0 0 12px;">
+          Let's face it, AI is changing how headshots get made. I built this generator because I'd rather lead the change than be left behind by it. There's no team of engineers behind this — just me, one photographer, leaning into new tools to keep doing this. Your purchase didn't just buy you a headshot — it supported an independent artist and her small business doing what she loves in a changing world.
+        </p>
+        <p style="font-size: 14px; line-height: 1.7; color: #2A2A2A; margin: 0;">
+          If you'd share one of these images on social, you'd help me reach the next person who needs a headshot but doesn't know I exist yet. I see every share. I'm grateful for every one. Enjoy your new, snazzy headshot!
+        </p>
+      </div>
+
+      ${
+        hasShareGraphics
+          ? `
+        <h3 style="font-size: 14px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; color: #C9A961; margin: 32px 0 16px; text-align: center;">
+          Share these on social
+        </h3>
+        <p style="font-size: 14px; line-height: 1.6; color: #555; margin: 0 0 16px; text-align: center; max-width: 480px; margin-left: auto; margin-right: auto;">
+          Each one has a QR code linking back to me. If anyone scans, they'll land at the same generator.
+        </p>
+        ${shareTable}
+      `
+          : ""
+      }
+
+      <!-- Footer -->
+      <div style="margin-top: 40px; padding-top: 24px; border-top: 1px solid #EFEAE0; text-align: center; font-size: 12px; color: #888;">
+        Questions? Just reply to this email — I read every one.<br/>
+        <span style="color: #2C2C2A;">— Kristi</span>
+      </div>
+
+    </div>
+  `;
+
+  try {
+    const resp = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        // Display name reads "Kristi" — recipient sees a personal sender
+        // even though the address is the shared Resend onboarding one.
+        // Once a domain is verified in Resend, swap this for
+        // "Kristi <kristi@generationheadshots.com>" or similar.
+        from: "Kristi <onboarding@resend.dev>",
+        to: [manifest.email],
+        // BCC Kristi per roadmap item #9 — gives her a zero-effort audit
+        // log of every delivery she can pull marketing content from.
+        bcc: ["kristi@kristinasherk.com"],
+        // reply_to lands customer replies in Kristi's real inbox even
+        // though the from-address is the shared Resend sender.
+        reply_to: "kristi@kristinasherk.com",
+        subject: "Your AI headshots are ready",
+        html,
+      }),
+    });
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => "");
+      console.error(
+        JSON.stringify({
+          type: "customer_email_failed",
+          status: resp.status,
+          body: text.slice(0, 500),
+        }),
+      );
+    } else {
+      console.log(
+        JSON.stringify({
+          type: "customer_email_sent",
+          deliveryId: manifest.deliveryId,
+          to: manifest.email,
+        }),
+      );
+    }
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        type: "customer_email_failed",
+        reason: error instanceof Error ? error.message : "unknown",
+      }),
+    );
+  }
+}
+
 // -------------------- Share-graphic generation --------------------
 
 // QR code on every share graphic points to the marketing site so a poster's
@@ -436,6 +627,15 @@ export default async function handler(
       manifest,
       manifestUrl: manifestBlob.url,
     });
+
+    // ---- Customer delivery email (NEW 2026-05-04). Sends the photo
+    //      download links + share graphic links + heartstrings note to
+    //      the customer's email address. This used to all live on the
+    //      Download screen; moving it to email keeps that screen focused
+    //      on the immediate "give me my photos" goal and uses the email
+    //      channel for the relationship-building moment.
+    //      BCC'd to kristi@kristinasherk.com per roadmap #9. ----
+    await sendCustomerDeliveryEmail({ manifest });
 
     return res.status(200).json({
       deliveryId,
