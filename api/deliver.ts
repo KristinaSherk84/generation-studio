@@ -67,7 +67,7 @@ type DeliverRequest = {
   skin?: Skin; // added 2026-04-28; surfaces the Realistic/Polished choice
 };
 
-type DeliveryManifest = {
+export type DeliveryManifest = {
   deliveryId: string;
   timestamp: string;
   email: string;
@@ -245,7 +245,7 @@ async function sendUsageAlertEmail(args: {
 // BCC: kristi@kristinasherk.com receives a copy of every customer email,
 // per roadmap item #9 — gives Kristi a zero-effort audit log she can use
 // to pull marketing content from real customer deliveries.
-async function sendCustomerDeliveryEmail(args: {
+export async function sendCustomerDeliveryEmail(args: {
   manifest: DeliveryManifest;
 }): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY;
