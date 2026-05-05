@@ -133,20 +133,33 @@ async function buildBeforeSprite(beforeUrl: string): Promise<{
   const labelX = barLeft + barWidth / 2;
   const labelY = barTop + LABEL_BAR_HEIGHT / 2 + LABEL_FONT_SIZE / 3;
 
+  // SVG <mask> is used instead of <clipPath> here. librsvg (which sharp
+  // wraps for SVG rendering on the Vercel serverless runtime) sometimes
+  // silently fails to apply clip-path on composited rect/text elements,
+  // resulting in the bar + label text completely missing from output.
+  // <mask> uses a different rendering path inside librsvg and works
+  // reliably. Verified on Vercel 2026-05-04.
+  //
+  // Font: DejaVu Sans is installed on every Linux server including
+  // Vercel's serverless runtime. Helvetica and Arial are NOT — using
+  // those falls through to no font at all and text glyphs render as
+  // empty space. Always use DejaVu Sans (or sans-serif fallback) for
+  // server-side SVG text rendering.
   const ringAndLabelSvg = Buffer.from(
     `<svg xmlns="http://www.w3.org/2000/svg" width="${spriteW}" height="${spriteH}">
       <defs>
         <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
           <feGaussianBlur stdDeviation="${SHADOW_BLUR / 2}"/>
         </filter>
-        <clipPath id="innerClip">
-          <circle cx="${padLeft + CIRCLE_DIAMETER / 2}" cy="${padTop + CIRCLE_DIAMETER / 2}" r="${INNER_DIAMETER / 2}"/>
-        </clipPath>
+        <mask id="innerMask">
+          <rect width="${spriteW}" height="${spriteH}" fill="black"/>
+          <circle cx="${padLeft + CIRCLE_DIAMETER / 2}" cy="${padTop + CIRCLE_DIAMETER / 2}" r="${INNER_DIAMETER / 2}" fill="white"/>
+        </mask>
       </defs>
       <circle cx="${shadowCx}" cy="${shadowCy}" r="${CIRCLE_DIAMETER / 2}" fill="black" fill-opacity="${SHADOW_OPACITY}" filter="url(#shadow)"/>
       <circle cx="${ringCx}" cy="${ringCy}" r="${CIRCLE_DIAMETER / 2}" fill="white"/>
-      <rect x="${barLeft}" y="${barTop}" width="${barWidth}" height="${LABEL_BAR_HEIGHT}" fill="black" fill-opacity="${LABEL_BG_OPACITY}" clip-path="url(#innerClip)"/>
-      <text x="${labelX}" y="${labelY}" font-family="Helvetica, Arial, sans-serif" font-size="${LABEL_FONT_SIZE}" font-weight="bold" fill="white" text-anchor="middle" letter-spacing="${LABEL_LETTER_SPACING}">${LABEL_TEXT}</text>
+      <rect x="${barLeft}" y="${barTop}" width="${barWidth}" height="${LABEL_BAR_HEIGHT}" fill="black" fill-opacity="${LABEL_BG_OPACITY}" mask="url(#innerMask)"/>
+      <text x="${labelX}" y="${labelY}" font-family="DejaVu Sans, sans-serif" font-size="${LABEL_FONT_SIZE}" font-weight="bold" fill="white" text-anchor="middle" letter-spacing="${LABEL_LETTER_SPACING}">${LABEL_TEXT}</text>
     </svg>`,
   );
 
@@ -160,17 +173,19 @@ async function buildBeforeSprite(beforeUrl: string): Promise<{
         left: padLeft + RING,
       },
       // Re-apply the label bar + text on top of the photo (since the
-      // photo would otherwise cover them).
+      // photo would otherwise cover them). Same mask + DejaVu Sans
+      // approach as the base SVG — see notes on librsvg quirks above.
       {
         input: Buffer.from(
           `<svg xmlns="http://www.w3.org/2000/svg" width="${spriteW}" height="${spriteH}">
             <defs>
-              <clipPath id="innerClip2">
-                <circle cx="${padLeft + CIRCLE_DIAMETER / 2}" cy="${padTop + CIRCLE_DIAMETER / 2}" r="${INNER_DIAMETER / 2}"/>
-              </clipPath>
+              <mask id="innerMask2">
+                <rect width="${spriteW}" height="${spriteH}" fill="black"/>
+                <circle cx="${padLeft + CIRCLE_DIAMETER / 2}" cy="${padTop + CIRCLE_DIAMETER / 2}" r="${INNER_DIAMETER / 2}" fill="white"/>
+              </mask>
             </defs>
-            <rect x="${barLeft}" y="${barTop}" width="${barWidth}" height="${LABEL_BAR_HEIGHT}" fill="black" fill-opacity="${LABEL_BG_OPACITY}" clip-path="url(#innerClip2)"/>
-            <text x="${labelX}" y="${labelY}" font-family="Helvetica, Arial, sans-serif" font-size="${LABEL_FONT_SIZE}" font-weight="bold" fill="white" text-anchor="middle" letter-spacing="${LABEL_LETTER_SPACING}">${LABEL_TEXT}</text>
+            <rect x="${barLeft}" y="${barTop}" width="${barWidth}" height="${LABEL_BAR_HEIGHT}" fill="black" fill-opacity="${LABEL_BG_OPACITY}" mask="url(#innerMask2)"/>
+            <text x="${labelX}" y="${labelY}" font-family="DejaVu Sans, sans-serif" font-size="${LABEL_FONT_SIZE}" font-weight="bold" fill="white" text-anchor="middle" letter-spacing="${LABEL_LETTER_SPACING}">${LABEL_TEXT}</text>
           </svg>`,
         ),
         top: 0,
@@ -264,11 +279,15 @@ function buildTextStripSvg(cta: string, url: string): Buffer {
   const ctaY = blockTop + CTA_FONT_SIZE * 0.85;
   const urlY = blockTop + CTA_FONT_SIZE + TEXT_GAP + URL_FONT_SIZE * 0.85;
 
+  // DejaVu Sans is reliably installed on Vercel's serverless runtime;
+  // Helvetica/Arial are NOT and would fall through to no font (causing
+  // text to silently disappear). See ringAndLabelSvg comment for full
+  // notes on font selection.
   return Buffer.from(
     `<svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS_W}" height="${STRIP_H}">
       <rect x="0" y="0" width="${CANVAS_W}" height="1" fill="${DIVIDER}"/>
-      <text x="${CANVAS_W / 2}" y="${ctaY}" font-family="Helvetica, Arial, sans-serif" font-size="${CTA_FONT_SIZE}" font-weight="bold" fill="${TEXT_DARK}" text-anchor="middle">${cta}</text>
-      <text x="${CANVAS_W / 2}" y="${urlY}" font-family="Helvetica, Arial, sans-serif" font-size="${URL_FONT_SIZE}" fill="${TEXT_MEDIUM}" text-anchor="middle">${url}</text>
+      <text x="${CANVAS_W / 2}" y="${ctaY}" font-family="DejaVu Sans, sans-serif" font-size="${CTA_FONT_SIZE}" font-weight="bold" fill="${TEXT_DARK}" text-anchor="middle">${cta}</text>
+      <text x="${CANVAS_W / 2}" y="${urlY}" font-family="DejaVu Sans, sans-serif" font-size="${URL_FONT_SIZE}" fill="${TEXT_MEDIUM}" text-anchor="middle">${url}</text>
     </svg>`,
   );
 }

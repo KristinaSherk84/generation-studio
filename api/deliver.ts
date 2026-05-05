@@ -362,7 +362,7 @@ async function sendCustomerDeliveryEmail(args: {
         // the new brand) but requires either a paid Resend plan to verify
         // a second domain, OR swapping out the kristinasherk.com domain
         // first and re-verifying. Tracked for V1.x cleanup.
-        from: "Kristi <kristi@kristinasherk.com>",
+        from: "Kristi at GenerAItion Headshots <kristi@kristinasherk.com>",
         to: [manifest.email],
         // BCC Kristi per roadmap item #9 — gives her a zero-effort audit
         // log of every delivery she can pull marketing content from.
