@@ -367,17 +367,12 @@ Well-tailored and intentional in either case — not boxy, not ill-fitting.`,
 // names + fake credentials when given medical attire prompts; we forbid
 // every text-rendering surface explicitly to head this off.
 const MEDICAL_ATTIRE_VARIATIONS: string[] = [
-  // 0 — Doctor's white coat over a dress shirt
-  // Leading-with "DOCTOR'S WHITE COAT" + explicit "NOT a suit jacket"
-  // because the v1 of this variant rendered as a suit (Gemini latched
-  // onto "dress shirt + tie + lapels" cues and ignored "lab coat").
-  // Removed: "lapels visible", "fully buttoned at the top", and the
-  // necktie option — all of those drag toward suit interpretation.
-  `A DOCTOR'S WHITE COAT (also called a physician's white coat or medical lab coat). NOT a suit jacket. NOT a blazer. NOT a sport coat. The garment must clearly read as a doctor's white coat — pure white color, simple notched collar (no formal suit lapels), worn open or with the top button only. Underneath: a soft collared dress shirt in a clean neutral color (white, light blue, or pale grey). NO necktie. The white of the coat must dominate the image — if more navy/charcoal is visible than white, the rendering is wrong.`,
-  // 1 — Doctor's white coat over a feminine blouse / soft top
-  `A DOCTOR'S WHITE COAT (physician's white coat / medical lab coat). NOT a suit jacket, NOT a blazer. Pure white, simple notched collar, worn open. Underneath: a soft feminine blouse, fine-knit top, or silk shell in a muted color (cream, blush, light grey, or pale blue). For a man: substitute a soft solid sweater or knit polo under the white coat. The white coat must dominate the image and read clearly as medical, not business attire.`,
-  // 2 — Doctor's white coat over scrubs (clinician-on-shift)
-  `A DOCTOR'S WHITE COAT (physician's white coat / medical lab coat) worn open over medical SCRUBS visible at the V-neck. NOT a suit jacket, NOT a blazer. The white coat must be pure white and dominate the upper torso. Beneath the coat, only the V-neck of the scrubs is visible — color of the scrubs: light blue, hospital teal, or muted grey. The look must read clearly as a doctor mid-shift wearing a white coat over scrubs — never as a businessperson in a suit.`,
+  // 0 — Doctor's white coat over collared shirt OR blouse (gender-aware)
+  `A DOCTOR'S WHITE COAT (also called a physician's white coat or medical lab coat). NOT a suit jacket, NOT a blazer, NOT a sport coat. The garment must clearly read as a doctor's white coat — pure white color, simple notched collar (no formal suit lapels), worn open or with the top button only. Underneath, GENDER-AWARE: if the subject appears to be a MAN, a crisp collared dress shirt in a clean neutral color (white, light blue, or pale grey). If the subject appears to be a WOMAN, a soft feminine blouse, fine-knit top, or silk shell with a clean neckline (cream, blush, light grey, or pale blue). NO necktie either way. The white of the coat must dominate the image.`,
+  // 1 — Doctor's white coat over BABY BLUE scrubs
+  `A DOCTOR'S WHITE COAT (physician's white coat / medical lab coat) worn open over medical SCRUBS visible at the V-neck. NOT a suit jacket, NOT a blazer. The white coat must be pure white and dominate the upper torso. Beneath the coat, only the V-neck of the scrubs is visible — scrubs color: BABY BLUE (soft, pale, slightly desaturated blue — NOT royal blue, NOT navy). The look reads as a doctor mid-shift wearing a white coat over baby blue scrubs.`,
+  // 2 — Doctor's white coat over NAVY scrubs
+  `A DOCTOR'S WHITE COAT (physician's white coat / medical lab coat) worn open over medical SCRUBS visible at the V-neck. NOT a suit jacket, NOT a blazer. The white coat must be pure white and dominate the upper torso. Beneath the coat, only the V-neck of the scrubs is visible — scrubs color: NAVY BLUE (deep classic navy — NOT royal blue, NOT baby blue). The look reads as a doctor mid-shift wearing a white coat over navy scrubs. CRITICAL: the dominant color in the image MUST be the white coat. If navy dominates, the rendering is wrong — Gemini sometimes mistakes "navy scrubs under white coat" for "navy suit jacket"; this variant must NOT render as a suit.`,
   // 3 — Scrubs in baby blue (no white coat)
   `Medical SCRUBS only (no white coat) — short-sleeve V-neck medical scrub top in BABY BLUE (soft, pale, slightly desaturated blue — NOT royal blue, NOT navy). The garment must clearly read as hospital scrubs: loose drape, V-neck collar, short sleeves, unstructured. NOT a t-shirt, NOT a polo, NOT workout wear.`,
   // 4 — Scrubs in navy blue (no white coat)
