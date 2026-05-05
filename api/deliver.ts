@@ -260,26 +260,12 @@ async function sendCustomerDeliveryEmail(args: {
   }
 
   const { manifest } = args;
-  const photoCount = manifest.deliveredHeadshotUrls.length;
   const hasShareGraphics =
     manifest.shareGraphicUrls?.some((u) => !!u) ?? false;
 
-  // Photo download row — small thumbnail next to a clear "Download" link.
-  // Inline styles only because email clients strip <style> blocks.
-  const photoRow = (url: string, i: number) => `
-    <tr>
-      <td style="padding: 8px; vertical-align: middle; width: 80px;">
-        <a href="${escapeHtml(url)}" style="text-decoration: none;">
-          <img src="${escapeHtml(url)}" alt="Headshot ${i + 1}" style="width: 72px; height: 90px; object-fit: cover; border-radius: 6px; border: 1px solid #E2DFD8; display: block;" />
-        </a>
-      </td>
-      <td style="padding: 8px 8px 8px 16px; vertical-align: middle;">
-        <a href="${escapeHtml(url)}" style="display: inline-block; background: #1B4332; color: #FFFFFF; padding: 12px 22px; border-radius: 999px; text-decoration: none; font-size: 14px; font-weight: 500; letter-spacing: 0.4px;">
-          Download photo ${i + 1}
-        </a>
-      </td>
-    </tr>`;
-
+  // Share-graphic download row — small thumbnail next to a forest-green
+  // "Download" pill link. Inline styles only because email clients strip
+  // <style> blocks.
   const shareRow = (url: string, i: number) => `
     <tr>
       <td style="padding: 8px; vertical-align: middle; width: 80px;">
@@ -294,13 +280,6 @@ async function sendCustomerDeliveryEmail(args: {
       </td>
     </tr>`;
 
-  const photoTable =
-    manifest.deliveredHeadshotUrls.length > 0
-      ? `<table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; max-width: 600px; margin: 0 auto;">
-          ${manifest.deliveredHeadshotUrls.map(photoRow).join("")}
-        </table>`
-      : "";
-
   const shareTable = hasShareGraphics
     ? `<table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; max-width: 600px; margin: 0 auto;">
         ${(manifest.shareGraphicUrls ?? [])
@@ -309,6 +288,11 @@ async function sendCustomerDeliveryEmail(args: {
       </table>`
     : "";
 
+  // The customer already downloaded their full-resolution headshots on
+  // the Download screen at purchase time. This email's only NEW value
+  // is the share-ready graphics with QR code + Kristi's heartstrings
+  // ask. Per Kristi 2026-05-04: 'It should say "Your sharable headshot
+  // graphic"' — the email is purely about the share asset.
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; color: #2C2C2A; max-width: 640px; margin: 0 auto; background: #FFFFFF; padding: 32px 24px;">
 
@@ -319,19 +303,12 @@ async function sendCustomerDeliveryEmail(args: {
         </span>
       </div>
 
-      <!-- Greeting + photos -->
-      <h1 style="font-family: Georgia, 'Times New Roman', serif; font-size: 26px; font-weight: 400; color: #2A2A2A; margin: 32px 0 12px;">
-        Your headshots are ready
-      </h1>
-      <p style="font-size: 15px; line-height: 1.6; color: #2A2A2A; margin: 0 0 20px;">
-        Hi there — your ${photoCount} professional ${photoCount === 1 ? "headshot is" : "headshots are"} ready. Tap any thumbnail or button below to view and save the full-resolution file.
-      </p>
-
-      ${photoTable}
-
-      <!-- Heartstrings note (gold accent top border) -->
-      <div style="margin: 40px 0 32px; padding: 24px 22px; background: #FFFFFF; border: 1px solid #E8E5DD; border-top: 3px solid #C9A961; border-radius: 8px;">
-        <h2 style="font-family: Georgia, 'Times New Roman', serif; font-size: 22px; font-weight: 400; font-style: italic; color: #C9A961; margin: 0 0 14px; text-align: center;">
+      <!-- Heartstrings note FIRST — sets the tone before the share-graphic
+           ask. The customer opened this email knowing they'd downloaded
+           their photos already; lead with the personal note, then the
+           reason we sent the email (the shareable graphic). -->
+      <div style="margin: 32px 0; padding: 28px 24px; background: #FFFFFF; border: 1px solid #E8E5DD; border-top: 3px solid #C9A961; border-radius: 8px;">
+        <h2 style="font-family: Georgia, 'Times New Roman', serif; font-size: 24px; font-weight: 400; font-style: italic; color: #C9A961; margin: 0 0 18px; text-align: center;">
           A note from Kristi
         </h2>
         <p style="font-size: 14px; line-height: 1.7; color: #2A2A2A; margin: 0 0 12px;">
@@ -345,15 +322,19 @@ async function sendCustomerDeliveryEmail(args: {
       ${
         hasShareGraphics
           ? `
-        <h3 style="font-size: 14px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; color: #C9A961; margin: 32px 0 16px; text-align: center;">
-          Share these on social
-        </h3>
-        <p style="font-size: 14px; line-height: 1.6; color: #555; margin: 0 0 16px; text-align: center; max-width: 480px; margin-left: auto; margin-right: auto;">
-          Each one has a QR code linking back to me. If anyone scans, they'll land at the same generator.
+        <h1 style="font-family: Georgia, 'Times New Roman', serif; font-size: 24px; font-weight: 400; color: #2A2A2A; margin: 36px 0 10px; text-align: center;">
+          Your sharable headshot graphic
+        </h1>
+        <p style="font-size: 14px; line-height: 1.6; color: #555; margin: 0 0 24px; text-align: center; max-width: 480px; margin-left: auto; margin-right: auto;">
+          Ready-to-post before/after with a QR code linking back to me. If a friend scans, they'll land at the same generator.
         </p>
         ${shareTable}
       `
-          : ""
+          : `
+        <p style="font-size: 14px; line-height: 1.6; color: #555; margin: 32px 0; text-align: center;">
+          (Your share graphic didn't generate this time — Kristi has been notified and will follow up.)
+        </p>
+      `
       }
 
       <!-- Footer -->
@@ -389,7 +370,7 @@ async function sendCustomerDeliveryEmail(args: {
         // reply_to lands customer replies in Kristi's real inbox even
         // though the from-address is the shared Resend sender.
         reply_to: "kristi@kristinasherk.com",
-        subject: "Your AI headshots are ready",
+        subject: "Your sharable headshot graphic",
         html,
       }),
     });
