@@ -190,10 +190,10 @@ async function sendUsageAlertEmail(args: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        // onboarding@resend.dev is Resend's shared sender that works without
-        // domain verification (free tier). Swap for a verified sender on
-        // kristinasherk.com later when we do domain auth.
-        from: "AI Generator Alerts <onboarding@resend.dev>",
+        // Sends from the verified kristinasherk.com Resend domain (same as
+        // the customer email below) so deliverability is consistent and
+        // these don't trip spam on Kristi's own inbox.
+        from: "AI Generator Alerts <kristi@kristinasherk.com>",
         to: ["kristi@kristinasherk.com"],
         subject: "$$$-AI-Generator-Used",
         html,
@@ -373,11 +373,15 @@ async function sendCustomerDeliveryEmail(args: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        // Display name reads "Kristi" — recipient sees a personal sender
-        // even though the address is the shared Resend onboarding one.
-        // Once a domain is verified in Resend, swap this for
-        // "Kristi <kristi@generationheadshots.com>" or similar.
-        from: "Kristi <onboarding@resend.dev>",
+        // Sender uses kristinasherk.com — Kristi's already-verified Resend
+        // domain (free tier: one verified domain only). Earlier draft used
+        // Resend's shared 'onboarding@resend.dev' which works but trips spam
+        // filters and reads as untrustworthy to recipients.
+        // Future migration to generationheadshots.com is desired (matches
+        // the new brand) but requires either a paid Resend plan to verify
+        // a second domain, OR swapping out the kristinasherk.com domain
+        // first and re-verifying. Tracked for V1.x cleanup.
+        from: "Kristi <kristi@kristinasherk.com>",
         to: [manifest.email],
         // BCC Kristi per roadmap item #9 — gives her a zero-effort audit
         // log of every delivery she can pull marketing content from.
