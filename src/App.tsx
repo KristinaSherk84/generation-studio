@@ -3186,12 +3186,6 @@ const CheckoutScreen = ({
 type DownloadScreenProps = {
   email: string;
   photoUrls: string[];
-  // Auto-generated share graphics — same array order as photoUrls. Empty
-  // string at [i] means the share graphic failed to composite for photo
-  // [i]; DownloadScreen omits the share UI for that photo. When the
-  // entire array is empty (e.g. a code path that didn't generate any),
-  // the heartstrings card is also hidden.
-  shareGraphicUrls?: string[];
   // "Generate a different Style" — takes the user back to the Style screen
   // with their reference photos preserved (no re-upload required).
   onNewStyle: () => void;
@@ -3237,7 +3231,6 @@ const readSuppressed = (): boolean => {
 const DownloadScreen = ({
   email,
   photoUrls,
-  shareGraphicUrls,
   onNewStyle,
   onHome,
   chosenStyle,
@@ -4340,10 +4333,13 @@ export default function App() {
   // each photo gets its own Download button.
   const [deliveredPhotoUrls, setDeliveredPhotoUrls] = useState<string[]>([]);
   // Auto-generated share graphics, same array order as deliveredPhotoUrls.
-  // Empty string at [i] means the share graphic failed to composite for
-  // photo [i] — DownloadScreen omits the share UI for those entries.
-  // Added 2026-05-04 alongside the auto-share-graphic pipeline.
-  const [deliveredShareGraphicUrls, setDeliveredShareGraphicUrls] = useState<
+  // Currently UNUSED on the client — moved to email delivery on
+  // 2026-05-04 (sendCustomerDeliveryEmail in /api/deliver). State kept
+  // for reset-flow consistency; the underscore-prefix on the read side
+  // tells TypeScript we know it's unused. Setters are still called so
+  // the response shape stays parsed and we can re-introduce client-side
+  // rendering later without re-plumbing.
+  const [_deliveredShareGraphicUrls, setDeliveredShareGraphicUrls] = useState<
     string[]
   >([]);
   const [regenCount, setRegenCount] = useState(0);
@@ -5157,7 +5153,6 @@ export default function App() {
         <DownloadScreen
           email={email}
           photoUrls={deliveredPhotoUrls}
-          shareGraphicUrls={deliveredShareGraphicUrls}
           chosenStyle={lastSelections.style}
           referencePhotoUrls={lastPhotoUrls}
           hasWideAngle={lastHasWideAngle}
