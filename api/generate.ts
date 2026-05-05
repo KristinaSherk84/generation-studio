@@ -367,21 +367,32 @@ Well-tailored and intentional in either case — not boxy, not ill-fitting.`,
 // names + fake credentials when given medical attire prompts; we forbid
 // every text-rendering surface explicitly to head this off.
 const MEDICAL_ATTIRE_VARIATIONS: string[] = [
-  // 0 — Lab coat over a dress shirt (executive/clinician look)
-  `A clean, crisp WHITE doctor's lab coat (knee-length, fully buttoned at the top, lapels visible) worn open over a crisp collared dress shirt in a soft neutral color (white, light blue, or pale grey). For a man: collared dress shirt with a small knot tie optional (solid color, no patterns). For a woman: a tailored collared blouse or fine knit top in a clean neckline.`,
-  // 1 — Lab coat over a feminine blouse / soft top (softer clinical look)
-  `A clean, crisp WHITE doctor's lab coat (knee-length, fully buttoned at the top, lapels visible) worn open over a soft feminine blouse, fine-knit top, or silk shell in a muted color (cream, blush, light grey, or pale blue). For a man: substitute a solid soft sweater or knit polo under the lab coat instead. The lab coat's white should be unmistakably crisp and unmarked.`,
-  // 2 — Lab coat over scrubs (clinician-on-shift)
-  `A clean, crisp WHITE doctor's lab coat (knee-length, partially buttoned or open) worn over medical SCRUBS in a clean neutral color (charcoal grey, navy blue, or hospital teal). The scrubs visible at the V-neck under the lab coat should read as classic short-sleeve scrub top. The look reads as a clinician mid-shift.`,
-  // 3 — Scrubs in baby blue (no lab coat)
-  `Medical SCRUBS only — short-sleeve V-neck scrub top in BABY BLUE (a soft, pale, slightly desaturated blue, NOT royal or navy). Clean, unbranded, unmarked. The drape should read as professional medical scrubs, not workout wear or casual t-shirt.`,
-  // 4 — Scrubs in navy blue (no lab coat)
-  `Medical SCRUBS only — short-sleeve V-neck scrub top in NAVY BLUE (deep, classic navy, NOT royal blue, NOT baby blue). Clean, unbranded, unmarked. The drape should read as professional medical scrubs.`,
-  // 5 — Scrubs in medical green (no lab coat)
-  `Medical SCRUBS only — short-sleeve V-neck scrub top in MEDICAL GREEN (the classic surgical-OR muted blue-green / teal-green color, sometimes called "scrub green" or "ceil"). NOT bright kelly green, NOT lime, NOT olive. Clean, unbranded, unmarked. The drape should read as professional medical scrubs.`,
+  // 0 — Doctor's white coat over a dress shirt
+  // Leading-with "DOCTOR'S WHITE COAT" + explicit "NOT a suit jacket"
+  // because the v1 of this variant rendered as a suit (Gemini latched
+  // onto "dress shirt + tie + lapels" cues and ignored "lab coat").
+  // Removed: "lapels visible", "fully buttoned at the top", and the
+  // necktie option — all of those drag toward suit interpretation.
+  `A DOCTOR'S WHITE COAT (also called a physician's white coat or medical lab coat). NOT a suit jacket. NOT a blazer. NOT a sport coat. The garment must clearly read as a doctor's white coat — pure white color, simple notched collar (no formal suit lapels), worn open or with the top button only. Underneath: a soft collared dress shirt in a clean neutral color (white, light blue, or pale grey). NO necktie. The white of the coat must dominate the image — if more navy/charcoal is visible than white, the rendering is wrong.`,
+  // 1 — Doctor's white coat over a feminine blouse / soft top
+  `A DOCTOR'S WHITE COAT (physician's white coat / medical lab coat). NOT a suit jacket, NOT a blazer. Pure white, simple notched collar, worn open. Underneath: a soft feminine blouse, fine-knit top, or silk shell in a muted color (cream, blush, light grey, or pale blue). For a man: substitute a soft solid sweater or knit polo under the white coat. The white coat must dominate the image and read clearly as medical, not business attire.`,
+  // 2 — Doctor's white coat over scrubs (clinician-on-shift)
+  `A DOCTOR'S WHITE COAT (physician's white coat / medical lab coat) worn open over medical SCRUBS visible at the V-neck. NOT a suit jacket, NOT a blazer. The white coat must be pure white and dominate the upper torso. Beneath the coat, only the V-neck of the scrubs is visible — color of the scrubs: light blue, hospital teal, or muted grey. The look must read clearly as a doctor mid-shift wearing a white coat over scrubs — never as a businessperson in a suit.`,
+  // 3 — Scrubs in baby blue (no white coat)
+  `Medical SCRUBS only (no white coat) — short-sleeve V-neck medical scrub top in BABY BLUE (soft, pale, slightly desaturated blue — NOT royal blue, NOT navy). The garment must clearly read as hospital scrubs: loose drape, V-neck collar, short sleeves, unstructured. NOT a t-shirt, NOT a polo, NOT workout wear.`,
+  // 4 — Scrubs in navy blue (no white coat)
+  `Medical SCRUBS only (no white coat) — short-sleeve V-neck medical scrub top in NAVY BLUE (deep classic navy — NOT royal blue, NOT baby blue, NOT black). The garment must clearly read as hospital scrubs: loose drape, V-neck collar, short sleeves, unstructured. NOT a t-shirt, NOT a polo, NOT a sweater.`,
+  // 5 — Scrubs in medical green (no white coat)
+  `Medical SCRUBS only (no white coat) — short-sleeve V-neck medical scrub top in MEDICAL GREEN (the classic surgical / OR scrub-green color — a muted blue-green or teal-green, sometimes called "scrub green" or "ceil"). NOT bright kelly green, NOT lime, NOT olive, NOT forest. The garment must clearly read as hospital scrubs: loose drape, V-neck collar, short sleeves, unstructured.`,
 ];
 
-const MEDICAL_NO_TEXT_RULE = `CRITICAL — NO TEXT, BADGES, OR LOGOS on any medical garment in this image. Specifically forbidden: name tags, ID badges, embroidered names or credentials on the lab coat or scrubs, hospital crests/logos, lanyards with text, stethoscopes with engraved text, conference badges, or any other surface that could render as text. Plain unbranded medical garments only. If you would normally add a name embroidered on the chest, DO NOT — leave the chest area clean and unmarked. This rule overrides any default tendency to add identifying text on medical clothing.`;
+const MEDICAL_GUARDRAILS_RULE = `CRITICAL MEDICAL ATTIRE GUARDRAILS — these override any default rendering tendencies:
+
+1. NO TEXT, BADGES, OR LOGOS on any medical garment. Forbidden: name tags, ID badges, embroidered names or credentials on the white coat or scrubs, hospital crests/logos, lanyards with text, stethoscopes with engraved text, conference badges, or any other surface that could render as text. Plain unbranded medical garments only. If you would normally add a name embroidered on the chest pocket, DO NOT — leave the chest area clean and unmarked.
+
+2. NEVER substitute a SUIT JACKET, BLAZER, or SPORT COAT for the doctor's white coat. The medical garment must always read as a physician's white coat (long, white, notched collar, worn open) or as scrubs (V-neck, loose, short sleeves) — depending on the variant specified above. If the prompt above says "white coat," the rendering must be a white doctor's coat — never a navy/charcoal business jacket, even if other style cues might suggest one.
+
+3. The dominant garment color in this image must match the variant specified above. If the variant says "white coat," white must dominate. If "baby blue scrubs," baby blue must dominate. Do not blend toward a different color than specified.`;
 
 function buildBlock4Attire(attire: Attire, variationIndex: number): string {
   if (attire === "medical") {
@@ -389,7 +400,7 @@ function buildBlock4Attire(attire: Attire, variationIndex: number): string {
       MEDICAL_ATTIRE_VARIATIONS[
         Math.max(0, Math.min(MEDICAL_ATTIRE_VARIATIONS.length - 1, variationIndex))
       ];
-    return `Attire: ${variant}\n\n${MEDICAL_NO_TEXT_RULE}`;
+    return `Attire: ${variant}\n\n${MEDICAL_GUARDRAILS_RULE}`;
   }
   return BLOCK_4_ATTIRE_STATIC[attire];
 }
