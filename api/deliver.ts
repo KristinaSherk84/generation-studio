@@ -288,6 +288,32 @@ async function sendCustomerDeliveryEmail(args: {
       </table>`
     : "";
 
+  // Backup high-res photo download row — minimal styling (small thumbnail
+  // + gold-underline text link), intentionally less prominent than the
+  // share-graphic forest-green pills above. Customer already downloaded
+  // these on the Download screen at purchase time; this section is purely
+  // re-download insurance to cut "I lost my files" support tickets.
+  const photoRow = (url: string, i: number) => `
+    <tr>
+      <td style="padding: 6px; vertical-align: middle; width: 64px;">
+        <a href="${escapeHtml(url)}" style="text-decoration: none;">
+          <img src="${escapeHtml(url)}" alt="Headshot ${i + 1}" style="width: 56px; height: 70px; object-fit: cover; border-radius: 4px; border: 1px solid #E2DFD8; display: block;" />
+        </a>
+      </td>
+      <td style="padding: 6px 6px 6px 14px; vertical-align: middle;">
+        <a href="${escapeHtml(url)}" style="color: #2A2A2A; font-size: 13px; text-decoration: none; border-bottom: 1px solid #C9A961; padding-bottom: 2px;">
+          Re-download headshot ${i + 1}
+        </a>
+      </td>
+    </tr>`;
+
+  const photoTable =
+    manifest.deliveredHeadshotUrls.length > 0
+      ? `<table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; max-width: 480px; margin: 0 auto;">
+          ${manifest.deliveredHeadshotUrls.map(photoRow).join("")}
+        </table>`
+      : "";
+
   // The customer already downloaded their full-resolution headshots on
   // the Download screen at purchase time. This email's only NEW value
   // is the share-ready graphics with QR code + Kristi's heartstrings
@@ -303,16 +329,16 @@ async function sendCustomerDeliveryEmail(args: {
         </span>
       </div>
 
-      <!-- Heartstrings note FIRST — sets the tone before the share-graphic
-           ask. The customer opened this email knowing they'd downloaded
-           their photos already; lead with the personal note, then the
-           reason we sent the email (the shareable graphic). -->
+      <!-- Heartstrings card FIRST — sets the tone (gratitude + share ask)
+           before the share-graphic download. New title 'Help me spread the
+           word!' and new opening 'Thanks for purchasing...' per Kristi
+           2026-05-04 (was 'A note from Kristi' / 'Let's face it'). -->
       <div style="margin: 32px 0; padding: 28px 24px; background: #FFFFFF; border: 1px solid #E8E5DD; border-top: 3px solid #C9A961; border-radius: 8px;">
         <h2 style="font-family: Georgia, 'Times New Roman', serif; font-size: 24px; font-weight: 400; font-style: italic; color: #C9A961; margin: 0 0 18px; text-align: center;">
-          A note from Kristi
+          Help me spread the word!
         </h2>
         <p style="font-size: 14px; line-height: 1.7; color: #2A2A2A; margin: 0 0 12px;">
-          Let's face it, AI is changing how headshots get made. I built this generator because I'd rather lead the change than be left behind by it. There's no team of engineers behind this — just me, one photographer, leaning into new tools to keep doing this. Your purchase didn't just buy you a headshot — it supported an independent artist and her small business doing what she loves in a changing world.
+          Thanks for purchasing your new generated headshots! AI is changing how headshots get made. I built this generator because I'd rather lead the change than be left behind by it. There's no team of engineers behind this — just me, one photographer, leaning into new tools to keep doing this. Your purchase didn't just buy you a headshot — it supported an independent artist and her small business doing what she loves in a changing world.
         </p>
         <p style="font-size: 14px; line-height: 1.7; color: #2A2A2A; margin: 0;">
           If you'd share one of these images on social, you'd help me reach the next person who needs a headshot but doesn't know I exist yet. I see every share. I'm grateful for every one. Enjoy your new, snazzy headshot!
@@ -335,6 +361,27 @@ async function sendCustomerDeliveryEmail(args: {
           (Your share graphic didn't generate this time — Kristi has been notified and will follow up.)
         </p>
       `
+      }
+
+      <!-- High-res photo backup links — secondary section so customers who
+           lose their downloads (cleared cache, switched devices, etc.) can
+           re-download from this email instead of opening a support ticket.
+           Smaller styling than the share-graphic pills above — these are
+           insurance, not the primary action. Added 2026-05-04. -->
+      ${
+        manifest.deliveredHeadshotUrls.length > 0
+          ? `
+        <div style="margin: 48px 0 0; padding: 24px 0 0; border-top: 1px solid #EFEAE0;">
+          <h3 style="font-size: 13px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; color: #888; margin: 0 0 8px; text-align: center;">
+            Your purchased headshots
+          </h3>
+          <p style="font-size: 13px; line-height: 1.55; color: #888; margin: 0 0 18px; text-align: center; max-width: 440px; margin-left: auto; margin-right: auto;">
+            Already saved to your device — these links are here if you need to re-download later.
+          </p>
+          ${photoTable}
+        </div>
+      `
+          : ""
       }
 
       <!-- Footer -->
