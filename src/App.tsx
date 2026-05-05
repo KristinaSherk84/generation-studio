@@ -102,23 +102,23 @@ type PhotographerTipsModalProps = {
 const PHOTOG_TIPS = [
   {
     title: "Upload your favorite shot first.",
-    body: "The AI gives extra weight to the first photo when learning your face. Lead with the photo that looks most like the version of yourself you want generated — clear, well-lit, recent.",
+    body: "The AI weights the first photo heaviest when learning your face — lead with your best one.",
   },
   {
-    title: "Turn off overhead lights.",
-    body: "Face a window. Natural daylight is best — overhead lights cast unflattering shadows under the eyes.",
+    title: "Face a window, not a ceiling.",
+    body: "Natural daylight beats overhead lights, which cast shadows under the eyes.",
   },
   {
     title: "No low-res photos.",
-    body: "The AI can only work with what it can see. Blurry, pixelated, or heavily compressed inputs produce blurry, distorted results.",
+    body: "Blurry inputs produce blurry results. Garbage in, garbage out.",
   },
   {
-    title: "Variety matters.",
-    body: "Different expressions, angles, and outfits. Four to eight photos is the sweet spot — more isn't always better. Include at least one close-cropped shot where your head nearly fills the frame — the AI mirrors your framing.",
+    title: "4–8 varied photos.",
+    body: "Different expressions, angles, outfits. Include one close-crop — the AI mirrors your framing.",
   },
   {
-    title: "The wider the lens, the more distorted your face.",
-    body: "Have a friend take the photo using the regular (rear) camera on the phone — NOT the selfie camera. Selfie cameras use wide lenses that stretch your nose and face.",
+    title: "Use the rear camera, not selfie.",
+    body: "Selfie cameras are wide-angle and stretch your nose and face. Have a friend take it.",
   },
 ];
 
