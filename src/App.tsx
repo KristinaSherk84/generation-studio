@@ -701,35 +701,40 @@ const LandingV2 = ({ onStart, onPromoUnlock }: LandingProps) => {
         }}
       >
         <Wordmark size={20} />
-        <div style={{ display: "flex", alignItems: "center", gap: 28 }}>
-          <a
-            href="#how"
-            style={{
-              fontSize: 14,
-              color: BRAND.charcoal,
-              textDecoration: "none",
-              borderBottom: `1px solid ${BRAND.gold}`,
-              paddingBottom: 2,
-            }}
-          >
-            How it works
-          </a>
-          <a
-            href="#examples"
-            style={{
-              fontSize: 14,
-              color: BRAND.charcoal,
-              textDecoration: "none",
-              borderBottom: `1px solid ${BRAND.gold}`,
-              paddingBottom: 2,
-            }}
-          >
-            Examples
-          </a>
-          <Pill onClick={onStart} size="sm">
-            Start now
-          </Pill>
-        </div>
+        {/* Nav links — kept on desktop for orientation, hidden on mobile
+            because they were pushing the wordmark off the screen edge.
+            The "Start now" pill that used to live here was removed
+            entirely 2026-05-04 — the big "CREATE MY HEADSHOTS" CTA below
+            the hero is the primary conversion surface, and a duplicate
+            in the nav added clutter without adding value. */}
+        {!isMobile && (
+          <div style={{ display: "flex", alignItems: "center", gap: 28 }}>
+            <a
+              href="#how"
+              style={{
+                fontSize: 14,
+                color: BRAND.charcoal,
+                textDecoration: "none",
+                borderBottom: `1px solid ${BRAND.gold}`,
+                paddingBottom: 2,
+              }}
+            >
+              How it works
+            </a>
+            <a
+              href="#examples"
+              style={{
+                fontSize: 14,
+                color: BRAND.charcoal,
+                textDecoration: "none",
+                borderBottom: `1px solid ${BRAND.gold}`,
+                paddingBottom: 2,
+              }}
+            >
+              Examples
+            </a>
+          </div>
+        )}
       </nav>
 
       {/* ========== HERO ========== */}
