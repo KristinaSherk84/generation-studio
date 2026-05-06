@@ -88,12 +88,20 @@ async function buildBeforeSprite(beforeUrl: string): Promise<{
 }> {
   const beforeBuf = await fetchAsBuffer(beforeUrl);
 
-  // 1. Square-crop + resize the source to inner diameter, top-anchored
-  //    so foreheads/hair stay visible.
+  // 1. Square-crop + resize the source to inner diameter.
+  //    - .rotate() with no args auto-applies EXIF Orientation so portrait
+  //      phone photos don't end up sideways. (Without this, a JPEG that
+  //      stores its pixels in landscape orientation but tags itself
+  //      "rotate 90 CW" via EXIF gets read as landscape, then cover-fit
+  //      scales on the wrong axis and the result looks rotated + zoomed.)
+  //    - position: sharp.strategy.attention picks the most "interesting"
+  //      region (faces and skin tones), so chest-up portraits don't get
+  //      their face cut off the way `position: "top"` did.
   const innerSrc = await sharp(beforeBuf)
+    .rotate()
     .resize(INNER_DIAMETER, INNER_DIAMETER, {
       fit: "cover",
-      position: "top",
+      position: sharp.strategy.attention,
     })
     .toBuffer();
 
@@ -270,9 +278,13 @@ export type ShareGraphicArgs = {
 export async function buildShareGraphic(
   args: ShareGraphicArgs,
 ): Promise<Buffer> {
-  // 1. AFTER cover-fit to 1200x1600.
+  // 1. AFTER cover-fit to 1200x1600. .rotate() with no args auto-applies
+  //    EXIF Orientation as a safety measure — Gemini outputs don't ship
+  //    with EXIF so this is normally a no-op, but a future model swap
+  //    or a human-edited input shouldn't break us silently.
   const afterBuf = await fetchAsBuffer(args.afterUrl);
   const afterImage = await sharp(afterBuf)
+    .rotate()
     .resize(CANVAS_W, CANVAS_H, { fit: "cover", position: "center" })
     .toBuffer();
 
