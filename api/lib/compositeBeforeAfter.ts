@@ -1,26 +1,22 @@
 /**
  * Build a before/after share graphic for delivery.
  *
- * Simplified V2 layout (1200x1600) — clean, no text dependencies:
+ * V3 layout (1200x1600) — clean, vector-only text:
  *   - Full canvas: AFTER headshot, cover-fit
- *   - Bottom-left: circular BEFORE inset with white ring + drop shadow.
- *     NO label bar (Kristi removed it 2026-05-04 — bar was visually
- *     heavy and the BEFORE label rendered as missing-glyph squares
- *     because the SVG fonts weren't available on Vercel's runtime).
+ *   - Bottom-left: circular BEFORE inset with white ring + drop shadow
+ *     (no label bar, removed 2026-05-04 — was visually heavy and the
+ *     SVG-text label rendered as missing-glyph squares on Vercel)
  *   - Bottom-right: white card containing a QR code linking to the
- *     share URL — the QR code IS the "try it yourself" CTA.
- *
- * No bottom text strip. Original V1 had a "Try it yourself" + URL
- * strip below the image, but the text rendered as boxes (font tofu)
- * because Vercel's serverless runtime didn't have the SVG-requested
- * fonts. Removed entirely on 2026-05-04 — the QR code carries the
- * call-to-action, and a clean image with no text reads more
- * professional anyway. If text is wanted back later, bundle a font
- * file with the deployment via @fontsource/* or similar.
+ *     share URL, with a "Scan to try it yourself" caption beneath
+ *     the QR inside the same card. Caption is rendered from
+ *     pre-computed SVG vector paths (see lib/textPaths.ts) so it's
+ *     immune to the font-tofu problem that bit V1 — librsvg renders
+ *     `<path>` elements as pure vectors with zero font dependency.
  */
 
 import sharp from "sharp";
 import QRCode from "qrcode";
+import { renderCaptionGroup } from "./textPaths.js";
 
 // ---- Canvas dimensions ----
 const CANVAS_W = 1200;
@@ -35,11 +31,23 @@ const SHADOW_OFFSET = { x: 4, y: 6 };
 const SHADOW_BLUR = 20;
 const SHADOW_OPACITY = 0.35;
 
-// ---- QR card (mirrors before circle on bottom-right) ----
+// ---- QR card (bottom-right; QR + caption inside the same card) ----
 const QR_SIZE = 220;
 const QR_CARD_PADDING = 14;
-const QR_CARD_SIZE = QR_SIZE + QR_CARD_PADDING * 2; // 248
+const QR_CARD_W = QR_SIZE + QR_CARD_PADDING * 2; // 248
+// Caption sits below the QR with QR_CAPTION_GAP whitespace. Card height
+// is grown just enough to fit it with QR_CARD_PADDING on top and bottom.
+const QR_CAPTION_FONT_SIZE = 20; // pt — tuned so the caption fits inside
+                                 // QR_CARD_W with a comfortable margin.
+const QR_CAPTION_GAP = 14;
+// 22.34px is the rendered text-block height at 20pt LiberationSans Bold;
+// see textPaths.ts metrics. We round up to 24 for a hair of breathing
+// room (and to handle any sub-pixel descender clipping).
+const QR_CAPTION_BLOCK_H = 24;
+const QR_CARD_H =
+  QR_CARD_PADDING + QR_SIZE + QR_CAPTION_GAP + QR_CAPTION_BLOCK_H + QR_CARD_PADDING;
 const QR_CARD_RADIUS = 12;
+const QR_CAPTION_FILL = "#1a1a1a"; // near-black for readable contrast
 
 // -------------------- Helpers --------------------
 
@@ -144,9 +152,15 @@ async function buildBeforeSprite(beforeUrl: string): Promise<{
 }
 
 /**
- * Build the QR card sprite — white rounded-rect card with a soft shadow
- * containing a QR-encoded link to the share URL. Mirrors the BEFORE
- * circle's bottom-left placement on the bottom-right.
+ * Build the QR card sprite — white rounded-rect card with a soft drop
+ * shadow, containing a QR code on top and a "Scan to try it yourself"
+ * caption beneath it. Both QR and caption live inside the same card
+ * for a single visual unit.
+ *
+ * The caption is rendered via pre-computed SVG `<path>` glyph outlines
+ * (see lib/textPaths.ts). This sidesteps the SVG-font-rendering
+ * problem on Vercel's serverless runtime, where missing fonts cause
+ * `<text>` elements to render as squares ("font tofu").
  */
 async function buildQrSprite(qrTargetUrl: string): Promise<{
   buffer: Buffer;
@@ -168,13 +182,36 @@ async function buildQrSprite(qrTargetUrl: string): Promise<{
   const padRight = SHADOW_BLUR + Math.max(SHADOW_OFFSET.x, 0);
   const padTop = SHADOW_BLUR;
   const padBottom = SHADOW_BLUR + Math.max(SHADOW_OFFSET.y, 0);
-  const spriteW = QR_CARD_SIZE + padLeft + padRight;
-  const spriteH = QR_CARD_SIZE + padTop + padBottom;
+  const spriteW = QR_CARD_W + padLeft + padRight;
+  const spriteH = QR_CARD_H + padTop + padBottom;
 
   const cardCx = padLeft;
   const cardCy = padTop;
 
-  // SVG: shadow rect (blurred) + white rounded-rect card.
+  // Caption sits below the QR. Compute its top-left position in the
+  // sprite's coordinate space, then center it horizontally inside the
+  // card (the rendered text width is shorter than the card's inner
+  // width by design — see QR_CAPTION_FONT_SIZE pick above).
+  const captionTopWithinCard =
+    QR_CARD_PADDING + QR_SIZE + QR_CAPTION_GAP;
+  // We need the rendered width to center; renderCaptionGroup also
+  // returns it.
+  const probe = renderCaptionGroup({
+    fontSize: QR_CAPTION_FONT_SIZE,
+    fill: QR_CAPTION_FILL,
+    originX: 0,
+    originY: 0,
+  });
+  const captionLeftWithinCard = (QR_CARD_W - probe.width) / 2;
+  const caption = renderCaptionGroup({
+    fontSize: QR_CAPTION_FONT_SIZE,
+    fill: QR_CAPTION_FILL,
+    originX: cardCx + captionLeftWithinCard,
+    originY: cardCy + captionTopWithinCard,
+  });
+
+  // SVG: shadow rect (blurred) + white rounded-rect card + caption
+  // glyph paths overlaid in the lower band of the card.
   const baseSvg = Buffer.from(
     `<svg xmlns="http://www.w3.org/2000/svg" width="${spriteW}" height="${spriteH}">
       <defs>
@@ -182,8 +219,9 @@ async function buildQrSprite(qrTargetUrl: string): Promise<{
           <feGaussianBlur stdDeviation="${SHADOW_BLUR / 2}"/>
         </filter>
       </defs>
-      <rect x="${cardCx + SHADOW_OFFSET.x}" y="${cardCy + SHADOW_OFFSET.y}" width="${QR_CARD_SIZE}" height="${QR_CARD_SIZE}" rx="${QR_CARD_RADIUS}" fill="black" fill-opacity="${SHADOW_OPACITY}" filter="url(#qrShadow)"/>
-      <rect x="${cardCx}" y="${cardCy}" width="${QR_CARD_SIZE}" height="${QR_CARD_SIZE}" rx="${QR_CARD_RADIUS}" fill="white"/>
+      <rect x="${cardCx + SHADOW_OFFSET.x}" y="${cardCy + SHADOW_OFFSET.y}" width="${QR_CARD_W}" height="${QR_CARD_H}" rx="${QR_CARD_RADIUS}" fill="black" fill-opacity="${SHADOW_OPACITY}" filter="url(#qrShadow)"/>
+      <rect x="${cardCx}" y="${cardCy}" width="${QR_CARD_W}" height="${QR_CARD_H}" rx="${QR_CARD_RADIUS}" fill="white"/>
+      ${caption.svg}
     </svg>`,
   );
 
@@ -218,13 +256,15 @@ export type ShareGraphicArgs = {
 /**
  * Build a complete before/after share graphic and return its JPEG buffer.
  *
- * Layout (1200x1600 — clean, no text):
+ * Layout (1200x1600):
  *   - Full canvas: AI-generated AFTER headshot, cover-fit
- *   - Bottom-left: BEFORE circle (white ring + drop shadow, NO label bar)
- *   - Bottom-right: QR card linking to generationheadshots.com
+ *   - Bottom-left: BEFORE circle (white ring + drop shadow, no label bar)
+ *   - Bottom-right: QR card with QR code + "Scan to try it yourself"
+ *     caption rendered as SVG vector paths (so it renders identically
+ *     across all environments without needing the right system fonts)
  *
- * The QR code IS the call-to-action — anyone scanning lands on the
- * marketing site. No text dependencies = no font-rendering issues.
+ * The QR code is the CTA; the caption tells the viewer what to do
+ * with it.
  */
 export async function buildShareGraphic(
   args: ShareGraphicArgs,
@@ -238,7 +278,7 @@ export async function buildShareGraphic(
   // 2. Build the BEFORE sprite (circle + ring + shadow — no label).
   const beforeSprite = await buildBeforeSprite(args.beforeUrl);
 
-  // 3. Build the QR card sprite.
+  // 3. Build the QR card sprite (QR + caption inside the same card).
   const qrSprite = await buildQrSprite(args.qrTargetUrl);
 
   // 4. Composite everything onto a 1200x1600 white canvas.
@@ -246,8 +286,8 @@ export async function buildShareGraphic(
   const beforeLeft = MARGIN - beforeSprite.circleOffsetX;
   const beforeTop = CANVAS_H - MARGIN - CIRCLE_DIAMETER - beforeSprite.circleOffsetY;
   // QR card goes bottom-right at MARGIN offset.
-  const qrLeft = CANVAS_W - MARGIN - QR_CARD_SIZE - qrSprite.cardOffsetX;
-  const qrTop = CANVAS_H - MARGIN - QR_CARD_SIZE - qrSprite.cardOffsetY;
+  const qrLeft = CANVAS_W - MARGIN - QR_CARD_W - qrSprite.cardOffsetX;
+  const qrTop = CANVAS_H - MARGIN - QR_CARD_H - qrSprite.cardOffsetY;
 
   const finalImage = await sharp({
     create: {
