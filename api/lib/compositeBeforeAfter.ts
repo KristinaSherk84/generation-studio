@@ -1,32 +1,30 @@
 /**
  * Build a before/after share graphic for delivery.
  *
- * TypeScript port of `before-after-headshot/scripts/composite.py` +
- * `make_share_variant.py` (Kristi's Pillow-based skill that's been used
- * to manually composite the marketing library in `Before-After Graphics/`).
+ * Simplified V2 layout (1200x1600) — clean, no text dependencies:
+ *   - Full canvas: AFTER headshot, cover-fit
+ *   - Bottom-left: circular BEFORE inset with white ring + drop shadow.
+ *     NO label bar (Kristi removed it 2026-05-04 — bar was visually
+ *     heavy and the BEFORE label rendered as missing-glyph squares
+ *     because the SVG fonts weren't available on Vercel's runtime).
+ *   - Bottom-right: white card containing a QR code linking to the
+ *     share URL — the QR code IS the "try it yourself" CTA.
  *
- * Layout (1200x1740):
- *   - Top 1200x1600: AFTER headshot, cover-fit
- *   - Bottom-left of the image: circular BEFORE inset (432px diameter)
- *     with white ring, drop shadow, and translucent BEFORE label bar
- *   - Bottom-right of the image: white card containing a QR code
- *     pointing to the share URL
- *   - Below the image (140px strip): centered "Try it yourself" CTA +
- *     URL on a hairline-bordered white strip
- *
- * Used by /api/deliver — every delivered photo gets one share graphic
- * (with the QR card) auto-generated and stored to Vercel Blob, surfaced
- * on the Download screen so the customer can post it.
+ * No bottom text strip. Original V1 had a "Try it yourself" + URL
+ * strip below the image, but the text rendered as boxes (font tofu)
+ * because Vercel's serverless runtime didn't have the SVG-requested
+ * fonts. Removed entirely on 2026-05-04 — the QR code carries the
+ * call-to-action, and a clean image with no text reads more
+ * professional anyway. If text is wanted back later, bundle a font
+ * file with the deployment via @fontsource/* or similar.
  */
 
 import sharp from "sharp";
 import QRCode from "qrcode";
 
-// ---- Canvas dimensions (match composite.py defaults) ----
+// ---- Canvas dimensions ----
 const CANVAS_W = 1200;
 const CANVAS_H = 1600;
-const STRIP_H = 140;
-const OUT_H = CANVAS_H + STRIP_H; // 1740
 
 // ---- BEFORE circle ----
 const CIRCLE_DIAMETER = Math.round(CANVAS_W * 0.36); // 432
@@ -36,27 +34,12 @@ const MARGIN = 40; // offset from canvas edges
 const SHADOW_OFFSET = { x: 4, y: 6 };
 const SHADOW_BLUR = 20;
 const SHADOW_OPACITY = 0.35;
-const LABEL_BAR_HEIGHT = Math.round(INNER_DIAMETER * 0.18); // bar height
-const LABEL_BG_OPACITY = 0.75;
-const LABEL_TEXT = "BEFORE";
-const LABEL_FONT_SIZE = 32;
-const LABEL_LETTER_SPACING = 6;
 
 // ---- QR card (mirrors before circle on bottom-right) ----
 const QR_SIZE = 220;
 const QR_CARD_PADDING = 14;
 const QR_CARD_SIZE = QR_SIZE + QR_CARD_PADDING * 2; // 248
 const QR_CARD_RADIUS = 12;
-
-// ---- Text strip (below the image) ----
-const CTA_FONT_SIZE = 56;
-const URL_FONT_SIZE = 22;
-const TEXT_GAP = 10;
-
-// Color palette
-const TEXT_DARK = "#2C2C2A";
-const TEXT_MEDIUM = "#888780";
-const DIVIDER = "#E8E8E6";
 
 // -------------------- Helpers --------------------
 
@@ -116,80 +99,36 @@ async function buildBeforeSprite(beforeUrl: string): Promise<{
   const spriteW = CIRCLE_DIAMETER + padLeft + padRight;
   const spriteH = CIRCLE_DIAMETER + padTop + padBottom;
 
-  // 4. Build a single SVG containing the white-ring circle, label bar,
-  //    and BEFORE text. Shadow is rendered via SVG filter.
-  // Shadow circle position (offset behind the white ring).
+  // 4. Build the shadow + white ring SVG. NO label bar or BEFORE text
+  //    (removed 2026-05-04 per Kristi: 'remove the black bar at the
+  //    bottom of the before circle photo'). The visual is now just
+  //    the photo masked into a clean circle with a white ring + soft
+  //    drop shadow.
   const shadowCx = padLeft + CIRCLE_DIAMETER / 2 + SHADOW_OFFSET.x;
   const shadowCy = padTop + CIRCLE_DIAMETER / 2 + SHADOW_OFFSET.y;
-  // Ring circle position (white circle behind the photo).
   const ringCx = padLeft + CIRCLE_DIAMETER / 2;
   const ringCy = padTop + CIRCLE_DIAMETER / 2;
-  // Label bar — only visible inside the inner circle (clipped via SVG).
-  const barLeft = padLeft + RING;
-  const barTop = padTop + RING + INNER_DIAMETER - LABEL_BAR_HEIGHT;
-  const barWidth = INNER_DIAMETER;
-  // Letter-spaced uppercase, white, centered horizontally within bar.
-  // We approximate centering by using SVG text-anchor=middle.
-  const labelX = barLeft + barWidth / 2;
-  const labelY = barTop + LABEL_BAR_HEIGHT / 2 + LABEL_FONT_SIZE / 3;
 
-  // SVG <mask> is used instead of <clipPath> here. librsvg (which sharp
-  // wraps for SVG rendering on the Vercel serverless runtime) sometimes
-  // silently fails to apply clip-path on composited rect/text elements,
-  // resulting in the bar + label text completely missing from output.
-  // <mask> uses a different rendering path inside librsvg and works
-  // reliably. Verified on Vercel 2026-05-04.
-  //
-  // Font: DejaVu Sans is installed on every Linux server including
-  // Vercel's serverless runtime. Helvetica and Arial are NOT — using
-  // those falls through to no font at all and text glyphs render as
-  // empty space. Always use DejaVu Sans (or sans-serif fallback) for
-  // server-side SVG text rendering.
-  const ringAndLabelSvg = Buffer.from(
+  const ringSvg = Buffer.from(
     `<svg xmlns="http://www.w3.org/2000/svg" width="${spriteW}" height="${spriteH}">
       <defs>
         <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
           <feGaussianBlur stdDeviation="${SHADOW_BLUR / 2}"/>
         </filter>
-        <mask id="innerMask">
-          <rect width="${spriteW}" height="${spriteH}" fill="black"/>
-          <circle cx="${padLeft + CIRCLE_DIAMETER / 2}" cy="${padTop + CIRCLE_DIAMETER / 2}" r="${INNER_DIAMETER / 2}" fill="white"/>
-        </mask>
       </defs>
       <circle cx="${shadowCx}" cy="${shadowCy}" r="${CIRCLE_DIAMETER / 2}" fill="black" fill-opacity="${SHADOW_OPACITY}" filter="url(#shadow)"/>
       <circle cx="${ringCx}" cy="${ringCy}" r="${CIRCLE_DIAMETER / 2}" fill="white"/>
-      <rect x="${barLeft}" y="${barTop}" width="${barWidth}" height="${LABEL_BAR_HEIGHT}" fill="black" fill-opacity="${LABEL_BG_OPACITY}" mask="url(#innerMask)"/>
-      <text x="${labelX}" y="${labelY}" font-family="DejaVu Sans, sans-serif" font-size="${LABEL_FONT_SIZE}" font-weight="bold" fill="white" text-anchor="middle" letter-spacing="${LABEL_LETTER_SPACING}">${LABEL_TEXT}</text>
     </svg>`,
   );
 
-  // 5. Composite: ring/shadow/label SVG as base, photo composited on top
-  //    inside the ring (RING px inset from circle edge).
-  const sprite = await sharp(ringAndLabelSvg)
+  // 5. Composite: ring/shadow SVG as base, photo composited on top
+  //    inside the ring (RING px inset from the outer circle edge).
+  const sprite = await sharp(ringSvg)
     .composite([
       {
         input: circularBefore,
         top: padTop + RING,
         left: padLeft + RING,
-      },
-      // Re-apply the label bar + text on top of the photo (since the
-      // photo would otherwise cover them). Same mask + DejaVu Sans
-      // approach as the base SVG — see notes on librsvg quirks above.
-      {
-        input: Buffer.from(
-          `<svg xmlns="http://www.w3.org/2000/svg" width="${spriteW}" height="${spriteH}">
-            <defs>
-              <mask id="innerMask2">
-                <rect width="${spriteW}" height="${spriteH}" fill="black"/>
-                <circle cx="${padLeft + CIRCLE_DIAMETER / 2}" cy="${padTop + CIRCLE_DIAMETER / 2}" r="${INNER_DIAMETER / 2}" fill="white"/>
-              </mask>
-            </defs>
-            <rect x="${barLeft}" y="${barTop}" width="${barWidth}" height="${LABEL_BAR_HEIGHT}" fill="black" fill-opacity="${LABEL_BG_OPACITY}" mask="url(#innerMask2)"/>
-            <text x="${labelX}" y="${labelY}" font-family="DejaVu Sans, sans-serif" font-size="${LABEL_FONT_SIZE}" font-weight="bold" fill="white" text-anchor="middle" letter-spacing="${LABEL_LETTER_SPACING}">${LABEL_TEXT}</text>
-          </svg>`,
-        ),
-        top: 0,
-        left: 0,
       },
     ])
     .png()
@@ -268,69 +207,41 @@ async function buildQrSprite(qrTargetUrl: string): Promise<{
   };
 }
 
-/**
- * Build the bottom text strip (CTA + URL on a white strip with a
- * hairline divider on top).
- */
-function buildTextStripSvg(cta: string, url: string): Buffer {
-  // Vertical centering of the two-line text block.
-  const blockHeight = CTA_FONT_SIZE + TEXT_GAP + URL_FONT_SIZE;
-  const blockTop = (STRIP_H - blockHeight) / 2;
-  const ctaY = blockTop + CTA_FONT_SIZE * 0.85;
-  const urlY = blockTop + CTA_FONT_SIZE + TEXT_GAP + URL_FONT_SIZE * 0.85;
-
-  // DejaVu Sans is reliably installed on Vercel's serverless runtime;
-  // Helvetica/Arial are NOT and would fall through to no font (causing
-  // text to silently disappear). See ringAndLabelSvg comment for full
-  // notes on font selection.
-  return Buffer.from(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS_W}" height="${STRIP_H}">
-      <rect x="0" y="0" width="${CANVAS_W}" height="1" fill="${DIVIDER}"/>
-      <text x="${CANVAS_W / 2}" y="${ctaY}" font-family="DejaVu Sans, sans-serif" font-size="${CTA_FONT_SIZE}" font-weight="bold" fill="${TEXT_DARK}" text-anchor="middle">${cta}</text>
-      <text x="${CANVAS_W / 2}" y="${urlY}" font-family="DejaVu Sans, sans-serif" font-size="${URL_FONT_SIZE}" fill="${TEXT_MEDIUM}" text-anchor="middle">${url}</text>
-    </svg>`,
-  );
-}
-
 // -------------------- Main --------------------
 
 export type ShareGraphicArgs = {
   beforeUrl: string;
   afterUrl: string;
   qrTargetUrl: string;
-  // CTA + URL shown on the strip below the image.
-  cta?: string;
-  urlText?: string;
 };
 
 /**
  * Build a complete before/after share graphic and return its JPEG buffer.
- * Matches the visual style of the manual `composite.py` output so the
- * customer's auto-generated graphic looks identical to the pieces in
- * Kristi's existing marketing library.
+ *
+ * Layout (1200x1600 — clean, no text):
+ *   - Full canvas: AI-generated AFTER headshot, cover-fit
+ *   - Bottom-left: BEFORE circle (white ring + drop shadow, NO label bar)
+ *   - Bottom-right: QR card linking to generationheadshots.com
+ *
+ * The QR code IS the call-to-action — anyone scanning lands on the
+ * marketing site. No text dependencies = no font-rendering issues.
  */
 export async function buildShareGraphic(
   args: ShareGraphicArgs,
 ): Promise<Buffer> {
-  const cta = args.cta ?? "Try it yourself";
-  const urlText = args.urlText ?? "generationheadshots.com";
-
   // 1. AFTER cover-fit to 1200x1600.
   const afterBuf = await fetchAsBuffer(args.afterUrl);
   const afterImage = await sharp(afterBuf)
     .resize(CANVAS_W, CANVAS_H, { fit: "cover", position: "center" })
     .toBuffer();
 
-  // 2. Build the BEFORE sprite (circle + ring + shadow + label).
+  // 2. Build the BEFORE sprite (circle + ring + shadow — no label).
   const beforeSprite = await buildBeforeSprite(args.beforeUrl);
 
   // 3. Build the QR card sprite.
   const qrSprite = await buildQrSprite(args.qrTargetUrl);
 
-  // 4. Build the text strip SVG.
-  const textStrip = buildTextStripSvg(cta, urlText);
-
-  // 5. Composite everything onto a 1200x1740 white canvas.
+  // 4. Composite everything onto a 1200x1600 white canvas.
   // BEFORE sprite goes bottom-left at MARGIN offset.
   const beforeLeft = MARGIN - beforeSprite.circleOffsetX;
   const beforeTop = CANVAS_H - MARGIN - CIRCLE_DIAMETER - beforeSprite.circleOffsetY;
@@ -341,7 +252,7 @@ export async function buildShareGraphic(
   const finalImage = await sharp({
     create: {
       width: CANVAS_W,
-      height: OUT_H,
+      height: CANVAS_H,
       channels: 3,
       background: "white",
     },
@@ -350,7 +261,6 @@ export async function buildShareGraphic(
       { input: afterImage, top: 0, left: 0 },
       { input: beforeSprite.buffer, top: beforeTop, left: beforeLeft },
       { input: qrSprite.buffer, top: qrTop, left: qrLeft },
-      { input: textStrip, top: CANVAS_H, left: 0 },
     ])
     .jpeg({ quality: 90, progressive: true })
     .toBuffer();
