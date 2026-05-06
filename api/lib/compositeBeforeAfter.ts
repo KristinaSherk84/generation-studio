@@ -23,6 +23,11 @@ import {
   CAPTION_UPM,
   renderCenteredLinesGroup,
 } from "./textPaths.js";
+import { detectFaceBox, type NormalizedBox } from "./detectFaceBox.js";
+
+/** Fraction of the BEFORE-circle height the face should fill. Per
+ *  Kristi 2026-05-06: head should take up 70% of the circle. */
+const BEFORE_FACE_FILL = 0.70;
 
 // ---- Canvas dimensions ----
 const CANVAS_W = 1200;
@@ -88,42 +93,99 @@ async function buildBeforeSprite(beforeUrl: string): Promise<{
 }> {
   const beforeBuf = await fetchAsBuffer(beforeUrl);
 
-  // 1. Square-crop + resize the source to inner diameter.
+  // 1. Square-crop the source so the face fills BEFORE_FACE_FILL of the
+  //    circle's height. Strategy:
   //
-  //    Two-step face-aware crop:
-  //      a) .rotate() with no args first — auto-applies EXIF Orientation
-  //         so portrait phone photos don't end up sideways. (Without
-  //         this, a JPEG that stores landscape pixels but tags itself
-  //         "rotate 90 CW" via EXIF gets read as landscape, then
-  //         cover-fit scales on the wrong axis and the result looks
-  //         rotated AND oddly zoomed. iPhone photos do this constantly.)
-  //      b) sharp.strategy.attention picks the most interesting region —
-  //         it's salience-based (faces + skin tones rank highest), so on
-  //         a portrait photo it lands roughly on the face.
-  //      c) We then center-extract a tighter square so the face fills
-  //         more of the circle. The attention crop is computed at
-  //         ZOOM_FACTOR × INNER_DIAMETER, then we extract INNER_DIAMETER
-  //         from the center. Net effect: face is ZOOM_FACTOR× bigger in
-  //         the final result. Tuned so that on a typical chest-up
-  //         portrait the face fills ~70% of the circle's height.
-  const ZOOM_FACTOR = 1.4;
-  const wideTarget = Math.round(INNER_DIAMETER * ZOOM_FACTOR);
-  const wideCrop = await sharp(beforeBuf)
-    .rotate()
-    .resize(wideTarget, wideTarget, {
-      fit: "cover",
-      position: sharp.strategy.attention,
-    })
-    .toBuffer();
-  const inset = Math.round((wideTarget - INNER_DIAMETER) / 2);
-  const innerSrc = await sharp(wideCrop)
-    .extract({
-      left: inset,
-      top: inset,
-      width: INNER_DIAMETER,
-      height: INNER_DIAMETER,
-    })
-    .toBuffer();
+  //    Step A — auto-orient via .rotate(). This reads the JPEG's EXIF
+  //    Orientation tag and rotates the pixels accordingly. Without it,
+  //    iPhone photos (landscape pixels + "rotate 90 CW" EXIF tag) come
+  //    out sideways.
+  //
+  //    Step B — find the face. We ask Gemini for a tight bbox around
+  //    the main face. Gemini's face detection is dramatically more
+  //    reliable than sharp's salience-based attention strategy, which
+  //    happily picks high-contrast hair or white lab coats over the
+  //    actual face on portrait photos.
+  //
+  //    Step C — if Gemini found a face, compute a square crop centered
+  //    on the face whose height makes the face exactly BEFORE_FACE_FILL
+  //    of the crop. Resize that crop to INNER_DIAMETER.
+  //
+  //    Step D — fall back to sharp.strategy.attention if Gemini failed
+  //    or returned no face. Better than nothing.
+  const oriented = await sharp(beforeBuf).rotate().toBuffer();
+  const orientedMeta = await sharp(oriented).metadata();
+  const srcW = orientedMeta.width ?? 0;
+  const srcH = orientedMeta.height ?? 0;
+
+  // Detect the face on a downsampled copy — full-resolution phone
+  // photos can be 5-10MB and Gemini doesn't need that pixel density to
+  // find a face. Downscaling keeps inline payloads small (~50-200KB) and
+  // shaves a chunk off latency. The bbox is returned in NORMALIZED
+  // (0..1) coordinates so it remains valid against the full-resolution
+  // crop below.
+  let faceBox: NormalizedBox | null = null;
+  if (srcW > 0 && srcH > 0) {
+    const FACE_DETECT_MAX_DIM = 1024;
+    const detectBuf = await sharp(oriented)
+      .resize(FACE_DETECT_MAX_DIM, FACE_DETECT_MAX_DIM, {
+        fit: "inside",
+        withoutEnlargement: true,
+      })
+      .jpeg({ quality: 80 })
+      .toBuffer();
+    faceBox = await detectFaceBox(detectBuf, "image/jpeg");
+  }
+
+  let innerSrc: Buffer;
+  if (faceBox && srcW > 0 && srcH > 0) {
+    // ---- Face detected — crop tight on it ----
+    const facePxX = (faceBox.xMin + faceBox.xMax) / 2 * srcW;
+    const facePxY = (faceBox.yMin + faceBox.yMax) / 2 * srcH;
+    const facePxH = (faceBox.yMax - faceBox.yMin) * srcH;
+    const facePxW = (faceBox.xMax - faceBox.xMin) * srcW;
+
+    // Crop side length so face_height / crop_height === BEFORE_FACE_FILL.
+    // Use the LARGER of (face height) and (face width) as the reference
+    // so wide faces (people facing the camera) don't get clipped on the
+    // sides.
+    const faceMax = Math.max(facePxH, facePxW);
+    let cropSize = Math.round(faceMax / BEFORE_FACE_FILL);
+    cropSize = Math.min(cropSize, srcW, srcH);
+
+    let left = Math.round(facePxX - cropSize / 2);
+    let top = Math.round(facePxY - cropSize / 2);
+    // Clamp to source bounds so .extract() doesn't error
+    left = Math.max(0, Math.min(left, srcW - cropSize));
+    top = Math.max(0, Math.min(top, srcH - cropSize));
+
+    innerSrc = await sharp(oriented)
+      .extract({ left, top, width: cropSize, height: cropSize })
+      .resize(INNER_DIAMETER, INNER_DIAMETER, { fit: "cover" })
+      .toBuffer();
+  } else {
+    // ---- Fallback — sharp's salience-based attention crop with a
+    //      modest zoom. This is the same heuristic we used before
+    //      Gemini-based detection and may miscrop on tricky photos,
+    //      but it's better than nothing if Gemini is down. ----
+    const ZOOM_FACTOR = 1.4;
+    const wideTarget = Math.round(INNER_DIAMETER * ZOOM_FACTOR);
+    const wideCrop = await sharp(oriented)
+      .resize(wideTarget, wideTarget, {
+        fit: "cover",
+        position: sharp.strategy.attention,
+      })
+      .toBuffer();
+    const inset = Math.round((wideTarget - INNER_DIAMETER) / 2);
+    innerSrc = await sharp(wideCrop)
+      .extract({
+        left: inset,
+        top: inset,
+        width: INNER_DIAMETER,
+        height: INNER_DIAMETER,
+      })
+      .toBuffer();
+  }
 
   // 2. Apply circular mask via SVG composite.
   const circularMaskSvg = Buffer.from(
