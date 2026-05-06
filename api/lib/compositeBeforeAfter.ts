@@ -89,19 +89,39 @@ async function buildBeforeSprite(beforeUrl: string): Promise<{
   const beforeBuf = await fetchAsBuffer(beforeUrl);
 
   // 1. Square-crop + resize the source to inner diameter.
-  //    - .rotate() with no args auto-applies EXIF Orientation so portrait
-  //      phone photos don't end up sideways. (Without this, a JPEG that
-  //      stores its pixels in landscape orientation but tags itself
-  //      "rotate 90 CW" via EXIF gets read as landscape, then cover-fit
-  //      scales on the wrong axis and the result looks rotated + zoomed.)
-  //    - position: sharp.strategy.attention picks the most "interesting"
-  //      region (faces and skin tones), so chest-up portraits don't get
-  //      their face cut off the way `position: "top"` did.
-  const innerSrc = await sharp(beforeBuf)
+  //
+  //    Two-step face-aware crop:
+  //      a) .rotate() with no args first — auto-applies EXIF Orientation
+  //         so portrait phone photos don't end up sideways. (Without
+  //         this, a JPEG that stores landscape pixels but tags itself
+  //         "rotate 90 CW" via EXIF gets read as landscape, then
+  //         cover-fit scales on the wrong axis and the result looks
+  //         rotated AND oddly zoomed. iPhone photos do this constantly.)
+  //      b) sharp.strategy.attention picks the most interesting region —
+  //         it's salience-based (faces + skin tones rank highest), so on
+  //         a portrait photo it lands roughly on the face.
+  //      c) We then center-extract a tighter square so the face fills
+  //         more of the circle. The attention crop is computed at
+  //         ZOOM_FACTOR × INNER_DIAMETER, then we extract INNER_DIAMETER
+  //         from the center. Net effect: face is ZOOM_FACTOR× bigger in
+  //         the final result. Tuned so that on a typical chest-up
+  //         portrait the face fills ~70% of the circle's height.
+  const ZOOM_FACTOR = 1.4;
+  const wideTarget = Math.round(INNER_DIAMETER * ZOOM_FACTOR);
+  const wideCrop = await sharp(beforeBuf)
     .rotate()
-    .resize(INNER_DIAMETER, INNER_DIAMETER, {
+    .resize(wideTarget, wideTarget, {
       fit: "cover",
       position: sharp.strategy.attention,
+    })
+    .toBuffer();
+  const inset = Math.round((wideTarget - INNER_DIAMETER) / 2);
+  const innerSrc = await sharp(wideCrop)
+    .extract({
+      left: inset,
+      top: inset,
+      width: INNER_DIAMETER,
+      height: INNER_DIAMETER,
     })
     .toBuffer();
 
