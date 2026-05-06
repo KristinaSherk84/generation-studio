@@ -16,7 +16,13 @@
 
 import sharp from "sharp";
 import QRCode from "qrcode";
-import { renderCaptionGroup } from "./textPaths.js";
+import {
+  CAPTION_ASCENT_FU,
+  CAPTION_DESCENT_FU,
+  CAPTION_LINES,
+  CAPTION_UPM,
+  renderCenteredLinesGroup,
+} from "./textPaths.js";
 
 // ---- Canvas dimensions ----
 const CANVAS_W = 1200;
@@ -31,21 +37,24 @@ const SHADOW_OFFSET = { x: 4, y: 6 };
 const SHADOW_BLUR = 20;
 const SHADOW_OPACITY = 0.35;
 
-// ---- QR card (bottom-right; QR + caption inside the same card) ----
+// ---- QR card (bottom-right; QR + two-line caption inside one card) ----
 const QR_SIZE = 220;
 const QR_CARD_PADDING = 14;
 const QR_CARD_W = QR_SIZE + QR_CARD_PADDING * 2; // 248
-// Caption sits below the QR with QR_CAPTION_GAP whitespace. Card height
-// is grown just enough to fit it with QR_CARD_PADDING on top and bottom.
-const QR_CAPTION_FONT_SIZE = 20; // pt — tuned so the caption fits inside
-                                 // QR_CARD_W with a comfortable margin.
-const QR_CAPTION_GAP = 14;
-// 22.34px is the rendered text-block height at 20pt LiberationSans Bold;
-// see textPaths.ts metrics. We round up to 24 for a hair of breathing
-// room (and to handle any sub-pixel descender clipping).
-const QR_CAPTION_BLOCK_H = 24;
+// Caption: two centered all-caps lines ("SCAN TO TRY IT" / "YOURSELF")
+// rendered as vector paths from textPaths.ts. Font size tuned so the
+// longer of the two lines fits inside QR_CARD_W with a comfortable
+// horizontal margin.
+const QR_CAPTION_FONT_SIZE = 20; // pt
+const QR_CAPTION_LINE_SPACING = 22; // px between baselines
+const QR_CAPTION_GAP = 14; // px between QR bottom and caption block top
+// Caption block height = ascent + (lineCount - 1) * lineSpacing + descent
+const QR_CAPTION_BLOCK_H =
+  (CAPTION_ASCENT_FU + CAPTION_DESCENT_FU) * (QR_CAPTION_FONT_SIZE / CAPTION_UPM)
+  + (CAPTION_LINES.length - 1) * QR_CAPTION_LINE_SPACING;
 const QR_CARD_H =
-  QR_CARD_PADDING + QR_SIZE + QR_CAPTION_GAP + QR_CAPTION_BLOCK_H + QR_CARD_PADDING;
+  QR_CARD_PADDING + QR_SIZE + QR_CAPTION_GAP +
+  Math.ceil(QR_CAPTION_BLOCK_H) + QR_CARD_PADDING;
 const QR_CARD_RADIUS = 12;
 const QR_CAPTION_FILL = "#1a1a1a"; // near-black for readable contrast
 
@@ -188,26 +197,18 @@ async function buildQrSprite(qrTargetUrl: string): Promise<{
   const cardCx = padLeft;
   const cardCy = padTop;
 
-  // Caption sits below the QR. Compute its top-left position in the
-  // sprite's coordinate space, then center it horizontally inside the
-  // card (the rendered text width is shorter than the card's inner
-  // width by design — see QR_CAPTION_FONT_SIZE pick above).
+  // Two-line caption sits below the QR, each line centered horizontally
+  // inside the card. The renderer handles per-line centering and the
+  // vertical line stacking; we just feed it the card center and the
+  // top-y of the caption block (in sprite coords).
   const captionTopWithinCard =
     QR_CARD_PADDING + QR_SIZE + QR_CAPTION_GAP;
-  // We need the rendered width to center; renderCaptionGroup also
-  // returns it.
-  const probe = renderCaptionGroup({
+  const caption = renderCenteredLinesGroup({
     fontSize: QR_CAPTION_FONT_SIZE,
     fill: QR_CAPTION_FILL,
-    originX: 0,
-    originY: 0,
-  });
-  const captionLeftWithinCard = (QR_CARD_W - probe.width) / 2;
-  const caption = renderCaptionGroup({
-    fontSize: QR_CAPTION_FONT_SIZE,
-    fill: QR_CAPTION_FILL,
-    originX: cardCx + captionLeftWithinCard,
-    originY: cardCy + captionTopWithinCard,
+    centerX: cardCx + QR_CARD_W / 2,
+    topY: cardCy + captionTopWithinCard,
+    lineSpacing: QR_CAPTION_LINE_SPACING,
   });
 
   // SVG: shadow rect (blurred) + white rounded-rect card + caption
