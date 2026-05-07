@@ -751,14 +751,19 @@ async function generateOneHeadshot(
     //    consistency than 2.5 Flash. Used 2026-04-20 → 2026-05-07. Hedges on
     //    smoothing directives — Glam tier never reached its 70%/95% targets
     //    even with prompt restructuring on 2026-05-07.
-    //  - gemini-3-pro-image-preview (Nano Banana Pro, current): RETRIED
-    //    2026-05-07 to address Flash's prompt-hedging on Glam smoothing.
-    //    Pro is described by Google as following complex multi-part
-    //    instructions more literally than Flash, which is the entire problem
-    //    we're trying to solve. Cost: ~$0.134/image at 2K (vs Flash ~$0.04),
-    //    so ~$0.80 per 6-image customer batch (up from ~$0.24). If 429 rate
-    //    limits return on Tier 1, revert this string to Nano Banana 2.
-    model: "gemini-3-pro-image-preview",
+    //  - gemini-3-pro-image-preview (Nano Banana Pro): RETRIED 2026-05-07
+    //    to address Flash's prompt-hedging on Glam smoothing. ALL 6
+    //    GENERATIONS FAILED on first test — same symptom as 2026-04-18.
+    //    Reverted to Flash 3.1 the same day to restore service. Need to
+    //    investigate the actual API error (rate limit / 400 / timeout)
+    //    via Vercel function logs before retrying. Do NOT swap back to
+    //    Pro until the failure mode is understood.
+    //  - gemini-3.1-flash-image-preview (Nano Banana 2, current): reverted
+    //    here 2026-05-07 after the Pro retry failed. Same model used
+    //    2026-04-20 → 2026-05-07. Hedges on Glam smoothing directives but
+    //    is at least reliable. Glam smoothing problem still open — need
+    //    a different solution approach.
+    model: "gemini-3.1-flash-image-preview",
     contents: [
       {
         role: "user",
