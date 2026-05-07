@@ -746,12 +746,19 @@ async function generateOneHeadshot(
     //  - gemini-2.5-flash-image (Nano Banana 1): worked but delivered
     //    occasional 503 UNAVAILABLE capacity errors (2026-04-20) and had
     //    weaker face-likeness than we wanted.
-    //  - gemini-3.1-flash-image-preview (Nano Banana 2, current): released
-    //    2026-02-26. Same Flash tier / same Tier 1 limits, but noticeably
-    //    better subject consistency (directly addresses the #1 AI-headshot
-    //    complaint — loss of likeness). Keep this model unless it regresses.
-    //    If Google deprecates the preview suffix, revert to 2.5 flash image.
-    model: "gemini-3.1-flash-image-preview",
+    //  - gemini-3.1-flash-image-preview (Nano Banana 2): released 2026-02-26.
+    //    Same Flash tier / same Tier 1 limits, but noticeably better subject
+    //    consistency than 2.5 Flash. Used 2026-04-20 → 2026-05-07. Hedges on
+    //    smoothing directives — Glam tier never reached its 70%/95% targets
+    //    even with prompt restructuring on 2026-05-07.
+    //  - gemini-3-pro-image-preview (Nano Banana Pro, current): RETRIED
+    //    2026-05-07 to address Flash's prompt-hedging on Glam smoothing.
+    //    Pro is described by Google as following complex multi-part
+    //    instructions more literally than Flash, which is the entire problem
+    //    we're trying to solve. Cost: ~$0.134/image at 2K (vs Flash ~$0.04),
+    //    so ~$0.80 per 6-image customer batch (up from ~$0.24). If 429 rate
+    //    limits return on Tier 1, revert this string to Nano Banana 2.
+    model: "gemini-3-pro-image-preview",
     contents: [
       {
         role: "user",
