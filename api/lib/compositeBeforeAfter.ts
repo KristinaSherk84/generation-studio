@@ -25,12 +25,15 @@ import {
 } from "./textPaths.js";
 import { detectFaceBox, type NormalizedBox } from "./detectFaceBox.js";
 
-/** Fraction of the BEFORE-photo height the face should fill. Per
- *  Kristi 2026-05-06: dropped from 0.70 (tight circle) to 0.50 (looser
- *  Polaroid) so the crop forgives more variation in customer photos —
- *  the Polaroid format is rectangular and shows more context, so the
- *  face doesn't need to dominate the way it did in the circle. */
-const BEFORE_FACE_FILL = 0.50;
+/** Fraction of the BEFORE-photo height the face should fill.
+ *  Evolution: 0.70 (tight circle) → 0.50 (Polaroid v1) → 0.35 (current).
+ *  Kristi 2026-05-06 (later that same day): even 50% was too tight on
+ *  real customer photos — the Polaroid still cropped to forehead/eyes
+ *  on some uploads. 0.35 gives the face roughly a third of the
+ *  Polaroid height, with the rest filled by hair, shoulders, and
+ *  surroundings. The "before" should read as "an actual snapshot,"
+ *  not as "an aggressive face-only crop." */
+const BEFORE_FACE_FILL = 0.35;
 
 // ---- Canvas dimensions ----
 const CANVAS_W = 1200;
@@ -224,35 +227,21 @@ async function buildBeforeSprite(beforeUrl: string): Promise<{
   const tiltedW = tiltedMeta.width ?? POLAROID_W;
   const tiltedH = tiltedMeta.height ?? POLAROID_H;
 
-  // 6. Build the sprite canvas — tilted Polaroid + shadow padding on
-  //    every side so the soft shadow can bleed without clipping.
-  const padLeft = SHADOW_BLUR;
-  const padRight = SHADOW_BLUR + Math.max(SHADOW_OFFSET.x, 0);
-  const padTop = SHADOW_BLUR;
-  const padBottom = SHADOW_BLUR + Math.max(SHADOW_OFFSET.y, 0);
+  // 6. Build the sprite canvas — tilted Polaroid only, no shadow.
+  //    Kristi 2026-05-06: removed the drop shadow because it rendered
+  //    as a visible gray rectangle behind the Polaroid in production
+  //    rather than reading as a soft glow. A clean Polaroid against
+  //    the AFTER background reads better. We still pad slightly so
+  //    the rotated bounding box isn't clipped, but no shadow bleed.
+  const SPRITE_PAD = 8;
+  const padLeft = SPRITE_PAD;
+  const padRight = SPRITE_PAD;
+  const padTop = SPRITE_PAD;
+  const padBottom = SPRITE_PAD;
   const spriteW = tiltedW + padLeft + padRight;
   const spriteH = tiltedH + padTop + padBottom;
 
-  // 7. Build a shadow layer — a blurred dark version of the tilted
-  //    Polaroid silhouette, offset by SHADOW_OFFSET.
-  const shadowMask = await sharp(tiltedBuffer)
-    .extractChannel("alpha")
-    .blur(SHADOW_BLUR / 2)
-    .toBuffer();
-  // Convert the alpha-only buffer back to RGBA black at SHADOW_OPACITY.
-  const shadowRgba = await sharp({
-    create: {
-      width: tiltedW,
-      height: tiltedH,
-      channels: 4,
-      background: { r: 0, g: 0, b: 0, alpha: SHADOW_OPACITY },
-    },
-  })
-    .joinChannel(shadowMask)
-    .png()
-    .toBuffer();
-
-  // 8. Compose: blank canvas → shadow (offset) → tilted Polaroid on top.
+  // 7. Compose: blank canvas + tilted Polaroid centered in it.
   const sprite = await sharp({
     create: {
       width: spriteW,
@@ -262,11 +251,6 @@ async function buildBeforeSprite(beforeUrl: string): Promise<{
     },
   })
     .composite([
-      {
-        input: shadowRgba,
-        top: padTop + SHADOW_OFFSET.y,
-        left: padLeft + SHADOW_OFFSET.x,
-      },
       {
         input: tiltedBuffer,
         top: padTop,
