@@ -636,7 +636,23 @@ const FLAVORS: Flavor[] = [
   },
 ];
 
-function buildBlock8(attire: Attire, variationIndex: number): string {
+// 2026-05-07: buildBlock8 gained a third `skin` parameter so the Glam tier
+// can inject a final-position override targeting the under-eye and outer-
+// eye-corner skin specifically. Earlier prompt edits to Block 1 / SKIN_GLAM
+// / Block 7 moved Glam smoothing only marginally, because Block 8's
+// per-image expression directives (the FLAVORS array) sit far closer to
+// the model's "what to render in THIS image" reasoning than the abstract
+// per-tier smoothing percentages do — and natural smile rendering produces
+// crow's feet and under-eye scrunch lines as a biomechanical side-effect
+// even when FLAVORS doesn't explicitly request them. The Glam override
+// here lives at the bottom of buildBlock8's output (just above the single-
+// image structural constraint) so it has near-final-word weight while
+// keeping the "one photograph, not a grid" directive last.
+function buildBlock8(
+  attire: Attire,
+  variationIndex: number,
+  skin: Skin | undefined,
+): string {
   // Defensive: clamp index into the valid range.
   const flavor = FLAVORS[Math.max(0, Math.min(FLAVORS.length - 1, variationIndex))];
 
@@ -645,13 +661,18 @@ function buildBlock8(attire: Attire, variationIndex: number): string {
       ? `- Outfit: Preserve the exact clothing from the reference photos — do not change the garment type, color, neckline, or style.`
       : `- Outfit detail: ${flavor.attireHint}. This must stay firmly within the attire category specified above.`;
 
+  const glamUnderEyeOverride =
+    skin === "glam"
+      ? `\n\nGLAM-TIER FINAL OVERRIDE — UNDER-EYE AND OUTER-EYE-CORNER SKIN ONLY: The expression above creates the impression of a warm, engaged, smiling subject — preserve that impression 100%. The SURFACE SKIN around the eyes, however, renders completely smooth in this output: NO crow's feet creases at the outer corners of the eyes, NO under-eye fine lines or wrinkles, NO crepey under-eye texture, NO scrunch lines below the eye, NO milia, NO tear-trough hollows, NO under-eye darkness, NO under-eye puffiness. The smile-eyes warmth comes ENTIRELY from cheek lift, slight squint, eye sparkle, and catchlights — NOT from creased skin. Think Vogue cover: warm engaged smile, completely smooth skin around the eyes. Pore micro-texture remains across the under-eye and outer-eye-corner zones per Block 1's pore directive, but all line and crease texture in those zones is eliminated.`
+      : "";
+
   return `Photograph direction for this single image:
 - Expression: ${flavor.expression}. Eyes must look alert, engaged, and realistic — never blank, glazed, doll-like, or expressionless.
 - Body and head: ${flavor.bodyPose}.
 - Framing: ${flavor.crop}.
 ${outfitLine}
 
-REFERENCE PHOTO USAGE RULE: The uploaded reference photos are provided ONLY so you can learn the subject's facial likeness — face shape, features, hair, skin tone. You MUST NOT copy, sample, or draw inspiration from the reference photos' backgrounds, environments, colors, lighting, or scenes. The new photograph's background and lighting come ENTIRELY from the direction in the prompt above — ignore anything visible behind or around the subject in the reference photos.
+REFERENCE PHOTO USAGE RULE: The uploaded reference photos are provided ONLY so you can learn the subject's facial likeness — face shape, features, hair, skin tone. You MUST NOT copy, sample, or draw inspiration from the reference photos' backgrounds, environments, colors, lighting, or scenes. The new photograph's background and lighting come ENTIRELY from the direction in the prompt above — ignore anything visible behind or around the subject in the reference photos.${glamUnderEyeOverride}
 
 IMPORTANT OUTPUT CONSTRAINT: Return exactly ONE single photograph. Do NOT return a grid, contact sheet, collage, multi-panel image, side-by-side comparison, or any composition containing more than one headshot. One photo only. The most important thing is preserving the subject's real likeness from the reference photos.`;
 }
@@ -713,7 +734,7 @@ function assemblePrompt(req: GenerateRequest): string {
   }
 
   parts.push(buildBlock7Technical(req.skin));
-  parts.push(buildBlock8(req.attire, req.variationIndex));
+  parts.push(buildBlock8(req.attire, req.variationIndex, req.skin));
 
   return parts.join("\n\n");
 }
