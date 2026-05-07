@@ -25,18 +25,42 @@ import {
 } from "./textPaths.js";
 import { detectFaceBox, type NormalizedBox } from "./detectFaceBox.js";
 
-/** Fraction of the BEFORE-circle height the face should fill. Per
- *  Kristi 2026-05-06: head should take up 70% of the circle. */
-const BEFORE_FACE_FILL = 0.70;
+/** Fraction of the BEFORE-photo height the face should fill. Per
+ *  Kristi 2026-05-06: dropped from 0.70 (tight circle) to 0.50 (looser
+ *  Polaroid) so the crop forgives more variation in customer photos —
+ *  the Polaroid format is rectangular and shows more context, so the
+ *  face doesn't need to dominate the way it did in the circle. */
+const BEFORE_FACE_FILL = 0.50;
 
 // ---- Canvas dimensions ----
 const CANVAS_W = 1200;
 const CANVAS_H = 1600;
 
-// ---- BEFORE circle ----
-const CIRCLE_DIAMETER = Math.round(CANVAS_W * 0.36); // 432
-const RING = 14; // white ring thickness
-const INNER_DIAMETER = CIRCLE_DIAMETER - 2 * RING; // 404
+// ---- BEFORE Polaroid (replaces the old BEFORE circle as of 2026-05-06) ----
+//
+// A Polaroid-style rectangle reads as a casual snapshot tucked into the
+// bottom-left corner — like a sticker on top of the AI headshot. The
+// rectangular photo area is more forgiving to imperfect face crops than
+// a tight circle was: even if the face isn't dead-center, the wider
+// frame keeps the surrounding context (hair, shoulders, room) visible
+// instead of cropping to a forehead-and-eyes sliver.
+const POLAROID_PHOTO_W = 380;
+const POLAROID_PHOTO_H = 380;
+const POLAROID_BORDER_SIDES = 18;
+const POLAROID_BORDER_TOP = 18;
+// Bottom border is intentionally thicker — that's the visual signature
+// of an actual Polaroid (the white space below the photo where you'd
+// hand-write a caption).
+const POLAROID_BORDER_BOTTOM = 80;
+const POLAROID_W = POLAROID_PHOTO_W + 2 * POLAROID_BORDER_SIDES; // 416
+const POLAROID_H = POLAROID_PHOTO_H + POLAROID_BORDER_TOP + POLAROID_BORDER_BOTTOM; // 478
+// Slight CCW tilt for casual scrapbook character. Set to 0 for a clean
+// non-tilted look if it ever feels too playful.
+const POLAROID_TILT_DEG = -4;
+// Subtle rounded corners (real Polaroids have a tiny radius from the
+// physical paper edge).
+const POLAROID_CORNER_RADIUS = 4;
+
 const MARGIN = 40; // offset from canvas edges
 const SHADOW_OFFSET = { x: 4, y: 6 };
 const SHADOW_BLUR = 20;
@@ -74,56 +98,41 @@ async function fetchAsBuffer(url: string): Promise<Buffer> {
 }
 
 /**
- * Build the BEFORE inset sprite as a single PNG buffer.
- * Includes the source image (square-cropped + circular masked), the
- * white ring, the drop shadow, and the translucent BEFORE label bar.
+ * Build the BEFORE Polaroid sprite — a rectangular Polaroid-style
+ * snapshot with the customer's BEFORE photo inside, white frame around
+ * it, a thicker bottom border, a slight tilt, and a soft drop shadow.
  *
- * Returns a buffer sized so the SHADOW has room to bleed past the
- * circle — the caller composites it with offsets that account for
- * the shadow padding.
+ * Returns a sprite buffer sized to fit the rotated Polaroid PLUS the
+ * shadow bleed, plus the offset coordinates the caller needs to
+ * composite the sprite onto the main canvas.
  */
 async function buildBeforeSprite(beforeUrl: string): Promise<{
   buffer: Buffer;
   spriteWidth: number;
   spriteHeight: number;
-  // Where the circle center sits inside the sprite, used to calculate
-  // the composite offset on the main canvas.
+  // The (x, y) inside the sprite where the rotated Polaroid's bounding
+  // box starts. Used to calculate the canvas-level paste offset so the
+  // visible Polaroid lands at MARGIN from the canvas edges, not the
+  // shadow padding.
   circleOffsetX: number;
   circleOffsetY: number;
 }> {
   const beforeBuf = await fetchAsBuffer(beforeUrl);
 
-  // 1. Square-crop the source so the face fills BEFORE_FACE_FILL of the
-  //    circle's height. Strategy:
-  //
-  //    Step A — auto-orient via .rotate(). This reads the JPEG's EXIF
-  //    Orientation tag and rotates the pixels accordingly. Without it,
-  //    iPhone photos (landscape pixels + "rotate 90 CW" EXIF tag) come
-  //    out sideways.
-  //
-  //    Step B — find the face. We ask Gemini for a tight bbox around
-  //    the main face. Gemini's face detection is dramatically more
-  //    reliable than sharp's salience-based attention strategy, which
-  //    happily picks high-contrast hair or white lab coats over the
-  //    actual face on portrait photos.
-  //
-  //    Step C — if Gemini found a face, compute a square crop centered
-  //    on the face whose height makes the face exactly BEFORE_FACE_FILL
-  //    of the crop. Resize that crop to INNER_DIAMETER.
-  //
-  //    Step D — fall back to sharp.strategy.attention if Gemini failed
-  //    or returned no face. Better than nothing.
+  // 1. Auto-orient the source. .rotate() with no args reads EXIF
+  //    Orientation and applies it — without this, iPhone photos (which
+  //    encode landscape pixels + a "rotate 90 CW" tag) come out
+  //    sideways.
   const oriented = await sharp(beforeBuf).rotate().toBuffer();
   const orientedMeta = await sharp(oriented).metadata();
   const srcW = orientedMeta.width ?? 0;
   const srcH = orientedMeta.height ?? 0;
 
-  // Detect the face on a downsampled copy — full-resolution phone
-  // photos can be 5-10MB and Gemini doesn't need that pixel density to
-  // find a face. Downscaling keeps inline payloads small (~50-200KB) and
-  // shaves a chunk off latency. The bbox is returned in NORMALIZED
-  // (0..1) coordinates so it remains valid against the full-resolution
-  // crop below.
+  // 2. Detect the face on a downsampled copy. Full-resolution phone
+  //    photos can be 5-10MB and Gemini doesn't need that pixel
+  //    density to find a face. The bbox is returned in NORMALIZED
+  //    (0..1) coordinates so it remains valid against the full-
+  //    resolution oriented buffer when we crop below.
   let faceBox: NormalizedBox | null = null;
   if (srcW > 0 && srcH > 0) {
     const FACE_DETECT_MAX_DIM = 1024;
@@ -137,105 +146,131 @@ async function buildBeforeSprite(beforeUrl: string): Promise<{
     faceBox = await detectFaceBox(detectBuf, "image/jpeg");
   }
 
-  let innerSrc: Buffer;
+  // 3. Build the photo content for inside the Polaroid (square,
+  //    POLAROID_PHOTO_W × POLAROID_PHOTO_H). Face fills 50% of the
+  //    photo height when detected — the wider Polaroid format means
+  //    the photo doesn't have to dominate the frame the way it did in
+  //    the tighter circle, so 50% reads as natural rather than
+  //    aggressive.
+  let photo: Buffer;
   if (faceBox && srcW > 0 && srcH > 0) {
-    // ---- Face detected — crop tight on it ----
+    // Face detected — crop centered on it
     const facePxX = (faceBox.xMin + faceBox.xMax) / 2 * srcW;
     const facePxY = (faceBox.yMin + faceBox.yMax) / 2 * srcH;
     const facePxH = (faceBox.yMax - faceBox.yMin) * srcH;
     const facePxW = (faceBox.xMax - faceBox.xMin) * srcW;
-
-    // Crop side length so face_height / crop_height === BEFORE_FACE_FILL.
-    // Use the LARGER of (face height) and (face width) as the reference
-    // so wide faces (people facing the camera) don't get clipped on the
-    // sides.
     const faceMax = Math.max(facePxH, facePxW);
     let cropSize = Math.round(faceMax / BEFORE_FACE_FILL);
     cropSize = Math.min(cropSize, srcW, srcH);
-
     let left = Math.round(facePxX - cropSize / 2);
     let top = Math.round(facePxY - cropSize / 2);
-    // Clamp to source bounds so .extract() doesn't error
     left = Math.max(0, Math.min(left, srcW - cropSize));
     top = Math.max(0, Math.min(top, srcH - cropSize));
-
-    innerSrc = await sharp(oriented)
+    photo = await sharp(oriented)
       .extract({ left, top, width: cropSize, height: cropSize })
-      .resize(INNER_DIAMETER, INNER_DIAMETER, { fit: "cover" })
+      .resize(POLAROID_PHOTO_W, POLAROID_PHOTO_H, { fit: "cover" })
       .toBuffer();
   } else {
-    // ---- Fallback — sharp's salience-based attention crop with a
-    //      modest zoom. This is the same heuristic we used before
-    //      Gemini-based detection and may miscrop on tricky photos,
-    //      but it's better than nothing if Gemini is down. ----
-    const ZOOM_FACTOR = 1.4;
-    const wideTarget = Math.round(INNER_DIAMETER * ZOOM_FACTOR);
+    // Fallback — salience-based attention crop with modest zoom.
+    // This runs only if Gemini face detection failed entirely. The
+    // wider Polaroid frame is more forgiving of imperfect crops than
+    // the tight circle was.
+    const ZOOM_FACTOR = 1.3;
+    const wideTarget = Math.round(POLAROID_PHOTO_W * ZOOM_FACTOR);
     const wideCrop = await sharp(oriented)
       .resize(wideTarget, wideTarget, {
         fit: "cover",
         position: sharp.strategy.attention,
       })
       .toBuffer();
-    const inset = Math.round((wideTarget - INNER_DIAMETER) / 2);
-    innerSrc = await sharp(wideCrop)
+    const inset = Math.round((wideTarget - POLAROID_PHOTO_W) / 2);
+    photo = await sharp(wideCrop)
       .extract({
         left: inset,
         top: inset,
-        width: INNER_DIAMETER,
-        height: INNER_DIAMETER,
+        width: POLAROID_PHOTO_W,
+        height: POLAROID_PHOTO_H,
       })
       .toBuffer();
   }
 
-  // 2. Apply circular mask via SVG composite.
-  const circularMaskSvg = Buffer.from(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${INNER_DIAMETER}" height="${INNER_DIAMETER}">
-      <circle cx="${INNER_DIAMETER / 2}" cy="${INNER_DIAMETER / 2}" r="${INNER_DIAMETER / 2}" fill="white"/>
+  // 4. Build the unrotated white Polaroid frame with the photo set
+  //    inside the photo well. The frame is one solid white rectangle;
+  //    the photo gets composited on top in the photo well region.
+  const frameSvg = Buffer.from(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${POLAROID_W}" height="${POLAROID_H}">
+      <rect x="0" y="0" width="${POLAROID_W}" height="${POLAROID_H}" rx="${POLAROID_CORNER_RADIUS}" fill="white"/>
     </svg>`,
   );
-  const circularBefore = await sharp(innerSrc)
-    .composite([{ input: circularMaskSvg, blend: "dest-in" }])
+  const flatPolaroid = await sharp(frameSvg)
+    .composite([
+      {
+        input: photo,
+        top: POLAROID_BORDER_TOP,
+        left: POLAROID_BORDER_SIDES,
+      },
+    ])
     .png()
     .toBuffer();
 
-  // 3. Build the sprite canvas — circle + shadow padding.
+  // 5. Tilt the entire Polaroid by POLAROID_TILT_DEG. Sharp's .rotate()
+  //    expands the canvas to fit the rotated content; we'll account
+  //    for the new bounding-box dimensions when sizing the sprite.
+  const tiltedBuffer = await sharp(flatPolaroid)
+    .rotate(POLAROID_TILT_DEG, { background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .png()
+    .toBuffer();
+  const tiltedMeta = await sharp(tiltedBuffer).metadata();
+  const tiltedW = tiltedMeta.width ?? POLAROID_W;
+  const tiltedH = tiltedMeta.height ?? POLAROID_H;
+
+  // 6. Build the sprite canvas — tilted Polaroid + shadow padding on
+  //    every side so the soft shadow can bleed without clipping.
   const padLeft = SHADOW_BLUR;
   const padRight = SHADOW_BLUR + Math.max(SHADOW_OFFSET.x, 0);
   const padTop = SHADOW_BLUR;
   const padBottom = SHADOW_BLUR + Math.max(SHADOW_OFFSET.y, 0);
-  const spriteW = CIRCLE_DIAMETER + padLeft + padRight;
-  const spriteH = CIRCLE_DIAMETER + padTop + padBottom;
+  const spriteW = tiltedW + padLeft + padRight;
+  const spriteH = tiltedH + padTop + padBottom;
 
-  // 4. Build the shadow + white ring SVG. NO label bar or BEFORE text
-  //    (removed 2026-05-04 per Kristi: 'remove the black bar at the
-  //    bottom of the before circle photo'). The visual is now just
-  //    the photo masked into a clean circle with a white ring + soft
-  //    drop shadow.
-  const shadowCx = padLeft + CIRCLE_DIAMETER / 2 + SHADOW_OFFSET.x;
-  const shadowCy = padTop + CIRCLE_DIAMETER / 2 + SHADOW_OFFSET.y;
-  const ringCx = padLeft + CIRCLE_DIAMETER / 2;
-  const ringCy = padTop + CIRCLE_DIAMETER / 2;
+  // 7. Build a shadow layer — a blurred dark version of the tilted
+  //    Polaroid silhouette, offset by SHADOW_OFFSET.
+  const shadowMask = await sharp(tiltedBuffer)
+    .extractChannel("alpha")
+    .blur(SHADOW_BLUR / 2)
+    .toBuffer();
+  // Convert the alpha-only buffer back to RGBA black at SHADOW_OPACITY.
+  const shadowRgba = await sharp({
+    create: {
+      width: tiltedW,
+      height: tiltedH,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: SHADOW_OPACITY },
+    },
+  })
+    .joinChannel(shadowMask)
+    .png()
+    .toBuffer();
 
-  const ringSvg = Buffer.from(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${spriteW}" height="${spriteH}">
-      <defs>
-        <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
-          <feGaussianBlur stdDeviation="${SHADOW_BLUR / 2}"/>
-        </filter>
-      </defs>
-      <circle cx="${shadowCx}" cy="${shadowCy}" r="${CIRCLE_DIAMETER / 2}" fill="black" fill-opacity="${SHADOW_OPACITY}" filter="url(#shadow)"/>
-      <circle cx="${ringCx}" cy="${ringCy}" r="${CIRCLE_DIAMETER / 2}" fill="white"/>
-    </svg>`,
-  );
-
-  // 5. Composite: ring/shadow SVG as base, photo composited on top
-  //    inside the ring (RING px inset from the outer circle edge).
-  const sprite = await sharp(ringSvg)
+  // 8. Compose: blank canvas → shadow (offset) → tilted Polaroid on top.
+  const sprite = await sharp({
+    create: {
+      width: spriteW,
+      height: spriteH,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    },
+  })
     .composite([
       {
-        input: circularBefore,
-        top: padTop + RING,
-        left: padLeft + RING,
+        input: shadowRgba,
+        top: padTop + SHADOW_OFFSET.y,
+        left: padLeft + SHADOW_OFFSET.x,
+      },
+      {
+        input: tiltedBuffer,
+        top: padTop,
+        left: padLeft,
       },
     ])
     .png()
@@ -349,7 +384,10 @@ export type ShareGraphicArgs = {
  *
  * Layout (1200x1600):
  *   - Full canvas: AI-generated AFTER headshot, cover-fit
- *   - Bottom-left: BEFORE circle (white ring + drop shadow, no label bar)
+ *   - Bottom-left: BEFORE Polaroid — rectangular white-framed snapshot
+ *     with a slight tilt and soft drop shadow. Replaces the previous
+ *     circular inset (changed 2026-05-06 because the tight circle was
+ *     unforgiving of imperfect face crops on real customer photos)
  *   - Bottom-right: QR card with QR code + "Scan to try it yourself"
  *     caption rendered as SVG vector paths (so it renders identically
  *     across all environments without needing the right system fonts)
@@ -370,16 +408,22 @@ export async function buildShareGraphic(
     .resize(CANVAS_W, CANVAS_H, { fit: "cover", position: "center" })
     .toBuffer();
 
-  // 2. Build the BEFORE sprite (circle + ring + shadow — no label).
+  // 2. Build the BEFORE Polaroid sprite (white frame, tilted, with
+  //    drop shadow). Returns a sprite that's bigger than the visible
+  //    Polaroid — the extra padding holds the tilted bounding box and
+  //    the shadow bleed.
   const beforeSprite = await buildBeforeSprite(args.beforeUrl);
 
   // 3. Build the QR card sprite (QR + caption inside the same card).
   const qrSprite = await buildQrSprite(args.qrTargetUrl);
 
   // 4. Composite everything onto a 1200x1600 white canvas.
-  // BEFORE sprite goes bottom-left at MARGIN offset.
+  //    BEFORE sprite goes bottom-left at MARGIN offset. The sprite is
+  //    sized to its tilted bounding box; placing it so the bounding-box
+  //    bottom-left sits at (MARGIN, CANVAS_H - MARGIN) keeps the visible
+  //    Polaroid roughly the same MARGIN distance from the canvas edges.
   const beforeLeft = MARGIN - beforeSprite.circleOffsetX;
-  const beforeTop = CANVAS_H - MARGIN - CIRCLE_DIAMETER - beforeSprite.circleOffsetY;
+  const beforeTop = CANVAS_H - MARGIN - beforeSprite.spriteHeight + beforeSprite.circleOffsetY;
   // QR card goes bottom-right at MARGIN offset.
   const qrLeft = CANVAS_W - MARGIN - QR_CARD_W - qrSprite.cardOffsetX;
   const qrTop = CANVAS_H - MARGIN - QR_CARD_H - qrSprite.cardOffsetY;
