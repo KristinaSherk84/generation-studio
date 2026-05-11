@@ -893,7 +893,7 @@ const LandingV2 = ({ onStart, onPromoUnlock, onShowGallery }: LandingV2Props) =>
       {/* ========== TOP NAV ========== */}
       <nav
         style={{
-          height: 76,
+          height: 52,
           padding: "0 clamp(16px, 4vw, 56px)",
           display: "flex",
           alignItems: "center",
@@ -948,17 +948,18 @@ const LandingV2 = ({ onStart, onPromoUnlock, onShowGallery }: LandingV2Props) =>
         style={{
           maxWidth: 1280,
           margin: "0 auto",
-          // Top padding tightened 2026-05-11 to reduce "dead space" between
-          // the nav and headline on mobile (Kristi marked this on a phone
-          // mockup). Desktop unchanged via the clamp's max.
+          // Top padding tightened on BOTH mobile and desktop 2026-05-11.
+          // Desktop was 40-80px (way too much dead space above the H1);
+          // now 16px to bring the headline up close to the nav.
           padding: isMobile
             ? "12px 20px 16px"
-            : "clamp(40px, 7vw, 80px) clamp(20px, 4vw, 56px) 32px",
+            : "16px clamp(20px, 4vw, 56px) 16px",
           textAlign: "center",
         }}
       >
-        {/* Big serif headline — font sized down on mobile (was 34px min,
-            now 26px min) per Kristi 2026-05-11. Tighter line-height too. */}
+        {/* Big serif headline — sized down on mobile per Kristi 2026-05-11.
+            On desktop the headline takes 3-4 lines at max viewport so the
+            margin below it is moderate to keep the page compact. */}
         <h1
           style={{
             fontFamily: SERIF_STACK,
@@ -969,7 +970,7 @@ const LandingV2 = ({ onStart, onPromoUnlock, onShowGallery }: LandingV2Props) =>
             lineHeight: isMobile ? 1.12 : 1.08,
             letterSpacing: -0.4,
             color: BRAND.charcoal,
-            margin: isMobile ? "0 auto 14px" : "0 auto 24px",
+            margin: isMobile ? "0 auto 14px" : "0 auto 18px",
             maxWidth: 980,
           }}
         >
@@ -992,12 +993,33 @@ const LandingV2 = ({ onStart, onPromoUnlock, onShowGallery }: LandingV2Props) =>
             lineHeight: 1.55,
             color: BRAND.subText,
             maxWidth: 640,
-            margin: isMobile ? "0 auto 24px" : "0 auto 40px",
+            margin: isMobile ? "0 auto 16px" : "0 auto 20px",
           }}
         >
           Most AI headshot tools are built by coders. This one is built by an
           actual headshot photographer, so they actually look like you.
         </p>
+
+        {/* Primary CTA sits ABOVE the hero photo on both mobile and desktop
+            (2026-05-11 — Kristi flagged that putting it below pushed the
+            button under the fold). Smaller "lg" pill (was "xl" on desktop)
+            so it doesn't dominate the composition above the photo. */}
+        <div style={{ marginBottom: isMobile ? 18 : 24 }}>
+          <Pill onClick={onStart} size="lg">
+            Create my headshots
+          </Pill>
+          <div
+            style={{
+              marginTop: 10,
+              fontSize: isMobile ? 12 : 13,
+              color: BRAND.subText,
+              letterSpacing: 0.3,
+            }}
+          >
+            Starts at <strong style={{ color: BRAND.charcoal }}>$2.99</strong> ·
+            {isMobile ? " 5 min · Money-back" : " Money-back guarantee · 5 minutes"}
+          </div>
+        </div>
 
         {/* Hero photo of Kristi leaning over her camera, transparent
             background (PNG). Swapped in 2026-05-11 — clean cutout, no
@@ -1033,7 +1055,10 @@ const LandingV2 = ({ onStart, onPromoUnlock, onShowGallery }: LandingV2Props) =>
         id="examples"
         style={{
           background: BRAND.white,
-          padding: isMobile ? "16px 0 8px" : "clamp(48px, 6vw, 80px) 0 16px",
+          // Tight top padding on both viewports so the strip sits right
+          // below Kristi's hand in the hero photo (per her 2026-05-11
+          // markup — "filmstrip should be right below my hand").
+          padding: isMobile ? "8px 0 8px" : "16px 0 16px",
         }}
       >
         <div
@@ -1102,33 +1127,9 @@ const LandingV2 = ({ onStart, onPromoUnlock, onShowGallery }: LandingV2Props) =>
         </div>
       </section>
 
-      {/* ========== PRIMARY CTA ========== */}
-      {/* Moved here 2026-05-11 — was above the filmstrip, now sits below
-          it. New flow: see the work first, then the ask. On mobile this
-          plus the tightened hero brings the CTA closer to above-the-fold
-          territory. On desktop the visual progression (hero → proof → ask)
-          is cleaner than the prior hero → ask → proof order. */}
-      <section
-        style={{
-          textAlign: "center",
-          padding: isMobile ? "20px 20px 40px" : "32px 20px 64px",
-        }}
-      >
-        <Pill onClick={onStart} size={isMobile ? "lg" : "xl"}>
-          Create my headshots
-        </Pill>
-        <div
-          style={{
-            marginTop: isMobile ? 12 : 18,
-            fontSize: isMobile ? 12 : 13,
-            color: BRAND.subText,
-            letterSpacing: 0.3,
-          }}
-        >
-          Starts at <strong style={{ color: BRAND.charcoal }}>$2.99</strong> ·
-          {isMobile ? " 5 min · Money-back" : " Money-back guarantee · 5 minutes"}
-        </div>
-      </section>
+      {/* Post-filmstrip CTA section was here (removed 2026-05-11). With the
+          new primary CTA placed above the hero photo + a second CTA in the
+          editorial tagline band below, having a third here was redundant. */}
 
       {/* ========== TRUST STRIP (charcoal full-bleed) ========== */}
       <section
