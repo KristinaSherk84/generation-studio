@@ -374,21 +374,16 @@ const SERIF_STACK =
 const SANS_STACK =
   "system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif";
 
-// Before/after pairs for the cycling hero carousel. Ordered as Kristi
-// approved on 2026-05-04. Files live in /public/marketing/ so they're
-// served from the site root at deploy time.
-const HERO_PAIRS: { before: string; after: string }[] = [
-  { before: "/marketing/pair-09-before.jpg", after: "/marketing/pair-09-after.jpg" },
-  { before: "/marketing/pair-10-before.jpg", after: "/marketing/pair-10-after.jpg" },
-  { before: "/marketing/pair-12-before.jpg", after: "/marketing/pair-12-after.jpg" },
-  { before: "/marketing/pair-13-before.jpg", after: "/marketing/pair-13-after.jpg" },
-  { before: "/marketing/pair-14-before.jpg", after: "/marketing/pair-14-after.jpg" },
-  { before: "/marketing/pair-15-before.jpg", after: "/marketing/pair-15-after.jpg" },
-  { before: "/marketing/pair-27-before.jpg", after: "/marketing/pair-27-after.jpg" },
-];
+// Pre-composited before/after posters (1200x1600 portrait, after as full
+// headshot + before as a circular inset in the lower-left labeled "BEFORE").
+// All 32 pairs from /Before-After Graphics/ live under public/marketing/gallery/.
+// Used by both the hero film strip and the full gallery screen.
+const GALLERY_PAIRS: string[] = Array.from({ length: 32 }, (_, i) => {
+  const n = String(i + 7).padStart(2, "0"); // pair-07 through pair-38
+  return `/marketing/gallery/pair-${n}.jpg`;
+});
 
-const CYCLE_MS = 4000; // 4-second auto-advance per the handoff
-const FADE_MS = 600; // 0.6s crossfade
+const STRIP_DURATION_S = 90; // full-loop duration; matches "slow film-reel" pace
 
 // Wordmark: "GenerAItion" with AI emphasized via italic + gold so it survives
 // at logo size (per brand notes — hyphenated "Gener-AI-tion" disappears).
@@ -481,153 +476,285 @@ const Pill = ({
   );
 };
 
-// Cycling before/after circles. Sit absolutely on top of the hero photo's
-// LinkedIn-style frames and crossfade between Kristi's 7 approved pairs
-// every 4 seconds.
+
+// Continuously-scrolling horizontal "film strip" of before/after posters.
+// Pure CSS animation — no JS interval. The track contains TWO copies of
+// GALLERY_PAIRS so the loop is seamless: when the first copy scrolls fully
+// out of view, the second copy occupies the visible area and the animation
+// jumps back to start (invisible because the second copy is identical).
 //
-// Positions are percentages of the hero photo's dimensions so they scale
-// with viewport. On MOBILE the photo container uses a tighter aspectRatio
-// (1.2 vs desktop's 1.86) so objectFit:cover crops the dark left/right
-// edges off the photo — making Kristi + the LinkedIn frames fill the
-// screen instead of being squished into a tiny strip. The carousel circle
-// percentages are recalculated for each viewport because the cropped
-// photo's frame centers land at different percentages of the visible area.
-const HeroCarousel = ({ isMobile }: { isMobile: boolean }) => {
-  const [idx, setIdx] = useState(0);
-  const [fading, setFading] = useState(false);
-
-  useEffect(() => {
-    const id = setInterval(() => {
-      setFading(true);
-      // Mid-fade swap — image cross-fades through opacity reset.
-      window.setTimeout(() => {
-        setIdx((i) => (i + 1) % HERO_PAIRS.length);
-        setFading(false);
-      }, FADE_MS / 2);
-    }, CYCLE_MS);
-    return () => clearInterval(id);
-  }, []);
-
-  // Preload the next pair so the swap is instant when it fires.
-  useEffect(() => {
-    const next = (idx + 1) % HERO_PAIRS.length;
-    const a = new Image();
-    a.src = HERO_PAIRS[next].before;
-    const b = new Image();
-    b.src = HERO_PAIRS[next].after;
-  }, [idx]);
-
-  const circle = (src: string, label: string, leftPct: number) => (
+// Hover pauses the strip via the .film-strip-track:hover rule injected by
+// LandingV2's <style> tag. Clicking a frame routes to the full gallery.
+const HeroFilmStrip = ({ onShowGallery }: { onShowGallery: () => void }) => (
+  <div
+    style={{
+      width: "100%",
+      overflow: "hidden",
+      maskImage:
+        "linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent)",
+      WebkitMaskImage:
+        "linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent)",
+    }}
+  >
     <div
+      className="film-strip-track"
       style={{
-        position: "absolute",
-        left: `${leftPct}%`,
-        // Vertical center positioned on the boundary between the LinkedIn-
-        // style card's grey banner and white content area in the new hero
-        // photo (copy 3, 2026-05-04 swap). Like a real LinkedIn profile
-        // photo straddling the banner/content border.
-        top: "73%",
-        transform: "translate(-50%, -50%)",
-        // Width as a percentage of the photo CONTAINER (not the viewport)
-        // so circles scale with the photo's display size at every viewport.
-        // Desktop: 20%. Mobile: 35% — much bigger because at 22% the faces
-        // were too small to read on a phone (per Kristi 2026-05-04: "circles
-        // need to be much bigger on mobile so we can actually see the goods").
-        // The 35% diameter still fits cleanly between the two LinkedIn frame
-        // centers (which are at 28% and 72% in the cropped view, leaving a
-        // 9% gap between the circles' edges).
-        width: isMobile ? "35%" : "20%",
+        display: "flex",
+        gap: 16,
+        width: "max-content",
+        animation: `film-strip-scroll ${STRIP_DURATION_S}s linear infinite`,
+      }}
+    >
+      {[...GALLERY_PAIRS, ...GALLERY_PAIRS].map((src, i) => (
+        <button
+          key={i}
+          onClick={onShowGallery}
+          aria-label="View full before-and-after gallery"
+          style={{
+            flex: "0 0 auto",
+            width: "clamp(160px, 18vw, 260px)",
+            aspectRatio: "3 / 4",
+            border: "none",
+            padding: 0,
+            background: "transparent",
+            cursor: "pointer",
+            borderRadius: 6,
+            overflow: "hidden",
+            boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
+          }}
+        >
+          <img
+            src={src}
+            alt="AI-generated headshot transformation"
+            loading="lazy"
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              display: "block",
+            }}
+          />
+        </button>
+      ))}
+    </div>
+  </div>
+);
+
+// -------------------- Gallery Screen --------------------
+//
+// Full-screen gallery of all 32 before/after pairs. Accessible from the
+// landing nav ("Examples") and from any film-strip card click. Same brand
+// language as LandingV2.
+type GalleryScreenProps = {
+  onBack: () => void;
+  onStart: () => void;
+};
+const GalleryScreen = ({ onBack, onStart }: GalleryScreenProps) => (
+  <div
+    style={{
+      background: BRAND.white,
+      color: BRAND.bodyText,
+      fontFamily: SANS_STACK,
+      minHeight: "100vh",
+    }}
+  >
+    <nav
+      style={{
+        height: 76,
+        padding: "0 clamp(16px, 4vw, 56px)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        borderBottom: `1px solid #EFEAE0`,
+        background: BRAND.white,
+        position: "sticky",
+        top: 0,
+        zIndex: 10,
+      }}
+    >
+      <button
+        onClick={onBack}
+        style={{
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          padding: 0,
+          fontFamily: SERIF_STACK,
+          fontSize: 20,
+          color: BRAND.charcoal,
+        }}
+      >
+        Gener
+        <span style={{ fontStyle: "italic", color: BRAND.gold, fontWeight: 600 }}>
+          AI
+        </span>
+        tion <span style={{ fontWeight: 500 }}>Headshots</span>
+      </button>
+      <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
+        <button
+          onClick={onBack}
+          style={{
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            fontSize: 14,
+            color: BRAND.charcoal,
+            borderBottom: `1px solid ${BRAND.gold}`,
+            paddingBottom: 2,
+            fontFamily: SANS_STACK,
+          }}
+        >
+          ← Back
+        </button>
+        <Pill onClick={onStart} size="sm">
+          Start now
+        </Pill>
+      </div>
+    </nav>
+
+    <section
+      style={{
         textAlign: "center",
+        padding: "clamp(40px, 6vw, 72px) 24px 32px",
+        maxWidth: 900,
+        margin: "0 auto",
       }}
     >
       <div
         style={{
-          width: "100%",
-          aspectRatio: "1",
-          borderRadius: "50%",
-          overflow: "hidden",
-          border: `4px solid ${BRAND.white}`,
-          boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
-          background: BRAND.white,
-        }}
-      >
-        <img
-          src={src}
-          alt={label}
-          style={{
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-            // Anchor the crop to the TOP of the source photo so foreheads
-            // and hair stay visible — the carousel circles are wider than
-            // they are tall on portrait reference photos, and default
-            // center-crop was clipping faces from above.
-            objectPosition: "top",
-            opacity: fading ? 0 : 1,
-            transition: `opacity ${FADE_MS}ms ease`,
-          }}
-        />
-      </div>
-    </div>
-  );
-
-  // Horizontal positions account for the mobile aspect-ratio crop:
-  // mobile = 1.2:1 aspect → 41% of original width is cropped (20.5%
-  // from each side), so frame centers shift inward proportionally.
-  const beforeLeftPct = isMobile ? 28 : 35;
-  const afterLeftPct = isMobile ? 72 : 66;
-
-  return (
-    <>
-      {circle(HERO_PAIRS[idx].before, "5 min ago", beforeLeftPct)}
-      {circle(HERO_PAIRS[idx].after, "5 min from now", afterLeftPct)}
-    </>
-  );
-};
-
-// Labels row that sits BELOW the hero photo container, NOT inside the
-// LinkedIn-style frames. Earlier the labels were inside the absolute-
-// positioned circle wrappers, which put them inside the white card area
-// of each LinkedIn frame and looked off (the white pill on the white card
-// was visually awkward). Now they live as a separate row underneath the
-// photo, each label horizontally aligned with its corresponding circle.
-const HeroCarouselLabels = ({ isMobile }: { isMobile: boolean }) => (
-  <div
-    style={{
-      position: "relative",
-      width: "100%",
-      marginTop: 18,
-      // Explicit height ensures the labels actually take up vertical space
-      // in the document flow (absolute children don't contribute height).
-      height: "clamp(20px, 1.6vw, 28px)",
-    }}
-  >
-    {(["5 min ago", "5 min from now"] as const).map((label, i) => (
-      <div
-        key={label}
-        style={{
-          position: "absolute",
-          // Match the carousel circle horizontal centers — different on
-          // mobile because the photo gets cropped tighter (see HeroCarousel).
-          left: isMobile
-            ? (i === 0 ? "28%" : "72%")
-            : (i === 0 ? "35%" : "66%"),
-          transform: "translateX(-50%)",
-          fontFamily: SANS_STACK,
-          fontSize: "clamp(13px, 1.3vw, 18px)",
+          fontSize: 12,
           fontWeight: 600,
-          color: BRAND.charcoal,
-          letterSpacing: 0.2,
-          whiteSpace: "nowrap",
+          letterSpacing: 2.4,
+          textTransform: "uppercase",
+          color: BRAND.gold,
+          marginBottom: 20,
         }}
       >
-        {label}
+        Real Customer Transformations
       </div>
-    ))}
+      <h1
+        style={{
+          fontFamily: SERIF_STACK,
+          fontSize: "clamp(32px, 5vw, 56px)",
+          fontWeight: 400,
+          lineHeight: 1.1,
+          letterSpacing: -0.4,
+          color: BRAND.charcoal,
+          margin: "0 0 18px",
+        }}
+      >
+        Before & after gallery
+      </h1>
+      <p
+        style={{
+          fontSize: "clamp(14px, 1.3vw, 17px)",
+          color: BRAND.subText,
+          maxWidth: 640,
+          margin: "0 auto",
+          lineHeight: 1.55,
+        }}
+      >
+        32 transformations from selfie to professional headshot. Each one
+        generated by Kristi's photographer-prompted AI. Click any image to
+        view full size.
+      </p>
+    </section>
+
+    <section
+      style={{
+        padding: "16px clamp(16px, 4vw, 48px) 64px",
+        maxWidth: 1400,
+        margin: "0 auto",
+      }}
+    >
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+          gap: 16,
+        }}
+      >
+        {GALLERY_PAIRS.map((src, i) => (
+          <a
+            key={src}
+            href={src}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: "block",
+              aspectRatio: "3 / 4",
+              borderRadius: 8,
+              overflow: "hidden",
+              boxShadow: "0 4px 16px rgba(0,0,0,0.10)",
+              transition: "transform 200ms ease, box-shadow 200ms ease",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = "translateY(-3px)";
+              e.currentTarget.style.boxShadow = "0 8px 24px rgba(0,0,0,0.18)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = "translateY(0)";
+              e.currentTarget.style.boxShadow = "0 4px 16px rgba(0,0,0,0.10)";
+            }}
+          >
+            <img
+              src={src}
+              alt={`Customer transformation ${i + 7}`}
+              loading="lazy"
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+                display: "block",
+              }}
+            />
+          </a>
+        ))}
+      </div>
+    </section>
+
+    <section
+      style={{
+        background: BRAND.cream,
+        textAlign: "center",
+        padding: "clamp(48px, 7vw, 80px) 24px",
+      }}
+    >
+      <h2
+        style={{
+          fontFamily: SERIF_STACK,
+          fontSize: "clamp(26px, 3.6vw, 42px)",
+          fontWeight: 400,
+          lineHeight: 1.18,
+          color: BRAND.charcoal,
+          maxWidth: 720,
+          margin: "0 auto 28px",
+        }}
+      >
+        Yours could be next.
+      </h2>
+      <Pill onClick={onStart} size="lg">
+        Create my headshots
+      </Pill>
+      <div
+        style={{
+          marginTop: 14,
+          fontSize: 13,
+          color: BRAND.subText,
+        }}
+      >
+        Starts at <strong style={{ color: BRAND.charcoal }}>$2.99</strong> ·
+        Money-back guarantee · 5 minutes
+      </div>
+    </section>
   </div>
 );
 
-const LandingV2 = ({ onStart, onPromoUnlock }: LandingProps) => {
+type LandingV2Props = LandingProps & {
+  onShowGallery: () => void;
+};
+
+const LandingV2 = ({ onStart, onPromoUnlock, onShowGallery }: LandingV2Props) => {
   // Mobile detection drives the hero photo's aspect-ratio crop. On phones
   // (<= 640px) we use a tighter aspect (1.2 vs desktop's 1.86) so the dark
   // empty space on either side of Kristi gets cropped off and the LinkedIn
@@ -690,6 +817,23 @@ const LandingV2 = ({ onStart, onPromoUnlock }: LandingProps) => {
         minHeight: "100vh",
       }}
     >
+      {/* Inline keyframes for the film-strip auto-scroll. Two copies of the
+          GALLERY_PAIRS array are rendered side-by-side; we translate the
+          track left by exactly half its width over STRIP_DURATION_S seconds,
+          then the animation restarts from 0 — visually seamless because the
+          second copy is byte-identical to the first. */}
+      <style>{`
+        @keyframes film-strip-scroll {
+          from { transform: translateX(0); }
+          to   { transform: translateX(-50%); }
+        }
+        .film-strip-track:hover {
+          animation-play-state: paused;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .film-strip-track { animation: none !important; }
+        }
+      `}</style>
       {/* ========== TOP NAV ========== */}
       <nav
         style={{
@@ -723,18 +867,22 @@ const LandingV2 = ({ onStart, onPromoUnlock }: LandingProps) => {
             >
               How it works
             </a>
-            <a
-              href="#examples"
+            <button
+              onClick={onShowGallery}
               style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
                 fontSize: 14,
                 color: BRAND.charcoal,
-                textDecoration: "none",
                 borderBottom: `1px solid ${BRAND.gold}`,
                 paddingBottom: 2,
+                fontFamily: SANS_STACK,
+                padding: 0,
               }}
             >
               Examples
-            </a>
+            </button>
           </div>
         )}
       </nav>
@@ -788,36 +936,37 @@ const LandingV2 = ({ onStart, onPromoUnlock }: LandingProps) => {
           expression actually look like you.
         </p>
 
-        {/* Hero photo with overlaid carousel */}
+        {/* Hero photo of Kristi with camera. The source photo has baked-in
+            "LinkedIn boxes" in the bottom 42% (where the old 2-circle
+            carousel used to overlay). On 2026-05-11 the carousel was
+            replaced with a horizontal film strip below the hero, so the
+            photo is now CROPPED to show only the top portion — Kristi +
+            her camera — and the LinkedIn boxes get sliced off the bottom.
+            Crop aspect ~3.2:1 (desktop), ~2.1:1 (mobile), with
+            objectPosition:"top center" to keep her head/camera visible. */}
         <div
           style={{
             position: "relative",
             width: "100%",
             maxWidth: 1100,
             margin: "0 auto",
-            // Mobile uses a tighter aspect ratio so objectFit:cover crops
-            // the dark left/right edges off the photo, zooming Kristi + the
-            // LinkedIn frames to fill the screen. Desktop keeps the photo's
-            // native aspect.
-            aspectRatio: isMobile ? "1.2 / 1" : "1376 / 740",
+            aspectRatio: isMobile ? "2.1 / 1" : "3.2 / 1",
+            overflow: "hidden",
+            borderRadius: 6,
           }}
         >
           <img
             src="/marketing/hero-kristi.jpg"
-            alt="Kristi Sherk holding a camera, with before and after AI headshot examples below"
+            alt="Kristi Sherk holding a camera"
             style={{
               width: "100%",
               height: "100%",
               objectFit: "cover",
+              objectPosition: "center top",
               display: "block",
             }}
           />
-          <HeroCarousel isMobile={isMobile} />
         </div>
-
-        {/* Carousel labels live BELOW the photo so they don't overlap the
-            LinkedIn frames' bottom edge. Aligned to the circle centers. */}
-        <HeroCarouselLabels isMobile={isMobile} />
       </section>
 
       {/* ========== PRIMARY CTA ========== */}
@@ -843,63 +992,77 @@ const LandingV2 = ({ onStart, onPromoUnlock }: LandingProps) => {
         </div>
       </section>
 
-      {/* ========== EXAMPLES STRIP ========== */}
-      {/* Three 3:4 example outputs, side-by-side. Moved here on 2026-05-04
-          (was below the editorial band, now sits BEFORE the trust strip)
-          so the user sees product proof first, then sees the credibility
-          stack (Microsoft / Marriott / Adobe ...) framing those examples.
-          Kept as a single grid that stays 3-up on every viewport. */}
+      {/* ========== FILM STRIP (auto-scrolling before/after gallery preview) ========== */}
+      {/* Replaces the previous 3-image hardcoded strip (2026-05-11). Pulls
+          from the same 32 composited posters used by the /gallery screen.
+          Continuously scrolls left-to-right; clicking any frame routes to
+          the full gallery. Hover pauses the strip. */}
       <section
+        id="examples"
         style={{
           background: BRAND.white,
-          padding: "clamp(40px, 6vw, 72px) clamp(16px, 4vw, 56px)",
+          padding: "clamp(48px, 6vw, 80px) 0 16px",
         }}
       >
         <div
           style={{
-            maxWidth: 1100,
+            maxWidth: 1280,
             margin: "0 auto",
-            display: "grid",
-            gridTemplateColumns: "repeat(3, 1fr)",
-            gap: "clamp(8px, 1.5vw, 20px)",
+            padding: "0 clamp(16px, 4vw, 56px) 24px",
+            textAlign: "center",
           }}
         >
-          {[
-            {
-              src: "/marketing/examples/ai-headshot-generator-man-glasses.jpg",
-              alt: "AI-generated professional headshot of a man with glasses",
-            },
-            {
-              src: "/marketing/examples/ai-headshot-generator-woman-blue-blazer.jpg",
-              alt: "AI-generated professional headshot of a woman in a blue blazer",
-            },
-            {
-              src: "/marketing/examples/ai-headshot-generator-man-suit-tie.jpg",
-              alt: "AI-generated professional headshot of a man in a suit and tie",
-            },
-          ].map((img) => (
-            <div
-              key={img.src}
-              style={{
-                aspectRatio: "3 / 4",
-                overflow: "hidden",
-                borderRadius: 6,
-                background: BRAND.cream,
-              }}
-            >
-              <img
-                src={img.src}
-                alt={img.alt}
-                loading="lazy"
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "cover",
-                  display: "block",
-                }}
-              />
-            </div>
-          ))}
+          <div
+            style={{
+              fontSize: 12,
+              fontWeight: 600,
+              letterSpacing: 2.4,
+              textTransform: "uppercase",
+              color: BRAND.gold,
+              marginBottom: 16,
+            }}
+          >
+            Real Transformations
+          </div>
+          <h2
+            style={{
+              fontFamily: SERIF_STACK,
+              fontSize: "clamp(26px, 3.4vw, 40px)",
+              fontWeight: 400,
+              lineHeight: 1.15,
+              color: BRAND.charcoal,
+              margin: "0 0 10px",
+            }}
+          >
+            32 selfies, transformed.
+          </h2>
+          <p
+            style={{
+              fontSize: 14,
+              color: BRAND.subText,
+              margin: 0,
+            }}
+          >
+            Hover to pause · click any image to see the full gallery
+          </p>
+        </div>
+        <HeroFilmStrip onShowGallery={onShowGallery} />
+        <div style={{ textAlign: "center", marginTop: 24 }}>
+          <button
+            onClick={onShowGallery}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              fontSize: 14,
+              fontFamily: SANS_STACK,
+              color: BRAND.charcoal,
+              borderBottom: `1px solid ${BRAND.gold}`,
+              paddingBottom: 2,
+            }}
+          >
+            View all 32 transformations →
+          </button>
         </div>
       </section>
 
@@ -4323,6 +4486,7 @@ const PaywallModal = ({ onClose }: PaywallModalProps) => (
 
 type Screen =
   | "landing"
+  | "gallery" // before/after gallery — accessible from landing nav
   | "upload"
   | "style"
   | "loading" // shown while /api/generate runs 6 times in parallel
@@ -5118,7 +5282,17 @@ export default function App() {
       )}
 
       {screen === "landing" && (
-        <LandingV2 onStart={handleStart} onPromoUnlock={handlePromoUnlock} />
+        <LandingV2
+          onStart={handleStart}
+          onPromoUnlock={handlePromoUnlock}
+          onShowGallery={() => setScreen("gallery")}
+        />
+      )}
+      {screen === "gallery" && (
+        <GalleryScreen
+          onBack={() => setScreen("landing")}
+          onStart={handleStart}
+        />
       )}
       {screen === "upload" && (
         <UploadScreen
