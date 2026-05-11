@@ -378,10 +378,32 @@ const SANS_STACK =
 // headshot + before as a circular inset in the lower-left labeled "BEFORE").
 // All 32 pairs from /Before-After Graphics/ live under public/marketing/gallery/.
 // Used by both the hero film strip and the full gallery screen.
-const GALLERY_PAIRS: string[] = Array.from({ length: 32 }, (_, i) => {
-  const n = String(i + 7).padStart(2, "0"); // pair-07 through pair-38
-  return `/marketing/gallery/pair-${n}.jpg`;
-});
+// Filenames cycle through 8 SEO templates × 4 each (renamed 2026-05-11).
+// Each template captures a different long-tail search variant. Google reads
+// filenames + alt text as content hints — varying gives us coverage across
+// the keyword cluster instead of stacking all weight on one term.
+const GALLERY_PAIR_TEMPLATES = [
+  { slug: "ai-headshot-generator-before-after", alt: "AI headshot generator before and after example" },
+  { slug: "realistic-ai-headshot-example",      alt: "Realistic AI headshot example" },
+  { slug: "professional-ai-headshot",           alt: "Professional AI headshot" },
+  { slug: "ai-headshot-portrait",               alt: "AI headshot portrait" },
+  { slug: "ai-headshot-before-and-after",       alt: "AI headshot before and after" },
+  { slug: "ai-generated-headshot-example",      alt: "AI generated headshot example" },
+  { slug: "ai-portrait-generator-result",       alt: "AI portrait generator result" },
+  { slug: "professional-headshot-ai",           alt: "Professional headshot from AI generator" },
+];
+
+const GALLERY_PAIRS: { src: string; alt: string }[] = Array.from(
+  { length: 32 },
+  (_, i) => {
+    const tpl = GALLERY_PAIR_TEMPLATES[i % GALLERY_PAIR_TEMPLATES.length];
+    const n = String(i).padStart(2, "0");
+    return {
+      src: `/marketing/gallery/${tpl.slug}-${n}.jpg`,
+      alt: tpl.alt,
+    };
+  },
+);
 
 const STRIP_DURATION_S = 90; // full-loop duration; matches "slow film-reel" pace
 
@@ -505,14 +527,16 @@ const HeroFilmStrip = ({ onShowGallery }: { onShowGallery: () => void }) => (
         animation: `film-strip-scroll ${STRIP_DURATION_S}s linear infinite`,
       }}
     >
-      {[...GALLERY_PAIRS, ...GALLERY_PAIRS].map((src, i) => (
+      {[...GALLERY_PAIRS, ...GALLERY_PAIRS].map((pair, i) => (
         <button
           key={i}
           onClick={onShowGallery}
           aria-label="View full before-and-after gallery"
           style={{
             flex: "0 0 auto",
-            width: "clamp(160px, 18vw, 260px)",
+            // Larger cards (was clamp(160, 18vw, 260)). Bigger feels more
+            // premium and lets users see the headshot detail at a glance.
+            width: "clamp(220px, 24vw, 360px)",
             aspectRatio: "3 / 4",
             border: "none",
             padding: 0,
@@ -524,9 +548,14 @@ const HeroFilmStrip = ({ onShowGallery }: { onShowGallery: () => void }) => (
           }}
         >
           <img
-            src={src}
-            alt="AI-generated headshot transformation"
-            loading="lazy"
+            src={pair.src}
+            alt={pair.alt}
+            // First batch eager (visible on initial render). Rest lazy.
+            // Without eager loading the auto-scrolling strip would show
+            // empty squares as fresh frames slide in faster than they
+            // can be fetched.
+            loading={i < 12 ? "eager" : "lazy"}
+            decoding="async"
             style={{
               width: "100%",
               height: "100%",
@@ -674,10 +703,10 @@ const GalleryScreen = ({ onBack, onStart }: GalleryScreenProps) => (
           gap: 16,
         }}
       >
-        {GALLERY_PAIRS.map((src, i) => (
+        {GALLERY_PAIRS.map((pair) => (
           <a
-            key={src}
-            href={src}
+            key={pair.src}
+            href={pair.src}
             target="_blank"
             rel="noopener noreferrer"
             style={{
@@ -698,8 +727,8 @@ const GalleryScreen = ({ onBack, onStart }: GalleryScreenProps) => (
             }}
           >
             <img
-              src={src}
-              alt={`Customer transformation ${i + 7}`}
+              src={pair.src}
+              alt={pair.alt}
               loading="lazy"
               style={{
                 width: "100%",
@@ -957,8 +986,8 @@ const LandingV2 = ({ onStart, onPromoUnlock, onShowGallery }: LandingV2Props) =>
           }}
         >
           <img
-            src="/marketing/hero-kristi-lean.png"
-            alt="Kristi Sherk leaning over her camera"
+            src="/marketing/ai-headshot-photographer-kristi-sherk.png"
+            alt="Kristi Sherk — AI headshot photographer with 20 years of experience, holding a professional camera"
             style={{
               width: "100%",
               height: "auto",
