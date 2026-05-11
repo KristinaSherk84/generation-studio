@@ -393,16 +393,37 @@ const GALLERY_PAIR_TEMPLATES = [
   { slug: "professional-headshot-ai",           alt: "Professional headshot from AI generator" },
 ];
 
-const GALLERY_PAIRS: { src: string; alt: string }[] = Array.from(
+// Source list keyed by source-pair index 0..31. Each entry references the
+// actual file on disk (filename has both template slug + index baked in).
+const GALLERY_SOURCE: { src: string; alt: string }[] = Array.from(
   { length: 32 },
   (_, i) => {
     const tpl = GALLERY_PAIR_TEMPLATES[i % GALLERY_PAIR_TEMPLATES.length];
-    const n = String(i).padStart(2, "0");
     return {
-      src: `/marketing/gallery/${tpl.slug}-${n}.jpg`,
+      src: `/marketing/gallery/${tpl.slug}-${String(i).padStart(2, "0")}.jpg`,
       alt: tpl.alt,
     };
   },
+);
+
+// 4-quarter interleave order. Same-person pairs tend to cluster in
+// sequential source positions (Kristi often shoots the same model in
+// multiple outfits), so pulling consecutive display positions from
+// different quarters of the source array guarantees they're at least 8
+// source-positions apart in the rendered strip + gallery. Deterministic
+// so React keys are stable across renders.
+const SHUFFLE_ORDER: number[] = (() => {
+  const arr: number[] = [];
+  for (let offset = 0; offset < 8; offset++) {
+    for (let quarter = 0; quarter < 4; quarter++) {
+      arr.push(offset + quarter * 8);
+    }
+  }
+  return arr;
+})();
+
+const GALLERY_PAIRS: { src: string; alt: string }[] = SHUFFLE_ORDER.map(
+  (sourceIdx) => GALLERY_SOURCE[sourceIdx],
 );
 
 const STRIP_DURATION_S = 90; // full-loop duration; matches "slow film-reel" pace
@@ -550,11 +571,17 @@ const HeroFilmStrip = ({ onShowGallery }: { onShowGallery: () => void }) => (
           <img
             src={pair.src}
             alt={pair.alt}
-            // First batch eager (visible on initial render). Rest lazy.
-            // Without eager loading the auto-scrolling strip would show
-            // empty squares as fresh frames slide in faster than they
-            // can be fetched.
-            loading={i < 12 ? "eager" : "lazy"}
+            // First 20 cards eager. Strip shows up to ~5 simultaneously
+            // and auto-scrolls fast enough that lazy-loaded ones aren't
+            // ready by the time they enter view; widening the eager batch
+            // closes that gap. Total eager bytes ≈ 1.3MB on the wider
+            // viewport — fast over Vercel's CDN, slower on 3G but the
+            // strip is below the fold so it doesn't block initial paint.
+            loading={i < 20 ? "eager" : "lazy"}
+            // Also hint high fetch priority on the first 6 (visible above
+            // the fold on widest viewports) so browsers don't queue them
+            // behind less-important assets.
+            fetchPriority={i < 6 ? "high" : "auto"}
             decoding="async"
             style={{
               width: "100%",
