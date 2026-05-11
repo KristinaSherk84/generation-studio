@@ -970,21 +970,32 @@ const LandingV2 = ({ onStart, onPromoUnlock, onShowGallery }: LandingV2Props) =>
             lineHeight: isMobile ? 1.12 : 1.15,
             letterSpacing: -0.3,
             color: BRAND.charcoal,
-            margin: isMobile ? "0 auto 14px" : "0 auto 16px",
+            margin: isMobile ? "0 auto 6px" : "0 auto 8px",
             maxWidth: 820,
           }}
         >
-          A professional headshot generator,{" "}
-          <em
-            style={{
-              fontStyle: "italic",
-              fontWeight: 400,
-              color: BRAND.charcoal,
-            }}
-          >
-            finally made by a real photographer.
-          </em>
+          A professional headshot generator
         </h1>
+        {/* Editorial italic tagline — split out of the H1 2026-05-11 per
+            Kristi. Sits as an H2 at smaller size so the main headline
+            owns the visual weight and this reads as a magazine-style
+            kicker. */}
+        <h2
+          style={{
+            fontFamily: SERIF_STACK,
+            fontStyle: "italic",
+            fontSize: isMobile
+              ? "clamp(16px, 4vw, 20px)"
+              : "clamp(18px, 1.9vw, 26px)",
+            fontWeight: 400,
+            lineHeight: 1.2,
+            color: BRAND.charcoal,
+            margin: isMobile ? "0 auto 14px" : "0 auto 16px",
+            maxWidth: 700,
+          }}
+        >
+          finally made by a real photographer.
+        </h2>
 
         {/* Muted subheadline */}
         <p
@@ -1055,10 +1066,9 @@ const LandingV2 = ({ onStart, onPromoUnlock, onShowGallery }: LandingV2Props) =>
         id="examples"
         style={{
           background: BRAND.white,
-          // Tight top padding on both viewports so the strip sits right
-          // below Kristi's hand in the hero photo (per her 2026-05-11
-          // markup — "filmstrip should be right below my hand").
-          padding: isMobile ? "8px 0 8px" : "16px 0 16px",
+          // Zero top padding 2026-05-11 — strip sits FLUSH against
+          // Kristi's hand at the bottom of the hero photo.
+          padding: "0 0 16px",
         }}
       >
         {/* Filmstrip first — editorial composition with visual leading
@@ -1079,22 +1089,12 @@ const LandingV2 = ({ onStart, onPromoUnlock, onShowGallery }: LandingV2Props) =>
             textAlign: "center",
           }}
         >
-          <div
-            style={{
-              fontSize: isMobile ? 10 : 12,
-              fontWeight: 600,
-              letterSpacing: 2.4,
-              textTransform: "uppercase",
-              color: BRAND.gold,
-              marginBottom: isMobile ? 8 : 12,
-            }}
-          >
-            Real Transformations
-          </div>
-          <h2
+          {/* "Real Transformations" gold eyebrow removed 2026-05-11.
+              "32 selfies, transformed." headline carries the caption alone. */}
+          <h3
             style={{
               fontFamily: SERIF_STACK,
-              fontSize: isMobile ? 20 : "clamp(26px, 3.4vw, 40px)",
+              fontSize: isMobile ? 20 : "clamp(22px, 2.6vw, 32px)",
               fontWeight: 400,
               lineHeight: 1.15,
               color: BRAND.charcoal,
@@ -1102,7 +1102,7 @@ const LandingV2 = ({ onStart, onPromoUnlock, onShowGallery }: LandingV2Props) =>
             }}
           >
             32 selfies, transformed.
-          </h2>
+          </h3>
           {!isMobile && (
             <p
               style={{
