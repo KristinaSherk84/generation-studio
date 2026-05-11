@@ -948,30 +948,30 @@ const LandingV2 = ({ onStart, onPromoUnlock, onShowGallery }: LandingV2Props) =>
         style={{
           maxWidth: 1280,
           margin: "0 auto",
-          // Top padding tightened on BOTH mobile and desktop 2026-05-11.
-          // Desktop was 40-80px (way too much dead space above the H1);
-          // now 16px to bring the headline up close to the nav.
+          // Bottom padding set to 0 so the filmstrip sits flush against
+          // the hero photo with no gap (per Kristi 2026-05-11 — "remove
+          // all padding between the hand and the film strip").
           padding: isMobile
-            ? "12px 20px 16px"
-            : "16px clamp(20px, 4vw, 56px) 16px",
+            ? "12px 20px 0"
+            : "16px clamp(20px, 4vw, 56px) 0",
           textAlign: "center",
         }}
       >
-        {/* Big serif headline — sized down on mobile per Kristi 2026-05-11.
-            On desktop the headline takes 3-4 lines at max viewport so the
-            margin below it is moderate to keep the page compact. */}
+        {/* Headline sized down on desktop 2026-05-11 (was clamp(34, 5.5vw,
+            68) — way too big). Now capped at 44px so it doesn't dominate
+            the viewport and the CTA stays above the fold. */}
         <h1
           style={{
             fontFamily: SERIF_STACK,
             fontSize: isMobile
               ? "clamp(24px, 6.5vw, 32px)"
-              : "clamp(34px, 5.5vw, 68px)",
+              : "clamp(28px, 3.4vw, 44px)",
             fontWeight: 400,
-            lineHeight: isMobile ? 1.12 : 1.08,
-            letterSpacing: -0.4,
+            lineHeight: isMobile ? 1.12 : 1.15,
+            letterSpacing: -0.3,
             color: BRAND.charcoal,
-            margin: isMobile ? "0 auto 14px" : "0 auto 18px",
-            maxWidth: 980,
+            margin: isMobile ? "0 auto 14px" : "0 auto 16px",
+            maxWidth: 820,
           }}
         >
           A professional headshot generator,{" "}
@@ -1061,13 +1061,21 @@ const LandingV2 = ({ onStart, onPromoUnlock, onShowGallery }: LandingV2Props) =>
           padding: isMobile ? "8px 0 8px" : "16px 0 16px",
         }}
       >
+        {/* Filmstrip first — editorial composition with visual leading
+            the caption (per Kristi 2026-05-11). Description block moved
+            to below the strip. */}
+        <HeroFilmStrip onShowGallery={onShowGallery} />
+
+        {/* Caption block — eyebrow + headline + (desktop only) hover hint.
+            Sits BELOW the strip so the visual is the entry point and the
+            text reads as a caption rather than a section header. */}
         <div
           style={{
             maxWidth: 1280,
             margin: "0 auto",
             padding: isMobile
-              ? "0 16px 12px"
-              : "0 clamp(16px, 4vw, 56px) 24px",
+              ? "20px 16px 0"
+              : "28px clamp(16px, 4vw, 56px) 0",
             textAlign: "center",
           }}
         >
@@ -1078,7 +1086,7 @@ const LandingV2 = ({ onStart, onPromoUnlock, onShowGallery }: LandingV2Props) =>
               letterSpacing: 2.4,
               textTransform: "uppercase",
               color: BRAND.gold,
-              marginBottom: isMobile ? 8 : 16,
+              marginBottom: isMobile ? 8 : 12,
             }}
           >
             Real Transformations
@@ -1107,8 +1115,8 @@ const LandingV2 = ({ onStart, onPromoUnlock, onShowGallery }: LandingV2Props) =>
             </p>
           )}
         </div>
-        <HeroFilmStrip onShowGallery={onShowGallery} />
-        <div style={{ textAlign: "center", marginTop: 24 }}>
+
+        <div style={{ textAlign: "center", marginTop: 20 }}>
           <button
             onClick={onShowGallery}
             style={{
