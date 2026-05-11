@@ -892,20 +892,28 @@ const LandingV2 = ({ onStart, onPromoUnlock, onShowGallery }: LandingV2Props) =>
         style={{
           maxWidth: 1280,
           margin: "0 auto",
-          padding: "clamp(40px, 7vw, 80px) clamp(20px, 4vw, 56px) 32px",
+          // Top padding tightened 2026-05-11 to reduce "dead space" between
+          // the nav and headline on mobile (Kristi marked this on a phone
+          // mockup). Desktop unchanged via the clamp's max.
+          padding: isMobile
+            ? "12px 20px 16px"
+            : "clamp(40px, 7vw, 80px) clamp(20px, 4vw, 56px) 32px",
           textAlign: "center",
         }}
       >
-        {/* Big serif headline */}
+        {/* Big serif headline — font sized down on mobile (was 34px min,
+            now 26px min) per Kristi 2026-05-11. Tighter line-height too. */}
         <h1
           style={{
             fontFamily: SERIF_STACK,
-            fontSize: "clamp(34px, 5.5vw, 68px)",
+            fontSize: isMobile
+              ? "clamp(24px, 6.5vw, 32px)"
+              : "clamp(34px, 5.5vw, 68px)",
             fontWeight: 400,
-            lineHeight: 1.08,
-            letterSpacing: -0.5,
+            lineHeight: isMobile ? 1.12 : 1.08,
+            letterSpacing: -0.4,
             color: BRAND.charcoal,
-            margin: "0 auto 24px",
+            margin: isMobile ? "0 auto 14px" : "0 auto 24px",
             maxWidth: 980,
           }}
         >
@@ -928,25 +936,23 @@ const LandingV2 = ({ onStart, onPromoUnlock, onShowGallery }: LandingV2Props) =>
             lineHeight: 1.55,
             color: BRAND.subText,
             maxWidth: 640,
-            margin: "0 auto 40px",
+            margin: isMobile ? "0 auto 24px" : "0 auto 40px",
           }}
         >
           Most AI headshot tools are built by coders. This one is built by an
-          actual headshot photographer — so the lighting, posing, and
-          expression actually look like you.
+          actual headshot photographer, so they actually look like you.
         </p>
 
         {/* Hero photo of Kristi leaning over her camera, transparent
-            background (PNG). Swapped in 2026-05-11 — replaces the older
-            JPG that had LinkedIn-style boxes baked into the bottom. Clean
-            cutout means no cropping needed; we let the photo display at
-            its natural aspect (607x388 ≈ 1.56:1) on a moderate max-width
-            so Kristi's face stays the visual anchor without dominating. */}
+            background (PNG). Swapped in 2026-05-11 — clean cutout, no
+            cropping needed. On mobile the max-width is tightened (260px
+            vs 640px desktop) so the photo doesn't dominate vertical space
+            and leaves room for the filmstrip + CTA above the fold. */}
         <div
           style={{
             position: "relative",
             width: "100%",
-            maxWidth: 640,
+            maxWidth: isMobile ? 260 : 640,
             margin: "0 auto",
           }}
         >
@@ -962,29 +968,6 @@ const LandingV2 = ({ onStart, onPromoUnlock, onShowGallery }: LandingV2Props) =>
         </div>
       </section>
 
-      {/* ========== PRIMARY CTA ========== */}
-      <section
-        style={{
-          textAlign: "center",
-          padding: "32px 20px 64px",
-        }}
-      >
-        <Pill onClick={onStart} size="xl">
-          Create my headshots
-        </Pill>
-        <div
-          style={{
-            marginTop: 18,
-            fontSize: 13,
-            color: BRAND.subText,
-            letterSpacing: 0.3,
-          }}
-        >
-          Starts at <strong style={{ color: BRAND.charcoal }}>$2.99</strong> ·
-          Money-back guarantee · 5 minutes
-        </div>
-      </section>
-
       {/* ========== FILM STRIP (auto-scrolling before/after gallery preview) ========== */}
       {/* Replaces the previous 3-image hardcoded strip (2026-05-11). Pulls
           from the same 32 composited posters used by the /gallery screen.
@@ -994,25 +977,27 @@ const LandingV2 = ({ onStart, onPromoUnlock, onShowGallery }: LandingV2Props) =>
         id="examples"
         style={{
           background: BRAND.white,
-          padding: "clamp(48px, 6vw, 80px) 0 16px",
+          padding: isMobile ? "16px 0 8px" : "clamp(48px, 6vw, 80px) 0 16px",
         }}
       >
         <div
           style={{
             maxWidth: 1280,
             margin: "0 auto",
-            padding: "0 clamp(16px, 4vw, 56px) 24px",
+            padding: isMobile
+              ? "0 16px 12px"
+              : "0 clamp(16px, 4vw, 56px) 24px",
             textAlign: "center",
           }}
         >
           <div
             style={{
-              fontSize: 12,
+              fontSize: isMobile ? 10 : 12,
               fontWeight: 600,
               letterSpacing: 2.4,
               textTransform: "uppercase",
               color: BRAND.gold,
-              marginBottom: 16,
+              marginBottom: isMobile ? 8 : 16,
             }}
           >
             Real Transformations
@@ -1020,24 +1005,26 @@ const LandingV2 = ({ onStart, onPromoUnlock, onShowGallery }: LandingV2Props) =>
           <h2
             style={{
               fontFamily: SERIF_STACK,
-              fontSize: "clamp(26px, 3.4vw, 40px)",
+              fontSize: isMobile ? 20 : "clamp(26px, 3.4vw, 40px)",
               fontWeight: 400,
               lineHeight: 1.15,
               color: BRAND.charcoal,
-              margin: "0 0 10px",
+              margin: 0,
             }}
           >
             32 selfies, transformed.
           </h2>
-          <p
-            style={{
-              fontSize: 14,
-              color: BRAND.subText,
-              margin: 0,
-            }}
-          >
-            Hover to pause · click any image to see the full gallery
-          </p>
+          {!isMobile && (
+            <p
+              style={{
+                fontSize: 14,
+                color: BRAND.subText,
+                margin: "10px 0 0",
+              }}
+            >
+              Hover to pause · click any image to see the full gallery
+            </p>
+          )}
         </div>
         <HeroFilmStrip onShowGallery={onShowGallery} />
         <div style={{ textAlign: "center", marginTop: 24 }}>
@@ -1056,6 +1043,34 @@ const LandingV2 = ({ onStart, onPromoUnlock, onShowGallery }: LandingV2Props) =>
           >
             View all 32 transformations →
           </button>
+        </div>
+      </section>
+
+      {/* ========== PRIMARY CTA ========== */}
+      {/* Moved here 2026-05-11 — was above the filmstrip, now sits below
+          it. New flow: see the work first, then the ask. On mobile this
+          plus the tightened hero brings the CTA closer to above-the-fold
+          territory. On desktop the visual progression (hero → proof → ask)
+          is cleaner than the prior hero → ask → proof order. */}
+      <section
+        style={{
+          textAlign: "center",
+          padding: isMobile ? "20px 20px 40px" : "32px 20px 64px",
+        }}
+      >
+        <Pill onClick={onStart} size={isMobile ? "lg" : "xl"}>
+          Create my headshots
+        </Pill>
+        <div
+          style={{
+            marginTop: isMobile ? 12 : 18,
+            fontSize: isMobile ? 12 : 13,
+            color: BRAND.subText,
+            letterSpacing: 0.3,
+          }}
+        >
+          Starts at <strong style={{ color: BRAND.charcoal }}>$2.99</strong> ·
+          {isMobile ? " 5 min · Money-back" : " Money-back guarantee · 5 minutes"}
         </div>
       </section>
 
