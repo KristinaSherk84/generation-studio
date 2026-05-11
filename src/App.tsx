@@ -936,33 +936,26 @@ const LandingV2 = ({ onStart, onPromoUnlock, onShowGallery }: LandingV2Props) =>
           expression actually look like you.
         </p>
 
-        {/* Hero photo of Kristi with camera. The source photo has baked-in
-            "LinkedIn boxes" in the bottom 42% (where the old 2-circle
-            carousel used to overlay). On 2026-05-11 the carousel was
-            replaced with a horizontal film strip below the hero, so the
-            photo is now CROPPED to show only the top portion — Kristi +
-            her camera — and the LinkedIn boxes get sliced off the bottom.
-            Crop aspect ~3.2:1 (desktop), ~2.1:1 (mobile), with
-            objectPosition:"top center" to keep her head/camera visible. */}
+        {/* Hero photo of Kristi leaning over her camera, transparent
+            background (PNG). Swapped in 2026-05-11 — replaces the older
+            JPG that had LinkedIn-style boxes baked into the bottom. Clean
+            cutout means no cropping needed; we let the photo display at
+            its natural aspect (607x388 ≈ 1.56:1) on a moderate max-width
+            so Kristi's face stays the visual anchor without dominating. */}
         <div
           style={{
             position: "relative",
             width: "100%",
-            maxWidth: 1100,
+            maxWidth: 640,
             margin: "0 auto",
-            aspectRatio: isMobile ? "2.1 / 1" : "3.2 / 1",
-            overflow: "hidden",
-            borderRadius: 6,
           }}
         >
           <img
-            src="/marketing/hero-kristi.jpg"
-            alt="Kristi Sherk holding a camera"
+            src="/marketing/hero-kristi-lean.png"
+            alt="Kristi Sherk leaning over her camera"
             style={{
               width: "100%",
-              height: "100%",
-              objectFit: "cover",
-              objectPosition: "center top",
+              height: "auto",
               display: "block",
             }}
           />
