@@ -26,6 +26,7 @@ import * as faceapi from "@vladmandic/face-api";
 import * as tf from "@tensorflow/tfjs";
 import path from "node:path";
 import { promises as fs } from "node:fs";
+import { fileURLToPath } from "node:url";
 import sharp from "sharp";
 
 export type Point = { x: number; y: number };
@@ -42,20 +43,58 @@ export type Landmarks = {
 };
 
 /**
- * Where face-api looks for its model JSON+weight files. This must match
- * where scripts/download-face-api-models.mjs places them.
+ * Where face-api looks for its model JSON+weight files. Computed
+ * relative to this source file (which Vercel will bundle into the same
+ * directory tree), with process.cwd() as a fallback for local dev where
+ * import.meta might not resolve to the source-tree path.
+ *
+ * Vercel needs `includeFiles: "api/lib/skin/models/**"` in vercel.json
+ * to actually copy the model files into the function deployment — the
+ * default node-file-trace bundler doesn't pick up runtime-loaded files.
  */
-const MODEL_DIR = path.join(process.cwd(), "api", "lib", "skin", "models");
+const SOURCE_DIR = path.dirname(fileURLToPath(import.meta.url));
+const MODEL_DIR_PRIMARY = path.join(SOURCE_DIR, "models");
+const MODEL_DIR_FALLBACK = path.join(
+  process.cwd(),
+  "api",
+  "lib",
+  "skin",
+  "models",
+);
+
+async function resolveModelDir(): Promise<string | null> {
+  // Try the source-relative path first (works on Vercel + most local setups)
+  try {
+    await fs.access(
+      path.join(MODEL_DIR_PRIMARY, "face_landmark_68_model-weights_manifest.json"),
+    );
+    return MODEL_DIR_PRIMARY;
+  } catch {
+    // Fall through to cwd-relative
+  }
+  try {
+    await fs.access(
+      path.join(
+        MODEL_DIR_FALLBACK,
+        "face_landmark_68_model-weights_manifest.json",
+      ),
+    );
+    return MODEL_DIR_FALLBACK;
+  } catch {
+    return null;
+  }
+}
 
 let modelsLoaded = false;
 let modelLoadPromise: Promise<void> | null = null;
+let cachedModelDir: string | null = null;
 
 /**
  * Load the three face-api models we use, exactly once per Vercel function
  * cold start. Subsequent calls in the same warm function reuse the cached
  * weights — no repeated disk reads.
  */
-async function ensureModelsLoaded(): Promise<void> {
+async function ensureModelsLoaded(modelDir: string): Promise<void> {
   if (modelsLoaded) return;
   if (modelLoadPromise) return modelLoadPromise;
 
@@ -65,15 +104,18 @@ async function ensureModelsLoaded(): Promise<void> {
     // @tensorflow/tfjs (the browser bundle, which also works in Node)
     // to keep the function bundle small — tfjs-node would pull ~30MB
     // of native bindings we don't need for our throughput.
+    console.log("[skin] initializing TFJS CPU backend...");
     await tf.setBackend("cpu");
     await tf.ready();
+    console.log(`[skin] TFJS ready (backend: ${tf.getBackend()}); loading face-api models from ${modelDir}`);
 
     await Promise.all([
-      faceapi.nets.ssdMobilenetv1.loadFromDisk(MODEL_DIR),
-      faceapi.nets.faceLandmark68Net.loadFromDisk(MODEL_DIR),
-      faceapi.nets.ageGenderNet.loadFromDisk(MODEL_DIR),
+      faceapi.nets.ssdMobilenetv1.loadFromDisk(modelDir),
+      faceapi.nets.faceLandmark68Net.loadFromDisk(modelDir),
+      faceapi.nets.ageGenderNet.loadFromDisk(modelDir),
     ]);
     modelsLoaded = true;
+    console.log("[skin] face-api models loaded successfully");
   })();
 
   try {
@@ -87,30 +129,6 @@ async function ensureModelsLoaded(): Promise<void> {
 }
 
 /**
- * Quick sanity check that the model files actually exist on disk before
- * we try to load them. Returns the missing filenames if any, otherwise
- * an empty array.
- */
-async function findMissingModelFiles(): Promise<string[]> {
-  // The exact filenames face-api expects after `loadFromDisk(MODEL_DIR)`.
-  // These are the standard names from face-api's GitHub releases.
-  const required = [
-    "ssd_mobilenetv1_model-weights_manifest.json",
-    "face_landmark_68_model-weights_manifest.json",
-    "age_gender_model-weights_manifest.json",
-  ];
-  const missing: string[] = [];
-  for (const f of required) {
-    try {
-      await fs.access(path.join(MODEL_DIR, f));
-    } catch {
-      missing.push(f);
-    }
-  }
-  return missing;
-}
-
-/**
  * Detect 68-point landmarks and gender on a single face in `imageBytes`.
  * Returns null if no face is found, the model files are missing, or the
  * library throws an unexpected error. The caller should fall back to
@@ -120,16 +138,17 @@ export async function detectLandmarks(
   imageBytes: Buffer,
 ): Promise<Landmarks | null> {
   try {
-    const missing = await findMissingModelFiles();
-    if (missing.length > 0) {
-      console.warn(
-        "[detectLandmarks] face-api model files missing — skipping " +
-          "pre-filter. Missing: " +
-          missing.join(", "),
-      );
-      return null;
+    if (!cachedModelDir) {
+      cachedModelDir = await resolveModelDir();
+      if (!cachedModelDir) {
+        console.warn(
+          `[skin] face-api model files NOT FOUND in either ${MODEL_DIR_PRIMARY} or ${MODEL_DIR_FALLBACK} — pre-filter disabled. Did the postinstall script run? Did vercel.json includeFiles work?`,
+        );
+        return null;
+      }
+      console.log(`[skin] using face-api model dir: ${cachedModelDir}`);
     }
-    await ensureModelsLoaded();
+    await ensureModelsLoaded(cachedModelDir);
 
     // face-api expects an HTMLImageElement-like object, OR raw RGB pixel
     // data. We use Sharp to decode the bytes into a known-good RGB raw
@@ -166,7 +185,10 @@ export async function detectLandmarks(
 
     tensor.dispose();
 
-    if (!result) return null;
+    if (!result) {
+      console.warn("[skin] detectLandmarks: no face found in reference photo");
+      return null;
+    }
 
     const points = result.landmarks.positions.map((p) => ({ x: p.x, y: p.y }));
     if (points.length !== 68) {
