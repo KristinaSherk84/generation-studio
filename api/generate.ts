@@ -763,12 +763,20 @@ async function fetchPhotoAsInlineData(url: string): Promise<InlineImage> {
 
 // -------------------- Gemini call --------------------
 
+// Per-attempt timeout. Gemini occasionally returns a long-tail latency
+// (one request takes 2-3 min while others return in 30s) — typically
+// because the request was routed to a slow worker. Better to abort
+// after 90s and retry on a different worker than to sit indefinitely.
+// 90s is well above the typical 30-50s success latency, so well-behaved
+// requests aren't impacted.
+const PER_ATTEMPT_TIMEOUT_MS = 90_000;
+
 async function generateOneHeadshot(
   ai: GoogleGenAI,
   prompt: string,
   photos: InlineImage[],
 ): Promise<string> {
-  const response = await ai.models.generateContent({
+  const apiCall = ai.models.generateContent({
     // Model history on this project:
     //  - gemini-3-pro-image-preview (Nano Banana Pro): hit 429 rate limits on
     //    fresh Tier 1 projects (2026-04-18). Swapped out.
@@ -816,6 +824,18 @@ async function generateOneHeadshot(
     },
   });
 
+  // Race the API call against a hard timeout. If Gemini hasn't replied in
+  // PER_ATTEMPT_TIMEOUT_MS, throw a retryable error so the caller can
+  // retry on a fresh worker rather than sitting here for the full Vercel
+  // function maxDuration (currently 300s).
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(
+      () => reject(new Error(`Gemini timeout after ${PER_ATTEMPT_TIMEOUT_MS}ms`)),
+      PER_ATTEMPT_TIMEOUT_MS,
+    );
+  });
+  const response = await Promise.race([apiCall, timeoutPromise]);
+
   const candidate = response.candidates?.[0];
   if (!candidate?.content?.parts) {
     throw new Error("Gemini returned no candidate");
@@ -847,6 +867,9 @@ function isRetryableGeminiError(error: unknown): boolean {
   // Transient network hiccups also worth one more try.
   if (msg.includes("ECONNRESET") || msg.includes("ETIMEDOUT")) return true;
   if (msg.includes("fetch failed")) return true;
+  // Our own per-attempt timeout — a stuck Gemini call we aborted. Retry on
+  // a fresh worker rather than sitting indefinitely.
+  if (msg.includes("Gemini timeout after")) return true;
   return false;
 }
 
@@ -854,7 +877,17 @@ async function generateOneHeadshotWithRetry(
   ai: GoogleGenAI,
   prompt: string,
   photos: InlineImage[],
-  maxAttempts = 3,
+  // Bumped from 3 → 5 on 2026-05-06. Diagnosis: gemini-3.1-flash-image-preview
+  // is a Preview model with widely-documented 503 server-overload issues on
+  // Tier 1 paid accounts (Google forum: discuss.ai.google.dev/t/persistent-
+  // 503-server-overloaded-errors-on-gemini-3-1-flash-image-preview-tier-1-
+  // paid-account/134665). One of our 6 parallel slots almost always hits a
+  // 503; the extra retries plus shorter backoffs give the slot more chances
+  // to land on a non-overloaded worker before giving up. Total worst-case
+  // retry time ≈ 0.5 + 1 + 2 + 4 = 7.5s of backoff plus ~30s × 5 attempts
+  // for the actual Gemini calls = ~2.5 min cap, vs. the previous ~150s cap
+  // with 3 attempts. Slightly slower failure but much better success rate.
+  maxAttempts = 5,
 ): Promise<string> {
   let lastError: unknown;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -867,10 +900,14 @@ async function generateOneHeadshotWithRetry(
       if (attempt === maxAttempts || !isRetryableGeminiError(error)) {
         throw error;
       }
-      // Exponential backoff: 1s, 2s. Plus up to 500ms jitter so six parallel
-      // callers don't all hit Google again at exactly the same millisecond.
-      const baseDelay = 1000 * Math.pow(2, attempt - 1); // 1000, 2000
-      const jitter = Math.floor(Math.random() * 500);
+      // Exponential backoff: 500ms, 1s, 2s, 4s. Plus up to 300ms jitter so
+      // six parallel callers don't all hit Google again at exactly the same
+      // millisecond. Shorter than the previous 1s/2s baseline because the
+      // bottleneck isn't OUR rate — it's Google's worker pool being busy,
+      // and there's no point waiting 16s between attempts when 1-2s is
+      // enough for the pool to rotate.
+      const baseDelay = 500 * Math.pow(2, attempt - 1); // 500, 1000, 2000, 4000
+      const jitter = Math.floor(Math.random() * 300);
       const delay = baseDelay + jitter;
       console.warn(
         `Gemini returned transient error on attempt ${attempt}/${maxAttempts}; ` +

@@ -5116,18 +5116,31 @@ export default function App() {
     setLastHasWideAngle(hasWideAngle);
     setScreen("loading");
 
-    // Fire 6 staggered calls (2s apart). Each gets a unique variationIndex
-    // (0-5) so the backend picks a different "flavor" per photo. Staggering
-    // matters: firing all 6 at the same instant overwhelms Gemini's Tier 1
-    // concurrent-request quota and consistently 429s the last one — even
-    // with the per-call retry wrapper, multiple parallel retries collide.
+    // Fire 6 staggered calls. Each gets a unique variationIndex (0-5) so
+    // the backend picks a different "flavor" per photo. Staggering matters
+    // here MORE than usual because gemini-3.1-flash-image-preview is a
+    // Preview model with documented capacity issues — multiple Google AI
+    // forum threads from 2026 confirm persistent 503 "Server Overloaded"
+    // errors even on paid Tier 1 accounts (e.g. discuss.ai.google.dev/t/
+    // persistent-503-server-overloaded-errors-on-gemini-3-1-flash-image-
+    // preview-tier-1-paid-account/134665). Tighter stagger = more
+    // concurrent pressure = more 503s.
     //
-    // Tightened 3s → 2s on 2026-05-04 to shave 5s off slot 6's start time
-    // (start times: 0, 2, 4, 6, 8, 10s instead of 0, 3, 6, 9, 12, 15s).
-    // The retry wrapper in /api/generate absorbs any extra 429s from the
-    // tighter concurrency. If we start seeing systematic 429s on slot 5
-    // or 6 we can dial back to 2.5s.
-    const STAGGER_MS = 2000;
+    // Stagger history:
+    //   - 3s (initial): start times 0, 3, 6, 9, 12, 15s
+    //   - 2s (2026-05-04): start times 0, 2, 4, 6, 8, 10s
+    //   - 5s (2026-05-06, current): start times 0, 5, 10, 15, 20, 25s.
+    //     Bumped because Kristi reported slot 6 consistently lagging
+    //     ~3 minutes — exactly what the Google-side 503 pattern looks
+    //     like when 6 parallel calls all hit at once. By the time slot 6
+    //     fires at t=25s, slots 1-3 are typically done and worker pool
+    //     pressure has dropped.
+    //
+    // Tradeoff: total batch time is ~25s longer at the start (slot 6
+    // starts later) but slot 6 actually completes instead of timing out.
+    // Net user-visible latency is similar or better because we no longer
+    // wait through 2-3 minutes of failed retries.
+    const STAGGER_MS = 5000;
     const calls = Array.from({ length: TOTAL_HEADSHOTS }, async (_, index) => {
       // Each call waits its turn before firing. Promise.all below still
       // collects them in parallel — we're just delaying the START of the
