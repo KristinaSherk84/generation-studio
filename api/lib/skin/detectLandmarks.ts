@@ -1,0 +1,209 @@
+/**
+ * 68-point face landmark detection via @vladmandic/face-api.
+ *
+ * Why this lib: it's the Node.js port of face-api.js, returning the exact
+ * same 68 landmark indices as dlib's shape_predictor_68_face_landmarks.dat
+ * model — same regions, same point ordering. The bundled weights are
+ * MIT-licensed (vs. dlib's iBUG-trained model which excludes commercial
+ * use), so safe to ship in a paid product.
+ *
+ * Landmark indices (matches dlib's 68-point scheme):
+ *   [0..16]  jawline (left ear → chin → right ear, 17 points)
+ *   [17..21] right eyebrow (subject's right) — 5 points
+ *   [22..26] left eyebrow — 5 points
+ *   [27..30] nose bridge — 4 vertical points
+ *   [31..35] nose bottom + nostrils — 5 points
+ *   [36..41] right eye outline — 6 points
+ *   [42..47] left eye outline — 6 points
+ *   [48..59] outer mouth — 12 points
+ *   [60..67] inner mouth — 8 points
+ *
+ * Model files must be present at MODEL_DIR. They get there via the npm
+ * postinstall script in scripts/download-face-api-models.mjs.
+ */
+
+import * as faceapi from "@vladmandic/face-api";
+import * as tf from "@tensorflow/tfjs";
+import path from "node:path";
+import { promises as fs } from "node:fs";
+import sharp from "sharp";
+
+export type Point = { x: number; y: number };
+
+export type Landmarks = {
+  /** Exactly 68 (x, y) coordinates in pixel space of the input image. */
+  points: Point[];
+  /** Detected gender. Used to pick the smoothing intensity tier. */
+  gender: "male" | "female";
+  /** Confidence score [0..1] for the gender detection. */
+  genderProbability: number;
+  /** Face bounding box in pixel space (for sanity checks). */
+  faceBox: { x: number; y: number; width: number; height: number };
+};
+
+/**
+ * Where face-api looks for its model JSON+weight files. This must match
+ * where scripts/download-face-api-models.mjs places them.
+ */
+const MODEL_DIR = path.join(process.cwd(), "api", "lib", "skin", "models");
+
+let modelsLoaded = false;
+let modelLoadPromise: Promise<void> | null = null;
+
+/**
+ * Load the three face-api models we use, exactly once per Vercel function
+ * cold start. Subsequent calls in the same warm function reuse the cached
+ * weights — no repeated disk reads.
+ */
+async function ensureModelsLoaded(): Promise<void> {
+  if (modelsLoaded) return;
+  if (modelLoadPromise) return modelLoadPromise;
+
+  modelLoadPromise = (async () => {
+    // face-api.js was originally a browser library; in Node we have to
+    // wire the TFJS backend manually before loading models. We use
+    // @tensorflow/tfjs (the browser bundle, which also works in Node)
+    // to keep the function bundle small — tfjs-node would pull ~30MB
+    // of native bindings we don't need for our throughput.
+    await tf.setBackend("cpu");
+    await tf.ready();
+
+    await Promise.all([
+      faceapi.nets.ssdMobilenetv1.loadFromDisk(MODEL_DIR),
+      faceapi.nets.faceLandmark68Net.loadFromDisk(MODEL_DIR),
+      faceapi.nets.ageGenderNet.loadFromDisk(MODEL_DIR),
+    ]);
+    modelsLoaded = true;
+  })();
+
+  try {
+    await modelLoadPromise;
+  } catch (err) {
+    // Reset so the next caller can retry rather than getting the same
+    // failed promise forever.
+    modelLoadPromise = null;
+    throw err;
+  }
+}
+
+/**
+ * Quick sanity check that the model files actually exist on disk before
+ * we try to load them. Returns the missing filenames if any, otherwise
+ * an empty array.
+ */
+async function findMissingModelFiles(): Promise<string[]> {
+  // The exact filenames face-api expects after `loadFromDisk(MODEL_DIR)`.
+  // These are the standard names from face-api's GitHub releases.
+  const required = [
+    "ssd_mobilenetv1_model-weights_manifest.json",
+    "face_landmark_68_model-weights_manifest.json",
+    "age_gender_model-weights_manifest.json",
+  ];
+  const missing: string[] = [];
+  for (const f of required) {
+    try {
+      await fs.access(path.join(MODEL_DIR, f));
+    } catch {
+      missing.push(f);
+    }
+  }
+  return missing;
+}
+
+/**
+ * Detect 68-point landmarks and gender on a single face in `imageBytes`.
+ * Returns null if no face is found, the model files are missing, or the
+ * library throws an unexpected error. The caller should fall back to
+ * "no smoothing" in that case rather than failing the whole generation.
+ */
+export async function detectLandmarks(
+  imageBytes: Buffer,
+): Promise<Landmarks | null> {
+  try {
+    const missing = await findMissingModelFiles();
+    if (missing.length > 0) {
+      console.warn(
+        "[detectLandmarks] face-api model files missing — skipping " +
+          "pre-filter. Missing: " +
+          missing.join(", "),
+      );
+      return null;
+    }
+    await ensureModelsLoaded();
+
+    // face-api expects an HTMLImageElement-like object, OR raw RGB pixel
+    // data. We use Sharp to decode the bytes into a known-good RGB raw
+    // buffer at a sensible size, then hand the pixels to TFJS directly.
+    const FACE_API_INPUT_MAX = 640; // longest side of input to face-api
+    const decoded = await sharp(imageBytes)
+      .rotate() // honor EXIF orientation
+      .resize(FACE_API_INPUT_MAX, FACE_API_INPUT_MAX, {
+        fit: "inside",
+        withoutEnlargement: true,
+      })
+      .removeAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+
+    const { data: pixels, info } = decoded;
+    const w = info.width;
+    const h = info.height;
+
+    // Build a TFJS tensor [height, width, channels=3] from the raw RGB
+    // buffer. tf.tensor3d expects Uint8Array → it will normalize to
+    // float32 internally as the model needs.
+    const tensor = tf.tensor3d(new Uint8Array(pixels), [h, w, 3], "int32");
+
+    // ssdMobilenetv1 is the face detector. Default options work fine for
+    // a single-face portrait reference photo.
+    const result = await faceapi
+      .detectSingleFace(
+        tensor as unknown as faceapi.TNetInput,
+        new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 }),
+      )
+      .withFaceLandmarks()
+      .withAgeAndGender();
+
+    tensor.dispose();
+
+    if (!result) return null;
+
+    const points = result.landmarks.positions.map((p) => ({ x: p.x, y: p.y }));
+    if (points.length !== 68) {
+      console.warn(
+        `[detectLandmarks] unexpected landmark count: ${points.length}`,
+      );
+      return null;
+    }
+
+    // We need landmarks in the coordinate space of the ORIGINAL image
+    // (not the downscaled-for-detection image), since the caller will
+    // build a mask at full resolution and apply it to the original.
+    // Scale all landmark x/y by the inverse of Sharp's resize factor.
+    const origMeta = await sharp(imageBytes).rotate().metadata();
+    const origW = origMeta.width ?? w;
+    const origH = origMeta.height ?? h;
+    const sx = origW / w;
+    const sy = origH / h;
+    const scaledPoints = points.map((p) => ({ x: p.x * sx, y: p.y * sy }));
+
+    const box = result.detection.box;
+    return {
+      points: scaledPoints,
+      gender: result.gender === "male" ? "male" : "female",
+      genderProbability: result.genderProbability,
+      faceBox: {
+        x: box.x * sx,
+        y: box.y * sy,
+        width: box.width * sx,
+        height: box.height * sy,
+      },
+    };
+  } catch (err) {
+    console.warn(
+      "[detectLandmarks] failed:",
+      err instanceof Error ? err.message : String(err),
+    );
+    return null;
+  }
+}

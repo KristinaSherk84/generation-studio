@@ -749,16 +749,46 @@ function assemblePrompt(req: GenerateRequest): string {
 
 // -------------------- Reference photo fetching --------------------
 
+import { preFilterReference } from "./lib/skin/index.js";
+
 // Fetch a Vercel Blob URL and convert to the inline base64 format Gemini wants.
-async function fetchPhotoAsInlineData(url: string): Promise<InlineImage> {
+//
+// When `skin` is Polished or Glam, the reference photo passes through the
+// skin pre-filter first (frequency-separation smoothing of the broad
+// color/shadow layer, with feature zones masked out via 68-point
+// landmark detection). This compensates for Gemini's "match what it
+// sees" bias — references with smooth skin produce smoother output.
+// See api/lib/skin/index.ts for the full pipeline.
+//
+// Pre-filter is a no-op for Realistic (the tier is meant to look
+// authentic and un-retouched). It also fails safe: if landmark
+// detection misses or the face-api models aren't on disk, the original
+// reference is returned unchanged and the Gemini call still goes
+// through — never breaks a paid generation.
+async function fetchPhotoAsInlineData(
+  url: string,
+  skin?: Skin,
+): Promise<InlineImage> {
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`Failed to fetch reference photo (${response.status}): ${url}`);
   }
   const contentType = response.headers.get("content-type") || "image/jpeg";
   const arrayBuffer = await response.arrayBuffer();
-  const data = Buffer.from(arrayBuffer).toString("base64");
-  return { mimeType: contentType, data };
+  let buffer = Buffer.from(arrayBuffer);
+
+  // Apply skin pre-filter for Polished / Glam. The function returns the
+  // ORIGINAL bytes unchanged if skin is Realistic / undefined, or on any
+  // failure (no face, missing models, etc.).
+  buffer = await preFilterReference(buffer, skin);
+
+  return {
+    // After pre-filter the bytes are always JPEG, so override mimeType.
+    // (Pre-filter re-encodes as JPEG quality 92 for Gemini.) If pre-filter
+    // returned the original unchanged we keep the original contentType.
+    mimeType: skin === "polished" || skin === "glam" ? "image/jpeg" : contentType,
+    data: buffer.toString("base64"),
+  };
 }
 
 // -------------------- Gemini call --------------------
@@ -982,8 +1012,12 @@ export default async function handler(
 
   try {
     // ---- Fetch all reference photos in parallel ----
+    // The pre-filter runs inside fetchPhotoAsInlineData when skin is
+    // Polished or Glam — it detects 68 landmarks, builds a smooth-zone
+    // mask, and applies frequency-separation smoothing. For Realistic
+    // (or undefined) it's a no-op.
     const photos = await Promise.all(
-      body.photoUrls.map((url) => fetchPhotoAsInlineData(url)),
+      body.photoUrls.map((url) => fetchPhotoAsInlineData(url, body.skin)),
     );
 
     // ---- Assemble the prompt from Kristi's v2 framework ----
