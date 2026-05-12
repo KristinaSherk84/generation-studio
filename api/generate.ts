@@ -796,7 +796,12 @@ async function fetchPhotoAsInlineData(
   }
   const contentType = response.headers.get("content-type") || "image/jpeg";
   const arrayBuffer = await response.arrayBuffer();
-  let buffer = Buffer.from(arrayBuffer);
+  // Annotate as plain `Buffer` so the later assignment from the
+  // pre-filter (which returns a different Buffer<ArrayBuffer> generic)
+  // type-checks cleanly. Without this, TypeScript narrows the type to
+  // Buffer<ArrayBufferLike> based on the Buffer.from overload and the
+  // later assignment `buffer = filtered` fails.
+  let buffer: Buffer = Buffer.from(arrayBuffer);
   let preFilterApplied = false;
 
   // Only attempt pre-filter for the tiers that need it.

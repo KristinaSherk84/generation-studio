@@ -22,7 +22,21 @@
  * postinstall script in scripts/download-face-api-models.mjs.
  */
 
-import * as faceapi from "@vladmandic/face-api";
+// IMPORTANT: explicit deep-import path to skip face-api's Node entrypoint.
+// The default `import "@vladmandic/face-api"` resolves to face-api.node.js
+// in Node, which auto-`require`s @tensorflow/tfjs-node. tfjs-node's native
+// bindings are ~30MB on disk and push the Vercel function bundle over the
+// 250MB unzipped limit. The ESM-nobundle variant uses whatever TFJS we
+// provide explicitly (via @tensorflow/tfjs, browser variant, much smaller)
+// and works fine in Node as long as we set the backend manually before
+// loading models — which we do below.
+//
+// TypeScript may not find type definitions for the deep import path
+// since face-api's package.json `types` field points at the main entry.
+// The `@ts-ignore` is intentional; the runtime resolves the path
+// correctly and Vercel's bundler picks up the file.
+// @ts-ignore — deep import path lacks type defs, runtime is fine
+import * as faceapi from "@vladmandic/face-api/dist/face-api.esm-nobundle.js";
 import * as tf from "@tensorflow/tfjs";
 import path from "node:path";
 import { promises as fs } from "node:fs";
