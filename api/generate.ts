@@ -749,22 +749,43 @@ function assemblePrompt(req: GenerateRequest): string {
 
 // -------------------- Reference photo fetching --------------------
 
-import { preFilterReference } from "./lib/skin/index.js";
+// LAZY-LOADED skin pre-filter. We do NOT import preFilterReference at the
+// top of the file — its transitive imports (@vladmandic/face-api +
+// @tensorflow/tfjs) sometimes throw at module-load time in the Vercel
+// runtime (native binding incompat, missing browser globals, etc.). A
+// throw at module-load takes down the WHOLE generate.ts module and ALL
+// 6 parallel generations fail with no useful error.
+//
+// Instead: dynamically import the pre-filter on first use, inside a
+// try/catch. If anything in the import chain fails, we set the cached
+// pre-filter to null and the rest of generate.ts works exactly like
+// before — no pre-filter, original references go straight to Gemini.
+type PreFilterFn = (bytes: Buffer, skin?: Skin) => Promise<Buffer>;
+let _preFilterCache: PreFilterFn | null = null;
+let _preFilterAttempted = false;
+
+async function loadPreFilterOnce(): Promise<PreFilterFn | null> {
+  if (_preFilterAttempted) return _preFilterCache;
+  _preFilterAttempted = true;
+  try {
+    const mod = await import("./lib/skin/index.js");
+    _preFilterCache = mod.preFilterReference;
+    console.log("[skin] pre-filter loaded successfully");
+  } catch (err) {
+    console.warn(
+      "[skin] failed to load pre-filter — disabling for this function instance:",
+      err instanceof Error ? err.message : String(err),
+    );
+    _preFilterCache = null;
+  }
+  return _preFilterCache;
+}
 
 // Fetch a Vercel Blob URL and convert to the inline base64 format Gemini wants.
-//
-// When `skin` is Polished or Glam, the reference photo passes through the
-// skin pre-filter first (frequency-separation smoothing of the broad
-// color/shadow layer, with feature zones masked out via 68-point
-// landmark detection). This compensates for Gemini's "match what it
-// sees" bias — references with smooth skin produce smoother output.
-// See api/lib/skin/index.ts for the full pipeline.
-//
-// Pre-filter is a no-op for Realistic (the tier is meant to look
-// authentic and un-retouched). It also fails safe: if landmark
-// detection misses or the face-api models aren't on disk, the original
-// reference is returned unchanged and the Gemini call still goes
-// through — never breaks a paid generation.
+// On Polished / Glam tiers, the reference passes through the skin
+// pre-filter first (lazily loaded — see above). Any failure in the
+// pre-filter falls back to the original reference, so generation always
+// completes regardless of pre-filter health.
 async function fetchPhotoAsInlineData(
   url: string,
   skin?: Skin,
@@ -776,17 +797,35 @@ async function fetchPhotoAsInlineData(
   const contentType = response.headers.get("content-type") || "image/jpeg";
   const arrayBuffer = await response.arrayBuffer();
   let buffer = Buffer.from(arrayBuffer);
+  let preFilterApplied = false;
 
-  // Apply skin pre-filter for Polished / Glam. The function returns the
-  // ORIGINAL bytes unchanged if skin is Realistic / undefined, or on any
-  // failure (no face, missing models, etc.).
-  buffer = await preFilterReference(buffer, skin);
+  // Only attempt pre-filter for the tiers that need it.
+  if (skin === "polished" || skin === "glam") {
+    const preFilter = await loadPreFilterOnce();
+    if (preFilter) {
+      try {
+        const filtered = await preFilter(buffer, skin);
+        if (filtered !== buffer) {
+          buffer = filtered;
+          preFilterApplied = true;
+        }
+      } catch (err) {
+        // Per-call failure — log and use original. Doesn't disable
+        // the cache (next call might succeed if it was a transient
+        // issue like a bad input).
+        console.warn(
+          "[skin] preFilter call failed, using original reference:",
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+    }
+  }
 
   return {
-    // After pre-filter the bytes are always JPEG, so override mimeType.
-    // (Pre-filter re-encodes as JPEG quality 92 for Gemini.) If pre-filter
-    // returned the original unchanged we keep the original contentType.
-    mimeType: skin === "polished" || skin === "glam" ? "image/jpeg" : contentType,
+    // If we applied the pre-filter the result is JPEG (re-encoded at
+    // quality 92). Otherwise keep the original content type so Gemini
+    // sees the correct format.
+    mimeType: preFilterApplied ? "image/jpeg" : contentType,
     data: buffer.toString("base64"),
   };
 }
