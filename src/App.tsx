@@ -161,7 +161,7 @@ const PhotographerTipsModal = ({ onDismiss }: PhotographerTipsModalProps) => (
       style={{
         background: C.white,
         borderRadius: 12,
-        padding: "48px 40px",
+        padding: "28px 36px",
         maxWidth: 640,
         width: "100%",
         maxHeight: "90vh",
@@ -176,17 +176,17 @@ const PhotographerTipsModal = ({ onDismiss }: PhotographerTipsModalProps) => (
           color: C.mediumGrey,
           textTransform: "uppercase",
           fontWeight: 500,
-          marginBottom: 12,
+          marginBottom: 8,
         }}
       >
         Photographer's tips
       </div>
       <h2
         style={{
-          fontSize: 28,
+          fontSize: 26,
           fontWeight: 500,
           color: C.dark,
-          margin: "0 0 8px",
+          margin: "0 0 6px",
           letterSpacing: -0.5,
         }}
       >
@@ -194,11 +194,11 @@ const PhotographerTipsModal = ({ onDismiss }: PhotographerTipsModalProps) => (
       </h2>
       <p
         style={{
-          fontSize: 15,
+          fontSize: 14,
           color: C.mediumGrey,
           marginTop: 0,
-          marginBottom: 32,
-          lineHeight: 1.6,
+          marginBottom: 18,
+          lineHeight: 1.5,
         }}
       >
         A few fundamentals from Kristi — twenty years behind the lens — that'll meaningfully
@@ -212,24 +212,24 @@ const PhotographerTipsModal = ({ onDismiss }: PhotographerTipsModalProps) => (
             style={{
               display: "flex",
               alignItems: "flex-start",
-              gap: 16,
-              marginBottom: 20,
-              paddingBottom: 20,
+              gap: 14,
+              marginBottom: 12,
+              paddingBottom: 12,
               borderBottom: idx < PHOTOG_TIPS.length - 1 ? `1px solid ${C.border}` : "none",
             }}
           >
             <div
               style={{
                 flexShrink: 0,
-                width: 32,
-                height: 32,
+                width: 28,
+                height: 28,
                 borderRadius: "50%",
                 background: C.dark,
                 color: C.white,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                fontSize: 14,
+                fontSize: 13,
                 fontWeight: 500,
               }}
             >
@@ -238,21 +238,21 @@ const PhotographerTipsModal = ({ onDismiss }: PhotographerTipsModalProps) => (
             <div>
               <div
                 style={{
-                  fontSize: 16,
+                  fontSize: 15,
                   fontWeight: 500,
                   color: C.dark,
-                  marginBottom: 4,
+                  marginBottom: 2,
                 }}
               >
                 {tip.title}
               </div>
-              <div style={{ fontSize: 14, color: C.mediumGrey, lineHeight: 1.6 }}>{tip.body}</div>
+              <div style={{ fontSize: 13, color: C.mediumGrey, lineHeight: 1.5 }}>{tip.body}</div>
             </div>
           </li>
         ))}
       </ol>
 
-      <div style={{ marginTop: 32 }}>
+      <div style={{ marginTop: 16 }}>
         <Button onClick={onDismiss} full>
           Got it — let's upload
         </Button>
