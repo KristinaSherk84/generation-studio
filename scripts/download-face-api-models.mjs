@@ -16,7 +16,13 @@
  * Skip if files already exist — keeps local dev npm-install fast.
  */
 
-import { mkdirSync, existsSync, createWriteStream, statSync } from "node:fs";
+import {
+  mkdirSync,
+  existsSync,
+  createWriteStream,
+  statSync,
+  copyFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { pipeline } from "node:stream/promises";
@@ -24,6 +30,42 @@ import { pipeline } from "node:stream/promises";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = dirname(__dirname);
 const MODEL_DIR = join(REPO_ROOT, "api", "lib", "skin", "models");
+
+// -------------------------------------------------------------------
+// Patch face-api for Node ESM compatibility
+// -------------------------------------------------------------------
+// @vladmandic/face-api ships `dist/face-api.esm-nobundle.js` with ESM
+// `import`/`export` syntax, BUT face-api's own package.json doesn't
+// declare `"type": "module"`. Node uses the nearest package.json to
+// decide how to interpret a .js file, so when we deep-import this file
+// from our ESM code, Node falls back to CommonJS rules and throws
+// "Cannot use import statement outside a module."
+//
+// Fix: create a .mjs sibling. Node always treats .mjs as ESM regardless
+// of parent package.json. Vercel's bundler picks up the .mjs file at
+// trace time because our import path references it.
+const FACE_API_DIST = join(
+  REPO_ROOT,
+  "node_modules",
+  "@vladmandic",
+  "face-api",
+  "dist",
+);
+const FACE_API_SRC = join(FACE_API_DIST, "face-api.esm-nobundle.js");
+const FACE_API_MJS = join(FACE_API_DIST, "face-api.esm-nobundle.mjs");
+if (existsSync(FACE_API_SRC) && !existsSync(FACE_API_MJS)) {
+  try {
+    copyFileSync(FACE_API_SRC, FACE_API_MJS);
+    console.log(
+      "face-api: patched dist/face-api.esm-nobundle.js → .mjs for Node ESM",
+    );
+  } catch (err) {
+    console.warn(
+      "face-api: failed to create .mjs sibling — skin pre-filter may fail at runtime:",
+      err.message,
+    );
+  }
+}
 
 // vladmandic/face-api keeps the models in its npm package, so the raw
 // GitHub URL is stable. Each model has a manifest.json + 1 or more
