@@ -957,58 +957,48 @@ const LandingV2 = ({ onStart, onPromoUnlock, onShowGallery }: LandingV2Props) =>
           textAlign: "center",
         }}
       >
-        {/* Headline sized down on desktop 2026-05-11 (was clamp(34, 5.5vw,
-            68) — way too big). Now capped at 44px so it doesn't dominate
-            the viewport and the CTA stays above the fold. */}
+        {/* 2026-05-13 — restructured per generationheadshots-build-handoff
+            now that Google Ads point directly at generationheadshots.com.
+            Page needs to convert cold strangers (paid traffic), not just
+            warm referrals from kristinasherk.com:
+              - H1 shortened to plain "AI Headshot Generator" so the
+                primary keyword leads
+              - Italic H2 ("finally made by a real photographer") removed
+              - Subhead rewritten as a single value-prop + guarantee
+                paragraph that does the work the old H2 + subhead split
+                used to do */}
         <h1
           style={{
             fontFamily: SERIF_STACK,
             fontSize: isMobile
-              ? "clamp(24px, 6.5vw, 32px)"
-              : "clamp(28px, 3.4vw, 44px)",
+              ? "clamp(28px, 7.5vw, 40px)"
+              : "clamp(36px, 4.2vw, 56px)",
             fontWeight: 400,
             lineHeight: isMobile ? 1.12 : 1.15,
             letterSpacing: -0.3,
             color: BRAND.charcoal,
-            margin: isMobile ? "0 auto 6px" : "0 auto 8px",
+            margin: isMobile ? "0 auto 12px" : "0 auto 16px",
             maxWidth: 820,
           }}
         >
-          A professional headshot generator
+          AI Headshot Generator
         </h1>
-        {/* Editorial italic tagline — split out of the H1 2026-05-11 per
-            Kristi. Sits as an H2 at smaller size so the main headline
-            owns the visual weight and this reads as a magazine-style
-            kicker. */}
-        <h2
-          style={{
-            fontFamily: SERIF_STACK,
-            fontStyle: "italic",
-            fontSize: isMobile
-              ? "clamp(16px, 4vw, 20px)"
-              : "clamp(18px, 1.9vw, 26px)",
-            fontWeight: 400,
-            lineHeight: 1.2,
-            color: BRAND.charcoal,
-            margin: isMobile ? "0 auto 14px" : "0 auto 16px",
-            maxWidth: 700,
-          }}
-        >
-          finally made by a real photographer.
-        </h2>
 
-        {/* Muted subheadline */}
+        {/* Replacement subhead — combines the old italic H2 and old muted
+            subhead into a single value-prop + guarantee paragraph. */}
         <p
           style={{
             fontSize: "clamp(15px, 1.4vw, 18px)",
             lineHeight: 1.55,
             color: BRAND.subText,
             maxWidth: 640,
-            margin: isMobile ? "0 auto 16px" : "0 auto 20px",
+            margin: isMobile ? "0 auto 18px" : "0 auto 24px",
           }}
         >
-          Most AI headshot tools are built by coders. This one is built by an
-          actual headshot photographer, so they actually look like you.
+          Most AI headshot apps aren't made by actual headshot photographers.
+          This one is. So your headshots look like you — or your money back.
+          No more plastic skin and fake-looking headshots. Only pay for what
+          truly looks like you.
         </p>
 
         {/* Primary CTA sits ABOVE the hero photo on both mobile and desktop
@@ -1032,29 +1022,12 @@ const LandingV2 = ({ onStart, onPromoUnlock, onShowGallery }: LandingV2Props) =>
           </div>
         </div>
 
-        {/* Hero photo of Kristi leaning over her camera, transparent
-            background (PNG). Swapped in 2026-05-11 — clean cutout, no
-            cropping needed. On mobile the max-width is tightened (260px
-            vs 640px desktop) so the photo doesn't dominate vertical space
-            and leaves room for the filmstrip + CTA above the fold. */}
-        <div
-          style={{
-            position: "relative",
-            width: "100%",
-            maxWidth: isMobile ? 260 : 640,
-            margin: "0 auto",
-          }}
-        >
-          <img
-            src="/marketing/ai-headshot-photographer-kristi-sherk.png"
-            alt="Kristi Sherk — AI headshot photographer with 20 years of experience, holding a professional camera"
-            style={{
-              width: "100%",
-              height: "auto",
-              display: "block",
-            }}
-          />
-        </div>
+        {/* Hero photo of Kristi MOVED OUT of the hero section (2026-05-13).
+            Per build-handoff: new page order is hero → filmstrip → trust
+            strip → founder photo + personal note → promise. Photo +
+            personal note now live in their own "Founder" section below
+            the trust strip — the page flow goes hook → action → social
+            proof → authority → founder face → trust story. */}
       </section>
 
       {/* ========== FILM STRIP (auto-scrolling before/after gallery preview) ========== */}
@@ -1192,6 +1165,89 @@ const LandingV2 = ({ onStart, onPromoUnlock, onShowGallery }: LandingV2Props) =>
               {brand}
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* ========== FOUNDER (photo + personal note) ========== */}
+      {/* Added 2026-05-13 per build-handoff. Photo MOVED here from the
+          hero (where it used to sit above the fold) so cold paid traffic
+          coming in from Google Ads sees hook → CTA → social proof FIRST,
+          then meets the founder once they're already engaged. Personal
+          note copy is the condensed 20-years-in-DC story from the old
+          kristinasherk.com/ai-headshots Squarespace page. */}
+      <section
+        style={{
+          background: BRAND.white,
+          padding: "clamp(56px, 8vw, 96px) clamp(20px, 4vw, 56px)",
+        }}
+      >
+        <div
+          style={{
+            maxWidth: 720,
+            margin: "0 auto",
+            textAlign: "center",
+          }}
+        >
+          <div
+            style={{
+              fontFamily: SANS_STACK,
+              fontSize: 11,
+              fontWeight: 600,
+              letterSpacing: 2.4,
+              textTransform: "uppercase",
+              color: BRAND.gold,
+              marginBottom: 20,
+            }}
+          >
+            From the photographer
+          </div>
+          <div
+            style={{
+              width: "100%",
+              maxWidth: isMobile ? 280 : 460,
+              margin: "0 auto 28px",
+            }}
+          >
+            <img
+              src="/marketing/ai-headshot-photographer-kristi-sherk.png"
+              alt="Kristi Sherk — AI headshot photographer with 20 years of experience, holding a professional camera"
+              style={{
+                width: "100%",
+                height: "auto",
+                display: "block",
+              }}
+            />
+          </div>
+          <p
+            style={{
+              fontFamily: SERIF_STACK,
+              fontSize: "clamp(16px, 1.5vw, 19px)",
+              lineHeight: 1.65,
+              color: BRAND.charcoal,
+              margin: 0,
+              textAlign: "left",
+            }}
+          >
+            I've spent two decades shooting professional headshots in DC.
+            I've also had a lot of conversations about AI headshot generators
+            — and frankly, most of them don't look like real people. So I put
+            my 20 years of knowledge about lighting, posing, lens choice, and
+            backgrounds into this one. The results are better than I expected.
+            Other AI tools don't use actual photographers to build their
+            products. This one does.
+          </p>
+          <div
+            style={{
+              fontFamily: SANS_STACK,
+              fontSize: 13,
+              letterSpacing: 0.4,
+              color: BRAND.subText,
+              marginTop: 16,
+              fontStyle: "italic",
+            }}
+          >
+            — Kristina Sherk
+          </div>
         </div>
       </section>
 
