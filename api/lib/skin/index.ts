@@ -42,17 +42,31 @@ export async function preFilterReference(
   // Short-circuit: skin tier is Realistic or undefined → no filtering
   if (!skin || skin === "realistic") return referenceBytes;
 
+  console.log(
+    `[skin] preFilterReference entered (skin=${skin}, ${referenceBytes.length} bytes)`,
+  );
+
   try {
     // 1. Detect landmarks + gender on the reference photo
     const landmarks = await detectLandmarks(referenceBytes);
     if (!landmarks) {
       // No face detected, or face-api models missing — return original
+      console.warn(
+        `[skin] detectLandmarks returned null — returning original reference unchanged`,
+      );
       return referenceBytes;
     }
+
+    console.log(
+      `[skin] landmarks detected: gender=${landmarks.gender} (p=${landmarks.genderProbability.toFixed(2)}), face=${landmarks.faceBox.width.toFixed(0)}×${landmarks.faceBox.height.toFixed(0)}`,
+    );
 
     // 2. Look up intensity for this (skin × gender) combo
     const intensity = getSkinIntensity(skin, landmarks.gender);
     if (!isPreFilterEnabled(skin, landmarks.gender)) {
+      console.log(
+        `[skin] intensity matrix returned zero for (skin=${skin}, gender=${landmarks.gender}) — returning original`,
+      );
       return referenceBytes;
     }
 

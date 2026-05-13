@@ -808,11 +808,24 @@ async function fetchPhotoAsInlineData(
   if (skin === "polished" || skin === "glam") {
     const preFilter = await loadPreFilterOnce();
     if (preFilter) {
+      const originalSize = buffer.length;
       try {
         const filtered = await preFilter(buffer, skin);
         if (filtered !== buffer) {
           buffer = filtered;
           preFilterApplied = true;
+          console.log(
+            `[skin] pre-filter APPLIED (skin=${skin}, ${originalSize} → ${filtered.length} bytes)`,
+          );
+        } else {
+          // preFilter returned the original unchanged. This means
+          // landmark detection failed, or model files weren't found,
+          // or the input is somehow bypassing smoothing. Important to
+          // surface — Glam customers paid for smoothing they're not
+          // getting.
+          console.warn(
+            `[skin] pre-filter returned ORIGINAL unchanged (skin=${skin}) — no smoothing applied. Likely cause: no face detected, model files missing, or smoothing intensity is zero.`,
+          );
         }
       } catch (err) {
         // Per-call failure — log and use original. Doesn't disable
@@ -823,6 +836,14 @@ async function fetchPhotoAsInlineData(
           err instanceof Error ? err.message : String(err),
         );
       }
+    } else {
+      // loadPreFilterOnce returned null — face-api import failed at
+      // cold-start. This is a permanent failure for this function
+      // instance. Important to surface on every call so we can see it
+      // in any log, not just the first call after cold start.
+      console.warn(
+        `[skin] pre-filter is DISABLED for this function instance (skin=${skin}) — face-api failed to load`,
+      );
     }
   }
 
