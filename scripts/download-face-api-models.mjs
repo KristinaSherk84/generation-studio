@@ -67,6 +67,58 @@ if (existsSync(FACE_API_SRC) && !existsSync(FACE_API_MJS)) {
   }
 }
 
+// -------------------------------------------------------------------
+// Patch @tensorflow/tfjs* packages so Node treats their .js files as ESM
+// -------------------------------------------------------------------
+// face-api.esm-nobundle.mjs imports `from '@tensorflow/tfjs'` which Node
+// resolves to .../tfjs/dist/index.js. That file uses ESM `import` syntax
+// but the package's own package.json lacks `"type": "module"`, so Node
+// falls back to CommonJS rules and throws "Failed to load the ES module."
+//
+// Fix: add `"type": "module"` to the package.json of each tfjs sub-package
+// we depend on. This is the same nearest-package-json mechanism we used
+// for face-api itself, just applied to one more layer down. Idempotent —
+// re-reading and re-writing the same value is a no-op.
+//
+// The packages we patch are exactly the ones face-api.esm-nobundle.mjs
+// imports. If face-api ever adds a new tfjs dependency we'll see another
+// "Failed to load ES module" error pointing at it, and we can add it here.
+import { readFileSync, writeFileSync } from "node:fs";
+
+const TFJS_PACKAGES_TO_PATCH = [
+  "@tensorflow/tfjs",
+  "@tensorflow/tfjs-core",
+  "@tensorflow/tfjs-backend-cpu",
+  "@tensorflow/tfjs-backend-wasm",
+  "@tensorflow/tfjs-converter",
+  "@tensorflow/tfjs-layers",
+  "@tensorflow/tfjs-data",
+];
+
+for (const pkgName of TFJS_PACKAGES_TO_PATCH) {
+  const pkgJsonPath = join(REPO_ROOT, "node_modules", pkgName, "package.json");
+  if (!existsSync(pkgJsonPath)) {
+    // Package isn't actually installed (some are transitive deps and may
+    // or may not be present). Skip silently.
+    continue;
+  }
+  try {
+    const pkg = JSON.parse(readFileSync(pkgJsonPath, "utf8"));
+    if (pkg.type === "module") {
+      // Already patched — idempotent re-run
+      continue;
+    }
+    pkg.type = "module";
+    writeFileSync(pkgJsonPath, JSON.stringify(pkg, null, 2) + "\n");
+    console.log(`tfjs: patched ${pkgName}/package.json → "type": "module"`);
+  } catch (err) {
+    console.warn(
+      `tfjs: failed to patch ${pkgName}/package.json — skin pre-filter may fail at runtime:`,
+      err.message,
+    );
+  }
+}
+
 // vladmandic/face-api keeps the models in its npm package, so the raw
 // GitHub URL is stable. Each model has a manifest.json + 1 or more
 // binary "shard" files (typically *.bin).
