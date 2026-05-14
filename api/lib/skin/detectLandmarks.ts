@@ -44,7 +44,31 @@
 // bundler picks up the file at trace time.
 // @ts-ignore — deep import path lacks type defs, runtime is fine
 import * as faceapi from "@vladmandic/face-api/dist/face-api.esm-nobundle.mjs";
-import * as tf from "@tensorflow/tfjs";
+// Import from tfjs-core directly, NOT the umbrella @tensorflow/tfjs.
+//
+// History: previously imported `from "@tensorflow/tfjs"`, then chased a
+// chain of Node ESM/CJS interop errors all the way to patching the
+// umbrella package's package.json to "type": "module" in our postinstall.
+// That fixed module loading but broke the ESM export surface — `tf.setBackend`,
+// `tf.ready`, `tf.getBackend`, and `tf.tensor3d` were all reported as
+// undefined at build time (TS2339 errors visible in Vercel build logs on
+// 2026-05-14). At runtime the import succeeded but the first call to
+// tf.setBackend("cpu") threw "tf.setBackend is not a function", which the
+// loadPreFilterOnce failsafe caught and silently disabled the entire
+// pre-filter — so every Glam/Polished call has been running with raw
+// references since the pre-filter shipped.
+//
+// Fix: import directly from `@tensorflow/tfjs-core` which IS the package
+// that actually owns setBackend/ready/getBackend/tensor3d. The umbrella
+// `@tensorflow/tfjs` re-exports from core plus layers/converter/data,
+// but we don't need any of layers/converter/data — face-api only uses
+// core. Smaller bundle, cleaner ESM surface, no umbrella-shape mismatch.
+//
+// The side-effect import of @tensorflow/tfjs-backend-cpu registers the
+// CPU backend with tfjs-core's backend registry. Without it,
+// tf.setBackend("cpu") would throw "backend not found".
+import * as tf from "@tensorflow/tfjs-core";
+import "@tensorflow/tfjs-backend-cpu";
 import path from "node:path";
 import { promises as fs } from "node:fs";
 import { fileURLToPath } from "node:url";
