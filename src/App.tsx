@@ -53,14 +53,314 @@ const font: CSSProperties = {
   fontFamily: "Inter, system-ui, -apple-system, sans-serif",
 };
 
+// -------------------- Flow-step framework --------------------
+// The user-facing journey is communicated as 5 numbered steps. The intro
+// modal shows the full list before they begin; the Navbar shows dot
+// progress on every screen; the LoadingScreen shows a step checklist
+// while photos are generating. Adding the framework here as the single
+// source of truth so all three surfaces stay in sync.
+//
+// Step → Screen mapping (see getStepFromScreen below):
+//   1 (Upload)        → "upload"
+//   2 (Pick style)    → "style"
+//   3 (Pick favorites)→ "loading", "grid", "checkout"
+//   4 (Retouch)       → reserved for the Path B Gemini Pro polish pass
+//                       — currently transitions to step 5 immediately
+//                       until that endpoint ships
+//   5 (Download)      → "success"
+const FLOW_STEPS: { label: string; description: string }[] = [
+  {
+    label: "Upload your shots",
+    description: "4–8 of your favorite recent photos so the AI can learn your face.",
+  },
+  {
+    label: "Pick your style",
+    description: "Choose the look — corporate, natural, executive, or urban.",
+  },
+  {
+    label: "Pick your favorites to polish",
+    description: "Review your 6 headshots and pick the ones you love most.",
+  },
+  {
+    label: "Retouch your headshots",
+    description: "We polish the ones you picked with our pro retouching pass.",
+  },
+  {
+    label: "Download your shots",
+    description: "Your finished headshots are emailed to you and ready to download.",
+  },
+];
+
+// Map a Screen value to the current 1-based step number (or null if no
+// step is meaningful, e.g. landing/gallery). Centralized so we don't
+// scatter step logic across components.
+function getStepFromScreen(
+  screen:
+    | "landing"
+    | "gallery"
+    | "upload"
+    | "style"
+    | "loading"
+    | "grid"
+    | "checkout"
+    | "success",
+): number | null {
+  switch (screen) {
+    case "upload":
+      return 1;
+    case "style":
+      return 2;
+    case "loading":
+    case "grid":
+    case "checkout":
+      return 3;
+    case "success":
+      return 5;
+    default:
+      return null;
+  }
+}
+
+// 5-dot step indicator used in the Navbar. Past steps render filled
+// with a checkmark; the current step renders filled with its number;
+// future steps render as outlined circles. Compact enough to sit
+// alongside the logo without crowding the brand on desktop. On narrow
+// viewports (≤480px) the connector lines shrink so 5 dots still fit.
+type StepIndicatorDotsProps = {
+  currentStep: number; // 1-based
+  totalSteps?: number;
+};
+
+const StepIndicatorDots = ({
+  currentStep,
+  totalSteps = FLOW_STEPS.length,
+}: StepIndicatorDotsProps) => (
+  <div
+    aria-label={`Step ${currentStep} of ${totalSteps}: ${FLOW_STEPS[currentStep - 1]?.label ?? ""}`}
+    style={{
+      display: "flex",
+      alignItems: "center",
+      gap: 3,
+    }}
+  >
+    {Array.from({ length: totalSteps }, (_, i) => {
+      const stepNum = i + 1;
+      const isPast = stepNum < currentStep;
+      const isCurrent = stepNum === currentStep;
+      const isFuture = stepNum > currentStep;
+      const stepLabel = FLOW_STEPS[i]?.label ?? "";
+      return (
+        <div
+          key={stepNum}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 3,
+          }}
+        >
+          <div
+            title={stepLabel}
+            style={{
+              width: 22,
+              height: 22,
+              borderRadius: "50%",
+              background: isPast || isCurrent ? C.dark : "transparent",
+              border: isFuture ? `1px solid ${C.lightGrey}` : "none",
+              color: isPast || isCurrent ? C.white : C.mediumGrey,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 11,
+              fontWeight: 500,
+              flexShrink: 0,
+            }}
+          >
+            {isPast ? <Check size={11} strokeWidth={3} /> : stepNum}
+          </div>
+          {stepNum < totalSteps && (
+            <div
+              style={{
+                width: 16,
+                height: 1,
+                background: stepNum < currentStep ? C.dark : C.lightGrey,
+                flexShrink: 0,
+              }}
+            />
+          )}
+        </div>
+      );
+    })}
+  </div>
+);
+
+// -------------------- Intro-steps modal --------------------
+// Full-screen modal shown ONCE per session when the user first arrives
+// at the upload screen. Lays out all 5 numbered steps with a one-line
+// description for each so customers know what they're signing up for
+// before they start uploading. Dismissed by clicking "Let's get started";
+// dismissal state is held at the App level so navigating back to landing
+// and re-entering shows it again (fresh-session mental model — matches
+// how the PhotographerTipsModal already behaves).
+type IntroStepsModalProps = {
+  onDismiss: () => void;
+};
+
+const IntroStepsModal = ({ onDismiss }: IntroStepsModalProps) => (
+  <div
+    role="dialog"
+    aria-modal="true"
+    aria-label="How it works — 5 steps"
+    style={{
+      position: "fixed",
+      inset: 0,
+      background: "rgba(0, 0, 0, 0.85)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 24,
+      zIndex: 1000,
+      ...font,
+    }}
+  >
+    <div
+      style={{
+        background: C.white,
+        borderRadius: 12,
+        padding: "32px 36px",
+        maxWidth: 540,
+        width: "100%",
+        maxHeight: "90vh",
+        overflowY: "auto",
+      }}
+    >
+      <div
+        style={{
+          fontSize: 11,
+          fontWeight: 500,
+          letterSpacing: 1.5,
+          color: C.mediumGrey,
+          textTransform: "uppercase",
+          marginBottom: 8,
+        }}
+      >
+        How it works
+      </div>
+      <h2
+        style={{
+          fontSize: 26,
+          fontWeight: 500,
+          color: C.dark,
+          margin: "0 0 6px",
+          lineHeight: 1.2,
+        }}
+      >
+        5 quick steps to your new headshots
+      </h2>
+      <p
+        style={{
+          fontSize: 14,
+          color: C.mediumGrey,
+          margin: "0 0 22px",
+          lineHeight: 1.5,
+        }}
+      >
+        Most people finish in under 10 minutes.
+      </p>
+      <ol
+        style={{
+          listStyle: "none",
+          padding: 0,
+          margin: "0 0 24px",
+        }}
+      >
+        {FLOW_STEPS.map((step, i) => (
+          <li
+            key={i}
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 14,
+              marginBottom: 14,
+              paddingBottom: 14,
+              borderBottom:
+                i < FLOW_STEPS.length - 1 ? `1px solid ${C.border}` : "none",
+            }}
+          >
+            <div
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: "50%",
+                background: C.dark,
+                color: C.white,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 13,
+                fontWeight: 500,
+                flexShrink: 0,
+                marginTop: 1,
+              }}
+            >
+              {i + 1}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div
+                style={{
+                  fontSize: 15,
+                  fontWeight: 500,
+                  color: C.dark,
+                  marginBottom: 2,
+                }}
+              >
+                {step.label}
+              </div>
+              <div
+                style={{
+                  fontSize: 13,
+                  color: C.mediumGrey,
+                  lineHeight: 1.5,
+                }}
+              >
+                {step.description}
+              </div>
+            </div>
+          </li>
+        ))}
+      </ol>
+      <button
+        onClick={onDismiss}
+        style={{
+          width: "100%",
+          padding: "14px 24px",
+          background: C.dark,
+          color: C.buttonText,
+          border: "none",
+          borderRadius: 8,
+          fontSize: 15,
+          fontWeight: 500,
+          cursor: "pointer",
+          ...font,
+        }}
+      >
+        Let's get started
+      </button>
+    </div>
+  </div>
+);
+
 // -------------------- Shared components --------------------
 
 type NavbarProps = {
   cartCount?: number;
   onLogoClick?: () => void;
+  // If set (1-based), replaces the "Selected (N)" indicator with the
+  // 5-dot step progress UI. Null/undefined on screens where steps
+  // aren't meaningful (e.g. landing) so we fall back to the cart count.
+  currentStep?: number | null;
 };
 
-const Navbar = ({ cartCount = 0, onLogoClick }: NavbarProps) => (
+const Navbar = ({ cartCount = 0, onLogoClick, currentStep }: NavbarProps) => (
   <div
     style={{
       height: 70,
@@ -70,16 +370,34 @@ const Navbar = ({ cartCount = 0, onLogoClick }: NavbarProps) => (
       alignItems: "center",
       justifyContent: "space-between",
       padding: "0 32px",
+      gap: 16,
       ...font,
     }}
   >
     <div
       onClick={onLogoClick}
-      style={{ fontWeight: 500, fontSize: 18, color: C.dark, cursor: "pointer" }}
+      style={{
+        fontWeight: 500,
+        fontSize: 18,
+        color: C.dark,
+        cursor: "pointer",
+        whiteSpace: "nowrap",
+      }}
     >
       Generation Studio
     </div>
-    <div style={{ fontSize: 14, color: C.dark, fontWeight: 400 }}>
+    {/* Step indicator sits in the middle when we're inside the flow;
+        the "Selected (N)" counter is preserved on the right so users
+        still see their cart state on the grid screen. */}
+    {currentStep && <StepIndicatorDots currentStep={currentStep} />}
+    <div
+      style={{
+        fontSize: 14,
+        color: C.dark,
+        fontWeight: 400,
+        whiteSpace: "nowrap",
+      }}
+    >
       Selected ({cartCount})
     </div>
   </div>
@@ -4934,6 +5252,15 @@ export default function App() {
   const [hasSeenTips, setHasSeenTips] = useState(false);
   const [showTipsModal, setShowTipsModal] = useState(false);
 
+  // Intro-steps modal state — same once-per-session pattern as the tips
+  // modal above. Shows the 5-step roadmap (Upload → Pick style → Pick
+  // favorites → Retouch → Download) so customers know what they're
+  // signing up for before they begin. Fires BEFORE the photographer-tips
+  // modal so the user sees the big picture first, then the upload
+  // fundamentals second.
+  const [hasSeenIntro, setHasSeenIntro] = useState(false);
+  const [showIntroModal, setShowIntroModal] = useState(false);
+
   // --------- Paywall unlock state ---------
   //
   // The entry paywall is considered "unlocked" for this session once EITHER:
@@ -5048,7 +5375,9 @@ export default function App() {
             }
             setStripeVerifyState("idle");
             setScreen("upload");
-            setShowTipsModal(true);
+            // Intro modal first ("Here's the 5 steps"), photographer-tips
+            // modal cascades after the user dismisses it.
+            setShowIntroModal(true);
             return;
           }
 
@@ -5225,6 +5554,8 @@ export default function App() {
     setRegeneratingSlots(new Set());
     setHasSeenTips(false);
     setShowTipsModal(false);
+    setHasSeenIntro(false);
+    setShowIntroModal(false);
   };
 
   // Landing → Upload. If the user has already unlocked (via Stripe or promo
@@ -5234,7 +5565,11 @@ export default function App() {
   const handleStart = async () => {
     if (isUnlocked) {
       setScreen("upload");
-      if (!hasSeenTips) setShowTipsModal(true);
+      // Show 5-step intro first; tips modal cascades after dismissal
+      // (see handleDismissIntro). If both are already seen this session,
+      // neither fires and the user lands on Upload directly.
+      if (!hasSeenIntro) setShowIntroModal(true);
+      else if (!hasSeenTips) setShowTipsModal(true);
       return;
     }
     // Kick off Stripe Checkout.
@@ -5266,12 +5601,23 @@ export default function App() {
   const handlePromoUnlock = () => {
     markUnlocked("promo");
     setScreen("upload");
-    if (!hasSeenTips) setShowTipsModal(true);
+    if (!hasSeenIntro) setShowIntroModal(true);
+    else if (!hasSeenTips) setShowTipsModal(true);
   };
 
   const handleDismissTips = () => {
     setShowTipsModal(false);
     setHasSeenTips(true);
+  };
+
+  // Intro modal dismissed → mark seen, then immediately fire the
+  // photographer-tips modal so the two sit in a natural sequence
+  // (big-picture roadmap first, fundamentals second). If the user has
+  // already seen tips this session, just close.
+  const handleDismissIntro = () => {
+    setShowIntroModal(false);
+    setHasSeenIntro(true);
+    if (!hasSeenTips) setShowTipsModal(true);
   };
 
   // Regenerate a SINGLE thumbnail slot, reusing the most recently-submitted
@@ -5496,7 +5842,11 @@ export default function App() {
           landing screen because LandingV2 has its own GenerAItion top nav.
           Showing both at once stacks two header bars and visually clashes. */}
       {screen !== "landing" && (
-        <Navbar cartCount={selectedImageIndices.length} onLogoClick={reset} />
+        <Navbar
+          cartCount={selectedImageIndices.length}
+          onLogoClick={reset}
+          currentStep={getStepFromScreen(screen)}
+        />
       )}
 
       {/* Stripe verification overlay — shown when the user just returned from
@@ -5748,6 +6098,11 @@ export default function App() {
 
       {/* Photographer's tips modal — shown once per session on Landing→Upload.
           Overlays the Upload screen until the user clicks "Got it." */}
+      {/* Intro modal renders ABOVE the tips modal in the DOM so if both
+          are ever simultaneously truthy (shouldn't happen — handleDismissIntro
+          chains them, but defensive), the intro one wins visually since both
+          use the same z-index. */}
+      {showIntroModal && <IntroStepsModal onDismiss={handleDismissIntro} />}
       {showTipsModal && <PhotographerTipsModal onDismiss={handleDismissTips} />}
     </div>
   );
