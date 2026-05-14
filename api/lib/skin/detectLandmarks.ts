@@ -22,53 +22,47 @@
  * postinstall script in scripts/download-face-api-models.mjs.
  */
 
-// IMPORTANT: explicit deep-import to skip face-api's auto-Node entrypoint.
+// 2026-05-14: switched from ESM imports to createRequire after a week of
+// chasing Node ESM/CJS interop errors. Full history of failed attempts:
 //
-// Why this path: the default `import "@vladmandic/face-api"` resolves to
-// face-api.node.js in Node, which auto-`require`s @tensorflow/tfjs-node.
-// tfjs-node's native bindings push the Vercel function over the 250MB
-// unzipped limit. The ESM-nobundle variant uses whatever TFJS we provide
-// explicitly (via @tensorflow/tfjs, browser variant, much smaller) and
-// works in Node as long as we set the backend manually before loading
-// models — which we do below.
+//   1. import "@vladmandic/face-api" (default Node entry)
+//      → required @tensorflow/tfjs-node which pushed function over 250MB
 //
-// Why .mjs instead of .js: face-api ships the ESM-nobundle variant as
-// `.js` but their package.json lacks `"type": "module"`. Node's nearest-
-// package-json rule means it would treat the file as CommonJS and throw
-// "Cannot use import statement outside a module." Our postinstall script
-// (scripts/download-face-api-models.mjs) copies the .js → .mjs so Node
-// will treat it as ESM unconditionally.
+//   2. import * as faceapi from "@vladmandic/face-api/dist/face-api.esm-nobundle.mjs"
+//      + import * as tf from "@tensorflow/tfjs"
+//      → "Failed to load ES module: tfjs/dist/index.js"
 //
-// TypeScript can't find type definitions for the deep .mjs path —
-// @ts-ignore is intentional; runtime resolves correctly and Vercel's
-// bundler picks up the file at trace time.
-// @ts-ignore — deep import path lacks type defs, runtime is fine
-import * as faceapi from "@vladmandic/face-api/dist/face-api.esm-nobundle.mjs";
-// Import from tfjs-core directly, NOT the umbrella @tensorflow/tfjs.
+//   3. + postinstall patch @tensorflow/tfjs* to "type": "module"
+//      → module loaded but ESM export surface broken: tf.setBackend,
+//        tf.ready, tf.getBackend, tf.tensor3d all undefined. Pre-filter
+//        silently disabled on every cold start, ran with raw references
+//        for entire lifetime of feature.
 //
-// History: previously imported `from "@tensorflow/tfjs"`, then chased a
-// chain of Node ESM/CJS interop errors all the way to patching the
-// umbrella package's package.json to "type": "module" in our postinstall.
-// That fixed module loading but broke the ESM export surface — `tf.setBackend`,
-// `tf.ready`, `tf.getBackend`, and `tf.tensor3d` were all reported as
-// undefined at build time (TS2339 errors visible in Vercel build logs on
-// 2026-05-14). At runtime the import succeeded but the first call to
-// tf.setBackend("cpu") threw "tf.setBackend is not a function", which the
-// loadPreFilterOnce failsafe caught and silently disabled the entire
-// pre-filter — so every Glam/Polished call has been running with raw
-// references since the pre-filter shipped.
+//   4. switched to import * as tf from "@tensorflow/tfjs-core"
+//      → same problem one layer deeper; tfjs-core ESM surface also
+//        empty after the package.json patch
 //
-// Fix: import directly from `@tensorflow/tfjs-core` which IS the package
-// that actually owns setBackend/ready/getBackend/tensor3d. The umbrella
-// `@tensorflow/tfjs` re-exports from core plus layers/converter/data,
-// but we don't need any of layers/converter/data — face-api only uses
-// core. Smaller bundle, cleaner ESM surface, no umbrella-shape mismatch.
+// Insight: Node's "type": "module" forces ESM parsing on CJS-shaped dist
+// files. The resulting namespace has no named exports because CJS's
+// `Object.defineProperty(exports, ...)` calls don't generate ESM
+// bindings. Every path that depends on ESM resolution of @tensorflow/*
+// from Vercel's serverless sandbox runs into this.
 //
-// The side-effect import of @tensorflow/tfjs-backend-cpu registers the
-// CPU backend with tfjs-core's backend registry. Without it,
-// tf.setBackend("cpu") would throw "backend not found".
-import * as tf from "@tensorflow/tfjs-core";
-import "@tensorflow/tfjs-backend-cpu";
+// Current approach: don't resolve @tensorflow/* as ESM at all. face-api
+// ships a UMD bundle at dist/face-api.js that has tfjs-core + the CPU
+// backend baked in and exposes the tf instance via `faceapi.tf`. Load
+// it via `createRequire` (Node's bridge for using CJS from ESM) and we
+// never trigger Node's ESM resolution for tfjs. No patches needed.
+import { createRequire } from "node:module";
+const requireCjs = createRequire(import.meta.url);
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const faceapi: any = requireCjs("@vladmandic/face-api/dist/face-api.js");
+// face-api exposes its bundled tfjs instance here so callers can run
+// tensor ops + manage backends without a separate tfjs install.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const tf: any = faceapi.tf;
+
 import path from "node:path";
 import { promises as fs } from "node:fs";
 import { fileURLToPath } from "node:url";

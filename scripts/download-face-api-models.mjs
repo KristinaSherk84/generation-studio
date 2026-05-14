@@ -68,56 +68,30 @@ if (existsSync(FACE_API_SRC) && !existsSync(FACE_API_MJS)) {
 }
 
 // -------------------------------------------------------------------
-// Patch @tensorflow/tfjs* packages so Node treats their .js files as ESM
+// NOTE on the tfjs ESM rabbit hole (2026-05-06 → 2026-05-14):
 // -------------------------------------------------------------------
-// face-api.esm-nobundle.mjs imports `from '@tensorflow/tfjs'` which Node
-// resolves to .../tfjs/dist/index.js. That file uses ESM `import` syntax
-// but the package's own package.json lacks `"type": "module"`, so Node
-// falls back to CommonJS rules and throws "Failed to load the ES module."
+// We previously patched @tensorflow/tfjs* packages with "type": "module"
+// here, because face-api's ESM-nobundle variant imported tfjs via
+// `import * as tf from '@tensorflow/tfjs'` and Node refused to load it
+// as ESM otherwise. That fix worked for module loading, but had a
+// catastrophic side effect: the named-export surface of tfjs-core (and
+// the umbrella tfjs) collapsed when their CJS-shaped dist files were
+// reinterpreted as ESM. `tf.setBackend`, `tf.tensor3d`, etc. all became
+// undefined, the pre-filter silently disabled itself on every cold
+// start, and every Glam/Polished generation has been running against
+// raw, un-smoothed references for the entire life of this feature.
 //
-// Fix: add `"type": "module"` to the package.json of each tfjs sub-package
-// we depend on. This is the same nearest-package-json mechanism we used
-// for face-api itself, just applied to one more layer down. Idempotent —
-// re-reading and re-writing the same value is a no-op.
+// The 2026-05-14 fix abandons the ESM resolution dance entirely and
+// loads face-api as a CJS module via `createRequire` from
+// detectLandmarks.ts. face-api ships a UMD bundle at dist/face-api.js
+// that has tfjs-core + the CPU backend bundled inside it and exposes
+// the tfjs instance as `faceapi.tf` — so we can call setBackend etc.
+// without ever resolving @tensorflow/* as a separate module. That
+// makes the tfjs package.json patches unnecessary; they're removed
+// here.
 //
-// The packages we patch are exactly the ones face-api.esm-nobundle.mjs
-// imports. If face-api ever adds a new tfjs dependency we'll see another
-// "Failed to load ES module" error pointing at it, and we can add it here.
-import { readFileSync, writeFileSync } from "node:fs";
-
-const TFJS_PACKAGES_TO_PATCH = [
-  "@tensorflow/tfjs",
-  "@tensorflow/tfjs-core",
-  "@tensorflow/tfjs-backend-cpu",
-  "@tensorflow/tfjs-backend-wasm",
-  "@tensorflow/tfjs-converter",
-  "@tensorflow/tfjs-layers",
-  "@tensorflow/tfjs-data",
-];
-
-for (const pkgName of TFJS_PACKAGES_TO_PATCH) {
-  const pkgJsonPath = join(REPO_ROOT, "node_modules", pkgName, "package.json");
-  if (!existsSync(pkgJsonPath)) {
-    // Package isn't actually installed (some are transitive deps and may
-    // or may not be present). Skip silently.
-    continue;
-  }
-  try {
-    const pkg = JSON.parse(readFileSync(pkgJsonPath, "utf8"));
-    if (pkg.type === "module") {
-      // Already patched — idempotent re-run
-      continue;
-    }
-    pkg.type = "module";
-    writeFileSync(pkgJsonPath, JSON.stringify(pkg, null, 2) + "\n");
-    console.log(`tfjs: patched ${pkgName}/package.json → "type": "module"`);
-  } catch (err) {
-    console.warn(
-      `tfjs: failed to patch ${pkgName}/package.json — skin pre-filter may fail at runtime:`,
-      err.message,
-    );
-  }
-}
+// The face-api .mjs rename above is kept as a safety net for any
+// future call site that wants the ESM variant — it's a free no-op.
 
 // vladmandic/face-api keeps the models in its npm package, so the raw
 // GitHub URL is stable. Each model has a manifest.json + 1 or more
