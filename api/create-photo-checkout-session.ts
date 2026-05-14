@@ -1,32 +1,30 @@
 /**
  * POST /api/create-photo-checkout-session
  *
- * Phase 2 paywall (2026-04-24). Creates a Stripe Checkout Session for the
- * per-photo charge at delivery time. Body: { count, creditApplied }.
+ * Phase 2 paywall (2026-04-24, simplified 2026-05-14). Creates a Stripe
+ * Checkout Session for the per-photo charge at delivery time.
+ * Body: { count, customerEmail? }.
  *
- * Pricing model:
- *   - Each high-rez headshot is $9.99.
- *   - If `creditApplied` is true (user paid the $4.99 entry earlier and hasn't
- *     consumed the credit yet), we subtract $4.99 from the total.
- *   - If `creditApplied` is false (user used a promo code OR has already
- *     consumed the credit on a prior purchase), the total is $9.99 × count.
+ * Pricing model (simplified 2026-05-14):
+ *   - Each high-rez headshot is $9.99 flat.
+ *   - Total = $9.99 × count, always. No credit, no per-customer discount.
  *
- * Single-line-item design: instead of N separate $9.99 line items plus a
- * Stripe Coupon for the discount, we create ONE custom-priced line item whose
- * `unit_amount` is the computed total. Simpler for us, clearer for the user
- * at the Stripe page ("2 high-rez AI headshots ($4.99 credit applied) — $14.99").
+ * Previously: the $2.99 entry fee was credited against the first photo
+ * purchase, so 1 photo would cost $9.99 ($2.99 paid earlier + $7.00 at
+ * checkout). That model was dropped because the client-side `credit_used`
+ * tracking lived in sessionStorage, which resets per tab — customers
+ * coming back in a new session were re-claiming the credit indefinitely.
+ * Flat-price keeps the math honest and the copy simple. Paired with a
+ * 48-hour TTL on the entry unlock so casual return visitors re-pay $2.99
+ * to re-enter (see PAYWALL_UNLOCK_TTL_MS in src/App.tsx).
+ *
+ * Single-line-item design: ONE custom-priced line item whose `unit_amount`
+ * is the computed total, instead of N separate $9.99 line items. Simpler
+ * for us, clearer for the user at the Stripe page.
  *
  * success_url carries `photo_paid=1` to distinguish from Phase 1's `paid=1`.
  * The mount-time useEffect in App.tsx picks this up, verifies server-side,
  * reads the pending delivery stash from sessionStorage, and runs /api/deliver.
- *
- * Notes for the future:
- *   - We could also expose `creditApplied` as a server-computed field instead
- *     of trusting the client — look the customer up by email and check Stripe
- *     for prior $4.99 charges. Not worth it for Phase 2 MVP.
- *   - When the full Stripe integration matures, consider a webhook-driven
- *     fulfillment flow so /api/deliver isn't gated on the client's ability to
- *     come back from Stripe. For now, the verify-on-return path is simpler.
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
@@ -34,14 +32,9 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 export const maxDuration = 15;
 
 const PRICE_PER_PHOTO_CENTS = 999;
-// Lowered 2026-04-30: $4.99 → $2.99 entry to lower top-of-funnel friction.
-// Same total per converting customer (still $9.99 per photo all-in) — entry
-// is just a smaller buy-in with a smaller credit applied to the first photo.
-const ENTRY_CREDIT_CENTS = 299;
 
 type CreatePhotoCheckoutBody = {
   count: number;
-  creditApplied: boolean;
   // Optional — the email captured by Stripe during the Phase 1 entry
   // checkout. When present we pass it as `customer_email` on the Phase 2
   // session so the Stripe page shows it pre-filled AND so Stripe Link can
@@ -71,7 +64,6 @@ export default async function handler(
 
   const body = req.body as Partial<CreatePhotoCheckoutBody>;
   const count = Number(body?.count);
-  const creditApplied = body?.creditApplied === true;
   const customerEmail =
     typeof body?.customerEmail === "string" &&
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.customerEmail.trim())
@@ -86,20 +78,8 @@ export default async function handler(
     return res.status(400).json({ error: "Invalid count" });
   }
 
-  // Compute the line-item total. Clamp to 0 in case a future credit scheme
-  // produces a negative (Stripe would reject negative unit_amount anyway).
-  const subtotalCents = PRICE_PER_PHOTO_CENTS * count;
-  const creditCents = creditApplied ? ENTRY_CREDIT_CENTS : 0;
-  const totalCents = Math.max(0, subtotalCents - creditCents);
-
-  // Edge case: if the credit covers the entire purchase (e.g. a future plan
-  // where credit > first-photo price), Stripe won't accept a $0 line item.
-  // Return an error so the client can fall through to the skip-Stripe branch.
-  if (totalCents === 0) {
-    return res
-      .status(400)
-      .json({ error: "Total is zero — skip Stripe and deliver directly" });
-  }
+  // Flat pricing — no credit, no discount.
+  const totalCents = PRICE_PER_PHOTO_CENTS * count;
 
   const host = req.headers.host;
   if (!host) {
@@ -107,11 +87,9 @@ export default async function handler(
   }
   const origin = `https://${host}`;
 
-  // Line item name shows on the Stripe page. Make it descriptive so the user
-  // recognizes what they're paying for and sees the credit reflected.
-  const itemName = `${count} high-rez AI headshot${count > 1 ? "s" : ""}${
-    creditApplied ? " (includes $2.99 credit from your entry purchase)" : ""
-  }`;
+  // Line item name shows on the Stripe page. Plural-aware so the user
+  // recognizes what they're paying for.
+  const itemName = `${count} high-rez AI headshot${count > 1 ? "s" : ""}`;
 
   const formBody = new URLSearchParams();
   formBody.append("mode", "payment");
@@ -158,7 +136,6 @@ export default async function handler(
           type: "stripe_photo_checkout_create_failed",
           status: stripeResp.status,
           count,
-          creditApplied,
           totalCents,
           body: errText.slice(0, 500),
         }),

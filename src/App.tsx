@@ -3785,14 +3785,16 @@ const CheckoutScreen = ({
   // the real gate.
   const emailLooksValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
-  // --- Phase 2 pricing math, mirrored from /api/create-photo-checkout-session ---
-  // Read unlock state from sessionStorage to decide whether this user skips
-  // Stripe (promo) or pays (stripe, with $4.99 credit on first checkout).
-  // Reading at render time (not state) keeps the UI responsive to changes
-  // made in the same tab without extra state plumbing.
-  // unlock_source moved from sessionStorage → localStorage 2026-05-04
-  // (paired with paywall_unlocked) so a paid customer who lost their tab
-  // session can still re-enter the funnel without paying again.
+  // --- Phase 2 pricing math (simplified 2026-05-14) ---
+  // Pricing model: $2.99 to try (entry fee — pays for app access), then a
+  // flat $9.99 per photo. No credit applied on first photo. History: the
+  // original model gave a $2.99 credit on first photo, but the credit_used
+  // tracking lived in sessionStorage, which resets per tab — so customers
+  // who came back in a new session could re-claim the credit indefinitely.
+  // Switched to a flat-price model on 2026-05-14 (a) to eliminate that bug
+  // surface, (b) to simplify the pricing copy, and (c) to capture full
+  // revenue on multi-photo customers who span multiple sessions. Paired
+  // with a 48-hour TTL on the entry unlock — see PAYWALL_UNLOCK_TTL_MS.
   const unlockSource =
     typeof window !== "undefined"
       ? (() => {
@@ -3803,18 +3805,11 @@ const CheckoutScreen = ({
           }
         })()
       : null;
-  const creditUsed =
-    typeof window !== "undefined"
-      ? window.sessionStorage.getItem("credit_used") === "true"
-      : false;
   const isPromoUnlock = unlockSource === "promo";
-  const creditEligible = !isPromoUnlock && !creditUsed;
 
   const PRICE_PER_PHOTO = 9.99;
-  const CREDIT_AMOUNT = 2.99;
   const subtotal = PRICE_PER_PHOTO * count;
-  const creditApplied = creditEligible ? CREDIT_AMOUNT : 0;
-  const totalOwed = Math.max(0, subtotal - creditApplied);
+  const totalOwed = subtotal;
   const fmt = (n: number) => `$${n.toFixed(2)}`;
 
   const submit = async () => {
@@ -3919,7 +3914,6 @@ const CheckoutScreen = ({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             count,
-            creditApplied: creditEligible,
             // Forward the email so Stripe pre-fills it on the Checkout page.
             // If Stripe Link has a saved card for this email, Link auto-fills
             // the payment method with one tap — effectively turning the
@@ -3990,8 +3984,8 @@ const CheckoutScreen = ({
       </p>
 
       {/* Pricing breakdown — skipped entirely for promo-unlocked users, who
-          pay nothing. Paid users see subtotal + optional credit + total owed
-          so there's zero surprise when Stripe loads. */}
+          pay nothing. Paid users see subtotal + total owed. Credit line was
+          removed 2026-05-14 in the flat-price-per-photo simplification. */}
       {!isPromoUnlock && (
         <div
           style={{
@@ -4017,20 +4011,6 @@ const CheckoutScreen = ({
             </span>
             <span>{fmt(subtotal)}</span>
           </div>
-          {creditEligible && (
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                color: C.mediumGrey,
-                fontSize: 13,
-                marginTop: 6,
-              }}
-            >
-              <span>$2.99 entry credit applied</span>
-              <span>−{fmt(creditApplied)}</span>
-            </div>
-          )}
           <div
             style={{
               display: "flex",
@@ -5363,42 +5343,82 @@ export default function App() {
 
   // --------- Paywall unlock state ---------
   //
-  // The entry paywall is considered "unlocked" for this session once EITHER:
-  //   (a) the user completed Stripe Checkout for the $4.99 entry fee, or
+  // The entry paywall is considered "unlocked" once EITHER:
+  //   (a) the user completed Stripe Checkout for the $2.99 entry fee, or
   //   (b) the user entered a valid promo code on the landing page.
   //
-  // Persisted via LOCALSTORAGE (changed from sessionStorage on 2026-05-04).
-  // History: original V1 used sessionStorage so the unlock would only survive
-  // the current browser tab/session and "couldn't" leak across visits. That
-  // backfired hard on the customer who hit browser-back after paying — the
-  // back navigation pulled her browser context to the now-completed Stripe
-  // URL, leaving her stranded on Stripe's "You're all done here" dead-end.
-  // sessionStorage being aggressive about session boundaries meant her paid
-  // unlock was already gone by the time she navigated to the app URL fresh.
-  // With localStorage, the unlock survives tab close + browser-back + brief
-  // navigation away, which is exactly what we want for a paid customer.
-  // Risk: shared device → next user inherits the unlock. Acceptable at the
-  // $2.99 price point; roadmap item #19 plans an email-match server-side
-  // recovery as the cleaner long-term fix.
+  // Persisted via LOCALSTORAGE with a 48-hour TTL (changed 2026-05-14).
+  // History:
+  //   - V1: sessionStorage (unlock died on tab close). Lost a paid customer
+  //     who hit browser-back after Stripe — Stripe dead-end + no unlock.
+  //   - 2026-05-04 (commit 23 "URGENT: Fix lost-session-after-payment"):
+  //     moved to localStorage, no TTL → unlock was permanent on browser.
+  //     Customer complained about getting the $2.99 credit re-applied
+  //     across multiple sessions because credit_used was in sessionStorage.
+  //   - 2026-05-14: kept localStorage but added a 48-hour TTL so casual
+  //     return visitors eventually re-pay $2.99 to re-enter. Paired with
+  //     dropping the per-photo credit entirely (flat $9.99 per photo).
   //
-  // unlock_source distinguishes the two paths so Phase 2 (the per-photo
-  // checkout at CheckoutScreen) knows whether to skip Stripe entirely
-  // (promo = free everything) or charge minus a $2.99 credit (stripe = paid
-  // entry, credit eligible on first photo purchase).
-  const [isUnlocked, setIsUnlocked] = useState<boolean>(() => {
+  // 48 hours is generous: covers same-day buyers, next-morning customers,
+  // and people who pay one day and come back the next to actually pick
+  // their photos. Power users coming back days later pay $2.99 again,
+  // which is fair since they're starting a new project.
+  //
+  // Migration: existing unlocks stored before this change have no
+  // `paywall_unlocked_at` timestamp. We grandfather them with the current
+  // time on first read, giving them a fresh 48 hours from now.
+  const PAYWALL_UNLOCK_TTL_MS = 48 * 60 * 60 * 1000;
+  const readUnlockFromStorage = (): boolean => {
     if (typeof window === "undefined") return false;
     try {
-      return window.localStorage.getItem("paywall_unlocked") === "true";
+      if (window.localStorage.getItem("paywall_unlocked") !== "true") {
+        return false;
+      }
+      const tsRaw = window.localStorage.getItem("paywall_unlocked_at");
+      // Migration path: legacy unlocks without timestamp get one written
+      // NOW, granting them a fresh 48h window starting from this read.
+      // This prevents existing paid customers from being suddenly locked
+      // out the moment we deploy the TTL.
+      if (!tsRaw) {
+        window.localStorage.setItem(
+          "paywall_unlocked_at",
+          String(Date.now()),
+        );
+        return true;
+      }
+      const ts = Number(tsRaw);
+      if (!Number.isFinite(ts)) {
+        return false;
+      }
+      const ageMs = Date.now() - ts;
+      if (ageMs > PAYWALL_UNLOCK_TTL_MS) {
+        // Expired — clear keys so the user is treated as locked again.
+        window.localStorage.removeItem("paywall_unlocked");
+        window.localStorage.removeItem("paywall_unlocked_at");
+        window.localStorage.removeItem("unlock_source");
+        return false;
+      }
+      return true;
     } catch {
       // localStorage can throw in private browsing or strict-mode envs.
       return false;
     }
-  });
+  };
+  const [isUnlocked, setIsUnlocked] = useState<boolean>(() =>
+    readUnlockFromStorage(),
+  );
   const markUnlocked = (source: "stripe" | "promo") => {
     if (typeof window !== "undefined") {
       try {
         window.localStorage.setItem("paywall_unlocked", "true");
         window.localStorage.setItem("unlock_source", source);
+        // Timestamp the unlock so we can age it out after 48h. Stored as a
+        // string because localStorage only holds strings; parsed back via
+        // Number() in readUnlockFromStorage above.
+        window.localStorage.setItem(
+          "paywall_unlocked_at",
+          String(Date.now()),
+        );
       } catch {
         // localStorage can throw in private browsing — fall back to in-memory
         // state only. The user keeps unlock for THIS tab but not after refresh.
@@ -5562,9 +5582,9 @@ export default function App() {
         return;
       }
 
-      // Payment confirmed — mark the entry credit as consumed so a future
-      // grid checkout in this same session gets charged full price.
-      window.sessionStorage.setItem("credit_used", "true");
+      // Payment confirmed. (Note: the legacy `credit_used` sessionStorage
+      // flag is no longer written here — the flat-price model removed
+      // 2026-05-14 means every photo is $9.99 regardless of past purchases.)
 
       // Read the pending delivery payload stashed by CheckoutScreen.
       const stashRaw = window.sessionStorage.getItem("pending_delivery");
