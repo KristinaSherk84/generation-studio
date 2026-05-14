@@ -51,19 +51,39 @@ const FACE_API_DIST = join(
   "face-api",
   "dist",
 );
-const FACE_API_SRC = join(FACE_API_DIST, "face-api.esm-nobundle.js");
-const FACE_API_MJS = join(FACE_API_DIST, "face-api.esm-nobundle.mjs");
-if (existsSync(FACE_API_SRC) && !existsSync(FACE_API_MJS)) {
-  try {
-    copyFileSync(FACE_API_SRC, FACE_API_MJS);
-    console.log(
-      "face-api: patched dist/face-api.esm-nobundle.js → .mjs for Node ESM",
-    );
-  } catch (err) {
-    console.warn(
-      "face-api: failed to create .mjs sibling — skin pre-filter may fail at runtime:",
-      err.message,
-    );
+
+// Rename both ESM-shaped face-api variants so Node treats them as ESM:
+//   face-api.esm-nobundle.js → .mjs  (BYO tfjs — left as fallback)
+//   face-api.esm.js          → .mjs  (tfjs bundled — current import path)
+//
+// Why both: an earlier attempt used the nobundle variant and tried to
+// supply tfjs separately, but Vercel's serverless sandbox could never
+// resolve @tensorflow/tfjs cleanly as ESM. We're now on the bundled
+// variant which inlines tfjs inside the face-api file itself, so there
+// IS no external @tensorflow/* import for Node to resolve. The rename
+// step is the same — face-api's own package.json doesn't declare
+// "type": "module", so we change the file extension instead.
+const ESM_VARIANTS_TO_RENAME = [
+  "face-api.esm-nobundle.js",
+  "face-api.esm.js",
+];
+
+for (const filename of ESM_VARIANTS_TO_RENAME) {
+  const src = join(FACE_API_DIST, filename);
+  const mjsName = filename.replace(/\.js$/, ".mjs");
+  const dst = join(FACE_API_DIST, mjsName);
+  if (existsSync(src) && !existsSync(dst)) {
+    try {
+      copyFileSync(src, dst);
+      console.log(
+        `face-api: patched dist/${filename} → ${mjsName} for Node ESM`,
+      );
+    } catch (err) {
+      console.warn(
+        `face-api: failed to create .mjs sibling for ${filename} — skin pre-filter may fail at runtime:`,
+        err.message,
+      );
+    }
   }
 }
 

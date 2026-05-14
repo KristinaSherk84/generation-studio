@@ -53,15 +53,29 @@
 // backend baked in and exposes the tf instance via `faceapi.tf`. Load
 // it via `createRequire` (Node's bridge for using CJS from ESM) and we
 // never trigger Node's ESM resolution for tfjs. No patches needed.
-import { createRequire } from "node:module";
-const requireCjs = createRequire(import.meta.url);
+// CURRENT ATTEMPT (6 of 6 face-api variants exhausted):
+//   5. UMD bundle face-api.js loaded via createRequire
+//      → 'this.util...' undefined in Node strict mode — UMD wrapper
+//        expects `this` to be a browser-like global object
+//
+//   6. face-api.esm.js (bundled ESM). Real ESM (no UMD `this` problem),
+//      tfjs-core + CPU backend inlined inside the bundle (no external
+//      @tensorflow/* resolution). The one variant we hadn't tried.
+//      Renamed to .mjs via postinstall because face-api's package.json
+//      doesn't declare type:module. tf instance accessed at faceapi.tf.
+
+// @ts-ignore — face-api's dist files don't ship .d.ts beside each
+// variant; runtime resolution finds the .mjs renamed from .esm.js by
+// postinstall.
+import * as faceapiModule from "@vladmandic/face-api/dist/face-api.esm.mjs";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const faceapi: any = requireCjs("@vladmandic/face-api/dist/face-api.js");
-// face-api exposes its bundled tfjs instance here so callers can run
-// tensor ops + manage backends without a separate tfjs install.
+const faceapi: any = faceapiModule;
+// The bundled ESM variant inlines tfjs-core and exposes the tf
+// instance under `tf` on the module namespace. Callers use this for
+// backend management + tensor ops, identical to a direct tfjs import.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const tf: any = faceapi.tf;
+const tf: any = (faceapiModule as any).tf;
 
 import path from "node:path";
 import { promises as fs } from "node:fs";
