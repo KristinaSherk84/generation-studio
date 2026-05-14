@@ -193,6 +193,97 @@ const StepIndicatorDots = ({
   </div>
 );
 
+// Vertical step checklist shown on the LoadingScreen so users can see
+// where they are in the 5-step journey while their photos are being
+// generated. Past steps render with a checkmark, the current step
+// renders with a spinner, future steps render with an outlined circle.
+// Compact card layout matches the existing LoadingScreen tip-carousel
+// aesthetic (light-grey background, rounded corners, ~520px wide).
+type GenerationStepsListProps = {
+  currentStep: number; // 1-based; typically 3 while generating
+};
+
+const GenerationStepsList = ({ currentStep }: GenerationStepsListProps) => (
+  <div
+    style={{
+      marginTop: 24,
+      marginLeft: "auto",
+      marginRight: "auto",
+      maxWidth: 520,
+      padding: "20px 22px",
+      borderRadius: 8,
+      background: C.white,
+      border: `1px solid ${C.border}`,
+      textAlign: "left",
+    }}
+  >
+    <div
+      style={{
+        fontSize: 11,
+        fontWeight: 500,
+        letterSpacing: 1.5,
+        color: C.mediumGrey,
+        textTransform: "uppercase",
+        marginBottom: 14,
+      }}
+    >
+      Where you are
+    </div>
+    {FLOW_STEPS.map((step, i) => {
+      const stepNum = i + 1;
+      const isPast = stepNum < currentStep;
+      const isCurrent = stepNum === currentStep;
+      return (
+        <div
+          key={stepNum}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            paddingTop: 8,
+            paddingBottom: 8,
+            opacity: isPast || isCurrent ? 1 : 0.5,
+          }}
+        >
+          {/* Status icon — checkmark for done, spinner for current,
+              empty circle for upcoming. Spinner uses the same keyframes
+              already declared at the bottom of LoadingScreen. */}
+          <div
+            style={{
+              width: 22,
+              height: 22,
+              borderRadius: "50%",
+              background: isPast ? C.dark : "transparent",
+              border: isPast ? "none" : `1.5px solid ${isCurrent ? C.dark : C.lightGrey}`,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+              ...(isCurrent
+                ? {
+                    borderTopColor: "transparent",
+                    animation: "spin 0.8s linear infinite",
+                  }
+                : {}),
+            }}
+          >
+            {isPast && <Check size={12} color={C.white} strokeWidth={3} />}
+          </div>
+          <div
+            style={{
+              fontSize: 14,
+              fontWeight: isCurrent ? 500 : 400,
+              color: C.dark,
+            }}
+          >
+            {step.label}
+          </div>
+        </div>
+      );
+    })}
+  </div>
+);
+
 // -------------------- Intro-steps modal --------------------
 // Full-screen modal shown ONCE per session when the user first arrives
 // at the upload screen. Lays out all 5 numbered steps with a one-line
@@ -2803,6 +2894,15 @@ const LoadingScreen = ({
           {readyCount} of {totalCount} ready
         </div>
       )}
+
+      {/* 5-step journey checklist — same source of truth as the
+          intro modal and the header dot indicator. Shows what the user
+          has already completed and what's still to come while they
+          wait for generation. Hidden on error state (the user has a
+          different mental task — recovering — so the journey context
+          isn't useful). Step 3 is the current step here because we're
+          loading the photos they're about to pick from. */}
+      {!errorMessage && <GenerationStepsList currentStep={3} />}
 
       {/* Early-advance button — fires when at least 5 of 6 are ready but the
           last one is still in flight. Slot 6 frequently gets queue-placed
