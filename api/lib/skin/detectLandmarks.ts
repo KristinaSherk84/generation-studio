@@ -214,9 +214,12 @@ export async function detectLandmarks(
 
     // ssdMobilenetv1 is the face detector. Default options work fine for
     // a single-face portrait reference photo.
+    // `faceapi.TNetInput` was a type from the old namespace import — now
+     // that faceapi is `any` (loaded via createRequire), we just cast the
+     // tensor through `unknown` to satisfy detectSingleFace's signature.
     const result = await faceapi
       .detectSingleFace(
-        tensor as unknown as faceapi.TNetInput,
+        tensor as unknown,
         new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 }),
       )
       .withFaceLandmarks()

@@ -772,10 +772,19 @@ async function loadPreFilterOnce(): Promise<PreFilterFn | null> {
     _preFilterCache = mod.preFilterReference;
     console.log("[skin] pre-filter loaded successfully");
   } catch (err) {
-    console.warn(
-      "[skin] failed to load pre-filter — disabling for this function instance:",
-      err instanceof Error ? err.message : String(err),
-    );
+    // Log the error message as its own short log line FIRST so Vercel's
+    // message-column truncation in the dashboard doesn't swallow the
+    // actual cause (as happened repeatedly when chasing the tfjs ESM
+    // failures — the truncated view showed "[skin] failed to load
+    // pre-f..." with the real error hidden after the prefix). Stack trace
+    // gets its own line too.
+    const errMsg = err instanceof Error ? err.message : String(err);
+    const errStack = err instanceof Error ? err.stack : undefined;
+    console.warn("[skin] LOAD-ERR:", errMsg);
+    if (errStack) {
+      console.warn("[skin] LOAD-STACK:", errStack);
+    }
+    console.warn("[skin] pre-filter disabled for this function instance");
     _preFilterCache = null;
   }
   return _preFilterCache;
