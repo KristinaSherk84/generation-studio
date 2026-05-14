@@ -2543,15 +2543,15 @@ const LoadingScreen = ({
       )}
 
       {/* Thumbnails appear here as each one finishes.
-          ANTI-THEFT NOTE (2026-05-14): rendered as <div background-image>
-          rather than <img>. On iOS/Android, long-pressing an <img> opens
-          a "Save Image" / share sheet that grabs the underlying full-res
-          data URI even before the user pays. <div> with background-image
-          does NOT trigger that menu. onContextMenu blocks the desktop
-          right-click "Save image as…" menu. The loading-screen thumbnails
-          are NOT watermarked (intentional — Kristi wants the user to be
-          able to preview clean versions while waiting for the rest); the
-          watermark only appears on the post-generation grid below. */}
+          ANTI-THEFT (2026-05-14): two-layer protection.
+          1) Rendered as <div background-image> not <img> so iOS/Android
+             long-press save sheet is suppressed. onContextMenu blocks
+             desktop right-click save. WebkitTouchCallout/UserSelect: none
+             as belt-and-suspenders.
+          2) Watermark overlay on every pre-purchase render — thumbnails,
+             preview lightbox, grid — so even a screenshot is defaced.
+             The watermark only disappears after checkout when the server
+             regenerates clean 2K files. */}
       {readyImages.length > 0 && (
         <>
           {/* Inline hint so the user discovers the tap-to-preview affordance.
@@ -2611,6 +2611,37 @@ const LoadingScreen = ({
                           userSelect: "none",
                         }}
                       />
+                      {/* Watermark overlay — defeats screenshot theft
+                          since long-press save is already blocked. Matches
+                          the grid-screen watermark pattern. */}
+                      <div
+                        style={{
+                          position: "absolute",
+                          inset: 0,
+                          pointerEvents: "none",
+                          overflow: "hidden",
+                        }}
+                      >
+                        {[33, 67].map((topPercent, row) => (
+                          <div
+                            key={row}
+                            style={{
+                              position: "absolute",
+                              top: `${topPercent}%`,
+                              left: "50%",
+                              transform: "translate(-50%, -50%) rotate(-30deg)",
+                              fontSize: 11,
+                              color: "rgba(255,255,255,0.55)",
+                              textShadow: "0 1px 2px rgba(0,0,0,0.4)",
+                              letterSpacing: 2,
+                              whiteSpace: "nowrap",
+                              fontWeight: 400,
+                            }}
+                          >
+                            WATERMARK · WATERMARK · WATERMARK
+                          </div>
+                        ))}
+                      </div>
                       {/* Subtle magnify icon in the corner so the
                           tap-to-preview affordance is also visible at the
                           tile level, not only in the hint text above. */}
@@ -2677,24 +2708,65 @@ const LoadingScreen = ({
           }}
         >
           <div
-            role="img"
-            aria-label={`Headshot ${previewIndex + 1} preview`}
-            onContextMenu={(e) => e.preventDefault()}
             onClick={(e) => e.stopPropagation()}
             style={{
+              position: "relative",
               width: "min(90vw, 70vh)",
               aspectRatio: "4/5",
-              backgroundImage: `url(${readyImages[previewIndex]})`,
-              backgroundSize: "contain",
-              backgroundPosition: "center",
-              backgroundRepeat: "no-repeat",
-              borderRadius: 12,
-              WebkitTouchCallout: "none",
-              WebkitUserSelect: "none",
-              userSelect: "none",
-              cursor: "default",
             }}
-          />
+          >
+            <div
+              role="img"
+              aria-label={`Headshot ${previewIndex + 1} preview`}
+              onContextMenu={(e) => e.preventDefault()}
+              style={{
+                width: "100%",
+                height: "100%",
+                backgroundImage: `url(${readyImages[previewIndex]})`,
+                backgroundSize: "contain",
+                backgroundPosition: "center",
+                backgroundRepeat: "no-repeat",
+                borderRadius: 12,
+                WebkitTouchCallout: "none",
+                WebkitUserSelect: "none",
+                userSelect: "none",
+                cursor: "default",
+              }}
+            />
+            {/* Watermark overlay scaled up for the lightbox so screenshots
+                of the larger preview are still defaced. Three diagonal bands
+                instead of two since the lightbox is roughly 4× the height
+                of a thumbnail — keeps watermark density visually consistent. */}
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                pointerEvents: "none",
+                overflow: "hidden",
+                borderRadius: 12,
+              }}
+            >
+              {[25, 50, 75].map((topPercent, row) => (
+                <div
+                  key={row}
+                  style={{
+                    position: "absolute",
+                    top: `${topPercent}%`,
+                    left: "50%",
+                    transform: "translate(-50%, -50%) rotate(-30deg)",
+                    fontSize: 22,
+                    color: "rgba(255,255,255,0.45)",
+                    textShadow: "0 1px 3px rgba(0,0,0,0.5)",
+                    letterSpacing: 4,
+                    whiteSpace: "nowrap",
+                    fontWeight: 400,
+                  }}
+                >
+                  WATERMARK · WATERMARK · WATERMARK
+                </div>
+              ))}
+            </div>
+          </div>
           <button
             onClick={(e) => {
               e.stopPropagation();
