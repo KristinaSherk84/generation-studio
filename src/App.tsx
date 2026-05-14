@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
-import { Upload, Check, X, ArrowLeft, RefreshCw, Loader2, Download } from "lucide-react";
+import { Upload, Check, X, ArrowLeft, RefreshCw, Loader2, Download, Maximize2 } from "lucide-react";
 import { upload } from "@vercel/blob/client";
 import exifr from "exifr";
 
@@ -2382,6 +2382,14 @@ const LoadingScreen = ({
   const currentlyGenerating = Math.min(readyCount + 1, totalCount);
   const allDone = readyCount >= totalCount;
 
+  // Tap-to-preview state. While the rest of the 6 are still generating,
+  // the user can tap any finished thumbnail to see it at a much larger size
+  // in a fullscreen lightbox. The lightbox uses a background-image <div>
+  // (not an <img>) so iOS/Android long-press save is still blocked, but the
+  // user gets to actually inspect each result while waiting. Set to null
+  // when no lightbox is open.
+  const [previewIndex, setPreviewIndex] = useState<number | null>(null);
+
   // Rotate through LOADING_TIPS while the user waits. ~7 seconds per tip is
   // long enough to read + absorb but short enough that waiting users cycle
   // through 3–5 tips over a typical 2–3 minute generation. Pauses on error
@@ -2534,58 +2542,183 @@ const LoadingScreen = ({
         </div>
       )}
 
-      {/* Thumbnails appear here as each one finishes */}
+      {/* Thumbnails appear here as each one finishes.
+          ANTI-THEFT NOTE (2026-05-14): rendered as <div background-image>
+          rather than <img>. On iOS/Android, long-pressing an <img> opens
+          a "Save Image" / share sheet that grabs the underlying full-res
+          data URI even before the user pays. <div> with background-image
+          does NOT trigger that menu. onContextMenu blocks the desktop
+          right-click "Save image as…" menu. The loading-screen thumbnails
+          are NOT watermarked (intentional — Kristi wants the user to be
+          able to preview clean versions while waiting for the rest); the
+          watermark only appears on the post-generation grid below. */}
       {readyImages.length > 0 && (
+        <>
+          {/* Inline hint so the user discovers the tap-to-preview affordance.
+              Kept short and low-key so it doesn't compete with the progress
+              indicator and tip rotator above. */}
+          <div
+            style={{
+              marginTop: 32,
+              marginBottom: 12,
+              fontSize: 12,
+              color: C.mediumGrey,
+              textAlign: "center",
+              letterSpacing: 0.2,
+            }}
+          >
+            Tap any photo to preview it while the rest finish.
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(3, 1fr)",
+              gap: 12,
+            }}
+          >
+            {Array.from({ length: totalCount }, (_, i) => {
+              const src = readyImages[i];
+              const tappable = !!src;
+              return (
+                <div
+                  key={i}
+                  onClick={tappable ? () => setPreviewIndex(i) : undefined}
+                  style={{
+                    position: "relative",
+                    aspectRatio: "4/5",
+                    background: C.lightGrey,
+                    borderRadius: 8,
+                    overflow: "hidden",
+                    border: `1px solid ${C.border}`,
+                    cursor: tappable ? "zoom-in" : "default",
+                  }}
+                >
+                  {src ? (
+                    <>
+                      <div
+                        role="img"
+                        aria-label={`Headshot ${i + 1}`}
+                        onContextMenu={(e) => e.preventDefault()}
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          backgroundImage: `url(${src})`,
+                          backgroundSize: "cover",
+                          backgroundPosition: "center",
+                          backgroundRepeat: "no-repeat",
+                          WebkitTouchCallout: "none",
+                          WebkitUserSelect: "none",
+                          userSelect: "none",
+                        }}
+                      />
+                      {/* Subtle magnify icon in the corner so the
+                          tap-to-preview affordance is also visible at the
+                          tile level, not only in the hint text above. */}
+                      <div
+                        style={{
+                          position: "absolute",
+                          bottom: 6,
+                          right: 6,
+                          background: "rgba(0,0,0,0.45)",
+                          color: "#fff",
+                          width: 22,
+                          height: 22,
+                          borderRadius: 4,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          pointerEvents: "none",
+                        }}
+                      >
+                        <Maximize2 size={12} />
+                      </div>
+                    </>
+                  ) : (
+                    <div
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: C.mediumGrey,
+                        fontSize: 11,
+                      }}
+                    >
+                      {i + 1}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      {/* Tap-to-preview lightbox. Renders the selected loading-screen
+          thumbnail at a much larger size so the user can actually inspect
+          the result while the remaining slots finish. Uses background-image
+          on a <div> (not <img>) so the long-press save sheet is still
+          blocked even at full size, and onContextMenu blocks desktop
+          right-click save. Tapping the backdrop OR the X closes it. */}
+      {previewIndex !== null && readyImages[previewIndex] && (
         <div
+          onClick={() => setPreviewIndex(null)}
           style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(3, 1fr)",
-            gap: 12,
-            marginTop: 32,
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.92)",
+            zIndex: 1000,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 20,
+            cursor: "zoom-out",
           }}
         >
-          {Array.from({ length: totalCount }, (_, i) => {
-            const src = readyImages[i];
-            return (
-              <div
-                key={i}
-                style={{
-                  aspectRatio: "4/5",
-                  background: C.lightGrey,
-                  borderRadius: 8,
-                  overflow: "hidden",
-                  border: `1px solid ${C.border}`,
-                }}
-              >
-                {src ? (
-                  <img
-                    src={src}
-                    alt={`Headshot ${i + 1}`}
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      objectFit: "cover",
-                      display: "block",
-                    }}
-                  />
-                ) : (
-                  <div
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      color: C.mediumGrey,
-                      fontSize: 11,
-                    }}
-                  >
-                    {i + 1}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          <div
+            role="img"
+            aria-label={`Headshot ${previewIndex + 1} preview`}
+            onContextMenu={(e) => e.preventDefault()}
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "min(90vw, 70vh)",
+              aspectRatio: "4/5",
+              backgroundImage: `url(${readyImages[previewIndex]})`,
+              backgroundSize: "contain",
+              backgroundPosition: "center",
+              backgroundRepeat: "no-repeat",
+              borderRadius: 12,
+              WebkitTouchCallout: "none",
+              WebkitUserSelect: "none",
+              userSelect: "none",
+              cursor: "default",
+            }}
+          />
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setPreviewIndex(null);
+            }}
+            aria-label="Close preview"
+            style={{
+              position: "absolute",
+              top: 20,
+              right: 20,
+              background: "rgba(255,255,255,0.15)",
+              border: "none",
+              color: "#fff",
+              width: 40,
+              height: 40,
+              borderRadius: "50%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+            }}
+          >
+            <X size={20} />
+          </button>
         </div>
       )}
 
@@ -2817,14 +2950,28 @@ const GridScreen = ({
             >
               {src ? (
                 <>
-                  <img
-                    src={src}
-                    alt={`Headshot variation ${i + 1}`}
+                  {/* ANTI-THEFT (2026-05-14): rendered as <div
+                      background-image> not <img>. On iOS/Android, long-pressing
+                      an <img> opens a "Save Image" sheet that grabs the
+                      underlying full-res data URI — bypassing the DOM watermark
+                      overlay below (which is a separate sibling element, not
+                      baked into the pixels). <div> with background-image does
+                      NOT trigger that save menu. onContextMenu blocks the
+                      desktop right-click "Save image as…" menu too. */}
+                  <div
+                    role="img"
+                    aria-label={`Headshot variation ${i + 1}`}
+                    onContextMenu={(e) => e.preventDefault()}
                     style={{
                       width: "100%",
                       height: "100%",
-                      objectFit: "cover",
-                      display: "block",
+                      backgroundImage: `url(${src})`,
+                      backgroundSize: "cover",
+                      backgroundPosition: "center",
+                      backgroundRepeat: "no-repeat",
+                      WebkitTouchCallout: "none",
+                      WebkitUserSelect: "none",
+                      userSelect: "none",
                     }}
                   />
                   {/* Watermark overlay — two diagonal lines of thin text,
