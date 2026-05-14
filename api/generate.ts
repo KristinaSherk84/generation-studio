@@ -861,10 +861,16 @@ async function fetchPhotoAsInlineData(
 // Per-attempt timeout. Gemini occasionally returns a long-tail latency
 // (one request takes 2-3 min while others return in 30s) — typically
 // because the request was routed to a slow worker. Better to abort
-// after 90s and retry on a different worker than to sit indefinitely.
-// 90s is well above the typical 30-50s success latency, so well-behaved
-// requests aren't impacted.
-const PER_ATTEMPT_TIMEOUT_MS = 90_000;
+// after 60s and retry on a different worker than to sit indefinitely.
+//
+// 60s rationale (tightened 2026-05-14 after a 504 in Vercel logs):
+// the previous 90s × 5 attempts could run 457s worst-case, blowing
+// past Vercel's 300s function maxDuration if two attempts hung the
+// full timeout. 60s × 4 attempts (see retryGeminiOnTransientError
+// below) caps worst-case at ~243s including backoffs, with plenty of
+// margin under the 300s cap. 60s still covers the typical 30-50s
+// success latency.
+const PER_ATTEMPT_TIMEOUT_MS = 60_000;
 
 async function generateOneHeadshot(
   ai: GoogleGenAI,
@@ -972,17 +978,24 @@ async function generateOneHeadshotWithRetry(
   ai: GoogleGenAI,
   prompt: string,
   photos: InlineImage[],
-  // Bumped from 3 → 5 on 2026-05-06. Diagnosis: gemini-3.1-flash-image-preview
-  // is a Preview model with widely-documented 503 server-overload issues on
-  // Tier 1 paid accounts (Google forum: discuss.ai.google.dev/t/persistent-
-  // 503-server-overloaded-errors-on-gemini-3-1-flash-image-preview-tier-1-
-  // paid-account/134665). One of our 6 parallel slots almost always hits a
-  // 503; the extra retries plus shorter backoffs give the slot more chances
-  // to land on a non-overloaded worker before giving up. Total worst-case
-  // retry time ≈ 0.5 + 1 + 2 + 4 = 7.5s of backoff plus ~30s × 5 attempts
-  // for the actual Gemini calls = ~2.5 min cap, vs. the previous ~150s cap
-  // with 3 attempts. Slightly slower failure but much better success rate.
-  maxAttempts = 5,
+  // History:
+  //  - 3 attempts (original)
+  //  - Bumped from 3 → 5 on 2026-05-06 to absorb gemini-3.1-flash-image-preview's
+  //    well-documented 503 server-overload issues on Tier 1 paid accounts (Google
+  //    forum: discuss.ai.google.dev/t/persistent-503-server-overloaded-errors-on-
+  //    gemini-3-1-flash-image-preview-tier-1-paid-account/134665).
+  //  - Reduced from 5 → 4 on 2026-05-14 after a Vercel 504 in production. Root
+  //    cause: PER_ATTEMPT_TIMEOUT_MS is 60s (was 90s, now tightened — see comment
+  //    on that constant). 5 × 60s + backoffs could still run ~307s in the worst
+  //    case if every attempt hung the full timeout, dangerously close to the
+  //    300s Vercel function maxDuration. 4 × 60s + 3.5s backoffs caps at ~243s
+  //    with safe margin.
+  //
+  // Worst case timing (4 attempts, 60s timeout each):
+  //   60 + 0.5 + 60 + 1 + 60 + 2 + 60 = 243.5s
+  //   Backoffs: 500ms, 1000ms, 2000ms (3 backoffs between 4 attempts).
+  // Versus Vercel maxDuration: 300s. Safety margin: ~56s.
+  maxAttempts = 4,
 ): Promise<string> {
   let lastError: unknown;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
