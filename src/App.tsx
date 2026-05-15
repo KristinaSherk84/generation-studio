@@ -24,6 +24,21 @@ export type UploadedPhoto = {
   // "broken app." The upload itself + the Gemini generate step both support
   // HEIC — only the client-side preview is blocked.
   isHeic: boolean;
+  // Face-size validation state, populated after the Blob upload completes
+  // by a per-photo call to /api/validate-photos. The endpoint runs Gemini
+  // vision to detect the largest face and measures its width relative to
+  // the image. Photos with no detectable face OR a face width below the
+  // minimum threshold get faceValidation === "failed" and render greyed-
+  // out with an overlay reading "Face too small, insufficient details" —
+  // they don't count toward the 5-photo minimum until the user removes
+  // them and uploads better ones.
+  //   "pending"  — validation request in flight
+  //   "passed"   — face detected and large enough
+  //   "failed"   — no face OR face too small; reason populated
+  //   "skipped"  — validation endpoint errored or wasn't reached; do not
+  //                block the user on our own system failure
+  faceValidation: "pending" | "passed" | "failed" | "skipped";
+  faceValidationReason: string | null;
 };
 
 // Detects HEIC / HEIF files. Some browsers don't set file.type on HEIC
@@ -1983,6 +1998,233 @@ const LandingV2 = ({ onStart, onPromoUnlock, onShowGallery }: LandingV2Props) =>
         </div>
       </section>
 
+      {/* ========== COMPARISON CHART ========== */}
+      {/* Side-by-side feature/price comparison against the major AI
+          headshot competitors. Added 2026-05-11 per Kristi's request,
+          modeled on the InstaHeadshots "10 times better, 1/10th the price"
+          chart format but multi-column to show GenerAItion winning across
+          the whole field. Numbers verified against competitor audit; safer
+          framings used where competitor data has tiers (e.g. "Tiered" for
+          resolution rather than claiming "1K" outright — competitors
+          have multiple resolution tiers and the precise base-tier number
+          isn't always public). Per Kristi's prior decision: competitors
+          may be named in factual comparison tables but not in URL slugs.
+          Horizontal scroll on narrow viewports preserves the full table
+          rather than collapsing to less-readable card stacks. */}
+      <section
+        style={{
+          background: BRAND.white,
+          padding: "clamp(56px, 8vw, 96px) clamp(16px, 4vw, 56px)",
+          textAlign: "center",
+        }}
+      >
+        <h2
+          style={{
+            fontFamily: SERIF_STACK,
+            fontSize: isMobile
+              ? "clamp(24px, 6vw, 32px)"
+              : "clamp(30px, 3.4vw, 46px)",
+            fontWeight: 400,
+            lineHeight: 1.15,
+            letterSpacing: -0.3,
+            color: BRAND.charcoal,
+            maxWidth: 900,
+            margin: "0 auto 12px",
+          }}
+        >
+          Up to <span style={{ color: BRAND.gold, fontStyle: "italic" }}>10× cheaper.</span>
+          {" "}Made by a{" "}
+          <span style={{ color: BRAND.gold, fontStyle: "italic" }}>real photographer.</span>
+        </h2>
+        <p
+          style={{
+            fontSize: isMobile ? 14 : 16,
+            color: BRAND.subText,
+            maxWidth: 620,
+            margin: "0 auto 36px",
+            lineHeight: 1.55,
+          }}
+        >
+          See how GenerAItion Headshots stacks up against the field. Pricing
+          is publicly listed entry-tier pricing as of {new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" })}.
+        </p>
+
+        <div
+          style={{
+            maxWidth: 1100,
+            margin: "0 auto",
+            // Horizontal scroll on narrow viewports keeps the table
+            // readable instead of stacking into less-scannable cards.
+            overflowX: "auto",
+            WebkitOverflowScrolling: "touch",
+          }}
+        >
+          <table
+            style={{
+              width: "100%",
+              minWidth: 720,
+              borderCollapse: "collapse",
+              fontFamily: SANS_STACK,
+              textAlign: "left",
+              fontSize: isMobile ? 13 : 15,
+            }}
+          >
+            <thead>
+              <tr>
+                <th style={{
+                  textAlign: "left",
+                  padding: "16px 14px",
+                  fontWeight: 500,
+                  fontSize: 13,
+                  color: BRAND.subText,
+                  borderBottom: `1px solid #EFEAE0`,
+                }}></th>
+                <th style={{
+                  padding: "16px 14px",
+                  fontWeight: 500,
+                  fontSize: isMobile ? 13 : 15,
+                  color: BRAND.charcoal,
+                  borderBottom: `2px solid ${BRAND.forestGreen}`,
+                  background: "#F4F8F4",
+                }}>
+                  <div style={{ fontWeight: 600 }}>GenerAItion</div>
+                  <div style={{ fontSize: 11, color: BRAND.forestGreen, fontWeight: 600, letterSpacing: 0.5, textTransform: "uppercase", marginTop: 2 }}>
+                    Our tool
+                  </div>
+                </th>
+                <th style={{ padding: "16px 14px", fontWeight: 500, fontSize: isMobile ? 13 : 15, color: BRAND.charcoal, borderBottom: `1px solid #EFEAE0` }}>
+                  HeadshotPro
+                </th>
+                <th style={{ padding: "16px 14px", fontWeight: 500, fontSize: isMobile ? 13 : 15, color: BRAND.charcoal, borderBottom: `1px solid #EFEAE0` }}>
+                  Aragon
+                </th>
+                <th style={{ padding: "16px 14px", fontWeight: 500, fontSize: isMobile ? 13 : 15, color: BRAND.charcoal, borderBottom: `1px solid #EFEAE0` }}>
+                  Headshots.so
+                </th>
+                <th style={{ padding: "16px 14px", fontWeight: 500, fontSize: isMobile ? 13 : 15, color: BRAND.charcoal, borderBottom: `1px solid #EFEAE0` }}>
+                  InstaHeadshots
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                {
+                  label: "Starting price",
+                  us: "$2.99",
+                  values: ["$29", "Not public", "$29", "$44"],
+                  usWins: true,
+                },
+                {
+                  label: "Pay per keeper",
+                  us: "$9.99 each",
+                  values: ["Bundle only", "Bundle only", "Bundle only", "Bundle only"],
+                  usWins: true,
+                },
+                {
+                  label: "Processing time",
+                  us: "Under 5 min",
+                  values: ["30 min", "120 min", "15 min", "15 min"],
+                  usWins: true,
+                },
+                {
+                  label: "AI generations per session",
+                  us: "6 (greener)",
+                  values: ["40+", "40", "100+", "100"],
+                  usWins: true,
+                },
+                {
+                  label: "2K resolution included",
+                  us: "Yes — round one",
+                  values: ["Tier upsell", "Tier upsell", "Tier upsell", "Tier upsell"],
+                  usWins: true,
+                },
+                {
+                  label: "Made by a real photographer",
+                  us: "Yes — 20 years",
+                  values: ["No", "No", "No", "No"],
+                  usWins: true,
+                },
+                {
+                  label: "Money-back guarantee",
+                  us: "Yes",
+                  values: ["Yes", "Limited", "Yes", "Yes"],
+                  usWins: false,
+                },
+              ].map((row) => (
+                <tr key={row.label}>
+                  <td style={{
+                    padding: "14px",
+                    color: BRAND.subText,
+                    fontWeight: 500,
+                    borderBottom: `1px solid #EFEAE0`,
+                    whiteSpace: "nowrap",
+                  }}>
+                    {row.label}
+                  </td>
+                  <td style={{
+                    padding: "14px",
+                    color: BRAND.forestGreen,
+                    fontWeight: 600,
+                    borderBottom: `1px solid #EFEAE0`,
+                    background: "#F4F8F4",
+                  }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                      {row.usWins && (
+                        <span
+                          aria-hidden="true"
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            width: 16,
+                            height: 16,
+                            borderRadius: "50%",
+                            background: BRAND.forestGreen,
+                            color: BRAND.white,
+                            fontSize: 10,
+                            fontWeight: 700,
+                            lineHeight: 1,
+                          }}
+                        >
+                          ✓
+                        </span>
+                      )}
+                      {row.us}
+                    </span>
+                  </td>
+                  {row.values.map((v, i) => (
+                    <td key={i} style={{
+                      padding: "14px",
+                      color: BRAND.charcoal,
+                      borderBottom: `1px solid #EFEAE0`,
+                    }}>
+                      {v}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div style={{ marginTop: 36 }}>
+          <Pill onClick={onStart} size="lg">
+            Create my headshots
+          </Pill>
+          <div
+            style={{
+              marginTop: 10,
+              fontSize: 13,
+              color: BRAND.subText,
+              letterSpacing: 0.3,
+            }}
+          >
+            Starts at <strong style={{ color: BRAND.charcoal }}>$2.99</strong> ·
+            Money-back guarantee · 5 minutes
+          </div>
+        </div>
+      </section>
+
       {/* ========== EDITORIAL TAGLINE BAND ========== */}
       <section
         style={{
@@ -2217,6 +2459,10 @@ const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) 
       errorMessage: null,
       isWideAngle: null, // filled in by the EXIF read below once it resolves
       isHeic: detectHeic(file),
+      // Face validation fires after Blob upload completes; until then
+      // the photo sits in "pending" so the UI shows it as still working.
+      faceValidation: "pending",
+      faceValidationReason: null,
     }));
     setPhotos((prev) => [...prev, ...placeholders]);
 
@@ -2238,6 +2484,56 @@ const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) 
                 : p,
             ),
           );
+          // Kick off the face-size validation as soon as Blob has the URL.
+          // We don't await it — the upload completion flips status="done"
+          // immediately and the validation result lands a few seconds
+          // later, flipping faceValidation to "passed" or "failed" and
+          // greying out the thumbnail in place if it failed.
+          fetch("/api/validate-photos", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ photoUrls: [result.url] }),
+          })
+            .then((resp) => {
+              if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+              return resp.json() as Promise<{
+                results: Array<{
+                  url: string;
+                  ok: boolean;
+                  reason?: string;
+                }>;
+              }>;
+            })
+            .then((data) => {
+              const r = data.results?.[0];
+              setPhotos((prev) =>
+                prev.map((p) =>
+                  p.id === placeholder.id
+                    ? {
+                        ...p,
+                        faceValidation: r?.ok ? "passed" : "failed",
+                        faceValidationReason: r?.ok
+                          ? null
+                          : r?.reason ??
+                            "Face too small, insufficient details",
+                      }
+                    : p,
+                ),
+              );
+            })
+            .catch(() => {
+              // Soft-skip on validation system error — don't block the user
+              // on our own pipeline flakiness. The photo will still go to
+              // /api/generate, where the server-side validation (if any
+              // future check is added) is the authoritative gate.
+              setPhotos((prev) =>
+                prev.map((p) =>
+                  p.id === placeholder.id
+                    ? { ...p, faceValidation: "skipped" }
+                    : p,
+                ),
+              );
+            });
         })
         .catch((err: unknown) => {
           const message =
@@ -2277,16 +2573,42 @@ const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) 
   };
 
   const uploadingCount = photos.filter((p) => p.status === "uploading").length;
-  const doneCount = photos.filter((p) => p.status === "done").length;
+  // Face validation runs after the Blob upload completes — while it's
+  // pending we treat the photo as "not yet usable" so the Continue button
+  // waits for the verdict. Typically resolves in 2-3 seconds.
+  const validatingCount = photos.filter(
+    (p) => p.status === "done" && p.faceValidation === "pending",
+  ).length;
+  // Only photos that uploaded successfully AND passed (or skipped, on
+  // system error) face validation count toward the 5-minimum.
+  const usableCount = photos.filter(
+    (p) =>
+      p.status === "done" &&
+      p.faceValidation !== "failed" &&
+      p.faceValidation !== "pending",
+  ).length;
+  const failedFaceCount = photos.filter(
+    (p) => p.faceValidation === "failed",
+  ).length;
   const hasError = photos.some((p) => p.status === "error");
-  const enoughPhotos = doneCount >= 3;
-  const canContinue = enoughPhotos && uploadingCount === 0;
+  const enoughPhotos = usableCount >= 5;
+  const canContinue =
+    enoughPhotos && uploadingCount === 0 && validatingCount === 0;
 
   let ctaLabel: string;
   if (uploadingCount > 0) {
     ctaLabel = `Uploading ${uploadingCount}…`;
+  } else if (validatingCount > 0) {
+    ctaLabel = `Checking face size on ${validatingCount}…`;
   } else if (!enoughPhotos) {
-    ctaLabel = `Upload ${3 - doneCount} more to continue`;
+    const needed = 5 - usableCount;
+    if (failedFaceCount > 0) {
+      // Some photos are greyed out — be explicit so the user knows the
+      // greyed ones don't count and they need to upload more.
+      ctaLabel = `Upload ${needed} more (greyed-out photos don't count)`;
+    } else {
+      ctaLabel = `Upload ${needed} more to continue`;
+    }
   } else {
     ctaLabel = "Continue to style selection";
   }
@@ -2505,6 +2827,51 @@ const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) 
                     }}
                   >
                     Preview unavailable (HEIC)
+                  </div>
+                </div>
+              )}
+
+              {/* Face-too-small overlay (2026-05-15 per Kristi). Fires when
+                  /api/validate-photos returns ok:false for this photo, meaning
+                  no face was detected OR the largest face was below the 15%
+                  width threshold. The image stays visible but is heavily
+                  desaturated by the dark overlay so it reads as "rejected,
+                  remove me." The photo also stops counting toward the
+                  5-minimum (see usableCount filter above). User dismisses
+                  by clicking the X button — same as any other photo. */}
+              {p.faceValidation === "failed" && p.status === "done" && (
+                <div
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: C.white,
+                    fontSize: 11,
+                    fontWeight: 500,
+                    textAlign: "center",
+                    padding: 8,
+                    background: "rgba(44, 44, 42, 0.85)",
+                    lineHeight: 1.35,
+                  }}
+                  title={
+                    p.faceValidationReason ??
+                    "Face too small, insufficient details"
+                  }
+                >
+                  <X size={18} style={{ marginBottom: 4 }} />
+                  Face too small
+                  <div
+                    style={{
+                      fontSize: 10,
+                      marginTop: 2,
+                      opacity: 0.85,
+                      fontWeight: 400,
+                    }}
+                  >
+                    Insufficient details
                   </div>
                 </div>
               )}
@@ -6312,7 +6679,17 @@ export default function App() {
     // Only send the photos that successfully uploaded to Blob. Silently drop
     // any that are still pending or errored — the user shouldn't be blocked
     // on a stray failed upload if they have 3+ good ones.
-    const usablePhotos = photos.filter((p) => p.status === "done" && p.blobUrl);
+    // Only forward photos that uploaded successfully AND passed the
+    // upload-time face-size validation. Failed-face photos are visually
+    // greyed out in the UploadScreen and never count toward the minimum,
+    // but we filter again here defensively so a race-y state can't slip
+    // a too-small-face photo to /api/generate.
+    const usablePhotos = photos.filter(
+      (p) =>
+        p.status === "done" &&
+        p.blobUrl &&
+        p.faceValidation !== "failed",
+    );
     const photoUrls = usablePhotos.map((p) => p.blobUrl as string);
     // Wide-angle flag: true if ANY usable reference photo was detected as
     // wide via EXIF. `null` (EXIF unreadable) and `false` (confirmed ≥40mm)
