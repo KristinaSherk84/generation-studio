@@ -1,23 +1,30 @@
 /**
  * POST /api/create-checkout-session
  *
- * Creates a Stripe Checkout Session for the $4.99 "Try It" entry fee and
+ * Creates a Stripe Checkout Session for the $2.99 "Try It" entry fee and
  * returns the hosted-checkout URL so the frontend can window.location to it.
  *
- * Phase 1 paywall (2026-04-24): this endpoint exists purely to gate the UI
- * flow — `/api/generate` is NOT gated on paid state yet, so a determined user
- * could still bypass by calling the backend directly. That's acceptable for
- * Phase 1 and will tighten in Phase 2 alongside the $9.99 per-photo checkout.
+ * Pricing model (current as of 2026-05-15):
+ *   - $2.99 entry fee unlocks the 6-headshot generation flow for 4 hours
+ *     (or until the customer downloads their first photo, whichever first).
+ *   - Each high-rez photo is a flat $9.99. No credit toward the first photo,
+ *     no discount, no bundles. The $2.99 is purely the cost of admission.
+ *   - History: pre-2026-05-15 the $2.99 was credited against the first
+ *     photo purchase (so 1 photo total = $9.99 = $2.99 + $7.00). That model
+ *     leaked because the client-side credit_used flag lived in sessionStorage
+ *     and reset per tab, letting returning customers re-claim the credit.
+ *     Flat pricing eliminated the leak and simplified the customer copy.
  *
- * Pricing model reminder (confirmed with Kristi):
- *   - $4.99 entry fee unlocks the 6-headshot generation flow.
- *   - The $4.99 is CREDITED against the first $9.99 high-rez purchase in
- *     Phase 2 — so 1 photo total = $9.99 net, not $14.98.
+ * Server-side gate on /api/generate (2026-05-15):
+ *   - Every /api/generate call now requires either the Stripe Checkout
+ *     Session ID from this $2.99 payment OR the PROMO_CODE env-var value.
+ *   - The Stripe session's metadata (unlock_expires_at + unlock_consumed)
+ *     is the source of truth for whether the unlock is still valid.
  *
  * Sandbox vs live: this endpoint reads STRIPE_SECRET_KEY and STRIPE_PRICE_ID_ENTRY
- * from env vars. As long as those are test-mode values (sk_test_... /
- * price_... from the sandbox), every transaction here is fake money. When
- * Kristi flips to live, swap both env vars and nothing else needs to change.
+ * from env vars. Currently set to live-mode values (sk_live_... and the
+ * $2.99 price ID created 2026-04-30). Sandbox can be re-enabled by swapping
+ * both env vars back to test-mode equivalents.
  *
  * Why raw fetch instead of the stripe npm package: the Vercel sandbox this
  * function deploys into is locked down and we couldn't `npm install stripe`
