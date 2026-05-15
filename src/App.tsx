@@ -480,52 +480,123 @@ const WelcomeUnlockedModal = ({
   );
 };
 
-// -------------------- Persistent header countdown chip --------------------
+// -------------------- 30-minute "winding down" warning modal --------------
 //
-// Tiny live countdown that lives in the header alongside the step-dots
-// indicator on every screen after payment. Reads the same expiresAt from
-// localStorage so it survives refresh and shows the truth even if React
-// state somehow desyncs. Hidden when no stripe unlock is active (promo
-// users / pre-payment landing screen).
+// Fires exactly once per session when the 4-hour unlock crosses below
+// 30 minutes remaining. Kristi 2026-05-15: chose this over a persistent
+// header countdown chip because the chip ate too much screen real estate
+// for a value that's irrelevant most of the time. One sharp prompt at
+// the 30-minute mark is enough to let the user decide whether to wrap
+// up or pay another $2.99 for a fresh try.
 
-type SessionCountdownChipProps = {
+type SessionTimeWarningModalProps = {
+  // Epoch ms — shown in the body so the user knows their actual deadline.
   expiresAt: number;
+  onDismiss: () => void;
 };
 
-const SessionCountdownChip = ({ expiresAt }: SessionCountdownChipProps) => {
+const SessionTimeWarningModal = ({
+  expiresAt,
+  onDismiss,
+}: SessionTimeWarningModalProps) => {
+  // Live-ticking remaining time so the displayed number is accurate the
+  // whole time the modal is open (even if the user lingers on it).
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
-  const remainingMs = expiresAt - now;
-  if (remainingMs <= 0) return null;
-  // Compact format for the header. Drop seconds once we're above 1 minute
-  // so the chip doesn't churn distractingly at the top of the screen.
-  const totalSeconds = Math.floor(remainingMs / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  const compact =
-    hours > 0
-      ? `${hours}h ${minutes}m left`
-      : minutes > 0
-      ? `${minutes}m left`
-      : `${seconds}s left`;
-  // Tint orange/red when under 30 minutes so the user notices urgency.
-  const urgent = remainingMs < 30 * 60 * 1000;
+  const remainingMs = Math.max(0, expiresAt - now);
+  const remainingText = formatRemaining(remainingMs);
+
   return (
     <div
-      title={`Your 4-hour try-it window ends in ${formatRemaining(remainingMs)}`}
+      role="dialog"
+      aria-modal="true"
+      aria-label="30 minutes left in your try-it session"
       style={{
-        fontSize: 12,
-        fontWeight: 500,
-        color: urgent ? "#A32D2D" : C.mediumGrey,
-        whiteSpace: "nowrap",
-        fontVariantNumeric: "tabular-nums",
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0, 0, 0, 0.85)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 24,
+        zIndex: 1050,
+        ...font,
       }}
     >
-      {compact}
+      <div
+        style={{
+          background: C.white,
+          borderRadius: 12,
+          padding: "28px 32px",
+          maxWidth: 440,
+          width: "100%",
+          textAlign: "center",
+        }}
+      >
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 500,
+            letterSpacing: 1.5,
+            color: "#A32D2D",
+            textTransform: "uppercase",
+            marginBottom: 8,
+          }}
+        >
+          Heads up
+        </div>
+        <h2
+          style={{
+            fontSize: 22,
+            fontWeight: 500,
+            color: C.dark,
+            margin: "0 0 8px",
+            lineHeight: 1.3,
+          }}
+        >
+          About 30 minutes left in your session.
+        </h2>
+        <p
+          style={{
+            fontSize: 14,
+            color: C.mediumGrey,
+            margin: "0 0 18px",
+            lineHeight: 1.6,
+          }}
+        >
+          Your 4-hour try-it window ends in{" "}
+          <span
+            style={{
+              fontWeight: 500,
+              color: C.dark,
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
+            {remainingText}
+          </span>
+          . If you need more time after that, pay $2.99 to start a new session.
+        </p>
+        <button
+          onClick={onDismiss}
+          style={{
+            width: "100%",
+            padding: "12px 24px",
+            background: C.dark,
+            color: C.buttonText,
+            border: "none",
+            borderRadius: 8,
+            fontSize: 14,
+            fontWeight: 500,
+            cursor: "pointer",
+            ...font,
+          }}
+        >
+          Got it
+        </button>
+      </div>
     </div>
   );
 };
@@ -695,17 +766,12 @@ type NavbarProps = {
   // 5-dot step progress UI. Null/undefined on screens where steps
   // aren't meaningful (e.g. landing) so we fall back to the cart count.
   currentStep?: number | null;
-  // Epoch ms; when present, renders a small "Nh Nm left" countdown chip
-  // showing how long until the 4-hour try-it window expires. Hidden
-  // when null (promo users, pre-payment, expired).
-  unlockExpiresAt?: number | null;
 };
 
 const Navbar = ({
   cartCount = 0,
   onLogoClick,
   currentStep,
-  unlockExpiresAt,
 }: NavbarProps) => (
   <div
     style={{
@@ -734,24 +800,14 @@ const Navbar = ({
     </div>
     {/* Step indicator sits in the middle when we're inside the flow;
         the "Selected (N)" counter is preserved on the right so users
-        still see their cart state on the grid screen. */}
+        still see their cart state on the grid screen. The 4-hour
+        countdown chip used to live here too but was removed 2026-05-15
+        — Kristi felt the persistent timer ate too much screen real
+        estate. A single one-shot 30-minute warning modal (see
+        SessionTimeWarningModal) handles the same notification need. */}
     {currentStep && <StepIndicatorDots currentStep={currentStep} />}
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 12,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {/* 4-hour countdown chip — visible after $2.99 entry payment so
-          customers always see how long they have left. */}
-      {unlockExpiresAt && unlockExpiresAt > Date.now() && (
-        <SessionCountdownChip expiresAt={unlockExpiresAt} />
-      )}
-      <div style={{ fontSize: 14, color: C.dark, fontWeight: 400 }}>
-        Selected ({cartCount})
-      </div>
+    <div style={{ fontSize: 14, color: C.dark, fontWeight: 400 }}>
+      Selected ({cartCount})
     </div>
   </div>
 );
@@ -5622,6 +5678,16 @@ export default function App() {
   // unlock + start the 4-hour countdown visibly.
   const [showWelcomePopup, setShowWelcomePopup] = useState(false);
 
+  // 30-minute warning state. The triggering useEffect lives below the
+  // unlockExpiresAt declaration (line ordering matters in TS strict
+  // mode — can't reference a `let` before its declaration even from
+  // a hook callback). Search for "thirty-min warning" to find the
+  // useEffect that drives this.
+  const [showThirtyMinWarning, setShowThirtyMinWarning] = useState(false);
+  const [hasShownThirtyMinWarning, setHasShownThirtyMinWarning] = useState(
+    false,
+  );
+
   // --------- Paywall unlock state (2026-05-15: session-bound model) ---------
   //
   // Two ways to be unlocked:
@@ -5695,10 +5761,9 @@ export default function App() {
     readUnlockFromStorage(),
   );
 
-  // Live ticker for the header countdown + welcome-popup countdown. Reads
-  // the expires_at from localStorage every second so the displayed time
-  // is accurate without storing a derived value in React state at every
-  // render. null when no stripe unlock is active.
+  // Live ticker for the welcome-popup countdown. Reads the expires_at
+  // from localStorage at mount so the popup countdown is accurate even
+  // after a page refresh. null when no stripe unlock is active.
   const [unlockExpiresAt, setUnlockExpiresAt] = useState<number | null>(
     () => {
       if (typeof window === "undefined") return null;
@@ -5711,6 +5776,28 @@ export default function App() {
       }
     },
   );
+
+  // thirty-min warning: poll every 15s for the first time remaining
+  // crosses the 30-minute threshold, then fire the modal once and
+  // stop polling. The hasShown flag prevents the modal from re-firing
+  // if the user dismisses and the timer is still under threshold.
+  useEffect(() => {
+    if (!unlockExpiresAt || hasShownThirtyMinWarning) return;
+    const WARNING_THRESHOLD_MS = 30 * 60 * 1000;
+    const id = setInterval(() => {
+      const remaining = unlockExpiresAt - Date.now();
+      if (remaining <= WARNING_THRESHOLD_MS && remaining > 0) {
+        setShowThirtyMinWarning(true);
+        setHasShownThirtyMinWarning(true);
+        clearInterval(id);
+      } else if (remaining <= 0) {
+        // Window expired without the warning firing (user went idle
+        // for 3h 30m+). Don't show "30 min left" when they have zero.
+        clearInterval(id);
+      }
+    }, 15 * 1000);
+    return () => clearInterval(id);
+  }, [unlockExpiresAt, hasShownThirtyMinWarning]);
 
   // Mark unlocked via the Stripe path. Stores all three keys plus the
   // expires_at the server gave us. Same key write order as below for the
@@ -6377,7 +6464,6 @@ export default function App() {
           cartCount={selectedImageIndices.length}
           onLogoClick={reset}
           currentStep={getStepFromScreen(screen)}
-          unlockExpiresAt={unlockExpiresAt}
         />
       )}
 
@@ -6639,6 +6725,15 @@ export default function App() {
         <WelcomeUnlockedModal
           expiresAt={unlockExpiresAt}
           onDismiss={() => setShowWelcomePopup(false)}
+        />
+      )}
+      {/* 30-min warning. Lower z-index than the welcome popup since it
+          should only ever fire 3.5h AFTER the welcome modal anyway, but
+          we belt-and-suspender the stacking just in case. */}
+      {showThirtyMinWarning && unlockExpiresAt && (
+        <SessionTimeWarningModal
+          expiresAt={unlockExpiresAt}
+          onDismiss={() => setShowThirtyMinWarning(false)}
         />
       )}
       {/* Intro modal renders ABOVE the tips modal in the DOM so if both
