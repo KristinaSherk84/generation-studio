@@ -599,13 +599,13 @@ For subjects with very short hair (under approximately chin length), no styling 
 // when references unanimously show closed-mouth smiles.
 const BLOCK_SMILE_FIDELITY = `SMILE STYLE FIDELITY RULE: Look carefully at the reference photos before deciding what kind of smile to render in this image.
 
-- If ALL reference photos show the subject with a closed-mouth smile (no teeth visible in any reference), generate a closed-mouth smile in this image too — EVEN IF the per-image expression directive in the variation block below asks for a teeth-showing or "open" smile. The expression directive is a suggestion; reference fidelity overrides it. Closed-mouth subjects who are forced into teeth-showing smiles by AI generation produce visibly uncanny, "AI-looking" teeth. The warmth of the smile comes from cheek lift, slight eye-squint, and Duchenne-style outer-corner eye crinkles — none of which require visible teeth.
+- If ALL reference photos show the subject with a closed-mouth smile (no teeth visible in any reference), generate a closed-mouth smile in this image too — EVEN IF the per-image expression directive in the variation block below asks for a teeth-showing or "open" smile. The expression directive is a suggestion; reference fidelity overrides it. Closed-mouth subjects who are forced into teeth-showing smiles by AI generation produce visibly uncanny, "AI-looking" teeth. The warmth of the smile comes from cheek lift and slight eye-squint — neither of which requires visible teeth.
 
-- If AT LEAST ONE reference photo clearly shows the subject smiling with teeth visible in a natural open smile, the per-image expression directive applies as written — teeth-showing smiles are appropriate.
+- If AT LEAST ONE reference photo clearly shows the subject smiling with teeth visible in a natural open smile, the per-image expression directive applies as written — teeth-showing smiles are appropriate. When you render teeth, match the subject's reference teeth closely: keep the same alignment, shape, size, spacing, and natural irregularities. A slight brightening or de-yellowing is fine — the subject can look like they just had a routine cleaning. Do NOT straighten or align the teeth. Do NOT enlarge or plump them. Do NOT remove gaps, chips, overlaps, slight rotations, or other distinctive features. The teeth should still look like the customer's teeth — just at their best — not like generic "Hollywood-perfect" teeth.
 
 - When in doubt about whether teeth are visible in the references, default to a closed-mouth smile. Closed-mouth smiles are universally flattering; uncanny AI-generated teeth ruin a headshot.
 
-The subject's natural smile style — how they actually smile in real life, as evidenced by their reference photos — is more important than the slot-level variation in this batch.`;
+The subject's natural smile style AND the recognizable appearance of the subject's teeth — as evidenced by their reference photos — are more important than the slot-level variation in this batch.`;
 
 // Block 8 — Single-photo variation instruction.
 //
