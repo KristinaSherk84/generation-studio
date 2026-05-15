@@ -1197,9 +1197,13 @@ export default async function handler(
   if (
     !body.photoUrls ||
     !Array.isArray(body.photoUrls) ||
-    body.photoUrls.length < 3
+    body.photoUrls.length < 5
   ) {
-    return res.status(400).json({ error: "At least 3 reference photos required" });
+    // Minimum bumped from 3 → 5 on 2026-05-15 per Kristi: more reference
+    // photos = better "look like you" output = higher keeper-buy rate.
+    // Frontend validation in src/App.tsx matches this server check; both
+    // must move together so the user doesn't sneak past the UI gate.
+    return res.status(400).json({ error: "At least 5 reference photos required" });
   }
   if (!body.style || !["corporate", "creative", "executive", "urban"].includes(body.style)) {
     return res.status(400).json({ error: "Invalid style" });

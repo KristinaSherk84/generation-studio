@@ -101,7 +101,7 @@ const PAYWALL_EXPIRED_MESSAGE =
 const FLOW_STEPS: { label: string; description: string }[] = [
   {
     label: "Upload your shots",
-    description: "4–8 of your favorite recent photos so the AI can learn your face.",
+    description: "5–8 of your favorite recent photos so the AI can learn your face.",
   },
   {
     label: "Pick your style",
@@ -840,7 +840,7 @@ const PHOTOG_TIPS = [
     body: "Blurry inputs produce blurry results. Garbage in, garbage out.",
   },
   {
-    title: "4–8 varied photos.",
+    title: "5–8 varied photos.",
     body: "Different expressions, angles, outfits. Include one close-crop — the AI mirrors your framing.",
   },
   {
@@ -2341,7 +2341,7 @@ const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) 
             letterSpacing: -0.3,
           }}
         >
-          Upload a minimum of 3 photos.
+          Upload a minimum of 5 photos.
         </div>
         <div
           style={{
@@ -2358,7 +2358,7 @@ const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) 
       </div>
 
       <p style={{ fontSize: 15, color: C.mediumGrey, marginTop: 16, lineHeight: 1.6 }}>
-        3 to 8 photos works best. Faces clearly visible, varied angles and expressions.
+        5 to 8 photos works best. Faces clearly visible, varied angles and expressions.
       </p>
 
       <div
@@ -6231,9 +6231,10 @@ export default function App() {
       setShowPaywall(true);
       return;
     }
-    if (!lastSelections || lastPhotoUrls.length < 3) {
+    if (!lastSelections || lastPhotoUrls.length < 5) {
       // Shouldn't happen — we only show the Grid after a successful generate,
       // which always sets these. Silent no-op safety net.
+      // Min bumped from 3 → 5 on 2026-05-15 along with the server check.
       return;
     }
     if (regeneratingSlots.has(index)) {
@@ -6319,9 +6320,9 @@ export default function App() {
     // generic "if it appears wide-angle..." wording in those cases.
     const hasWideAngle = usablePhotos.some((p) => p.isWideAngle === true);
 
-    if (photoUrls.length < 3) {
+    if (photoUrls.length < 5) {
       setGenerationError(
-        "We need at least 3 uploaded photos to generate. Go back and add more.",
+        "We need at least 5 uploaded photos to generate. Go back and add more.",
       );
       setScreen("loading");
       return;
