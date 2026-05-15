@@ -585,6 +585,28 @@ For subjects with very short hair (under approximately chin length), no styling 
   return BLOCK_HAIR_DEFAULT;
 }
 
+// Smile-style fidelity rule (added 2026-05-15 per recurring customer
+// feedback about "weird AI teeth"). The per-slot FLAVORS array below
+// mixes closed-mouth and teeth-showing expressions — slot 0 is a closed
+// mouth, slot 2 is teeth-showing, slot 4 is closed, etc. If the subject
+// naturally smiles with their mouth closed in real life, forcing AI teeth
+// onto them produces uncanny results that read as "obviously AI."
+//
+// Fix without adding a vision-detection step: tell Gemini explicitly that
+// the references are the source of truth for smile style. The model can
+// already see whether the reference photos show teeth — we just need to
+// give it permission (and instruction) to override the per-slot direction
+// when references unanimously show closed-mouth smiles.
+const BLOCK_SMILE_FIDELITY = `SMILE STYLE FIDELITY RULE: Look carefully at the reference photos before deciding what kind of smile to render in this image.
+
+- If ALL reference photos show the subject with a closed-mouth smile (no teeth visible in any reference), generate a closed-mouth smile in this image too — EVEN IF the per-image expression directive in the variation block below asks for a teeth-showing or "open" smile. The expression directive is a suggestion; reference fidelity overrides it. Closed-mouth subjects who are forced into teeth-showing smiles by AI generation produce visibly uncanny, "AI-looking" teeth. The warmth of the smile comes from cheek lift, slight eye-squint, and Duchenne-style outer-corner eye crinkles — none of which require visible teeth.
+
+- If AT LEAST ONE reference photo clearly shows the subject smiling with teeth visible in a natural open smile, the per-image expression directive applies as written — teeth-showing smiles are appropriate.
+
+- When in doubt about whether teeth are visible in the references, default to a closed-mouth smile. Closed-mouth smiles are universally flattering; uncanny AI-generated teeth ruin a headshot.
+
+The subject's natural smile style — how they actually smile in real life, as evidenced by their reference photos — is more important than the slot-level variation in this batch.`;
+
 // Block 8 — Single-photo variation instruction.
 //
 // The frontend fires SIX parallel requests, each with a different variationIndex
@@ -715,6 +737,12 @@ function assemblePrompt(req: GenerateRequest): string {
   parts.push(buildBlock4Attire(req.attire, req.variationIndex));
   parts.push(BLOCK_EYEWEAR);
   parts.push(buildBlockHair(req.skin, req.variationIndex));
+  // Smile-style fidelity rule. Tells Gemini to match the smile style of
+  // the reference photos (closed-mouth references → closed-mouth output)
+  // and to OVERRIDE the per-slot expression directive in Block 8 when
+  // the references unanimously show closed mouths. Reduces uncanny
+  // "AI teeth" complaints. Added 2026-05-15.
+  parts.push(BLOCK_SMILE_FIDELITY);
   parts.push(BLOCK_5_LIGHTING[req.lighting]);
 
   // Wide-angle lens detected on the client via EXIF? Append the stronger
