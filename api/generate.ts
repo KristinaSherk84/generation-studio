@@ -61,17 +61,23 @@ type GenerateRequest = {
   lighting: Lighting;
   background?: Background; // only used when style === "corporate"
   variationIndex: number; // 0-5; frontend fires 6 parallel calls, each with a unique index
-  // True if the client read EXIF from any reference photo and found a focal
-  // length <40mm (35mm-equivalent). In that case we append a stronger lens-
-  // distortion correction block to the prompt. See BLOCK_LENS_CORRECTION below.
-  // Defaults to false when the client couldn't read EXIF (e.g. stripped images).
   hasWideAngle?: boolean;
-  // "realistic" (default) keeps current behavior — no extra block injected.
-  // "polished" adds BLOCK_SKIN_POLISHED, which is gender-gated inside the
-  // prompt itself (only fires for women; ignored for men). Added 2026-04-26
-  // after three female beta users complained the default treatment made
-  // them look older.
   skin?: Skin;
+  // ---- Paywall enforcement (added 2026-05-15) ----
+  // Exactly one of these two must be present and valid for the request to
+  // be processed:
+  //   - stripeSessionId: the Stripe Checkout Session ID from the $2.99
+  //     entry payment. Server verifies via Stripe API that
+  //     metadata.unlock_expires_at > now AND metadata.unlock_consumed !== "true".
+  //   - promoCode: the env-var-defined promo code (kristi-vip-xyz at time
+  //     of writing). Server compares against process.env.PROMO_CODE with
+  //     constant-time equality.
+  // If neither is present, the request is rejected with 402 Payment Required
+  // before any Gemini work happens. This is the structural fix for the leak
+  // discovered 2026-05-14 where legacy localStorage unlocks were generating
+  // free photos indefinitely.
+  stripeSessionId?: string;
+  promoCode?: string;
 };
 
 type InlineImage = { mimeType: string; data: string };
@@ -1041,6 +1047,118 @@ async function generateOneHeadshotWithRetry(
 
 // -------------------- Handler --------------------
 
+// ---- Paywall verification ----
+//
+// Returns { ok: true } if the request carries either a valid Stripe session
+// ID OR the correct promo code. Returns { ok: false, reason } otherwise.
+// Stripe path: GET the Checkout Session via Stripe API and check metadata
+// fields written by /api/verify-checkout when the entry payment confirmed:
+//   - metadata.unlock_expires_at: epoch ms; must be in the future
+//   - metadata.unlock_consumed: must NOT be "true" (burned by /api/deliver
+//     when the user successfully downloads a photo)
+// Promo path: compare the submitted code against process.env.PROMO_CODE
+// with constant-time equality so timing attacks can't probe the code.
+type UnlockCheck =
+  | { ok: true; via: "stripe"; sessionId: string }
+  | { ok: true; via: "promo" }
+  | { ok: false; reason: "missing" | "expired" | "consumed" | "invalid" };
+
+function constantTimeEquals(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return result === 0;
+}
+
+async function verifyUnlock(
+  stripeSessionId: string | undefined,
+  promoCode: string | undefined,
+  stripeSecretKey: string,
+): Promise<UnlockCheck> {
+  // Promo path takes precedence — cheaper (no network call) and the promo
+  // code is a power-user bypass that Kristi gates by sharing manually.
+  if (promoCode && typeof promoCode === "string") {
+    const envCode = process.env.PROMO_CODE;
+    if (envCode && constantTimeEquals(promoCode.trim(), envCode.trim())) {
+      return { ok: true, via: "promo" };
+    }
+    // Fall through to stripe check if a promo was sent but didn't match —
+    // a client might pass both for some defensive reason. Don't 402 yet.
+  }
+
+  if (!stripeSessionId || typeof stripeSessionId !== "string") {
+    return { ok: false, reason: "missing" };
+  }
+  if (!stripeSessionId.startsWith("cs_")) {
+    return { ok: false, reason: "invalid" };
+  }
+
+  try {
+    const resp = await fetch(
+      `https://api.stripe.com/v1/checkout/sessions/${encodeURIComponent(stripeSessionId)}`,
+      {
+        method: "GET",
+        headers: { Authorization: `Bearer ${stripeSecretKey}` },
+      },
+    );
+    if (!resp.ok) {
+      console.warn(
+        JSON.stringify({
+          type: "unlock_verify_stripe_fetch_failed",
+          status: resp.status,
+          sessionId: stripeSessionId,
+        }),
+      );
+      return { ok: false, reason: "invalid" };
+    }
+    const session = (await resp.json()) as {
+      payment_status?: string;
+      metadata?: Record<string, string> | null;
+      payment_intent?: { status?: string } | string | null;
+    };
+
+    // Sanity check: only sessions actually paid for can unlock anything.
+    // Mirrors the paid:true logic in /api/verify-checkout (handles Cash
+    // App Pay async settlement via PI.status === "succeeded" too).
+    const piStatus =
+      session.payment_intent && typeof session.payment_intent === "object"
+        ? session.payment_intent.status
+        : undefined;
+    const isPaid =
+      session.payment_status === "paid" || piStatus === "succeeded";
+    if (!isPaid) {
+      return { ok: false, reason: "invalid" };
+    }
+
+    const consumed = session.metadata?.unlock_consumed === "true";
+    if (consumed) {
+      return { ok: false, reason: "consumed" };
+    }
+
+    const expiresAtRaw = session.metadata?.unlock_expires_at;
+    const expiresAt = expiresAtRaw ? Number(expiresAtRaw) : NaN;
+    if (!Number.isFinite(expiresAt) || expiresAt <= 0) {
+      // Defensive: if metadata wasn't written (e.g., verify-checkout
+      // hadn't run yet on this session), treat as invalid. The user
+      // should re-trigger verification by reloading.
+      return { ok: false, reason: "invalid" };
+    }
+    if (Date.now() > expiresAt) {
+      return { ok: false, reason: "expired" };
+    }
+
+    return { ok: true, via: "stripe", sessionId: stripeSessionId };
+  } catch (err) {
+    console.warn(
+      "unlock verification threw:",
+      err instanceof Error ? err.message : String(err),
+    );
+    return { ok: false, reason: "invalid" };
+  }
+}
+
 export default async function handler(
   req: VercelRequest,
   res: VercelResponse,
@@ -1051,6 +1169,30 @@ export default async function handler(
 
   // ---- Validate inputs (cheap, fail fast) ----
   const body = req.body as Partial<GenerateRequest>;
+
+  // ---- Paywall gate: verify the caller has a valid unlock BEFORE doing
+  //      any expensive Gemini work. Returns 402 Payment Required with a
+  //      reason code the client can use to display the right error UI
+  //      (expired → "your 4-hour window ran out, pay again"; consumed →
+  //      "you already downloaded, this unlock is spent"; missing/invalid
+  //      → "you need to pay $2.99 to use the generator"). ----
+  const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+  if (!stripeSecretKey) {
+    return res
+      .status(500)
+      .json({ error: "Server missing STRIPE_SECRET_KEY" });
+  }
+  const unlock = await verifyUnlock(
+    body.stripeSessionId,
+    body.promoCode,
+    stripeSecretKey,
+  );
+  if (!unlock.ok) {
+    return res.status(402).json({
+      error: "Payment required",
+      reason: unlock.reason,
+    });
+  }
 
   if (
     !body.photoUrls ||

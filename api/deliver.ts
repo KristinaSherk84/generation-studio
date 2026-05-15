@@ -65,6 +65,12 @@ type DeliverRequest = {
   lighting: Lighting;
   background?: Background;
   skin?: Skin; // added 2026-04-28; surfaces the Realistic/Polished choice
+  // The Stripe Checkout Session ID for the $2.99 entry payment. When a
+  // delivery succeeds we flip metadata.unlock_consumed to "true" on this
+  // session so /api/generate stops accepting it. Optional — promo-unlock
+  // users won't have one, and skipping the metadata write for them is
+  // intentional (Tiffany etc. keep their unlock permanently).
+  stripeSessionId?: string;
 };
 
 export type DeliveryManifest = {
@@ -671,6 +677,60 @@ export default async function handler(
     //      channel for the relationship-building moment.
     //      BCC'd to kristi@kristinasherk.com per roadmap #9. ----
     await sendCustomerDeliveryEmail({ manifest });
+
+    // ---- Burn the $2.99 unlock token (2026-05-15) ----
+    //
+    // The unlock model: $2.99 buys 4 hours of /api/generate access OR
+    // until the customer downloads their first photo (whichever first).
+    // This is the "until they download" half: flip metadata.unlock_consumed
+    // to "true" on the Stripe Checkout Session so the unlock token can't
+    // be reused for a second batch of generations. Customers who want
+    // another try pay $2.99 again.
+    //
+    // Only applies when the client passed stripeSessionId — promo-unlock
+    // customers (Tiffany etc.) don't have one, and we intentionally leave
+    // their unlock alone so they can come back and use the promo again.
+    //
+    // Failure mode is non-blocking: if the Stripe metadata write fails
+    // for any reason, we still return success to the user — they paid,
+    // they got their photo, we'll just have a slightly leaky unlock
+    // that the 4h TTL will eventually clean up.
+    if (body.stripeSessionId && body.stripeSessionId.startsWith("cs_")) {
+      const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+      if (stripeSecretKey) {
+        try {
+          const formBody = new URLSearchParams();
+          formBody.append("metadata[unlock_consumed]", "true");
+          const burnResp = await fetch(
+            `https://api.stripe.com/v1/checkout/sessions/${encodeURIComponent(body.stripeSessionId)}`,
+            {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${stripeSecretKey}`,
+                "Content-Type": "application/x-www-form-urlencoded",
+              },
+              body: formBody.toString(),
+            },
+          );
+          if (!burnResp.ok) {
+            const errText = await burnResp.text().catch(() => "");
+            console.warn(
+              JSON.stringify({
+                type: "unlock_burn_failed",
+                status: burnResp.status,
+                sessionId: body.stripeSessionId,
+                body: errText.slice(0, 300),
+              }),
+            );
+          }
+        } catch (err) {
+          console.warn(
+            "unlock burn threw:",
+            err instanceof Error ? err.message : String(err),
+          );
+        }
+      }
+    }
 
     return res.status(200).json({
       deliveryId,

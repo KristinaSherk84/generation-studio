@@ -8,35 +8,47 @@
  *
  * This endpoint retrieves the Stripe Checkout Session by ID using our secret
  * key and returns one of three states:
- *   { paid: true }                 — session is fully paid; unlock immediately
- *   { paid: false, pending: true } — async payment method (Cash App Pay,
- *                                    Klarna, ACH, etc.) is still settling.
- *                                    Frontend should poll and show a
- *                                    "Verifying payment…" UI.
- *   { paid: false }                — payment did not go through (abandoned,
- *                                    failed, or unpaid for non-async reasons).
+ *   { paid: true, sessionId, unlockExpiresAt } — paid; unlock immediately
+ *   { paid: false, pending: true }             — async payment in flight
+ *   { paid: false }                            — not paid (abandoned/failed)
  *
- * 2026-05-04 — Cash App Pay race fix:
+ * 2026-05-15 — Session-bound paywall gate.
+ *   When the session first confirms as paid here, we WRITE two metadata
+ *   fields to the Stripe Checkout Session itself:
+ *     - unlock_expires_at: epoch milliseconds, set to now + 4 hours.
+ *       The window during which /api/generate accepts this session as a
+ *       valid unlock token.
+ *     - unlock_consumed: "false" initially. /api/deliver flips this to
+ *       "true" on a successful download, immediately killing the unlock
+ *       even if the 4-hour window hasn't elapsed.
+ *   /api/generate then consults THESE FIELDS as the source of truth for
+ *   whether to do the expensive Gemini work. Stripe is the database here
+ *   — no new infrastructure needed and the customer can never tamper with
+ *   their own metadata (only our secret key can write).
+ *
+ *   The write is idempotent: if metadata.unlock_expires_at is already set
+ *   on a re-verify (e.g., the user refreshes the success URL), we leave
+ *   the existing values alone. The clock starts ONCE at first confirmation.
+ *
+ * 2026-05-04 — Cash App Pay race fix (unchanged):
  *   We previously returned `paid: true` only when `payment_status === "paid"`.
  *   That broke for Cash App Pay (and other "delayed notification" payment
  *   methods like Klarna and ACH): Stripe redirects the customer back to
- *   success_url BEFORE settlement completes, so the very first verify call
- *   sees `payment_status: "unpaid"` even though the customer just authorized.
- *   The frontend silently dumped them to the landing page. One customer
- *   was refunded out of customer-service necessity (May 4, 2026) before
- *   we caught this.
- *   Fix: also retrieve the session's payment_intent (via expand[]) and
- *   surface a `pending` state when the PI is "processing" or "requires_action."
- *   Frontend polls until it resolves to paid: true or a real failure.
- *
- * Phase 1 scope: the unlock is purely UI-side (a sessionStorage flag). Phase 2
- * will also gate `/api/generate` on a server-verified signal, but that's a
- * later change.
+ *   success_url BEFORE settlement completes. We now also accept
+ *   `payment_intent.status === "succeeded"` as paid, and surface a `pending`
+ *   state when the PI is "processing" or "requires_action" so the frontend
+ *   can poll until it resolves.
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
 export const maxDuration = 15;
+
+// Length of the unlock window after the $2.99 entry is confirmed paid.
+// Per Kristi 2026-05-15: 4 hours is long enough for any reasonable
+// customer flow (10-15 min for a focused user) but short enough that
+// casual return visitors will re-pay if they walk away.
+const UNLOCK_TTL_MS = 4 * 60 * 60 * 1000;
 
 type VerifyResponse = {
   paid: boolean;
@@ -45,6 +57,14 @@ type VerifyResponse = {
   // paid is true, pending is irrelevant and omitted.
   pending?: boolean;
   customerEmail?: string;
+  // Returned only when paid:true. The Stripe session ID is what the
+  // frontend stores and forwards on every /api/generate call so the
+  // server can re-verify the unlock.
+  sessionId?: string;
+  // Returned only when paid:true. Epoch milliseconds when the 4-hour
+  // window expires. Frontend uses this for the countdown UI and to
+  // detect expiry without a server round-trip.
+  unlockExpiresAt?: number;
 };
 
 export default async function handler(
@@ -67,19 +87,11 @@ export default async function handler(
   if (!sessionId) {
     return res.status(400).json({ error: "Missing session_id" });
   }
-  // Stripe session IDs always start with "cs_" — cheap sanity check to bail
-  // before calling Stripe with obviously garbage input.
   if (!sessionId.startsWith("cs_")) {
     return res.status(400).json({ error: "Invalid session_id" });
   }
 
   try {
-    // Expand `payment_intent` so we get the underlying PI's status alongside
-    // the session, in one round trip. Stripe's expand[] syntax replaces the
-    // string-id with the full object. We need this because the session's
-    // top-level payment_status lags settlement for async methods (Cash App
-    // Pay etc.) — the PI status is the more accurate "is the money in
-    // motion?" signal.
     const stripeResp = await fetch(
       `https://api.stripe.com/v1/checkout/sessions/${encodeURIComponent(sessionId)}?expand[]=payment_intent`,
       {
@@ -99,7 +111,6 @@ export default async function handler(
           body: errText.slice(0, 500),
         }),
       );
-      // 404 → user forged a session id. Just return paid: false.
       if (stripeResp.status === 404) {
         const payload: VerifyResponse = { paid: false };
         return res.status(200).json(payload);
@@ -110,28 +121,14 @@ export default async function handler(
     }
 
     const session = (await stripeResp.json()) as {
-      // Session-level fields:
-      //   - status: "open" | "complete" | "expired"
-      //     "complete" means the customer finished the Stripe Checkout flow
-      //     (i.e., they authorized payment). It does NOT guarantee settlement.
-      //   - payment_status: "paid" | "unpaid" | "no_payment_required"
-      //     For async methods this stays "unpaid" until Stripe receives final
-      //     confirmation from the issuer/wallet — can be seconds (Cash App)
-      //     to days (ACH).
       status?: string;
       payment_status?: string;
       customer_details?: { email?: string } | null;
       customer_email?: string | null;
-      // After expand[]=payment_intent this is the PI object, not just an id.
-      // PI.status: "requires_payment_method" | "requires_confirmation" |
-      //   "requires_action" | "processing" | "requires_capture" |
-      //   "succeeded" | "canceled"
-      // "succeeded" and "processing" both indicate the customer authorized
-      // a real payment that's either settled or in transit. Both are safe
-      // to recognize as "the money is real."
-      payment_intent?: {
-        status?: string;
-      } | string | null;
+      payment_intent?: { status?: string } | string | null;
+      // Our own unlock-state fields written by this endpoint on first
+      // confirmation and read on every subsequent /api/generate call.
+      metadata?: Record<string, string> | null;
     };
 
     const piStatus =
@@ -139,22 +136,6 @@ export default async function handler(
         ? session.payment_intent.status
         : undefined;
 
-    // Decision tree for the three return states:
-    //
-    // (1) Fully paid → unlock immediately.
-    //     Two ways to land here:
-    //       a. session.payment_status === "paid"  (cards, settled async)
-    //       b. payment_intent.status === "succeeded"  (covers a tiny race
-    //          where the PI flipped to succeeded but the session.payment_status
-    //          field hasn't propagated yet — happens in practice).
-    //
-    // (2) Async settlement in progress → tell frontend to poll.
-    //     Triggered by: session.status === "complete" AND PI.status === "processing"
-    //     (Cash App Pay normally, ACH always, Klarna sometimes.)
-    //     Also includes "requires_action" defensively (rare for hosted Checkout
-    //     but Stripe's docs allow it).
-    //
-    // (3) Not paid (abandoned, expired, failed). Default branch.
     let paid = false;
     let pending = false;
     if (session.payment_status === "paid" || piStatus === "succeeded") {
@@ -171,10 +152,71 @@ export default async function handler(
       session.customer_email ??
       undefined;
 
+    // -----------------------------------------------------------------
+    // First-confirmation hook: when paid:true AND we haven't already
+    // stamped unlock_expires_at on this session, write it now. The clock
+    // starts here and runs for UNLOCK_TTL_MS (4h). Idempotent across
+    // re-verifies — if the field is already set we leave it alone.
+    // -----------------------------------------------------------------
+    let unlockExpiresAt: number | undefined;
+    if (paid) {
+      const existing = session.metadata?.unlock_expires_at;
+      const existingNum = existing ? Number(existing) : NaN;
+      if (Number.isFinite(existingNum) && existingNum > 0) {
+        // Re-verify of a session we've already stamped — use the
+        // existing window so the clock doesn't reset on refresh.
+        unlockExpiresAt = existingNum;
+      } else {
+        // First confirmation. Write the window to Stripe metadata.
+        unlockExpiresAt = Date.now() + UNLOCK_TTL_MS;
+        try {
+          const formBody = new URLSearchParams();
+          formBody.append(
+            "metadata[unlock_expires_at]",
+            String(unlockExpiresAt),
+          );
+          formBody.append("metadata[unlock_consumed]", "false");
+          const updateResp = await fetch(
+            `https://api.stripe.com/v1/checkout/sessions/${encodeURIComponent(sessionId)}`,
+            {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${secretKey}`,
+                "Content-Type": "application/x-www-form-urlencoded",
+              },
+              body: formBody.toString(),
+            },
+          );
+          if (!updateResp.ok) {
+            // Log but don't fail the whole verify — the user has paid;
+            // we can recover by reading metadata on the next call.
+            const errText = await updateResp.text().catch(() => "");
+            console.warn(
+              JSON.stringify({
+                type: "stripe_session_metadata_write_failed",
+                status: updateResp.status,
+                sessionId,
+                body: errText.slice(0, 400),
+              }),
+            );
+            // Fall back to in-memory window — user gets full 4h locally
+            // even though server can't enforce until metadata is set.
+          }
+        } catch (err) {
+          console.warn(
+            "Stripe session metadata write threw:",
+            err instanceof Error ? err.message : String(err),
+          );
+        }
+      }
+    }
+
     const payload: VerifyResponse = {
       paid,
       ...(pending && !paid ? { pending: true } : {}),
       ...(email ? { customerEmail: email } : {}),
+      ...(paid ? { sessionId } : {}),
+      ...(paid && unlockExpiresAt ? { unlockExpiresAt } : {}),
     };
     return res.status(200).json(payload);
   } catch (error) {

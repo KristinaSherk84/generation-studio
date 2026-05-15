@@ -53,6 +53,36 @@ const font: CSSProperties = {
   fontFamily: "Inter, system-ui, -apple-system, sans-serif",
 };
 
+// Module-scope helper so all /api/generate callers (DownloadScreen's
+// cross-style fetches included) can read the current unlock identifier
+// off localStorage at request time. Returns the body fragment to merge
+// into the fetch payload. Server is the gate; this is just transport.
+function readUnlockRequestFields(): {
+  stripeSessionId?: string;
+  promoCode?: string;
+} {
+  if (typeof window === "undefined") return {};
+  try {
+    const source = window.localStorage.getItem("unlock_source");
+    if (source === "promo") {
+      const code = window.localStorage.getItem("promo_code");
+      return code ? { promoCode: code } : {};
+    }
+    if (source === "stripe") {
+      const sid = window.localStorage.getItem("stripe_session_id");
+      return sid ? { stripeSessionId: sid } : {};
+    }
+    return {};
+  } catch {
+    return {};
+  }
+}
+
+// User-facing error message for the 402 Payment Required response from
+// /api/generate. Per Kristi 2026-05-15 — this is the exact wording.
+const PAYWALL_EXPIRED_MESSAGE =
+  "API Error: Your 4 hours to try the app has expired.";
+
 // -------------------- Flow-step framework --------------------
 // The user-facing journey is communicated as 5 numbered steps. The intro
 // modal shows the full list before they begin; the Navbar shows dot
@@ -284,6 +314,222 @@ const GenerationStepsList = ({ currentStep }: GenerationStepsListProps) => (
   </div>
 );
 
+// -------------------- Welcome popup with 4-hour countdown --------------------
+//
+// Fires the moment /api/verify-checkout confirms the $2.99 entry payment.
+// Tells the customer the rules of the road: they have 4 hours, refund
+// available, email Kristi for support. Includes a live ticking countdown
+// so they SEE the 4 hours start visibly, not just as words on a screen.
+//
+// The expiresAt prop is the epoch-ms timestamp the server stamped onto
+// the Stripe Checkout session metadata. The popup recomputes "remaining"
+// every second from Date.now() so the countdown is always live and
+// recovers correctly across tab close + reopen.
+
+type WelcomeUnlockedModalProps = {
+  expiresAt: number; // epoch ms; 4h from when the server confirmed payment
+  onDismiss: () => void;
+};
+
+function formatRemaining(ms: number): string {
+  if (ms <= 0) return "0h 0m 0s";
+  const totalSeconds = Math.floor(ms / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return `${hours}h ${minutes}m ${seconds}s`;
+}
+
+const WelcomeUnlockedModal = ({
+  expiresAt,
+  onDismiss,
+}: WelcomeUnlockedModalProps) => {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const remainingMs = expiresAt - now;
+  const remainingText = formatRemaining(remainingMs);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Payment confirmed — your 4-hour session has started"
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0, 0, 0, 0.85)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 24,
+        zIndex: 1100,
+        ...font,
+      }}
+    >
+      <div
+        style={{
+          background: C.white,
+          borderRadius: 12,
+          padding: "32px 36px",
+          maxWidth: 480,
+          width: "100%",
+          textAlign: "center",
+        }}
+      >
+        <div
+          style={{
+            width: 56,
+            height: 56,
+            borderRadius: "50%",
+            background: C.dark,
+            color: C.white,
+            margin: "0 auto 18px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Check size={26} strokeWidth={3} />
+        </div>
+        <h2
+          style={{
+            fontSize: 26,
+            fontWeight: 500,
+            color: C.dark,
+            margin: "0 0 8px",
+            lineHeight: 1.2,
+          }}
+        >
+          You have 4 hours to try it out.
+        </h2>
+        <p
+          style={{
+            fontSize: 14,
+            color: C.mediumGrey,
+            margin: "0 0 22px",
+            lineHeight: 1.6,
+          }}
+        >
+          For issues, email me for a refund:{" "}
+          <a
+            href="mailto:kristi@kristinasherk.com"
+            style={{ color: C.dark, fontWeight: 500 }}
+          >
+            kristi@kristinasherk.com
+          </a>
+        </p>
+
+        {/* Live countdown — updates every second so the 4-hour clock is
+            visible and unambiguous. Kept big and centered so it reads as
+            the centerpiece of the popup. */}
+        <div
+          style={{
+            background: C.pageBg,
+            borderRadius: 10,
+            padding: "18px 16px",
+            marginBottom: 22,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 500,
+              letterSpacing: 1.5,
+              color: C.mediumGrey,
+              textTransform: "uppercase",
+              marginBottom: 6,
+            }}
+          >
+            Time remaining
+          </div>
+          <div
+            style={{
+              fontSize: 32,
+              fontWeight: 500,
+              color: C.dark,
+              fontVariantNumeric: "tabular-nums",
+              letterSpacing: -0.5,
+            }}
+          >
+            {remainingText}
+          </div>
+        </div>
+
+        <button
+          onClick={onDismiss}
+          style={{
+            width: "100%",
+            padding: "14px 24px",
+            background: C.dark,
+            color: C.buttonText,
+            border: "none",
+            borderRadius: 8,
+            fontSize: 15,
+            fontWeight: 500,
+            cursor: "pointer",
+            ...font,
+          }}
+        >
+          Let's get started
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// -------------------- Persistent header countdown chip --------------------
+//
+// Tiny live countdown that lives in the header alongside the step-dots
+// indicator on every screen after payment. Reads the same expiresAt from
+// localStorage so it survives refresh and shows the truth even if React
+// state somehow desyncs. Hidden when no stripe unlock is active (promo
+// users / pre-payment landing screen).
+
+type SessionCountdownChipProps = {
+  expiresAt: number;
+};
+
+const SessionCountdownChip = ({ expiresAt }: SessionCountdownChipProps) => {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const remainingMs = expiresAt - now;
+  if (remainingMs <= 0) return null;
+  // Compact format for the header. Drop seconds once we're above 1 minute
+  // so the chip doesn't churn distractingly at the top of the screen.
+  const totalSeconds = Math.floor(remainingMs / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const compact =
+    hours > 0
+      ? `${hours}h ${minutes}m left`
+      : minutes > 0
+      ? `${minutes}m left`
+      : `${seconds}s left`;
+  // Tint orange/red when under 30 minutes so the user notices urgency.
+  const urgent = remainingMs < 30 * 60 * 1000;
+  return (
+    <div
+      title={`Your 4-hour try-it window ends in ${formatRemaining(remainingMs)}`}
+      style={{
+        fontSize: 12,
+        fontWeight: 500,
+        color: urgent ? "#A32D2D" : C.mediumGrey,
+        whiteSpace: "nowrap",
+        fontVariantNumeric: "tabular-nums",
+      }}
+    >
+      {compact}
+    </div>
+  );
+};
+
 // -------------------- Intro-steps modal --------------------
 // Full-screen modal shown ONCE per session when the user first arrives
 // at the upload screen. Lays out all 5 numbered steps with a one-line
@@ -449,9 +695,18 @@ type NavbarProps = {
   // 5-dot step progress UI. Null/undefined on screens where steps
   // aren't meaningful (e.g. landing) so we fall back to the cart count.
   currentStep?: number | null;
+  // Epoch ms; when present, renders a small "Nh Nm left" countdown chip
+  // showing how long until the 4-hour try-it window expires. Hidden
+  // when null (promo users, pre-payment, expired).
+  unlockExpiresAt?: number | null;
 };
 
-const Navbar = ({ cartCount = 0, onLogoClick, currentStep }: NavbarProps) => (
+const Navbar = ({
+  cartCount = 0,
+  onLogoClick,
+  currentStep,
+  unlockExpiresAt,
+}: NavbarProps) => (
   <div
     style={{
       height: 70,
@@ -483,13 +738,20 @@ const Navbar = ({ cartCount = 0, onLogoClick, currentStep }: NavbarProps) => (
     {currentStep && <StepIndicatorDots currentStep={currentStep} />}
     <div
       style={{
-        fontSize: 14,
-        color: C.dark,
-        fontWeight: 400,
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
         whiteSpace: "nowrap",
       }}
     >
-      Selected ({cartCount})
+      {/* 4-hour countdown chip — visible after $2.99 entry payment so
+          customers always see how long they have left. */}
+      {unlockExpiresAt && unlockExpiresAt > Date.now() && (
+        <SessionCountdownChip expiresAt={unlockExpiresAt} />
+      )}
+      <div style={{ fontSize: 14, color: C.dark, fontWeight: 400 }}>
+        Selected ({cartCount})
+      </div>
     </div>
   </div>
 );
@@ -748,7 +1010,9 @@ type LandingProps = {
   onStart: () => void;
   // Fires after the user successfully validates a promo code. Parent marks
   // the paywall as unlocked in sessionStorage and advances to Upload.
-  onPromoUnlock: () => void;
+  // Fires after a valid promo code is verified server-side. Receives the
+  // validated code so the App can persist it for /api/generate re-verification.
+  onPromoUnlock: (code: string) => void;
 };
 
 
@@ -1262,7 +1526,10 @@ const LandingV2 = ({ onStart, onPromoUnlock, onShowGallery }: LandingV2Props) =>
       const data = (await resp.json()) as { valid?: boolean };
       if (data.valid) {
         setPromoStatus("success");
-        setTimeout(() => onPromoUnlock(), 700);
+        // Pass the validated code up so App stores it for /api/generate
+        // to re-verify on every call (server-side check is what actually
+        // gates access — localStorage is just for survival across refresh).
+        setTimeout(() => onPromoUnlock(trimmed), 700);
       } else {
         setPromoStatus("error");
         setPromoErrMsg("That code isn't recognized.");
@@ -3872,6 +4139,11 @@ const CheckoutScreen = ({
             lighting: selections.lighting,
             background: selections.background,
             skin: selections.skin,
+            // Server flips metadata.unlock_consumed=true on this Stripe
+            // session so the unlock can't be reused for another batch.
+            // Pulled at call time from localStorage; for promo users
+            // this is undefined and the server skips the metadata write.
+            ...readUnlockRequestFields(),
           }),
         });
         if (!response.ok) {
@@ -4390,6 +4662,9 @@ const DownloadScreen = ({
         // single-frame flavor to show off the bonus style.
         variationIndex: 0,
         hasWideAngle: hasWideAngle ?? false,
+        // Paywall fields — even bonus previews count against the
+        // session's 4h window. Customer paid, customer gets the bonus.
+        ...readUnlockRequestFields(),
       }),
     })
       .then(async (r) => {
@@ -5341,64 +5616,76 @@ export default function App() {
   const [hasSeenIntro, setHasSeenIntro] = useState(false);
   const [showIntroModal, setShowIntroModal] = useState(false);
 
-  // --------- Paywall unlock state ---------
+  // Welcome-after-payment popup. Fires when /api/verify-checkout returns
+  // paid:true with a fresh sessionId+unlockExpiresAt — i.e., the user
+  // just finished the $2.99 Stripe Checkout and we want to confirm the
+  // unlock + start the 4-hour countdown visibly.
+  const [showWelcomePopup, setShowWelcomePopup] = useState(false);
+
+  // --------- Paywall unlock state (2026-05-15: session-bound model) ---------
   //
-  // The entry paywall is considered "unlocked" once EITHER:
-  //   (a) the user completed Stripe Checkout for the $2.99 entry fee, or
-  //   (b) the user entered a valid promo code on the landing page.
+  // Two ways to be unlocked:
+  //   (a) Stripe path: user paid $2.99 via Stripe Checkout. localStorage
+  //       holds the cs_xxx session ID + the server-provided expires_at.
+  //       /api/generate verifies the session against Stripe metadata on
+  //       every call. Unlock dies when:
+  //         - 4 hours pass (server-stamped expires_at), OR
+  //         - The user successfully downloads a photo (/api/deliver flips
+  //           metadata.unlock_consumed to "true" on the Stripe session).
+  //   (b) Promo path: user entered the friends-and-family code on landing.
+  //       localStorage holds the validated code itself. /api/generate
+  //       verifies via constant-time compare against PROMO_CODE env var.
+  //       No expiry, no consumption — trusted users keep access.
   //
-  // Persisted via LOCALSTORAGE with a 48-hour TTL (changed 2026-05-14).
-  // History:
-  //   - V1: sessionStorage (unlock died on tab close). Lost a paid customer
-  //     who hit browser-back after Stripe — Stripe dead-end + no unlock.
-  //   - 2026-05-04 (commit 23 "URGENT: Fix lost-session-after-payment"):
-  //     moved to localStorage, no TTL → unlock was permanent on browser.
-  //     Customer complained about getting the $2.99 credit re-applied
-  //     across multiple sessions because credit_used was in sessionStorage.
-  //   - 2026-05-14: kept localStorage but added a 48-hour TTL so casual
-  //     return visitors eventually re-pay $2.99 to re-enter. Paired with
-  //     dropping the per-photo credit entirely (flat $9.99 per photo).
+  // localStorage keys in use:
+  //   paywall_unlocked        — "true" / absent. Quick presence flag.
+  //   unlock_source           — "stripe" | "promo"
+  //   stripe_session_id       — cs_xxx (only when source=stripe)
+  //   unlock_expires_at       — epoch ms (only when source=stripe)
+  //   promo_code              — code value (only when source=promo)
   //
-  // 48 hours is generous: covers same-day buyers, next-morning customers,
-  // and people who pay one day and come back the next to actually pick
-  // their photos. Power users coming back days later pay $2.99 again,
-  // which is fair since they're starting a new project.
-  //
-  // Migration: existing unlocks stored before this change have no
-  // `paywall_unlocked_at` timestamp. We grandfather them with the current
-  // time on first read, giving them a fresh 48 hours from now.
-  const PAYWALL_UNLOCK_TTL_MS = 48 * 60 * 60 * 1000;
+  // Migration: legacy installations have paywall_unlocked=true but no
+  // stripe_session_id. We treat those as locked-out so the server gate
+  // can't be bypassed by stale localStorage. Those users will see the
+  // paywall again on their next visit, which is the intended outcome —
+  // they're the same population that was burning Gemini credit for free.
   const readUnlockFromStorage = (): boolean => {
     if (typeof window === "undefined") return false;
     try {
       if (window.localStorage.getItem("paywall_unlocked") !== "true") {
         return false;
       }
-      const tsRaw = window.localStorage.getItem("paywall_unlocked_at");
-      // Migration path: legacy unlocks without timestamp get one written
-      // NOW, granting them a fresh 48h window starting from this read.
-      // This prevents existing paid customers from being suddenly locked
-      // out the moment we deploy the TTL.
-      if (!tsRaw) {
-        window.localStorage.setItem(
-          "paywall_unlocked_at",
-          String(Date.now()),
+      const source = window.localStorage.getItem("unlock_source");
+      if (source === "promo") {
+        // Promo unlock just needs the code present — server re-verifies on
+        // every /api/generate call so a stale or invalid code fails there.
+        return !!window.localStorage.getItem("promo_code");
+      }
+      if (source === "stripe") {
+        const sid = window.localStorage.getItem("stripe_session_id");
+        if (!sid) {
+          // Legacy unlock without session ID — clear and force re-pay.
+          window.localStorage.removeItem("paywall_unlocked");
+          window.localStorage.removeItem("unlock_source");
+          window.localStorage.removeItem("paywall_unlocked_at");
+          return false;
+        }
+        const exp = Number(
+          window.localStorage.getItem("unlock_expires_at") ?? "0",
         );
+        if (!Number.isFinite(exp) || exp <= Date.now()) {
+          // Expired locally — clear everything so we don't keep showing
+          // unlocked UI to a user the server will 402.
+          window.localStorage.removeItem("paywall_unlocked");
+          window.localStorage.removeItem("unlock_source");
+          window.localStorage.removeItem("stripe_session_id");
+          window.localStorage.removeItem("unlock_expires_at");
+          return false;
+        }
         return true;
       }
-      const ts = Number(tsRaw);
-      if (!Number.isFinite(ts)) {
-        return false;
-      }
-      const ageMs = Date.now() - ts;
-      if (ageMs > PAYWALL_UNLOCK_TTL_MS) {
-        // Expired — clear keys so the user is treated as locked again.
-        window.localStorage.removeItem("paywall_unlocked");
-        window.localStorage.removeItem("paywall_unlocked_at");
-        window.localStorage.removeItem("unlock_source");
-        return false;
-      }
-      return true;
+      // Unknown source — treat as locked.
+      return false;
     } catch {
       // localStorage can throw in private browsing or strict-mode envs.
       return false;
@@ -5407,25 +5694,102 @@ export default function App() {
   const [isUnlocked, setIsUnlocked] = useState<boolean>(() =>
     readUnlockFromStorage(),
   );
-  const markUnlocked = (source: "stripe" | "promo") => {
+
+  // Live ticker for the header countdown + welcome-popup countdown. Reads
+  // the expires_at from localStorage every second so the displayed time
+  // is accurate without storing a derived value in React state at every
+  // render. null when no stripe unlock is active.
+  const [unlockExpiresAt, setUnlockExpiresAt] = useState<number | null>(
+    () => {
+      if (typeof window === "undefined") return null;
+      try {
+        const raw = window.localStorage.getItem("unlock_expires_at");
+        const n = raw ? Number(raw) : NaN;
+        return Number.isFinite(n) && n > 0 ? n : null;
+      } catch {
+        return null;
+      }
+    },
+  );
+
+  // Mark unlocked via the Stripe path. Stores all three keys plus the
+  // expires_at the server gave us. Same key write order as below for the
+  // promo path; reads are tolerant of any order via readUnlockFromStorage.
+  const markStripeUnlocked = (sessionId: string, expiresAt: number) => {
     if (typeof window !== "undefined") {
       try {
         window.localStorage.setItem("paywall_unlocked", "true");
-        window.localStorage.setItem("unlock_source", source);
-        // Timestamp the unlock so we can age it out after 48h. Stored as a
-        // string because localStorage only holds strings; parsed back via
-        // Number() in readUnlockFromStorage above.
+        window.localStorage.setItem("unlock_source", "stripe");
+        window.localStorage.setItem("stripe_session_id", sessionId);
         window.localStorage.setItem(
-          "paywall_unlocked_at",
-          String(Date.now()),
+          "unlock_expires_at",
+          String(expiresAt),
         );
       } catch {
-        // localStorage can throw in private browsing — fall back to in-memory
-        // state only. The user keeps unlock for THIS tab but not after refresh.
+        // localStorage failure (private browsing etc.) — unlock survives
+        // for this tab via React state only.
       }
+    }
+    setUnlockExpiresAt(expiresAt);
+    setIsUnlocked(true);
+  };
+
+  // Mark unlocked via promo. Saves the code so /api/generate can verify
+  // it on every call (server enforces; client doesn't trust the flag).
+  const markPromoUnlocked = (code: string) => {
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem("paywall_unlocked", "true");
+        window.localStorage.setItem("unlock_source", "promo");
+        window.localStorage.setItem("promo_code", code);
+      } catch {}
     }
     setIsUnlocked(true);
   };
+
+  // Adapter for older call sites that pass just a "source" string. Stripe
+  // callers should use markStripeUnlocked directly to provide sessionId +
+  // expiresAt; the legacy markUnlocked("stripe") is kept here only for
+  // back-compat against code paths that don't yet have those values
+  // (currently just the unused Cash App Pay polling fallback).
+  const markUnlocked = (source: "stripe" | "promo") => {
+    if (source === "promo") {
+      // No code available in this back-compat path — caller should use
+      // markPromoUnlocked. Bail safely.
+      return;
+    }
+    // Stripe back-compat: just flip the flag. Real callers will follow up
+    // with markStripeUnlocked when they have the server's response in hand.
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem("paywall_unlocked", "true");
+        window.localStorage.setItem("unlock_source", "stripe");
+      } catch {}
+    }
+    setIsUnlocked(true);
+  };
+
+  // Clear the unlock entirely (used after /api/deliver burns the
+  // server-side metadata on a successful download). Forces the user
+  // back to the paywall on their next attempt.
+  const clearUnlock = () => {
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.removeItem("paywall_unlocked");
+        window.localStorage.removeItem("unlock_source");
+        window.localStorage.removeItem("stripe_session_id");
+        window.localStorage.removeItem("unlock_expires_at");
+        window.localStorage.removeItem("promo_code");
+      } catch {}
+    }
+    setUnlockExpiresAt(null);
+    setIsUnlocked(false);
+  };
+
+  // Note: the equivalent of getUnlockRequestFields() is defined at module
+  // scope as readUnlockRequestFields() so DownloadScreen (a separate
+  // component below) can call it too. All /api/generate and /api/deliver
+  // callers in this file use that module-scope helper.
 
   // On mount, check whether we're returning from Stripe Checkout. Stripe
   // redirects back to `${origin}/?paid=1&session_id=<cs_xxx>` — we verify
@@ -5475,12 +5839,31 @@ export default function App() {
             paid?: boolean;
             pending?: boolean;
             customerEmail?: string;
+            // New 2026-05-15: server returns the session ID it stamped
+            // metadata on, plus the 4-hour expiration. Both go into
+            // localStorage via markStripeUnlocked so the rest of the
+            // session can include sessionId on every /api/generate.
+            sessionId?: string;
+            unlockExpiresAt?: number;
           };
 
           if (data.customerEmail) lastEmail = data.customerEmail;
 
           if (data.paid) {
-            markUnlocked("stripe");
+            if (data.sessionId && data.unlockExpiresAt) {
+              markStripeUnlocked(data.sessionId, data.unlockExpiresAt);
+              // Show the welcome popup with countdown timer.
+              setShowWelcomePopup(true);
+            } else {
+              // Server didn't return the new fields (deploy lag or
+              // metadata write failed). Fall back to the legacy flag —
+              // user gets in, but /api/generate may 402 them if Stripe
+              // metadata isn't there. Logged for diagnostics.
+              console.warn(
+                "verify-checkout missing sessionId/unlockExpiresAt — using legacy unlock fallback",
+              );
+              markUnlocked("stripe");
+            }
             // Stash the email Stripe captured during Phase 1 checkout so the
             // CheckoutScreen can pre-fill it later (saves re-typing) and so
             // Phase 2 Stripe Checkout gets passed the same customer_email
@@ -5623,6 +6006,9 @@ export default function App() {
             lighting: stash.selections.lighting,
             background: stash.selections.background,
             skin: stash.selections.skin,
+            // Burn the entry unlock (Stripe metadata flip) when delivery
+            // succeeds. Promo users have no sessionId; server skips them.
+            ...readUnlockRequestFields(),
           }),
         });
         if (!deliverResp.ok) throw new Error(`HTTP ${deliverResp.status}`);
@@ -5630,6 +6016,12 @@ export default function App() {
           photoUrls: string[];
           shareGraphicUrls?: string[];
         };
+        // Burn the local unlock state now that the server has marked the
+        // Stripe session as consumed. Without this, the localStorage flag
+        // would still say "unlocked" until the 4h TTL expired — fine for
+        // security (server gate catches anyway, returns 402) but the UI
+        // would falsely show the user as still in the try-it window.
+        clearUnlock();
         // Restore ALL state DownloadScreen needs. The Stripe redirect is a
         // full page navigation, which wipes React in-memory state — so
         // lastSelections/lastPhotoUrls come back null on return and the
@@ -5718,8 +6110,11 @@ export default function App() {
   // Promo code success path. Marks the paywall unlocked with source="promo"
   // so the Phase 2 per-photo checkout can skip Stripe entirely (promo users
   // get free everything). Friends skip both fees.
-  const handlePromoUnlock = () => {
-    markUnlocked("promo");
+  const handlePromoUnlock = (code: string) => {
+    // Persist the validated promo code so /api/generate can re-verify it
+    // server-side on every call. The server is the actual gate; this
+    // storage just lets us survive page refreshes without re-prompting.
+    markPromoUnlocked(code);
     setScreen("upload");
     if (!hasSeenIntro) setShowIntroModal(true);
     else if (!hasSeenTips) setShowTipsModal(true);
@@ -5781,8 +6176,13 @@ export default function App() {
           variationIndex: index,
           hasWideAngle: lastHasWideAngle,
           skin: lastSelections.skin,
+          ...readUnlockRequestFields(),
         }),
       });
+      if (response.status === 402) {
+        clearUnlock();
+        throw new Error(PAYWALL_EXPIRED_MESSAGE);
+      }
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
@@ -5902,8 +6302,19 @@ export default function App() {
             variationIndex: index,
             hasWideAngle,
             skin: selections.skin,
+            // Paywall enforcement (2026-05-15): server requires either a
+            // valid Stripe session ID or the promo code on every call.
+            ...readUnlockRequestFields(),
           }),
         });
+        if (response.status === 402) {
+          // Server rejected the unlock — either the 4h window expired
+          // or the customer already downloaded (consumed). Clear local
+          // unlock state so the UI stops showing them as unlocked, and
+          // surface Kristi's standard friendly message.
+          clearUnlock();
+          throw new Error(PAYWALL_EXPIRED_MESSAGE);
+        }
         if (!response.ok) {
           const err = (await response.json().catch(() => ({}))) as { error?: string };
           throw new Error(err.error || `HTTP ${response.status}`);
@@ -5966,6 +6377,7 @@ export default function App() {
           cartCount={selectedImageIndices.length}
           onLogoClick={reset}
           currentStep={getStepFromScreen(screen)}
+          unlockExpiresAt={unlockExpiresAt}
         />
       )}
 
@@ -6218,6 +6630,17 @@ export default function App() {
 
       {/* Photographer's tips modal — shown once per session on Landing→Upload.
           Overlays the Upload screen until the user clicks "Got it." */}
+      {/* Welcome popup with the 4-hour countdown — fires the moment a
+          fresh $2.99 payment is confirmed by /api/verify-checkout. Higher
+          z-index than the intro/tips modals so if multiple are in flight
+          this one shows first (it carries the most important info: the
+          customer's clock has started). */}
+      {showWelcomePopup && unlockExpiresAt && (
+        <WelcomeUnlockedModal
+          expiresAt={unlockExpiresAt}
+          onDismiss={() => setShowWelcomePopup(false)}
+        />
+      )}
       {/* Intro modal renders ABOVE the tips modal in the DOM so if both
           are ever simultaneously truthy (shouldn't happen — handleDismissIntro
           chains them, but defensive), the intro one wins visually since both
