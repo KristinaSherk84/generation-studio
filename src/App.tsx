@@ -2018,6 +2018,18 @@ const LandingV2 = ({ onStart, onPromoUnlock, onShowGallery }: LandingV2Props) =>
           textAlign: "center",
         }}
       >
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            letterSpacing: 2.4,
+            textTransform: "uppercase",
+            color: BRAND.gold,
+            marginBottom: 14,
+          }}
+        >
+          The Verdict
+        </div>
         <h2
           style={{
             fontFamily: SERIF_STACK,
@@ -2025,38 +2037,42 @@ const LandingV2 = ({ onStart, onPromoUnlock, onShowGallery }: LandingV2Props) =>
               ? "clamp(24px, 6vw, 32px)"
               : "clamp(30px, 3.4vw, 46px)",
             fontWeight: 400,
-            lineHeight: 1.15,
+            lineHeight: 1.2,
             letterSpacing: -0.3,
             color: BRAND.charcoal,
             maxWidth: 900,
-            margin: "0 auto 12px",
+            margin: "0 auto 14px",
           }}
         >
-          Up to <span style={{ color: BRAND.gold, fontStyle: "italic" }}>10× cheaper.</span>
-          {" "}Made by a{" "}
-          <span style={{ color: BRAND.gold, fontStyle: "italic" }}>real photographer.</span>
+          Choose Us, the{" "}
+          <span style={{ color: BRAND.gold, fontStyle: "italic" }}>
+            Fastest, Greenest, Cheapest and Most Realistic
+          </span>{" "}
+          Headshot Generator.
         </h2>
         <p
           style={{
             fontSize: isMobile ? 14 : 16,
             color: BRAND.subText,
-            maxWidth: 620,
+            maxWidth: 560,
             margin: "0 auto 36px",
             lineHeight: 1.55,
           }}
         >
-          See how GenerAItion Headshots stacks up against the field. Pricing
-          is publicly listed entry-tier pricing as of {new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" })}.
+          Compared to the most expensive AI headshot tools on the market today.
+          Real numbers, no asterisks.
         </p>
 
         <div
           style={{
             maxWidth: 1100,
             margin: "0 auto",
-            // Horizontal scroll on narrow viewports keeps the table
-            // readable instead of stacking into less-scannable cards.
+            // Horizontal scroll on narrow viewports keeps the table readable
+            // instead of stacking into less-scannable cards.
             overflowX: "auto",
             WebkitOverflowScrolling: "touch",
+            border: `0.5px solid #EFEAE0`,
+            borderRadius: 10,
           }}
         >
           <table
@@ -2066,143 +2082,255 @@ const LandingV2 = ({ onStart, onPromoUnlock, onShowGallery }: LandingV2Props) =>
               borderCollapse: "collapse",
               fontFamily: SANS_STACK,
               textAlign: "left",
-              fontSize: isMobile ? 13 : 15,
+              fontSize: isMobile ? 13 : 14,
             }}
           >
             <thead>
               <tr>
                 <th style={{
-                  textAlign: "left",
                   padding: "16px 14px",
                   fontWeight: 500,
-                  fontSize: 13,
+                  fontSize: 12,
                   color: BRAND.subText,
-                  borderBottom: `1px solid #EFEAE0`,
+                  background: BRAND.cream,
+                  borderBottom: `0.5px solid #EFEAE0`,
+                  width: "1%",
+                  whiteSpace: "nowrap",
                 }}></th>
                 <th style={{
                   padding: "16px 14px",
-                  fontWeight: 500,
-                  fontSize: isMobile ? 13 : 15,
-                  color: BRAND.charcoal,
-                  borderBottom: `2px solid ${BRAND.forestGreen}`,
                   background: "#F4F8F4",
+                  borderBottom: `2px solid ${BRAND.forestGreen}`,
+                  borderLeft: `2px solid ${BRAND.forestGreen}`,
+                  borderRight: `2px solid ${BRAND.forestGreen}`,
+                  borderTop: `2px solid ${BRAND.forestGreen}`,
+                  textAlign: "left",
                 }}>
-                  <div style={{ fontWeight: 600 }}>GenerAItion</div>
-                  <div style={{ fontSize: 11, color: BRAND.forestGreen, fontWeight: 600, letterSpacing: 0.5, textTransform: "uppercase", marginTop: 2 }}>
+                  <div style={{
+                    fontSize: 10,
+                    fontWeight: 600,
+                    letterSpacing: 1.4,
+                    textTransform: "uppercase",
+                    color: BRAND.forestGreen,
+                  }}>
                     Our tool
                   </div>
+                  <div style={{
+                    fontFamily: SERIF_STACK,
+                    fontSize: 17,
+                    fontWeight: 500,
+                    color: BRAND.forestGreen,
+                    marginTop: 4,
+                  }}>
+                    GenerAItion
+                    <span style={{
+                      display: "inline-block",
+                      fontSize: 9,
+                      fontWeight: 700,
+                      letterSpacing: 1.2,
+                      textTransform: "uppercase",
+                      color: BRAND.white,
+                      background: BRAND.forestGreen,
+                      padding: "2px 6px",
+                      borderRadius: 3,
+                      marginLeft: 6,
+                      verticalAlign: "middle",
+                      fontFamily: SANS_STACK,
+                    }}>
+                      Best
+                    </span>
+                  </div>
                 </th>
-                <th style={{ padding: "16px 14px", fontWeight: 500, fontSize: isMobile ? 13 : 15, color: BRAND.charcoal, borderBottom: `1px solid #EFEAE0` }}>
-                  HeadshotPro
+                <th style={{
+                  padding: "16px 14px",
+                  background: BRAND.cream,
+                  borderBottom: `0.5px solid #EFEAE0`,
+                  textAlign: "left",
+                }}>
+                  <div style={{
+                    fontSize: 10,
+                    fontWeight: 600,
+                    letterSpacing: 1.4,
+                    textTransform: "uppercase",
+                    color: BRAND.subText,
+                  }}>
+                    Competitor
+                  </div>
+                  <div style={{
+                    fontFamily: SERIF_STACK,
+                    fontSize: 17,
+                    fontWeight: 500,
+                    color: BRAND.charcoal,
+                    marginTop: 4,
+                  }}>
+                    HeadshotPro
+                  </div>
                 </th>
-                <th style={{ padding: "16px 14px", fontWeight: 500, fontSize: isMobile ? 13 : 15, color: BRAND.charcoal, borderBottom: `1px solid #EFEAE0` }}>
-                  Aragon
-                </th>
-                <th style={{ padding: "16px 14px", fontWeight: 500, fontSize: isMobile ? 13 : 15, color: BRAND.charcoal, borderBottom: `1px solid #EFEAE0` }}>
-                  Headshots.so
-                </th>
-                <th style={{ padding: "16px 14px", fontWeight: 500, fontSize: isMobile ? 13 : 15, color: BRAND.charcoal, borderBottom: `1px solid #EFEAE0` }}>
-                  InstaHeadshots
+                <th style={{
+                  padding: "16px 14px",
+                  background: BRAND.cream,
+                  borderBottom: `0.5px solid #EFEAE0`,
+                  textAlign: "left",
+                }}>
+                  <div style={{
+                    fontSize: 10,
+                    fontWeight: 600,
+                    letterSpacing: 1.4,
+                    textTransform: "uppercase",
+                    color: BRAND.subText,
+                  }}>
+                    Competitor
+                  </div>
+                  <div style={{
+                    fontFamily: SERIF_STACK,
+                    fontSize: 17,
+                    fontWeight: 500,
+                    color: BRAND.charcoal,
+                    marginTop: 4,
+                  }}>
+                    InstaHeadshots
+                  </div>
                 </th>
               </tr>
             </thead>
             <tbody>
-              {[
+              {([
                 {
                   label: "Starting price",
-                  us: "$2.99",
-                  values: ["$29", "Not public", "$29", "$44"],
-                  usWins: true,
-                },
-                {
-                  label: "Pay per keeper",
-                  us: "$9.99 each",
-                  values: ["Bundle only", "Bundle only", "Bundle only", "Bundle only"],
+                  us: "$12.98",
+                  usSub: "Session + 1 keeper. Pay for what you love.",
+                  values: ["$29", "$44+"],
+                  valuesSub: ["40-pack bundle — keep or not.", "100-pack bundle — keep or not."],
                   usWins: true,
                 },
                 {
                   label: "Processing time",
                   us: "Under 5 min",
-                  values: ["30 min", "120 min", "15 min", "15 min"],
+                  usSub: "",
+                  values: ["30 min", "15 min"],
+                  valuesSub: ["", ""],
                   usWins: true,
                 },
                 {
-                  label: "AI generations per session",
-                  us: "6 (greener)",
-                  values: ["40+", "40", "100+", "100"],
+                  label: "Environmental impact",
+                  us: "6 generations",
+                  usSub: "Up to 16× less AI processing.",
+                  values: ["40+ generations", "100 generations"],
+                  valuesSub: ["~7× more energy per session.", "~16× more energy per session."],
                   usWins: true,
                 },
                 {
-                  label: "2K resolution included",
-                  us: "Yes — round one",
-                  values: ["Tier upsell", "Tier upsell", "Tier upsell", "Tier upsell"],
+                  label: "2K resolution",
+                  us: "Included",
+                  usSub: "",
+                  values: ["Premium tier", "Premium tier"],
+                  valuesSub: ["Paid upgrade.", "Paid upgrade."],
                   usWins: true,
                 },
                 {
                   label: "Made by a real photographer",
                   us: "Yes — 20 years",
-                  values: ["No", "No", "No", "No"],
+                  usSub: "Lighting + posing baked into the prompts.",
+                  values: ["No", "No"],
+                  valuesSub: ["Built by coders.", "Built by coders."],
                   usWins: true,
                 },
                 {
                   label: "Money-back guarantee",
                   us: "Yes",
-                  values: ["Yes", "Limited", "Yes", "Yes"],
+                  usSub: "",
+                  values: ["Yes", "Yes"],
+                  valuesSub: ["", ""],
                   usWins: false,
                 },
-              ].map((row) => (
-                <tr key={row.label}>
-                  <td style={{
-                    padding: "14px",
-                    color: BRAND.subText,
-                    fontWeight: 500,
-                    borderBottom: `1px solid #EFEAE0`,
-                    whiteSpace: "nowrap",
-                  }}>
-                    {row.label}
-                  </td>
-                  <td style={{
-                    padding: "14px",
-                    color: BRAND.forestGreen,
-                    fontWeight: 600,
-                    borderBottom: `1px solid #EFEAE0`,
-                    background: "#F4F8F4",
-                  }}>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                      {row.usWins && (
-                        <span
-                          aria-hidden="true"
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            width: 16,
-                            height: 16,
-                            borderRadius: "50%",
-                            background: BRAND.forestGreen,
-                            color: BRAND.white,
-                            fontSize: 10,
-                            fontWeight: 700,
-                            lineHeight: 1,
-                          }}
-                        >
-                          ✓
-                        </span>
-                      )}
-                      {row.us}
-                    </span>
-                  </td>
-                  {row.values.map((v, i) => (
-                    <td key={i} style={{
+              ] as const).map((row, rowIdx, rows) => {
+                const isLast = rowIdx === rows.length - 1;
+                const cellBorder = isLast ? "none" : `0.5px solid #EFEAE0`;
+                return (
+                  <tr key={row.label}>
+                    <td style={{
                       padding: "14px",
-                      color: BRAND.charcoal,
-                      borderBottom: `1px solid #EFEAE0`,
+                      color: BRAND.subText,
+                      fontWeight: 500,
+                      borderBottom: cellBorder,
+                      whiteSpace: "nowrap",
+                      verticalAlign: "top",
                     }}>
-                      {v}
+                      {row.label}
                     </td>
-                  ))}
-                </tr>
-              ))}
+                    <td style={{
+                      padding: "14px",
+                      borderBottom: cellBorder,
+                      borderLeft: `2px solid ${BRAND.forestGreen}`,
+                      borderRight: `2px solid ${BRAND.forestGreen}`,
+                      background: "#F4F8F4",
+                      verticalAlign: "top",
+                    }}>
+                      <span style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                        color: BRAND.forestGreen,
+                        fontWeight: 600,
+                      }}>
+                        {row.usWins && (
+                          <span
+                            aria-hidden="true"
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              width: 14,
+                              height: 14,
+                              borderRadius: "50%",
+                              background: BRAND.forestGreen,
+                              color: BRAND.white,
+                              fontSize: 9,
+                              fontWeight: 700,
+                              lineHeight: 1,
+                            }}
+                          >
+                            ✓
+                          </span>
+                        )}
+                        {row.us}
+                      </span>
+                      {row.usSub && (
+                        <div style={{
+                          fontSize: 11,
+                          color: BRAND.forestGreen,
+                          opacity: 0.8,
+                          marginTop: 4,
+                          fontWeight: 500,
+                          lineHeight: 1.4,
+                        }}>
+                          {row.usSub}
+                        </div>
+                      )}
+                    </td>
+                    {row.values.map((v, i) => (
+                      <td key={i} style={{
+                        padding: "14px",
+                        color: BRAND.charcoal,
+                        borderBottom: cellBorder,
+                        verticalAlign: "top",
+                      }}>
+                        <div>{v}</div>
+                        {row.valuesSub[i] && (
+                          <div style={{
+                            fontSize: 11,
+                            color: "#8a8782",
+                            marginTop: 4,
+                            lineHeight: 1.4,
+                          }}>
+                            {row.valuesSub[i]}
+                          </div>
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
