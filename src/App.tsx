@@ -1315,16 +1315,19 @@ const HeroFilmStrip = ({ onShowGallery }: { onShowGallery: () => void }) => (
           <img
             src={pair.src}
             alt={pair.alt}
-            // First 20 cards eager. Strip shows up to ~5 simultaneously
-            // and auto-scrolls fast enough that lazy-loaded ones aren't
-            // ready by the time they enter view; widening the eager batch
-            // closes that gap. Total eager bytes ≈ 1.3MB on the wider
-            // viewport — fast over Vercel's CDN, slower on 3G but the
-            // strip is below the fold so it doesn't block initial paint.
-            loading={i < 20 ? "eager" : "lazy"}
-            // Also hint high fetch priority on the first 6 (visible above
-            // the fold on widest viewports) so browsers don't queue them
-            // behind less-important assets.
+            // ALL strip cards eager — the auto-scrolling strip moves past
+            // any lazy-loaded ones before they finish fetching, causing
+            // blank-card flashes. There are 32 unique URLs (the 64-card
+            // map duplicates each for the seamless loop, so browsers
+            // serve the duplicates from cache). Total payload ~3MB, loads
+            // in parallel over HTTP/2; below the fold so doesn't block
+            // initial paint. (Earlier "first 20 eager" wasn't enough —
+            // by the time the strip auto-scrolled past those, the lazy
+            // ones still hadn't loaded.)
+            loading="eager"
+            // High fetch priority on the first 6 (visible on widest
+            // viewports) so browsers grab those before lower-priority
+            // page assets.
             fetchPriority={i < 6 ? "high" : "auto"}
             decoding="async"
             style={{
