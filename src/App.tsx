@@ -24,21 +24,6 @@ export type UploadedPhoto = {
   // "broken app." The upload itself + the Gemini generate step both support
   // HEIC — only the client-side preview is blocked.
   isHeic: boolean;
-  // Face-size validation state, populated after the Blob upload completes
-  // by a per-photo call to /api/validate-photos. The endpoint runs Gemini
-  // vision to detect the largest face and measures its width relative to
-  // the image. Photos with no detectable face OR a face width below the
-  // minimum threshold get faceValidation === "failed" and render greyed-
-  // out with an overlay reading "Face too small, insufficient details" —
-  // they don't count toward the 5-photo minimum until the user removes
-  // them and uploads better ones.
-  //   "pending"  — validation request in flight
-  //   "passed"   — face detected and large enough
-  //   "failed"   — no face OR face too small; reason populated
-  //   "skipped"  — validation endpoint errored or wasn't reached; do not
-  //                block the user on our own system failure
-  faceValidation: "pending" | "passed" | "failed" | "skipped";
-  faceValidationReason: string | null;
 };
 
 // Detects HEIC / HEIF files. Some browsers don't set file.type on HEIC
@@ -2599,10 +2584,6 @@ const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) 
       errorMessage: null,
       isWideAngle: null, // filled in by the EXIF read below once it resolves
       isHeic: detectHeic(file),
-      // Face validation fires after Blob upload completes; until then
-      // the photo sits in "pending" so the UI shows it as still working.
-      faceValidation: "pending",
-      faceValidationReason: null,
     }));
     setPhotos((prev) => [...prev, ...placeholders]);
 
@@ -2624,56 +2605,6 @@ const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) 
                 : p,
             ),
           );
-          // Kick off the face-size validation as soon as Blob has the URL.
-          // We don't await it — the upload completion flips status="done"
-          // immediately and the validation result lands a few seconds
-          // later, flipping faceValidation to "passed" or "failed" and
-          // greying out the thumbnail in place if it failed.
-          fetch("/api/validate-photos", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ photoUrls: [result.url] }),
-          })
-            .then((resp) => {
-              if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-              return resp.json() as Promise<{
-                results: Array<{
-                  url: string;
-                  ok: boolean;
-                  reason?: string;
-                }>;
-              }>;
-            })
-            .then((data) => {
-              const r = data.results?.[0];
-              setPhotos((prev) =>
-                prev.map((p) =>
-                  p.id === placeholder.id
-                    ? {
-                        ...p,
-                        faceValidation: r?.ok ? "passed" : "failed",
-                        faceValidationReason: r?.ok
-                          ? null
-                          : r?.reason ??
-                            "Face too small, insufficient details",
-                      }
-                    : p,
-                ),
-              );
-            })
-            .catch(() => {
-              // Soft-skip on validation system error — don't block the user
-              // on our own pipeline flakiness. The photo will still go to
-              // /api/generate, where the server-side validation (if any
-              // future check is added) is the authoritative gate.
-              setPhotos((prev) =>
-                prev.map((p) =>
-                  p.id === placeholder.id
-                    ? { ...p, faceValidation: "skipped" }
-                    : p,
-                ),
-              );
-            });
         })
         .catch((err: unknown) => {
           const message =
@@ -2713,42 +2644,20 @@ const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) 
   };
 
   const uploadingCount = photos.filter((p) => p.status === "uploading").length;
-  // Face validation runs after the Blob upload completes — while it's
-  // pending we treat the photo as "not yet usable" so the Continue button
-  // waits for the verdict. Typically resolves in 2-3 seconds.
-  const validatingCount = photos.filter(
-    (p) => p.status === "done" && p.faceValidation === "pending",
-  ).length;
-  // Only photos that uploaded successfully AND passed (or skipped, on
-  // system error) face validation count toward the 5-minimum.
-  const usableCount = photos.filter(
-    (p) =>
-      p.status === "done" &&
-      p.faceValidation !== "failed" &&
-      p.faceValidation !== "pending",
-  ).length;
-  const failedFaceCount = photos.filter(
-    (p) => p.faceValidation === "failed",
-  ).length;
+  // Any photo that uploaded successfully counts toward the 5-minimum.
+  // Face-size validation was removed 2026-05-18 per Kristi — customer can
+  // upload shots of any size; we trust them to pick decent reference photos.
+  const usableCount = photos.filter((p) => p.status === "done").length;
   const hasError = photos.some((p) => p.status === "error");
   const enoughPhotos = usableCount >= 5;
-  const canContinue =
-    enoughPhotos && uploadingCount === 0 && validatingCount === 0;
+  const canContinue = enoughPhotos && uploadingCount === 0;
 
   let ctaLabel: string;
   if (uploadingCount > 0) {
     ctaLabel = `Uploading ${uploadingCount}…`;
-  } else if (validatingCount > 0) {
-    ctaLabel = `Checking face size on ${validatingCount}…`;
   } else if (!enoughPhotos) {
     const needed = 5 - usableCount;
-    if (failedFaceCount > 0) {
-      // Some photos are greyed out — be explicit so the user knows the
-      // greyed ones don't count and they need to upload more.
-      ctaLabel = `Upload ${needed} more (greyed-out photos don't count)`;
-    } else {
-      ctaLabel = `Upload ${needed} more to continue`;
-    }
+    ctaLabel = `Upload ${needed} more to continue`;
   } else {
     ctaLabel = "Continue to style selection";
   }
@@ -2967,51 +2876,6 @@ const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) 
                     }}
                   >
                     Preview unavailable (HEIC)
-                  </div>
-                </div>
-              )}
-
-              {/* Face-too-small overlay (2026-05-15 per Kristi). Fires when
-                  /api/validate-photos returns ok:false for this photo, meaning
-                  no face was detected OR the largest face was below the 15%
-                  width threshold. The image stays visible but is heavily
-                  desaturated by the dark overlay so it reads as "rejected,
-                  remove me." The photo also stops counting toward the
-                  5-minimum (see usableCount filter above). User dismisses
-                  by clicking the X button — same as any other photo. */}
-              {p.faceValidation === "failed" && p.status === "done" && (
-                <div
-                  style={{
-                    position: "absolute",
-                    inset: 0,
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: C.white,
-                    fontSize: 11,
-                    fontWeight: 500,
-                    textAlign: "center",
-                    padding: 8,
-                    background: "rgba(44, 44, 42, 0.85)",
-                    lineHeight: 1.35,
-                  }}
-                  title={
-                    p.faceValidationReason ??
-                    "Face too small, insufficient details"
-                  }
-                >
-                  <X size={18} style={{ marginBottom: 4 }} />
-                  Face too small
-                  <div
-                    style={{
-                      fontSize: 10,
-                      marginTop: 2,
-                      opacity: 0.85,
-                      fontWeight: 400,
-                    }}
-                  >
-                    Insufficient details
                   </div>
                 </div>
               )}
@@ -7375,16 +7239,8 @@ export default function App() {
     // Only send the photos that successfully uploaded to Blob. Silently drop
     // any that are still pending or errored — the user shouldn't be blocked
     // on a stray failed upload if they have 3+ good ones.
-    // Only forward photos that uploaded successfully AND passed the
-    // upload-time face-size validation. Failed-face photos are visually
-    // greyed out in the UploadScreen and never count toward the minimum,
-    // but we filter again here defensively so a race-y state can't slip
-    // a too-small-face photo to /api/generate.
     const usablePhotos = photos.filter(
-      (p) =>
-        p.status === "done" &&
-        p.blobUrl &&
-        p.faceValidation !== "failed",
+      (p) => p.status === "done" && p.blobUrl,
     );
     const photoUrls = usablePhotos.map((p) => p.blobUrl as string);
     // Wide-angle flag: true if ANY usable reference photo was detected as
