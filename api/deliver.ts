@@ -31,13 +31,21 @@
 
 import { put } from "@vercel/blob";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { GoogleGenAI, type Part } from "@google/genai";
 import { buildShareGraphic } from "./lib/compositeBeforeAfter.js";
+import {
+  buildRetouchPrompt,
+  RETOUCH_MODEL,
+  type RetouchTier,
+} from "./lib/retouchPrompts.js";
 
-// Bumped from 10s to 60s on 2026-05-04 to accommodate the auto-share-graphic
-// pipeline. Each composite is ~1-2s on Vercel; for 6 photos worst case we
-// need headroom. Vercel Pro supports up to 300s but 60s is plenty since the
-// composites run in parallel.
-export const maxDuration = 60;
+// Bumped from 60s → 300s on 2026-05-15 (Path B launch). The new retouch
+// pass runs Gemini Pro Image Preview on every non-Realistic-tier photo
+// before the share-graphic step. Pro takes ~10-15s per image. For 6
+// photos worst case (all Glam) we need ~90s headroom for the parallel
+// retouches plus ~10s for the composites plus a safety buffer.
+// Vercel Pro tier max is 300s — we take all of it for safety.
+export const maxDuration = 300;
 
 // -------------------- Types --------------------
 
@@ -71,6 +79,12 @@ type DeliverRequest = {
   // users won't have one, and skipping the metadata write for them is
   // intentional (Tiffany etc. keep their unlock permanently).
   stripeSessionId?: string;
+  // Per-photo retouch tier (Path B 2026-05-15). Same index as photoUrls.
+  // "realistic" = no retouch, ship the input photo as-is. "polished" /
+  // "glam" = Pro retouching pass via Gemini 3 Pro Image Preview using
+  // the prompts in api/lib/retouchPrompts.ts. Optional for back-compat —
+  // a missing or empty array falls back to "realistic" for every photo.
+  retouchTiers?: ("realistic" | "polished" | "glam")[];
 };
 
 export type DeliveryManifest = {
@@ -535,6 +549,131 @@ async function generateShareGraphics(args: {
   return results;
 }
 
+// -------------------- Per-photo retouch (Path B) --------------------
+//
+// For each photo whose retouchTier is "polished" or "glam", fetch the
+// original from Blob, run Gemini 3 Pro Image Preview with the matching
+// retouching prompt, and upload the retouched bytes back to Blob. The
+// returned array is the same length and order as the input photoUrls,
+// with each non-Realistic entry replaced by the URL of its retouched
+// version. Realistic entries are passed through unchanged.
+//
+// Failure mode: any single photo's retouch failure (Gemini Pro 429, 5xx,
+// no image returned, timeout) falls back to the original photo URL for
+// that index. The customer still gets their initial-generation photo —
+// the email isn't blocked on Pro retouch failures. Logged loudly so the
+// pattern of failures is visible without breaking customer delivery.
+//
+// Parallelism: all retouches fire concurrently via Promise.allSettled.
+// Pro Image Preview's Tier 2 rate limits allow this comfortably for up
+// to 6 simultaneous photos. Total wall-clock is dominated by the slowest
+// of the parallel calls (~15-20s typical, up to 30s long tail).
+async function applyRetouchPass(
+  photoUrls: string[],
+  tiers: RetouchTier[],
+  deliveryId: string,
+): Promise<string[]> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    console.warn(
+      "[deliver] retouch skipped — GEMINI_API_KEY missing; shipping originals",
+    );
+    return photoUrls;
+  }
+  const ai = new GoogleGenAI({ apiKey });
+
+  const tasks = photoUrls.map(async (url, i): Promise<string> => {
+    const tier = tiers[i] ?? "realistic";
+    if (tier === "realistic") {
+      return url; // pass through unchanged
+    }
+    try {
+      // Fetch original bytes from Blob
+      const fetchResp = await fetch(url);
+      if (!fetchResp.ok) {
+        console.warn(
+          JSON.stringify({
+            type: "retouch_fetch_failed",
+            deliveryId,
+            photoIndex: i,
+            status: fetchResp.status,
+          }),
+        );
+        return url;
+      }
+      const buf = Buffer.from(await fetchResp.arrayBuffer());
+      const mimeType = fetchResp.headers.get("content-type") ?? "image/jpeg";
+
+      // Build the prompt. Age band is unknown server-side (we don't
+      // collect age from the customer) — default to "mature" for the
+      // more conservative under-eye treatment. Glam ignores age band.
+      const prompt = buildRetouchPrompt(tier, "mature");
+
+      const parts: Part[] = [
+        { text: prompt },
+        {
+          inlineData: { mimeType, data: buf.toString("base64") },
+        },
+      ];
+      const resp = await ai.models.generateContent({
+        model: RETOUCH_MODEL,
+        contents: [{ role: "user", parts }],
+      });
+
+      // Find the first inline image in the response.
+      const candidates = resp.candidates ?? [];
+      for (const c of candidates) {
+        const cParts = c.content?.parts ?? [];
+        for (const p of cParts) {
+          const inline = (
+            p as { inlineData?: { mimeType?: string; data?: string } }
+          ).inlineData;
+          if (inline?.data && inline.mimeType) {
+            // Upload retouched bytes back to Blob with a distinct path
+            // so the original and retouched versions don't collide.
+            const ext = inline.mimeType === "image/png" ? "png" : "jpg";
+            const retouchedKey = `deliveries/${deliveryId}/retouched-${i}-${tier}.${ext}`;
+            const blob = await put(
+              retouchedKey,
+              Buffer.from(inline.data, "base64"),
+              {
+                access: "public",
+                contentType: inline.mimeType,
+                allowOverwrite: true,
+              },
+            );
+            return blob.url;
+          }
+        }
+      }
+      console.warn(
+        JSON.stringify({
+          type: "retouch_no_image_returned",
+          deliveryId,
+          photoIndex: i,
+          tier,
+        }),
+      );
+      return url;
+    } catch (err) {
+      console.warn(
+        JSON.stringify({
+          type: "retouch_threw",
+          deliveryId,
+          photoIndex: i,
+          tier,
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      );
+      return url;
+    }
+  });
+
+  // Promise.all is fine — each task is wrapped in its own try/catch and
+  // never throws, so we can't lose the partial results.
+  return Promise.all(tasks);
+}
+
 // -------------------- Handler --------------------
 
 export default async function handler(
@@ -601,6 +740,27 @@ export default async function handler(
   const timestamp = new Date().toISOString();
 
   try {
+    // ---- Per-photo retouch pass (Path B, 2026-05-15) ----
+    //
+    // For each photo whose retouchTier is "polished" or "glam", run
+    // Gemini 3 Pro Image Preview with the corresponding retouching
+    // prompt and replace the photo's URL with the retouched version.
+    // Realistic-tier photos pass through unchanged.
+    //
+    // If retouchTiers is missing or empty (back-compat with old client
+    // versions still deployed during the rollout), every photo is
+    // treated as Realistic — no retouch, ship as-is.
+    const incomingTiers: RetouchTier[] =
+      Array.isArray(body.retouchTiers) &&
+      body.retouchTiers.length === body.photoUrls.length
+        ? body.retouchTiers
+        : body.photoUrls.map(() => "realistic" as RetouchTier);
+    const finalPhotoUrls = await applyRetouchPass(
+      body.photoUrls,
+      incomingTiers,
+      deliveryId,
+    );
+
     // ---- Write the manifest JSON. ----
     // Tiny payload (a few KB at most) so we happily do this server-side — no
     // 413 risk here; the bulky image bytes are already in Blob by the time
@@ -626,7 +786,10 @@ export default async function handler(
     // those photos.
     const shareGraphicUrls = await generateShareGraphics({
       deliveryId,
-      deliveredPhotoUrls: body.photoUrls,
+      // Use the RETOUCHED URLs for the share graphic AFTERs so the
+      // customer (and anyone they share the graphic with) sees the
+      // editorial version, not the un-retouched initial generation.
+      deliveredPhotoUrls: finalPhotoUrls,
       referencePhotoUrls: body.referencePhotoUrls,
     });
 
@@ -640,7 +803,11 @@ export default async function handler(
       background: body.background,
       skin: body.skin,
       referencePhotoUrls: body.referencePhotoUrls,
-      deliveredHeadshotUrls: body.photoUrls,
+      // The manifest stores the FINAL (retouched, where applicable) URLs
+      // — that's what the customer downloads, what the share graphics
+      // reference, and what we'd serve again if Kristi later replays a
+      // delivery for support reasons.
+      deliveredHeadshotUrls: finalPhotoUrls,
       shareGraphicUrls,
     };
     const manifestKey = `deliveries/${deliveryId}/manifest.json`;
@@ -734,7 +901,10 @@ export default async function handler(
 
     return res.status(200).json({
       deliveryId,
-      photoUrls: body.photoUrls,
+      // Return the FINAL (retouched) URLs to the client. The download
+      // screen renders these directly — customer downloads the
+      // retouched version, not the un-retouched initial generation.
+      photoUrls: finalPhotoUrls,
       shareGraphicUrls,
     });
   } catch (error) {
