@@ -96,7 +96,9 @@ function readUnlockRequestFields(): {
 // User-facing error message for the 402 Payment Required response from
 // /api/generate. Per Kristi 2026-05-15 — this is the exact wording.
 const PAYWALL_EXPIRED_MESSAGE =
-  "API Error: Your 4 hours to try the app has expired.";
+  "API Error: Your 2 hours to try the app has expired.";
+// Note: above message also fires if the unlock was consumed by /api/deliver
+// (the burn-on-download path). Same UX outcome — user re-pays $2.99.
 
 // -------------------- Flow-step framework --------------------
 // The user-facing journey is communicated as 5 numbered steps. The intro
@@ -329,12 +331,12 @@ const GenerationStepsList = ({ currentStep }: GenerationStepsListProps) => (
   </div>
 );
 
-// -------------------- Welcome popup with 4-hour countdown --------------------
+// -------------------- Welcome popup with 2-hour countdown --------------------
 //
 // Fires the moment /api/verify-checkout confirms the $2.99 entry payment.
-// Tells the customer the rules of the road: they have 4 hours, refund
+// Tells the customer the rules of the road: they have 2 hours, refund
 // available, email Kristi for support. Includes a live ticking countdown
-// so they SEE the 4 hours start visibly, not just as words on a screen.
+// so they SEE the 2 hours start visibly, not just as words on a screen.
 //
 // The expiresAt prop is the epoch-ms timestamp the server stamped onto
 // the Stripe Checkout session metadata. The popup recomputes "remaining"
@@ -371,7 +373,7 @@ const WelcomeUnlockedModal = ({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Payment confirmed — your 4-hour session has started"
+      aria-label="Payment confirmed — your 2-hour session has started"
       style={{
         position: "fixed",
         inset: 0,
@@ -418,7 +420,7 @@ const WelcomeUnlockedModal = ({
             lineHeight: 1.2,
           }}
         >
-          You have 4 hours to try it out.
+          You have 2 hours to try it out.
         </h2>
         <p
           style={{
@@ -437,7 +439,7 @@ const WelcomeUnlockedModal = ({
           </a>
         </p>
 
-        {/* Live countdown — updates every second so the 4-hour clock is
+        {/* Live countdown — updates every second so the 2-hour clock is
             visible and unambiguous. Kept big and centered so it reads as
             the centerpiece of the popup. */}
         <div
@@ -495,13 +497,13 @@ const WelcomeUnlockedModal = ({
   );
 };
 
-// -------------------- 30-minute "winding down" warning modal --------------
+// -------------------- 15-minute "winding down" warning modal --------------
 //
-// Fires exactly once per session when the 4-hour unlock crosses below
-// 30 minutes remaining. Kristi 2026-05-15: chose this over a persistent
+// Fires exactly once per session when the 2-hour unlock crosses below
+// 15 minutes remaining. Kristi 2026-05-15: chose this over a persistent
 // header countdown chip because the chip ate too much screen real estate
 // for a value that's irrelevant most of the time. One sharp prompt at
-// the 30-minute mark is enough to let the user decide whether to wrap
+// the 15-minute mark is enough to let the user decide whether to wrap
 // up or pay another $2.99 for a fresh try.
 
 type SessionTimeWarningModalProps = {
@@ -528,7 +530,7 @@ const SessionTimeWarningModal = ({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="30 minutes left in your try-it session"
+      aria-label="15 minutes left in your try-it session"
       style={{
         position: "fixed",
         inset: 0,
@@ -572,7 +574,7 @@ const SessionTimeWarningModal = ({
             lineHeight: 1.3,
           }}
         >
-          About 30 minutes left in your session.
+          About 15 minutes left in your session.
         </h2>
         <p
           style={{
@@ -582,7 +584,7 @@ const SessionTimeWarningModal = ({
             lineHeight: 1.6,
           }}
         >
-          Your 4-hour try-it window ends in{" "}
+          Your 2-hour try-it window ends in{" "}
           <span
             style={{
               fontWeight: 500,
@@ -815,10 +817,10 @@ const Navbar = ({
     </div>
     {/* Step indicator sits in the middle when we're inside the flow;
         the "Selected (N)" counter is preserved on the right so users
-        still see their cart state on the grid screen. The 4-hour
+        still see their cart state on the grid screen. The 2-hour
         countdown chip used to live here too but was removed 2026-05-15
         — Kristi felt the persistent timer ate too much screen real
-        estate. A single one-shot 30-minute warning modal (see
+        estate. A single one-shot 15-minute warning modal (see
         SessionTimeWarningModal) handles the same notification need. */}
     {currentStep && <StepIndicatorDots currentStep={currentStep} />}
     <div style={{ fontSize: 14, color: C.dark, fontWeight: 400 }}>
@@ -2401,7 +2403,7 @@ const LandingV2 = ({ onStart, onPromoUnlock, onShowGallery }: LandingV2Props) =>
             margin: "28px auto 0",
           }}
         >
-          $2.99 to start your session. $9.99 per keeper. No bundles, no surprise
+          $2.99 to start your session. $11.99 per keeper. No bundles, no surprise
           fees, no charges for headshots that don't look like you.
         </p>
         <div style={{ marginTop: 36 }}>
@@ -4608,7 +4610,7 @@ const CheckoutScreen = ({
 
   // --- Phase 2 pricing math (simplified 2026-05-14) ---
   // Pricing model: $2.99 to try (entry fee — pays for app access), then a
-  // flat $9.99 per photo. No credit applied on first photo. History: the
+  // flat $11.99 per photo. No credit applied on first photo. History: the
   // original model gave a $2.99 credit on first photo, but the credit_used
   // tracking lived in sessionStorage, which resets per tab — so customers
   // who came back in a new session could re-claim the credit indefinitely.
@@ -4628,7 +4630,7 @@ const CheckoutScreen = ({
       : null;
   const isPromoUnlock = unlockSource === "promo";
 
-  const PRICE_PER_PHOTO = 9.99;
+  const PRICE_PER_PHOTO = 11.99;
   const subtotal = PRICE_PER_PHOTO * count;
   const totalOwed = subtotal;
   const fmt = (n: number) => `$${n.toFixed(2)}`;
@@ -4833,7 +4835,7 @@ const CheckoutScreen = ({
             }}
           >
             <span>
-              {count} high-rez headshot{count !== 1 ? "s" : ""} × $9.99
+              {count} high-rez headshot{count !== 1 ? "s" : ""} × $11.99
             </span>
             <span>{fmt(subtotal)}</span>
           </div>
@@ -6173,10 +6175,10 @@ export default function App() {
   // Welcome-after-payment popup. Fires when /api/verify-checkout returns
   // paid:true with a fresh sessionId+unlockExpiresAt — i.e., the user
   // just finished the $2.99 Stripe Checkout and we want to confirm the
-  // unlock + start the 4-hour countdown visibly.
+  // unlock + start the 2-hour countdown visibly.
   const [showWelcomePopup, setShowWelcomePopup] = useState(false);
 
-  // 30-minute warning state. The triggering useEffect lives below the
+  // 15-minute warning state. The triggering useEffect lives below the
   // unlockExpiresAt declaration (line ordering matters in TS strict
   // mode — can't reference a `let` before its declaration even from
   // a hook callback). Search for "thirty-min warning" to find the
@@ -6193,7 +6195,7 @@ export default function App() {
   //       holds the cs_xxx session ID + the server-provided expires_at.
   //       /api/generate verifies the session against Stripe metadata on
   //       every call. Unlock dies when:
-  //         - 4 hours pass (server-stamped expires_at), OR
+  //         - 2 hours pass (server-stamped expires_at), OR
   //         - The user successfully downloads a photo (/api/deliver flips
   //           metadata.unlock_consumed to "true" on the Stripe session).
   //   (b) Promo path: user entered the friends-and-family code on landing.
@@ -6276,12 +6278,16 @@ export default function App() {
   );
 
   // thirty-min warning: poll every 15s for the first time remaining
-  // crosses the 30-minute threshold, then fire the modal once and
+  // crosses the 15-minute threshold, then fire the modal once and
   // stop polling. The hasShown flag prevents the modal from re-firing
   // if the user dismisses and the timer is still under threshold.
   useEffect(() => {
     if (!unlockExpiresAt || hasShownThirtyMinWarning) return;
-    const WARNING_THRESHOLD_MS = 30 * 60 * 1000;
+    // 15 min remaining (down from 30 on 2026-05-15 when the total unlock
+    // window dropped from 4h to 2h — 30 min on a 2h session fires too
+    // early, halfway through their time). 15 min on a 2h window leaves
+    // 12.5% of the session as the "wrap up" zone.
+    const WARNING_THRESHOLD_MS = 15 * 60 * 1000;
     const id = setInterval(() => {
       const remaining = unlockExpiresAt - Date.now();
       if (remaining <= WARNING_THRESHOLD_MS && remaining > 0) {
@@ -6425,7 +6431,7 @@ export default function App() {
             pending?: boolean;
             customerEmail?: string;
             // New 2026-05-15: server returns the session ID it stamped
-            // metadata on, plus the 4-hour expiration. Both go into
+            // metadata on, plus the 2-hour expiration. Both go into
             // localStorage via markStripeUnlocked so the rest of the
             // session can include sessionId on every /api/generate.
             sessionId?: string;
@@ -6552,7 +6558,7 @@ export default function App() {
 
       // Payment confirmed. (Note: the legacy `credit_used` sessionStorage
       // flag is no longer written here — the flat-price model removed
-      // 2026-05-14 means every photo is $9.99 regardless of past purchases.)
+      // 2026-05-14 means every photo is $11.99 regardless of past purchases.)
 
       // Read the pending delivery payload stashed by CheckoutScreen.
       const stashRaw = window.sessionStorage.getItem("pending_delivery");
@@ -7225,7 +7231,7 @@ export default function App() {
 
       {/* Photographer's tips modal — shown once per session on Landing→Upload.
           Overlays the Upload screen until the user clicks "Got it." */}
-      {/* Welcome popup with the 4-hour countdown — fires the moment a
+      {/* Welcome popup with the 2-hour countdown — fires the moment a
           fresh $2.99 payment is confirmed by /api/verify-checkout. Higher
           z-index than the intro/tips modals so if multiple are in flight
           this one shows first (it carries the most important info: the
@@ -7236,7 +7242,7 @@ export default function App() {
           onDismiss={() => setShowWelcomePopup(false)}
         />
       )}
-      {/* 30-min warning. Lower z-index than the welcome popup since it
+      {/* 15-min warning. Lower z-index than the welcome popup since it
           should only ever fire 3.5h AFTER the welcome modal anyway, but
           we belt-and-suspender the stacking just in case. */}
       {showThirtyMinWarning && unlockExpiresAt && (

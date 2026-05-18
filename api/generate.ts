@@ -1201,7 +1201,7 @@ export default async function handler(
   // ---- Paywall gate: verify the caller has a valid unlock BEFORE doing
   //      any expensive Gemini work. Returns 402 Payment Required with a
   //      reason code the client can use to display the right error UI
-  //      (expired → "your 4-hour window ran out, pay again"; consumed →
+  //      (expired → "your 2-hour window ran out, pay again"; consumed →
   //      "you already downloaded, this unlock is spent"; missing/invalid
   //      → "you need to pay $2.99 to use the generator"). ----
   const stripeSecretKey = process.env.STRIPE_SECRET_KEY;

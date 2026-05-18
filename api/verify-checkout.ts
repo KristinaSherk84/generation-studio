@@ -15,12 +15,12 @@
  * 2026-05-15 — Session-bound paywall gate.
  *   When the session first confirms as paid here, we WRITE two metadata
  *   fields to the Stripe Checkout Session itself:
- *     - unlock_expires_at: epoch milliseconds, set to now + 4 hours.
+ *     - unlock_expires_at: epoch milliseconds, set to now + 2 hours.
  *       The window during which /api/generate accepts this session as a
  *       valid unlock token.
  *     - unlock_consumed: "false" initially. /api/deliver flips this to
  *       "true" on a successful download, immediately killing the unlock
- *       even if the 4-hour window hasn't elapsed.
+ *       even if the 2-hour window hasn't elapsed.
  *   /api/generate then consults THESE FIELDS as the source of truth for
  *   whether to do the expensive Gemini work. Stripe is the database here
  *   — no new infrastructure needed and the customer can never tamper with
@@ -45,10 +45,14 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 export const maxDuration = 15;
 
 // Length of the unlock window after the $2.99 entry is confirmed paid.
-// Per Kristi 2026-05-15: 4 hours is long enough for any reasonable
+// Per Kristi 2026-05-15: 2 hours is long enough for any reasonable
 // customer flow (10-15 min for a focused user) but short enough that
 // casual return visitors will re-pay if they walk away.
-const UNLOCK_TTL_MS = 4 * 60 * 60 * 1000;
+// Tightened to 2h on 2026-05-15 (was 4h). Path B launch shortened the
+// session because most converting customers finish within 30 min and the
+// shorter window encourages "second look" repeat-buying — customers who
+// come back for another batch pay $2.99 again.
+const UNLOCK_TTL_MS = 2 * 60 * 60 * 1000;
 
 type VerifyResponse = {
   paid: boolean;
@@ -61,7 +65,7 @@ type VerifyResponse = {
   // frontend stores and forwards on every /api/generate call so the
   // server can re-verify the unlock.
   sessionId?: string;
-  // Returned only when paid:true. Epoch milliseconds when the 4-hour
+  // Returned only when paid:true. Epoch milliseconds when the 2-hour
   // window expires. Frontend uses this for the countdown UI and to
   // detect expiry without a server round-trip.
   unlockExpiresAt?: number;

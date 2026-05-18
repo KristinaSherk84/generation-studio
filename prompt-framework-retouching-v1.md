@@ -87,4 +87,4 @@ When the retouching endpoint is built, the prompts above should be used like thi
 - Skin smoothing direction: use the section above corresponding to the customer's tier choice plus apparent age band.
 - BLOCK_SMILE_FIDELITY: **does not apply** in the retouching call (it's specific to initial generation). The Glam TEETH bullet above governs teeth handling at the retouching stage.
 - Model: per the Path B architecture notes, use `gemini-3-pro-image-preview` (Nano Banana Pro) for the retouching pass — higher fidelity for editorial-level retouch than Flash.
-- Pricing: retouching tier choice maps to per-photo price (Realistic free / Polished = $X / Glam = $Y) — final pricing TBD by Kristi.
+- Pricing: per Kristi 2026-05-15, all three tiers are included in the flat **$11.99 per photo** price. There is no per-tier upcharge. Customers pick whichever tier they want at the new "Customize your Retouch Level" screen between Grid and Checkout, and the price is the same regardless.

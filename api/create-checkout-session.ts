@@ -4,16 +4,19 @@
  * Creates a Stripe Checkout Session for the $2.99 "Try It" entry fee and
  * returns the hosted-checkout URL so the frontend can window.location to it.
  *
- * Pricing model (current as of 2026-05-15):
- *   - $2.99 entry fee unlocks the 6-headshot generation flow for 4 hours
+ * Pricing model (current 2026-05-15, Path B launch):
+ *   - $2.99 entry fee unlocks the 6-headshot generation flow for 2 hours
  *     (or until the customer downloads their first photo, whichever first).
- *   - Each high-rez photo is a flat $9.99. No credit toward the first photo,
- *     no discount, no bundles. The $2.99 is purely the cost of admission.
- *   - History: pre-2026-05-15 the $2.99 was credited against the first
- *     photo purchase (so 1 photo total = $9.99 = $2.99 + $7.00). That model
- *     leaked because the client-side credit_used flag lived in sessionStorage
- *     and reset per tab, letting returning customers re-claim the credit.
- *     Flat pricing eliminated the leak and simplified the customer copy.
+ *   - Each high-rez photo is a flat $11.99 — includes the customer's
+ *     chosen retouch tier (Realistic / Polished / Glam). No tier upcharge.
+ *   - History:
+ *     - Pre-2026-05-15: $9.99/photo with $2.99 credit toward first photo.
+ *       Credit leaked because sessionStorage reset per tab.
+ *     - 2026-05-14: dropped credit, flat $9.99/photo, no retouch tier.
+ *     - 2026-05-15 (Path B): $11.99/photo, retouch tier included. Initial
+ *       generation now produces Realistic for everyone; tier choice
+ *       happens at the new "Customize your Retouch Level" screen between
+ *       grid and checkout. Unlock TTL dropped from 4h to 2h.
  *
  * Server-side gate on /api/generate (2026-05-15):
  *   - Every /api/generate call now requires either the Stripe Checkout

@@ -680,7 +680,7 @@ export default async function handler(
 
     // ---- Burn the $2.99 unlock token (2026-05-15) ----
     //
-    // The unlock model: $2.99 buys 4 hours of /api/generate access OR
+    // The unlock model: $2.99 buys 2 hours of /api/generate access OR
     // until the customer downloads their first photo (whichever first).
     // This is the "until they download" half: flip metadata.unlock_consumed
     // to "true" on the Stripe Checkout Session so the unlock token can't

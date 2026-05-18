@@ -5,9 +5,10 @@
  * Checkout Session for the per-photo charge at delivery time.
  * Body: { count, customerEmail? }.
  *
- * Pricing model (simplified 2026-05-14):
- *   - Each high-rez headshot is $9.99 flat.
- *   - Total = $9.99 × count, always. No credit, no per-customer discount.
+ * Pricing model (current 2026-05-15, Path B launch):
+ *   - Each high-rez headshot is $11.99 flat — includes the customer's
+ *     chosen retouch tier (Realistic / Polished / Glam). No upcharge.
+ *   - Total = $11.99 × count, always. No credit, no per-customer discount.
  *
  * Previously: the $2.99 entry fee was credited against the first photo
  * purchase, so 1 photo would cost $9.99 ($2.99 paid earlier + $7.00 at
@@ -31,7 +32,14 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 
 export const maxDuration = 15;
 
-const PRICE_PER_PHOTO_CENTS = 999;
+// Per-photo download price in cents. Raised from 999 ($9.99) → 1199
+// ($11.99) on 2026-05-15 as part of the Path B retouch-tier launch.
+// The new $11.99 includes the chosen retouch tier (Realistic / Polished /
+// Glam) — no separate retouch upcharge. Customer pays once for the photo
+// + retouch they want. Uses Stripe price_data (custom unit_amount), not
+// the legacy "Buy it" Price ID in the Stripe dashboard — so the
+// dashboard's $9.99 Price ID is unused and can be archived later.
+const PRICE_PER_PHOTO_CENTS = 1199;
 
 type CreatePhotoCheckoutBody = {
   count: number;
