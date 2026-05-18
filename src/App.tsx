@@ -149,6 +149,7 @@ function getStepFromScreen(
     | "style"
     | "loading"
     | "grid"
+    | "retouch"
     | "checkout"
     | "success",
 ): number | null {
@@ -159,8 +160,14 @@ function getStepFromScreen(
       return 2;
     case "loading":
     case "grid":
-    case "checkout":
       return 3;
+    case "retouch":
+    case "checkout":
+      // Both retouch and checkout map to step 4 "Retouch your headshots"
+      // in the 5-step framework. Checkout is the final commit before
+      // the retouch pass actually fires server-side (in /api/deliver),
+      // so it conceptually belongs in the same step.
+      return 4;
     case "success":
       return 5;
     default:
@@ -4525,6 +4532,482 @@ const GridScreen = ({
   );
 };
 
+// -------------------- Retouch tier picker --------------------
+//
+// New step in the Path B flow (2026-05-15): sits between the Grid screen
+// (where the customer picked their favorites) and the Checkout screen.
+//
+// Customer Journey at this stage:
+//   1. Customer hits "Customize your Retouch Level" from Grid.
+//   2. Intro popup explains the three tiers (Realistic / Polished / Glam).
+//   3. RetouchScreen: a thumbnail of each picked photo with three radio
+//      circles next to it. Customer ticks one tier per photo. Default
+//      is "polished" — the middle option, framed as the sensible default
+//      "make it nice" choice; customer can downshift to Realistic for
+//      zero retouching or upshift to Glam for editorial Vogue treatment.
+//   4. "Process & Continue" button → Checkout screen ($11.99 × N).
+//   5. After Stripe success, /api/deliver runs the per-tier retouching
+//      pass with Gemini Pro before sending the email.
+//
+// Mobile-first: thumbnails stack vertically on narrow viewports so the
+// radio circles are easy to tap without zooming. Per-photo "row" layout
+// (image on the left, tier picker on the right) flips to "image on top,
+// tier picker stacked below" on viewports under 500px.
+
+export type RetouchTier = "realistic" | "polished" | "glam";
+
+// Concise per-tier copy used in both the intro popup AND inline on the
+// RetouchScreen — single source of truth so they don't drift.
+const RETOUCH_TIER_DESCRIPTIONS: {
+  tier: RetouchTier;
+  label: string;
+  oneLiner: string;
+  description: string;
+}[] = [
+  {
+    tier: "realistic",
+    label: "Realistic",
+    oneLiner: "Untouched, just as you are.",
+    description:
+      "Keep the photo as the AI generated it — no extra retouching. Pores, fine lines, natural texture all stay. Best when you want an authentic, un-airbrushed look.",
+  },
+  {
+    tier: "polished",
+    label: "Polished",
+    oneLiner: "Lightly retouched, like a pro.",
+    description:
+      "Even skin tone, brighter under-eyes, removed blemishes — the way a senior executive's company headshot looks. Still you, just well-rested.",
+  },
+  {
+    tier: "glam",
+    label: "Glam",
+    oneLiner: "Editorial, magazine-ready.",
+    description:
+      "Vogue-cover level retouching — luminous even skin, soft contour, subtle makeup enhancement, teeth color-corrected. Editorial polish while still keeping your features unmistakably yours.",
+  },
+];
+
+// Intro popup that fires once when the customer reaches the Retouch
+// screen. Explains the three tier options so the radio choice on the
+// screen is meaningful.
+type IntroRetouchModalProps = {
+  onDismiss: () => void;
+};
+
+const IntroRetouchModal = ({ onDismiss }: IntroRetouchModalProps) => (
+  <div
+    role="dialog"
+    aria-modal="true"
+    aria-label="What's coming next: your retouch level options"
+    style={{
+      position: "fixed",
+      inset: 0,
+      background: "rgba(0, 0, 0, 0.85)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 20,
+      zIndex: 1000,
+      ...font,
+    }}
+  >
+    <div
+      style={{
+        background: C.white,
+        borderRadius: 12,
+        padding: "26px 22px",
+        maxWidth: 520,
+        width: "100%",
+        maxHeight: "92vh",
+        overflowY: "auto",
+      }}
+    >
+      <div
+        style={{
+          fontSize: 11,
+          fontWeight: 500,
+          letterSpacing: 1.5,
+          color: C.mediumGrey,
+          textTransform: "uppercase",
+          marginBottom: 6,
+        }}
+      >
+        Next step
+      </div>
+      <h2
+        style={{
+          fontSize: 22,
+          fontWeight: 500,
+          color: C.dark,
+          margin: "0 0 6px",
+          lineHeight: 1.25,
+        }}
+      >
+        Customize your retouch level
+      </h2>
+      <p
+        style={{
+          fontSize: 13,
+          color: C.mediumGrey,
+          margin: "0 0 16px",
+          lineHeight: 1.5,
+        }}
+      >
+        Pick how much polishing you want for each photo. The price is the
+        same regardless of which level you choose — $11.99 per photo.
+      </p>
+
+      {RETOUCH_TIER_DESCRIPTIONS.map((t, i) => (
+        <div
+          key={t.tier}
+          style={{
+            paddingTop: 12,
+            paddingBottom: 12,
+            borderBottom:
+              i < RETOUCH_TIER_DESCRIPTIONS.length - 1
+                ? `1px solid ${C.border}`
+                : "none",
+          }}
+        >
+          <div
+            style={{
+              fontSize: 14,
+              fontWeight: 500,
+              color: C.dark,
+              marginBottom: 2,
+            }}
+          >
+            {t.label}
+          </div>
+          <div
+            style={{
+              fontSize: 12,
+              color: C.dark,
+              fontStyle: "italic",
+              marginBottom: 4,
+            }}
+          >
+            {t.oneLiner}
+          </div>
+          <div
+            style={{
+              fontSize: 12,
+              color: C.mediumGrey,
+              lineHeight: 1.5,
+            }}
+          >
+            {t.description}
+          </div>
+        </div>
+      ))}
+
+      <button
+        onClick={onDismiss}
+        style={{
+          width: "100%",
+          padding: "13px 22px",
+          background: C.dark,
+          color: C.buttonText,
+          border: "none",
+          borderRadius: 8,
+          fontSize: 14,
+          fontWeight: 500,
+          cursor: "pointer",
+          marginTop: 18,
+          ...font,
+        }}
+      >
+        Got it — let me pick
+      </button>
+    </div>
+  </div>
+);
+
+// The retouch screen itself.
+type RetouchScreenProps = {
+  // Indices into the original `images` array of the photos the customer
+  // selected on the grid screen. These are the photos they're going to
+  // pay for and retouch.
+  selectedIndices: number[];
+  // Full array of all 6 generated images (data URIs). We index into this
+  // with selectedIndices to show only the picked ones.
+  images: string[];
+  // Current tier choice per selected index. Populated in App-level state
+  // and passed down with a setter. Default "polished" per the framing
+  // (middle option = sensible default; customer downshifts to Realistic
+  // for an untouched photo, upshifts to Glam for editorial).
+  retouchTiers: Record<number, RetouchTier>;
+  setRetouchTiers: React.Dispatch<
+    React.SetStateAction<Record<number, RetouchTier>>
+  >;
+  onContinue: () => void;
+  onBack: () => void;
+};
+
+const RetouchScreen = ({
+  selectedIndices,
+  images,
+  retouchTiers,
+  setRetouchTiers,
+  onContinue,
+  onBack,
+}: RetouchScreenProps) => {
+  // Defensive: if no photos somehow made it here, hand the user back to
+  // the grid so they can pick favorites again rather than locking them
+  // on an empty screen.
+  if (selectedIndices.length === 0) {
+    return (
+      <div
+        style={{
+          maxWidth: 720,
+          margin: "0 auto",
+          padding: "48px 20px",
+          textAlign: "center",
+          ...font,
+        }}
+      >
+        <p style={{ color: C.mediumGrey, fontSize: 14 }}>
+          You haven't picked any photos yet.
+        </p>
+        <Button onClick={onBack} full>
+          Back to picks
+        </Button>
+      </div>
+    );
+  }
+
+  const setTier = (index: number, tier: RetouchTier) => {
+    setRetouchTiers((prev) => ({ ...prev, [index]: tier }));
+  };
+
+  return (
+    <div
+      style={{
+        maxWidth: 720,
+        margin: "0 auto",
+        padding: "32px 20px 80px",
+        ...font,
+      }}
+    >
+      <button
+        onClick={onBack}
+        style={{
+          background: "transparent",
+          border: "none",
+          color: C.mediumGrey,
+          fontSize: 13,
+          cursor: "pointer",
+          padding: 0,
+          marginBottom: 16,
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 4,
+        }}
+      >
+        <ArrowLeft size={14} />
+        Back to picks
+      </button>
+
+      <h1
+        style={{
+          fontSize: 26,
+          fontWeight: 500,
+          color: C.dark,
+          margin: "0 0 6px",
+          lineHeight: 1.2,
+          letterSpacing: -0.3,
+        }}
+      >
+        Customize your retouch level
+      </h1>
+      <p
+        style={{
+          fontSize: 14,
+          color: C.mediumGrey,
+          margin: "0 0 20px",
+          lineHeight: 1.5,
+        }}
+      >
+        Pick a retouch level for each photo. All photos are $11.99 — same
+        price regardless of which level you choose.
+      </p>
+
+      {/* Per-photo rows. On desktop the thumbnail sits on the left and
+          the tier picker on the right. On narrow viewports (≤500px) the
+          tier picker stacks below the thumbnail so the radio circles
+          remain large and easy to tap. */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+        {selectedIndices.map((imgIndex) => {
+          const src = images[imgIndex];
+          const currentTier = retouchTiers[imgIndex] ?? "polished";
+          return (
+            <div
+              key={imgIndex}
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 16,
+                padding: 14,
+                background: C.white,
+                border: `1px solid ${C.border}`,
+                borderRadius: 10,
+                alignItems: "flex-start",
+              }}
+            >
+              {/* Thumbnail. Uses background-image div, matching the
+                  anti-save-protection pattern from the grid screen. */}
+              <div
+                style={{
+                  width: 110,
+                  aspectRatio: "4/5",
+                  borderRadius: 8,
+                  overflow: "hidden",
+                  position: "relative",
+                  flexShrink: 0,
+                  backgroundImage: `url(${src})`,
+                  backgroundSize: "cover",
+                  backgroundPosition: "center",
+                  backgroundColor: C.lightGrey,
+                }}
+                onContextMenu={(e) => e.preventDefault()}
+                aria-label={`Headshot ${imgIndex + 1}`}
+                role="img"
+              >
+                {/* Watermark — same diagonal pattern as the grid. */}
+                <div
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    pointerEvents: "none",
+                    overflow: "hidden",
+                  }}
+                >
+                  {[33, 67].map((topPercent, row) => (
+                    <div
+                      key={row}
+                      style={{
+                        position: "absolute",
+                        top: `${topPercent}%`,
+                        left: "50%",
+                        transform: "translate(-50%, -50%) rotate(-30deg)",
+                        fontSize: 9,
+                        color: "rgba(255,255,255,0.55)",
+                        textShadow: "0 1px 2px rgba(0,0,0,0.4)",
+                        letterSpacing: 1.5,
+                        whiteSpace: "nowrap",
+                        fontWeight: 400,
+                      }}
+                    >
+                      WATERMARK · WATERMARK
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Tier radio picker. Minimum width keeps it readable but
+                  the flex-wrap on the parent stacks it below the thumb
+                  on phone widths. */}
+              <div style={{ flex: 1, minWidth: 200 }}>
+                {RETOUCH_TIER_DESCRIPTIONS.map((t) => {
+                  const selected = currentTier === t.tier;
+                  return (
+                    <label
+                      key={t.tier}
+                      onClick={() => setTier(imgIndex, t.tier)}
+                      style={{
+                        display: "flex",
+                        alignItems: "flex-start",
+                        gap: 10,
+                        padding: "8px 0",
+                        cursor: "pointer",
+                      }}
+                    >
+                      {/* Custom radio circle — bigger tap target than
+                          the native input on mobile, and visually
+                          consistent with the brand palette. */}
+                      <div
+                        style={{
+                          width: 22,
+                          height: 22,
+                          borderRadius: "50%",
+                          border: `2px solid ${selected ? C.dark : C.lightGrey}`,
+                          background: selected ? C.dark : "transparent",
+                          flexShrink: 0,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          marginTop: 1,
+                          transition: "border-color 0.15s, background 0.15s",
+                        }}
+                      >
+                        {selected && (
+                          <div
+                            style={{
+                              width: 8,
+                              height: 8,
+                              borderRadius: "50%",
+                              background: C.white,
+                            }}
+                          />
+                        )}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div
+                          style={{
+                            fontSize: 14,
+                            fontWeight: 500,
+                            color: C.dark,
+                            marginBottom: 2,
+                          }}
+                        >
+                          {t.label}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 12,
+                            color: C.mediumGrey,
+                            lineHeight: 1.4,
+                          }}
+                        >
+                          {t.oneLiner}
+                        </div>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Sticky-feeling CTA at the bottom. Always visible on mobile via
+          natural scroll — we deliberately don't position:fixed it (see
+          comments elsewhere in this file about iframe height issues
+          with position:fixed). */}
+      <div style={{ marginTop: 28 }}>
+        <Button onClick={onContinue} full>
+          Continue to checkout · $11.99 × {selectedIndices.length} ={" "}
+          ${(11.99 * selectedIndices.length).toFixed(2)}
+        </Button>
+        <p
+          style={{
+            fontSize: 12,
+            color: C.mediumGrey,
+            textAlign: "center",
+            marginTop: 10,
+            lineHeight: 1.5,
+          }}
+        >
+          The retouching happens after payment. Realistic = no retouching,
+          ship as-is. Polished and Glam run through our editorial
+          retouching pass.
+        </p>
+      </div>
+    </div>
+  );
+};
+
 // -------------------- Screen 5: Deliver --------------------
 //
 // Beta delivery screen. No Stripe, no email sending. Asks for the user's
@@ -4549,6 +5032,11 @@ type CheckoutScreenProps = {
   // Style selections that produced these images; recorded in the manifest for
   // posterity (and to help diagnose if someone reports bad output).
   selections: StyleSelections;
+  // Retouch tier chosen on the RetouchScreen, one entry per selectedImages
+  // index (same order). Forwarded to /api/deliver so the server can run the
+  // appropriate Pro retouching pass per photo before sending the email.
+  // "realistic" = no retouching; "polished" / "glam" = Pro retouch.
+  retouchTiers: RetouchTier[];
   // On success: parent navigates to the download screen with the email the
   // user typed + the public Blob URLs for the delivered photos.
   onComplete: (args: {
@@ -4579,6 +5067,7 @@ const CheckoutScreen = ({
   selectedImages,
   referencePhotoUrls,
   selections,
+  retouchTiers,
   onComplete,
   onBack,
 }: CheckoutScreenProps) => {
@@ -4690,6 +5179,11 @@ const CheckoutScreen = ({
             lighting: selections.lighting,
             background: selections.background,
             skin: selections.skin,
+            // Per-photo retouch tier — drives the Pro retouching pass
+            // /api/deliver runs server-side before sending email.
+            // Same order as uploadedUrls (i.e., index N in retouchTiers
+            // describes the tier for the photo at uploadedUrls[N]).
+            retouchTiers,
             // Server flips metadata.unlock_consumed=true on this Stripe
             // session so the unlock can't be reused for another batch.
             // Pulled at call time from localStorage; for promo users
@@ -4724,6 +5218,10 @@ const CheckoutScreen = ({
         uploadedUrls,
         referencePhotoUrls,
         selections,
+        // Stash the retouch tier per photo too — the Stripe redirect
+        // wipes React state, so without this the post-payment handler
+        // wouldn't know which tier the customer picked for each photo.
+        retouchTiers,
       };
       window.sessionStorage.setItem(
         "pending_delivery",
@@ -6063,6 +6561,11 @@ type Screen =
   | "style"
   | "loading" // shown while /api/generate runs 6 times in parallel
   | "grid"
+  // "retouch" (added 2026-05-15, Path B): customer picks a retouch tier
+  // per picked photo (Realistic / Polished / Glam). Sits between grid
+  // and checkout. The actual Pro retouching pass fires after payment
+  // (in /api/deliver).
+  | "retouch"
   | "checkout"
   | "success";
 
@@ -6074,6 +6577,21 @@ export default function App() {
   // CheckoutScreen so we can forward the matching clean base64 images to
   // /api/deliver. Navbar "Selected (N)" reads this set's size.
   const [selectedImageIndices, setSelectedImageIndices] = useState<number[]>([]);
+
+  // Retouch tier choice per selected image. Keyed by the image's index
+  // in `generatedImages` (same index used by selectedImageIndices). Set
+  // on the new RetouchScreen between Grid and Checkout. Defaults to
+  // "polished" when a photo is first added — the sensible middle option;
+  // customer can downshift to Realistic or up to Glam per photo.
+  const [retouchTiers, setRetouchTiers] = useState<
+    Record<number, RetouchTier>
+  >({});
+
+  // Intro popup for the Retouch screen. Fires once per session right
+  // before the customer reaches the RetouchScreen so they understand
+  // what each tier means before they tick a radio circle.
+  const [hasSeenRetouchIntro, setHasSeenRetouchIntro] = useState(false);
+  const [showRetouchIntroModal, setShowRetouchIntroModal] = useState(false);
   const [email, setEmail] = useState("");
   // Public Blob URLs returned by /api/deliver — handed to DownloadScreen so
   // each photo gets its own Download button.
@@ -6569,6 +7087,11 @@ export default function App() {
         uploadedUrls: string[];
         referencePhotoUrls: string[];
         selections: StyleSelections;
+        // Per-photo retouch tier — index N here matches uploadedUrls[N].
+        // Optional for back-compat with pre-Path-B stashes (any in-flight
+        // checkout still using the old stash shape will default to
+        // "polished" for every photo when this is undefined).
+        retouchTiers?: RetouchTier[];
       };
       try {
         stash = JSON.parse(stashRaw);
@@ -6580,6 +7103,14 @@ export default function App() {
       // Call /api/deliver with the stashed data — same shape the CheckoutScreen
       // would have sent directly in the promo/unpaid path.
       try {
+        // Resolve retouch tiers — use the stashed array if present;
+        // fall back to "polished" for every photo if the stash predates
+        // Path B (in-flight customers who paid before the deploy).
+        const resolvedTiers: RetouchTier[] =
+          Array.isArray(stash.retouchTiers) &&
+          stash.retouchTiers.length === stash.uploadedUrls.length
+            ? stash.retouchTiers
+            : stash.uploadedUrls.map(() => "polished" as RetouchTier);
         const deliverResp = await fetch("/api/deliver", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -6592,6 +7123,7 @@ export default function App() {
             lighting: stash.selections.lighting,
             background: stash.selections.background,
             skin: stash.selections.skin,
+            retouchTiers: resolvedTiers,
             // Burn the entry unlock (Stripe metadata flip) when delivery
             // succeeds. Promo users have no sessionId; server skips them.
             ...readUnlockRequestFields(),
@@ -6638,6 +7170,9 @@ export default function App() {
   const reset = () => {
     setScreen("landing");
     setSelectedImageIndices([]);
+    setRetouchTiers({});
+    setHasSeenRetouchIntro(false);
+    setShowRetouchIntroModal(false);
     setDeliveredPhotoUrls([]);
     setDeliveredShareGraphicUrls([]);
     setEmail("");
@@ -6719,6 +7254,32 @@ export default function App() {
     setShowIntroModal(false);
     setHasSeenIntro(true);
     if (!hasSeenTips) setShowTipsModal(true);
+  };
+
+  // Retouch intro popup dismissed → mark seen so it doesn't re-fire
+  // if the user navigates back and forward across the retouch screen.
+  const handleDismissRetouchIntro = () => {
+    setShowRetouchIntroModal(false);
+    setHasSeenRetouchIntro(true);
+  };
+
+  // Transition handler from Grid → Retouch (replaces the previous
+  // Grid → Checkout direct jump). Pre-fills retouchTiers for any newly
+  // selected indices that don't have a tier yet — defaults to "polished"
+  // per the framing in RetouchScreen.
+  const handleAdvanceToRetouch = (selections: number[]) => {
+    setSelectedImageIndices(selections);
+    setRetouchTiers((prev) => {
+      const next = { ...prev };
+      for (const i of selections) {
+        if (!(i in next)) next[i] = "polished";
+      }
+      return next;
+    });
+    setScreen("retouch");
+    // Fire the intro popup once per session so the customer understands
+    // what the radio choice on the retouch screen actually means.
+    if (!hasSeenRetouchIntro) setShowRetouchIntroModal(true);
   };
 
   // Regenerate a SINGLE thumbnail slot, reusing the most recently-submitted
@@ -7163,10 +7724,7 @@ export default function App() {
       {screen === "grid" && (
         <GridScreen
           images={generatedImages}
-          onDeliver={(indices) => {
-            setSelectedImageIndices(indices);
-            setScreen("checkout");
-          }}
+          onDeliver={handleAdvanceToRetouch}
           onBack={() => setScreen("style")}
           onRegenerateSlot={handleRegenerateSlot}
           regenError={regenError}
@@ -7176,6 +7734,16 @@ export default function App() {
           initialBatchInFlight={initialBatchInFlight}
         />
       )}
+      {screen === "retouch" && (
+        <RetouchScreen
+          selectedIndices={selectedImageIndices}
+          images={generatedImages}
+          retouchTiers={retouchTiers}
+          setRetouchTiers={setRetouchTiers}
+          onContinue={() => setScreen("checkout")}
+          onBack={() => setScreen("grid")}
+        />
+      )}
       {screen === "checkout" && lastSelections && (
         <CheckoutScreen
           selectedImages={selectedImageIndices
@@ -7183,13 +7751,16 @@ export default function App() {
             .filter((img): img is string => !!img)}
           referencePhotoUrls={lastPhotoUrls}
           selections={lastSelections}
+          retouchTiers={selectedImageIndices.map(
+            (i) => retouchTiers[i] ?? "polished",
+          )}
           onComplete={({ email: submittedEmail, photoUrls, shareGraphicUrls }) => {
             setEmail(submittedEmail);
             setDeliveredPhotoUrls(photoUrls);
             setDeliveredShareGraphicUrls(shareGraphicUrls ?? []);
             setScreen("success");
           }}
-          onBack={() => setScreen("grid")}
+          onBack={() => setScreen("retouch")}
         />
       )}
       {screen === "success" && lastSelections && (
@@ -7251,6 +7822,12 @@ export default function App() {
           chains them, but defensive), the intro one wins visually since both
           use the same z-index. */}
       {showIntroModal && <IntroStepsModal onDismiss={handleDismissIntro} />}
+      {/* Retouch tier intro popup — fires once per session when the customer
+          reaches the Retouch screen. Explains what each of the 3 tiers does
+          before they tick a radio. */}
+      {showRetouchIntroModal && (
+        <IntroRetouchModal onDismiss={handleDismissRetouchIntro} />
+      )}
       {showTipsModal && <PhotographerTipsModal onDismiss={handleDismissTips} />}
     </div>
   );
