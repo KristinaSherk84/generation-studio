@@ -6318,17 +6318,20 @@ const DownloadScreen = ({
           marginTop: 32,
         }}
       >
-        <div style={{ fontSize: 13, fontWeight: 500, color: C.dark, marginBottom: 8 }}>
-          Want a full new set in a different style?
+        <div style={{ fontSize: 15, fontWeight: 500, color: C.dark, marginBottom: 6 }}>
+          Loved your photos? Try a totally different look.
         </div>
         <div style={{ fontSize: 13, color: C.mediumGrey, lineHeight: 1.6, marginBottom: 16 }}>
-          Generate 6 fresh headshots in another style. Your uploaded reference photos
-          are still saved, so you'll go straight to the style picker — no re-uploading.
+          Generate 6 brand-new headshots in a different style — corporate
+          to creative, indoor to outdoor, whatever direction you want.
+          Your uploaded reference photos are still saved, so you'll skip
+          straight to the style picker — no re-uploading. Just $2.99 to
+          start a fresh session, then $11.99 per photo you keep.
         </div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <Button onClick={onNewStyle}>Generate a different Style</Button>
+          <Button onClick={onNewStyle}>Try a different style</Button>
           <Button variant="ghost" onClick={onHome}>
-            Back to home
+            I'm done — back to home
           </Button>
         </div>
       </div>
