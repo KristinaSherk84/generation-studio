@@ -36,11 +36,17 @@ export type AgeBand = "young" | "mature" | "older";
 // match. Cost: ~$0.30-0.40 per image on Tier 2.
 export const RETOUCH_MODEL = "gemini-3-pro-image-preview";
 
-// IDENTITY_ANCHOR v2 2026-05-18: added "and expression" to the locked
-// feature-set and appended a high-end-retoucher persona-priming sentence
-// at the end. Persona priming significantly reduced structural drift in
-// the Glam pass during Kristi's iterative testing.
-const IDENTITY_ANCHOR = `Identity preservation — non-negotiable, overrides every other directive below. Preserve the subject's facial features and expression with 100% precision. The retouched face must remain UNMISTAKABLY the same person. Match the input photo EXACTLY for face shape, bone structure, eye shape and color, nose shape, mouth shape, hairline, ethnicity, and every distinguishing mark (freckles, beauty marks, moles, scars, asymmetries). DO NOT idealize features. DO NOT blend toward generic 'attractive' proportions. The retouching below operates ONLY on the skin SURFACE — never on facial structure, proportions, or feature placement. You will act as a high end retoucher changing only surface level items, not structural ones.`;
+// IDENTITY_ANCHOR v3 2026-05-18: added BACKGROUND AND CROP LOCK clause.
+// Kristi tested the Deluxe flow and saw the Polished version cropping
+// IN on the subject vs the Realistic input, and the background subtly
+// regenerating. Without an explicit lock the model treats both as "fair
+// game" — same failure mode we hit with the jaw earlier. Locking both
+// here in the identity anchor so all three retouch tiers inherit it.
+//
+// v2 additions (kept): added "and expression" to the locked feature-set
+// and appended a high-end-retoucher persona-priming sentence. Persona
+// priming significantly reduced structural drift in the Glam pass.
+const IDENTITY_ANCHOR = `Identity preservation — non-negotiable, overrides every other directive below. Preserve the subject's facial features and expression with 100% precision. The retouched face must remain UNMISTAKABLY the same person. Match the input photo EXACTLY for face shape, bone structure, eye shape and color, nose shape, mouth shape, hairline, ethnicity, and every distinguishing mark (freckles, beauty marks, moles, scars, asymmetries). DO NOT idealize features. DO NOT blend toward generic 'attractive' proportions. The retouching below operates ONLY on the skin SURFACE — never on facial structure, proportions, or feature placement. You will act as a high end retoucher changing only surface level items, not structural ones. BACKGROUND AND CROP LOCK: The background AND crop of the output photo MUST be preserved IDENTICALLY to the input photo. Background: everything outside the subject (walls, scenery, light fixtures, depth-of-field blur, color tones, composition) stays unchanged — do NOT replace, regenerate, alter, recolor, or stylize the background in any way. If the input background is blurred, the output background is blurred the same way. Crop and framing: the subject must occupy the same area of the frame as in the input — same head size, same headroom above the hairline, same shoulder line position, same horizontal centering. Do NOT zoom in, do NOT zoom out, do NOT re-crop, do NOT recompose. The output canvas and subject placement must be pixel-equivalent to the input.`;
 
 const PORE_ANCHOR = `Pore micro-texture preservation — applies to every tier below. Preserve the 3D micro-texture of the skin surface (the raised/recessed terrain of pores at close magnification). Pore micro-texture stays at 100% on the face, neck, and visible décolletage. The smoothing operates on surface evenness only — the pore texture itself remains visible at normal viewing distance.`;
 
