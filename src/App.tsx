@@ -4427,6 +4427,112 @@ const RETOUCH_TIER_DESCRIPTIONS: {
   },
 ];
 
+// Mid-loading popup (2026-05-18). Fires once per session shortly after
+// the customer reaches the loading screen and the 6 generations are
+// in flight. Tells them what's coming next — the retouch step —
+// so they understand the "realistic skin on purpose" output they're
+// about to see and don't panic-leave the page thinking it's broken.
+//
+// Smaller / lighter-weight than IntroRetouchModal because the customer
+// is mid-wait and we don't want to interrupt the flow heavily.
+type LoadingRetouchPreviewModalProps = {
+  onDismiss: () => void;
+};
+
+const LoadingRetouchPreviewModal = ({
+  onDismiss,
+}: LoadingRetouchPreviewModalProps) => (
+  <div
+    role="dialog"
+    aria-modal="true"
+    aria-label="Heads up — your retouch choice is coming next"
+    style={{
+      position: "fixed",
+      inset: 0,
+      background: "rgba(0, 0, 0, 0.78)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 20,
+      zIndex: 1000,
+      ...font,
+    }}
+  >
+    <div
+      style={{
+        background: C.white,
+        borderRadius: 12,
+        padding: "28px 24px",
+        maxWidth: 460,
+        width: "100%",
+      }}
+    >
+      <div
+        style={{
+          fontSize: 11,
+          fontWeight: 500,
+          letterSpacing: 1.5,
+          color: C.mediumGrey,
+          textTransform: "uppercase",
+          marginBottom: 8,
+        }}
+      >
+        Heads up
+      </div>
+      <h2
+        style={{
+          fontSize: 20,
+          fontWeight: 500,
+          color: C.dark,
+          margin: "0 0 12px",
+          lineHeight: 1.3,
+        }}
+      >
+        You're in control of the retouching
+      </h2>
+      <p
+        style={{
+          fontSize: 14,
+          color: C.dark,
+          margin: "0 0 14px",
+          lineHeight: 1.55,
+        }}
+      >
+        In the next step, you'll get to choose to retouch the photos you
+        choose! You get all the control.
+      </p>
+      <p
+        style={{
+          fontSize: 14,
+          color: C.dark,
+          margin: "0 0 22px",
+          lineHeight: 1.55,
+        }}
+      >
+        The app is made to generate realistic skin on purpose — but you
+        can polish the shots you like in the next step.
+      </p>
+      <button
+        onClick={onDismiss}
+        style={{
+          width: "100%",
+          padding: "13px 22px",
+          background: C.dark,
+          color: C.buttonText,
+          border: "none",
+          borderRadius: 8,
+          fontSize: 14,
+          fontWeight: 500,
+          cursor: "pointer",
+          ...font,
+        }}
+      >
+        Got it
+      </button>
+    </div>
+  </div>
+);
+
 // Intro popup that fires once when the customer reaches the Retouch
 // screen. Explains the three tier options so the radio choice on the
 // screen is meaningful.
@@ -6453,6 +6559,15 @@ export default function App() {
   // what each tier means before they tick a radio circle.
   const [hasSeenRetouchIntro, setHasSeenRetouchIntro] = useState(false);
   const [showRetouchIntroModal, setShowRetouchIntroModal] = useState(false);
+
+  // Mid-loading popup (2026-05-18). Fires once per session shortly after
+  // the customer enters the loading screen — explains that realistic
+  // skin is on purpose and they'll get retouching choices in the next
+  // step. Prevents panic-leaves while waiting for the 6 generations.
+  const [hasSeenLoadingRetouchPopup, setHasSeenLoadingRetouchPopup] =
+    useState(false);
+  const [showLoadingRetouchPopup, setShowLoadingRetouchPopup] =
+    useState(false);
   const [email, setEmail] = useState("");
   // Public Blob URLs returned by /api/deliver — handed to DownloadScreen so
   // each photo gets its own Download button.
@@ -7034,6 +7149,8 @@ export default function App() {
     setRetouchTiers({});
     setHasSeenRetouchIntro(false);
     setShowRetouchIntroModal(false);
+    setHasSeenLoadingRetouchPopup(false);
+    setShowLoadingRetouchPopup(false);
     setDeliveredPhotoUrls([]);
     setDeliveredShareGraphicUrls([]);
     setEmail("");
@@ -7123,6 +7240,21 @@ export default function App() {
     setShowRetouchIntroModal(false);
     setHasSeenRetouchIntro(true);
   };
+
+  // Fire the "you control the retouching" popup ~3 seconds after the
+  // customer enters the loading screen for the first time this session.
+  // The 3s delay lets them watch the first slot start generating before
+  // we interrupt — this is a heads-up about what's COMING, not a
+  // reminder of what's happening now. Once dismissed it doesn't re-fire
+  // (controlled by hasSeenLoadingRetouchPopup).
+  useEffect(() => {
+    if (screen !== "loading" || hasSeenLoadingRetouchPopup) return;
+    const id = setTimeout(() => {
+      setShowLoadingRetouchPopup(true);
+      setHasSeenLoadingRetouchPopup(true);
+    }, 3000);
+    return () => clearTimeout(id);
+  }, [screen, hasSeenLoadingRetouchPopup]);
 
   // Transition handler from Grid → Retouch (replaces the previous
   // Grid → Checkout direct jump). Pre-fills retouchTiers for any newly
@@ -7677,6 +7809,16 @@ export default function App() {
           chains them, but defensive), the intro one wins visually since both
           use the same z-index. */}
       {showIntroModal && <IntroStepsModal onDismiss={handleDismissIntro} />}
+      {/* Mid-loading "you control the retouching" popup. Fires once
+          per session ~3 seconds after the customer enters the loading
+          screen so they see one slot start generating before being
+          interrupted. Tells them realistic skin is on purpose and
+          retouching choices are coming next. */}
+      {showLoadingRetouchPopup && (
+        <LoadingRetouchPreviewModal
+          onDismiss={() => setShowLoadingRetouchPopup(false)}
+        />
+      )}
       {/* Retouch tier intro popup — fires once per session when the customer
           reaches the Retouch screen. Explains what each of the 3 tiers does
           before they tick a radio. */}
