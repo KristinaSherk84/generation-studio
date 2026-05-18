@@ -3212,12 +3212,16 @@ const StyleScreen = ({ onGenerate, onBack }: StyleScreenProps) => {
   const [background, setBackground] = useState<string>("lightgrey");
   const [attire, setAttire] = useState<string | null>(null);
   const [lighting, setLighting] = useState<string | null>(null);
-  // Skin treatment defaults to "realistic" (current behavior). "polished"
-  // and "glam" apply backend overrides that only fire for women —
-  // men's skin treatment is unchanged regardless of this toggle.
-  const [skin, setSkin] = useState<"realistic" | "polished" | "glam">(
-    "realistic",
-  );
+  // Skin tier is hardcoded to "realistic" for initial generation (Path B
+  // 2026-05-15). The UI picker that used to set this on the Style screen
+  // was removed — the customer picks their retouch tier AFTER seeing
+  // initial-generation results, on the new RetouchScreen. Kept as a const
+  // (not state) so the rest of the file doesn't need to be rewritten:
+  // it still flows through to /api/generate, which still routes it
+  // through the existing tier conditional (which now always takes the
+  // Realistic branch). Behavior of initial generation is unchanged from
+  // pre-Path-B Realistic customers.
+  const skin: "realistic" | "polished" | "glam" = "realistic";
 
   const canGenerate = Boolean(style && attire && lighting);
 
@@ -3518,22 +3522,13 @@ const StyleScreen = ({ onGenerate, onBack }: StyleScreenProps) => {
         ))}
       </div>
 
-      {/* Skin (women only — men's treatment unchanged regardless of this
-          toggle, but the toggle is shown to everyone since we don't ask for
-          gender). Defaults to Realistic = current behavior. Polished applies
-          a tone-evening + pore-preserving treatment for women. */}
-      <SectionLabel>Skin</SectionLabel>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <Chip selected={skin === "realistic"} onClick={() => setSkin("realistic")}>
-          Realistic
-        </Chip>
-        <Chip selected={skin === "polished"} onClick={() => setSkin("polished")}>
-          Polished
-        </Chip>
-        <Chip selected={skin === "glam"} onClick={() => setSkin("glam")}>
-          Glam
-        </Chip>
-      </div>
+      {/* Skin tier picker REMOVED 2026-05-15 (Path B launch). The choice
+          between Realistic / Polished / Glam now happens AFTER the initial
+          generation, on the new "Customize your Retouch Level" screen
+          between Grid and Checkout. That way the customer SEES their
+          initial-generation result first, then decides how much polishing
+          to apply per photo. Initial generation always runs with skin =
+          "realistic" (the existing Realistic prompt path is unchanged). */}
 
       {/* Photographer's tip */}
       <PhotogTip style={{ marginTop: 24 }}>
