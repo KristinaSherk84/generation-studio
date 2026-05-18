@@ -131,53 +131,57 @@ async function buildBeforeSprite(beforeUrl: string): Promise<{
   const srcW = orientedMeta.width ?? 0;
   const srcH = orientedMeta.height ?? 0;
 
-  // 2. Detect the face on a downsampled copy. Full-resolution phone
-  //    photos can be 5-10MB and Gemini doesn't need that pixel
-  //    density to find a face. The bbox is returned in NORMALIZED
-  //    (0..1) coordinates so it remains valid against the full-
-  //    resolution oriented buffer when we crop below.
-  let faceBox: NormalizedBox | null = null;
-  if (srcW > 0 && srcH > 0) {
-    const FACE_DETECT_MAX_DIM = 1024;
-    const detectBuf = await sharp(oriented)
-      .resize(FACE_DETECT_MAX_DIM, FACE_DETECT_MAX_DIM, {
-        fit: "inside",
-        withoutEnlargement: true,
-      })
-      .jpeg({ quality: 80 })
-      .toBuffer();
-    faceBox = await detectFaceBox(detectBuf, "image/jpeg");
-  }
-
-  // 3. Build the photo content for inside the Polaroid (square,
-  //    POLAROID_PHOTO_W × POLAROID_PHOTO_H). Face fills 50% of the
-  //    photo height when detected — the wider Polaroid format means
-  //    the photo doesn't have to dominate the frame the way it did in
-  //    the tighter circle, so 50% reads as natural rather than
-  //    aggressive.
+  // 2. Build the photo content for inside the Polaroid (square,
+  //    POLAROID_PHOTO_W × POLAROID_PHOTO_H).
+  //
+  // Cropping rule (per Kristi 2026-05-15, replacing the prior
+  // face-detected face-centered crop):
+  //   - WIDTH: use the full width of the uploaded photo as the crop's
+  //     width. No face-relative zoom-in.
+  //   - HEIGHT: position the crop top-weighted — the crop's top edge
+  //     sits 5% of the source height below the top of the photo. This
+  //     captures the face area for typical portrait headshots (where
+  //     the face sits in the upper third) without needing a face
+  //     detector. The 5% nudge avoids cropping straight off the very
+  //     edge of the image.
+  //   - The crop is square (POLAROID_PHOTO_W × POLAROID_PHOTO_H is
+  //     square at 380×380). If the source width is wider than the
+  //     source height (landscape upload), the crop height is capped at
+  //     srcH and the top is anchored to 0 so we don't overflow.
+  //
+  // Face detection is no longer used here. We dropped the detectFaceBox
+  // call because the top-weighted full-width crop is simpler, faster
+  // (no Gemini Vision round-trip), and per Kristi produces a more
+  // recognizable BEFORE for the share graphic.
   let photo: Buffer;
-  if (faceBox && srcW > 0 && srcH > 0) {
-    // Face detected — crop centered on it
-    const facePxX = (faceBox.xMin + faceBox.xMax) / 2 * srcW;
-    const facePxY = (faceBox.yMin + faceBox.yMax) / 2 * srcH;
-    const facePxH = (faceBox.yMax - faceBox.yMin) * srcH;
-    const facePxW = (faceBox.xMax - faceBox.xMin) * srcW;
-    const faceMax = Math.max(facePxH, facePxW);
-    let cropSize = Math.round(faceMax / BEFORE_FACE_FILL);
-    cropSize = Math.min(cropSize, srcW, srcH);
-    let left = Math.round(facePxX - cropSize / 2);
-    let top = Math.round(facePxY - cropSize / 2);
-    left = Math.max(0, Math.min(left, srcW - cropSize));
-    top = Math.max(0, Math.min(top, srcH - cropSize));
+  if (srcW > 0 && srcH > 0) {
+    // The crop is a square of side `cropSize`. Start with the source
+    // width — Kristi's "use the full width of the uploaded shot."
+    let cropSize = srcW;
+    // If the source is landscape (or very wide), the square can't be
+    // wider than the source height either. Cap to srcH so .extract()
+    // doesn't fail.
+    cropSize = Math.min(cropSize, srcH);
+    // Left position: center horizontally (anchored on the middle of the
+    // source). For typical portrait sources where cropSize === srcW,
+    // this becomes 0. For landscape sources where cropSize < srcW,
+    // this picks the horizontal middle so faces aren't sliced off.
+    const left = Math.max(0, Math.round((srcW - cropSize) / 2));
+    // Top position: 5% of srcH below the top edge — the "nudge down"
+    // Kristi specified. Clamped so the crop doesn't extend past the
+    // bottom of the source (which can happen on extreme landscape
+    // uploads where cropSize == srcH and we'd want top=0).
+    const nudge = Math.round(srcH * 0.05);
+    const top = Math.max(0, Math.min(nudge, srcH - cropSize));
     photo = await sharp(oriented)
       .extract({ left, top, width: cropSize, height: cropSize })
       .resize(POLAROID_PHOTO_W, POLAROID_PHOTO_H, { fit: "cover" })
       .toBuffer();
   } else {
-    // Fallback — salience-based attention crop with modest zoom.
-    // This runs only if Gemini face detection failed entirely. The
-    // wider Polaroid frame is more forgiving of imperfect crops than
-    // the tight circle was.
+    // Metadata read failed — fall back to salience-based attention crop.
+    // Should be extremely rare (Sharp returns dimensions for any
+    // decodable image), but defensively keep a fallback path so a
+    // missing srcW/srcH can't break the whole delivery.
     const ZOOM_FACTOR = 1.3;
     const wideTarget = Math.round(POLAROID_PHOTO_W * ZOOM_FACTOR);
     const wideCrop = await sharp(oriented)
