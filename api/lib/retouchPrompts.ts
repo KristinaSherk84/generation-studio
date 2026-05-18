@@ -10,7 +10,25 @@
  * change down to the constants below.
  */
 
-export type RetouchTier = "realistic" | "polished" | "glam";
+// ============================================================================
+// Customer-facing tier model (2026-05-18 Glow Up Deluxe pivot):
+//   "basic"  — Realistic only. No retouching. $9.99 per photo.
+//   "deluxe" — Glow Up Deluxe Bundle. Customer receives all 3 versions of
+//              the same headshot: Realistic, Polished, and Glam. $14.99
+//              per photo. /api/deliver runs both Polished and Glam Gemini
+//              Pro passes in parallel on the original Realistic photo.
+//
+// Old per-tier model ("realistic" | "polished" | "glam") replaced. The
+// underlying Polished/Glam prompts still exist below — they're just no
+// longer separately selectable by the customer. Deluxe customers get both.
+// ============================================================================
+export type RetouchTier = "basic" | "deluxe";
+
+// SubTier identifies which retouching pass is being run. Used internally by
+// /api/deliver and /api/retouch when fanning out a Deluxe order into two
+// parallel Gemini Pro calls.
+export type RetouchSubTier = "polished" | "glam";
+
 export type AgeBand = "young" | "mature" | "older";
 
 // Gemini model — Pro Image Preview ("Nano Banana Pro"). Slower (~10-15s
@@ -101,17 +119,38 @@ The aesthetic target is "commercial beauty campaign that hasn't erased the human
 
 ${PORE_ANCHOR}`;
 
+/**
+ * Build the prompt for a single retouching SUB-TIER pass.
+ *
+ * In the Glow Up Deluxe model, the customer-facing tier is "basic" or
+ * "deluxe". Basic skips retouching entirely (no Gemini Pro call needed).
+ * Deluxe fans out into TWO sub-tier passes: "polished" + "glam", run in
+ * parallel against the original Realistic photo. This function returns
+ * the prompt for a single sub-tier.
+ */
 export function buildRetouchPrompt(
-  tier: RetouchTier,
+  subTier: RetouchSubTier,
   ageBand: AgeBand | undefined,
 ): string {
-  if (tier === "polished") {
+  if (subTier === "polished") {
     return ageBand === "young"
       ? RETOUCH_POLISHED_YOUNG
       : RETOUCH_POLISHED_MATURE;
   }
-  if (tier === "glam") {
+  if (subTier === "glam") {
     return RETOUCH_GLAM;
   }
-  throw new Error(`buildRetouchPrompt called with unexpected tier: ${tier}`);
+  throw new Error(
+    `buildRetouchPrompt called with unexpected sub-tier: ${subTier}`,
+  );
+}
+
+/**
+ * Which sub-tier passes does a customer-facing tier require?
+ *   basic  → no Pro calls
+ *   deluxe → both Polished and Glam Pro calls in parallel
+ */
+export function subTiersForTier(tier: RetouchTier): RetouchSubTier[] {
+  if (tier === "deluxe") return ["polished", "glam"];
+  return [];
 }

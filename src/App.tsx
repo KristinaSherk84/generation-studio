@@ -2371,8 +2371,9 @@ const LandingV2 = ({ onStart, onPromoUnlock, onShowGallery }: LandingV2Props) =>
             margin: "28px auto 0",
           }}
         >
-          $2.99 to start your session. $11.99 per keeper. No bundles, no surprise
-          fees, no charges for headshots that don't look like you.
+          $2.99 to start your session. $9.99 per basic keeper, or $14.99
+          for the Glow Up Deluxe Bundle (3 retouching levels of the same headshot).
+          No surprise fees, no charges for headshots that don't look like you.
         </p>
         <div style={{ marginTop: 36 }}>
           <Pill onClick={onStart} size="lg">
@@ -4394,36 +4395,35 @@ const GridScreen = ({
 // (image on the left, tier picker on the right) flips to "image on top,
 // tier picker stacked below" on viewports under 500px.
 
-export type RetouchTier = "realistic" | "polished" | "glam";
+// Glow Up Deluxe tier model (2026-05-18). Replaces the prior 3-tier
+// (Realistic/Polished/Glam) picker. Now a customer picks per photo:
+//   basic  — Realistic only, $9.99
+//   deluxe — All 3 versions (Realistic + Polished + Glam), $14.99
+// The underlying Polished/Glam retouching still happens server-side for
+// Deluxe photos — the customer just doesn't have to commit to one tier
+// before purchase.
+export type RetouchTier = "basic" | "deluxe";
 
-// Concise per-tier copy used in both the intro popup AND inline on the
+// Per-tier copy used in both the intro popup AND inline on the
 // RetouchScreen — single source of truth so they don't drift.
 const RETOUCH_TIER_DESCRIPTIONS: {
   tier: RetouchTier;
   label: string;
-  oneLiner: string;
+  price: string;
   description: string;
 }[] = [
   {
-    tier: "realistic",
-    label: "Realistic",
-    oneLiner: "Untouched, just as you are.",
-    description:
-      "Keep the photo as the AI generated it — no extra retouching. Pores, fine lines, natural texture all stay. Best when you want an authentic, un-airbrushed look.",
+    tier: "basic",
+    label: "Basic",
+    price: "$9.99",
+    description: "As is, what you see is what you get",
   },
   {
-    tier: "polished",
-    label: "Polished",
-    oneLiner: "Lightly retouched, like a pro.",
+    tier: "deluxe",
+    label: "Glow Up Deluxe Bundle",
+    price: "$14.99",
     description:
-      "Even skin tone, brighter under-eyes, removed blemishes — the way a senior executive's company headshot looks. Still you, just well-rested.",
-  },
-  {
-    tier: "glam",
-    label: "Glam",
-    oneLiner: "Editorial, magazine-ready.",
-    description:
-      "Vogue-cover level retouching — luminous even skin, soft contour, subtle makeup enhancement, teeth color-corrected. Editorial polish while still keeping your features unmistakably yours.",
+      "Receive 3 versions of your headshot with different levels of retouching.",
   },
 ];
 
@@ -4479,30 +4479,19 @@ const IntroRetouchModal = ({ onDismiss }: IntroRetouchModalProps) => (
           fontSize: 22,
           fontWeight: 500,
           color: C.dark,
-          margin: "0 0 6px",
+          margin: "0 0 14px",
           lineHeight: 1.25,
         }}
       >
-        Customize your retouch level
+        Retouch your Delivered Headshots:
       </h2>
-      <p
-        style={{
-          fontSize: 13,
-          color: C.mediumGrey,
-          margin: "0 0 16px",
-          lineHeight: 1.5,
-        }}
-      >
-        Pick how much polishing you want for each photo. The price is the
-        same regardless of which level you choose — $11.99 per photo.
-      </p>
 
       {RETOUCH_TIER_DESCRIPTIONS.map((t, i) => (
         <div
           key={t.tier}
           style={{
-            paddingTop: 12,
-            paddingBottom: 12,
+            paddingTop: 14,
+            paddingBottom: 14,
             borderBottom:
               i < RETOUCH_TIER_DESCRIPTIONS.length - 1
                 ? `1px solid ${C.border}`
@@ -4511,27 +4500,34 @@ const IntroRetouchModal = ({ onDismiss }: IntroRetouchModalProps) => (
         >
           <div
             style={{
-              fontSize: 14,
-              fontWeight: 500,
-              color: C.dark,
-              marginBottom: 2,
-            }}
-          >
-            {t.label}
-          </div>
-          <div
-            style={{
-              fontSize: 12,
-              color: C.dark,
-              fontStyle: "italic",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "baseline",
               marginBottom: 4,
             }}
           >
-            {t.oneLiner}
+            <div
+              style={{
+                fontSize: 15,
+                fontWeight: 500,
+                color: C.dark,
+              }}
+            >
+              {t.label}
+            </div>
+            <div
+              style={{
+                fontSize: 13,
+                fontWeight: 500,
+                color: C.dark,
+              }}
+            >
+              {t.price}
+            </div>
           </div>
           <div
             style={{
-              fontSize: 12,
+              fontSize: 13,
               color: C.mediumGrey,
               lineHeight: 1.5,
             }}
@@ -4650,36 +4646,45 @@ const RetouchScreen = ({
 
       <h1
         style={{
-          fontSize: 26,
+          fontSize: 24,
           fontWeight: 500,
           color: C.dark,
-          margin: "0 0 6px",
+          margin: "0 0 14px",
           lineHeight: 1.2,
           letterSpacing: -0.3,
         }}
       >
-        Customize your retouch level
+        Retouch your Delivered Headshots:
       </h1>
-      <p
+
+      {/* Explainer card. Mirrors the intro modal copy so customers who
+          dismissed the modal still see the two-tier explanation inline. */}
+      <div
         style={{
-          fontSize: 14,
-          color: C.mediumGrey,
-          margin: "0 0 20px",
-          lineHeight: 1.5,
+          background: C.lightGrey,
+          borderRadius: 8,
+          padding: "12px 14px",
+          margin: "0 0 22px",
         }}
       >
-        Pick a retouch level for each photo. All photos are $11.99 — same
-        price regardless of which level you choose.
-      </p>
+        <p style={{ fontSize: 13, color: C.dark, margin: "0 0 6px", lineHeight: 1.5 }}>
+          <span style={{ fontWeight: 500 }}>Basic:</span> As is, what you see is what you get
+        </p>
+        <p style={{ fontSize: 13, color: C.dark, margin: 0, lineHeight: 1.5 }}>
+          <span style={{ fontWeight: 500 }}>Glow Up Deluxe:</span> Receive 3 versions of your headshot with different levels of retouching.
+        </p>
+      </div>
 
       {/* Per-photo rows. On desktop the thumbnail sits on the left and
           the tier picker on the right. On narrow viewports (≤500px) the
           tier picker stacks below the thumbnail so the radio circles
           remain large and easy to tap. */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         {selectedIndices.map((imgIndex) => {
           const src = images[imgIndex];
-          const currentTier = retouchTiers[imgIndex] ?? "polished";
+          // Default to "basic" — the cheaper option, safest for cost and
+          // the most conservative customer assumption.
+          const currentTier = retouchTiers[imgIndex] ?? "basic";
           return (
             <div
               key={imgIndex}
@@ -4791,25 +4796,34 @@ const RetouchScreen = ({
                           />
                         )}
                       </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
+                      <div
+                        style={{
+                          flex: 1,
+                          minWidth: 0,
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "baseline",
+                          gap: 8,
+                        }}
+                      >
                         <div
                           style={{
                             fontSize: 14,
-                            fontWeight: 500,
+                            fontWeight: selected ? 500 : 400,
                             color: C.dark,
-                            marginBottom: 2,
                           }}
                         >
                           {t.label}
                         </div>
                         <div
                           style={{
-                            fontSize: 12,
-                            color: C.mediumGrey,
-                            lineHeight: 1.4,
+                            fontSize: 13,
+                            color: selected ? C.dark : C.mediumGrey,
+                            fontWeight: selected ? 500 : 400,
+                            whiteSpace: "nowrap",
                           }}
                         >
-                          {t.oneLiner}
+                          {t.price}
                         </div>
                       </div>
                     </label>
@@ -4821,28 +4835,14 @@ const RetouchScreen = ({
         })}
       </div>
 
-      {/* Sticky-feeling CTA at the bottom. Always visible on mobile via
-          natural scroll — we deliberately don't position:fixed it (see
-          comments elsewhere in this file about iframe height issues
-          with position:fixed). */}
+      {/* CTA at the bottom. The total math runs in the parent's
+          handleAdvanceToCheckout; we deliberately don't show a running
+          total here per Kristi 2026-05-18 — simpler screen, math is
+          finalized at the Stripe page. */}
       <div style={{ marginTop: 28 }}>
         <Button onClick={onContinue} full>
-          Continue to checkout · $11.99 × {selectedIndices.length} ={" "}
-          ${(11.99 * selectedIndices.length).toFixed(2)}
+          Continue to checkout
         </Button>
-        <p
-          style={{
-            fontSize: 12,
-            color: C.mediumGrey,
-            textAlign: "center",
-            marginTop: 10,
-            lineHeight: 1.5,
-          }}
-        >
-          The retouching happens after payment. Realistic = no retouching,
-          ship as-is. Polished and Glam run through our editorial
-          retouching pass.
-        </p>
       </div>
     </div>
   );
@@ -4954,8 +4954,13 @@ const CheckoutScreen = ({
       : null;
   const isPromoUnlock = unlockSource === "promo";
 
-  const PRICE_PER_PHOTO = 11.99;
-  const subtotal = PRICE_PER_PHOTO * count;
+  // Glow Up Deluxe pricing (2026-05-18). Mixed totals supported per
+  // photo — see retouchTiers prop.
+  const PRICE_BASIC = 9.99;
+  const PRICE_DELUXE = 14.99;
+  const basicCount = retouchTiers.filter((t) => t === "basic").length;
+  const deluxeCount = retouchTiers.filter((t) => t === "deluxe").length;
+  const subtotal = PRICE_BASIC * basicCount + PRICE_DELUXE * deluxeCount;
   const totalOwed = subtotal;
   const fmt = (n: number) => `$${n.toFixed(2)}`;
 
@@ -5074,7 +5079,9 @@ const CheckoutScreen = ({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            count,
+            // Glow Up Deluxe pricing (2026-05-18): server computes the
+            // mixed total from the tier array. Length = photo count.
+            retouchTiers,
             // Forward the email so Stripe pre-fills it on the Checkout page.
             // If Stripe Link has a saved card for this email, Link auto-fills
             // the payment method with one tap — effectively turning the
@@ -5168,7 +5175,17 @@ const CheckoutScreen = ({
             }}
           >
             <span>
-              {count} high-rez headshot{count !== 1 ? "s" : ""} × $11.99
+              {basicCount > 0 && (
+                <>
+                  {basicCount} basic × $9.99
+                </>
+              )}
+              {basicCount > 0 && deluxeCount > 0 && <span> + </span>}
+              {deluxeCount > 0 && (
+                <>
+                  {deluxeCount} Glow Up Deluxe × $14.99
+                </>
+              )}
             </span>
             <span>{fmt(subtotal)}</span>
           </div>
@@ -6166,7 +6183,8 @@ const DownloadScreen = ({
           to creative, indoor to outdoor, whatever direction you want.
           Your uploaded reference photos are still saved, so you'll skip
           straight to the style picker — no re-uploading. Just $2.99 to
-          start a fresh session, then $11.99 per photo you keep.
+          start a fresh session, then $9.99 per basic keeper or $14.99 for the
+          Glow Up Deluxe Bundle (3 retouching versions of each headshot).
         </div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <Button onClick={onNewStyle}>Try a different style</Button>
@@ -6953,7 +6971,7 @@ export default function App() {
           Array.isArray(stash.retouchTiers) &&
           stash.retouchTiers.length === stash.uploadedUrls.length
             ? stash.retouchTiers
-            : stash.uploadedUrls.map(() => "polished" as RetouchTier);
+            : stash.uploadedUrls.map(() => "basic" as RetouchTier);
         const deliverResp = await fetch("/api/deliver", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -7108,14 +7126,16 @@ export default function App() {
 
   // Transition handler from Grid → Retouch (replaces the previous
   // Grid → Checkout direct jump). Pre-fills retouchTiers for any newly
-  // selected indices that don't have a tier yet — defaults to "polished"
-  // per the framing in RetouchScreen.
+  // selected indices that don't have a tier yet — defaults to "basic"
+  // per Glow Up Deluxe (2026-05-18): basic is the cheaper option and
+  // the safest default so a customer who just clicks through doesn't
+  // get auto-upsold to $14.99/photo.
   const handleAdvanceToRetouch = (selections: number[]) => {
     setSelectedImageIndices(selections);
     setRetouchTiers((prev) => {
       const next = { ...prev };
       for (const i of selections) {
-        if (!(i in next)) next[i] = "polished";
+        if (!(i in next)) next[i] = "basic";
       }
       return next;
     });
@@ -7587,7 +7607,7 @@ export default function App() {
           referencePhotoUrls={lastPhotoUrls}
           selections={lastSelections}
           retouchTiers={selectedImageIndices.map(
-            (i) => retouchTiers[i] ?? "polished",
+            (i) => retouchTiers[i] ?? "basic",
           )}
           onComplete={({ email: submittedEmail, photoUrls, shareGraphicUrls }) => {
             setEmail(submittedEmail);

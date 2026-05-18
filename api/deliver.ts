@@ -36,15 +36,18 @@ import { buildShareGraphic } from "./lib/compositeBeforeAfter.js";
 import {
   buildRetouchPrompt,
   RETOUCH_MODEL,
+  subTiersForTier,
   type RetouchTier,
+  type RetouchSubTier,
 } from "./lib/retouchPrompts.js";
 
-// Bumped from 60s → 300s on 2026-05-15 (Path B launch). The new retouch
-// pass runs Gemini Pro Image Preview on every non-Realistic-tier photo
-// before the share-graphic step. Pro takes ~10-15s per image. For 6
-// photos worst case (all Glam) we need ~90s headroom for the parallel
-// retouches plus ~10s for the composites plus a safety buffer.
-// Vercel Pro tier max is 300s — we take all of it for safety.
+// Bumped from 60s → 300s on 2026-05-15 (Path B launch). 2026-05-18 Glow
+// Up Deluxe pivot: now each Deluxe photo fires BOTH Polished and Glam
+// Pro passes in parallel — so worst case 6 photos × 2 sub-tiers = 12
+// simultaneous Pro calls. Pro Tier 2 rate limits accommodate this, and
+// the parallelism means total wall-clock is still dominated by the
+// slowest individual call (~15-25s). Vercel Pro tier max is 300s — we
+// take all of it for safety.
 export const maxDuration = 300;
 
 // -------------------- Types --------------------
@@ -79,12 +82,28 @@ type DeliverRequest = {
   // users won't have one, and skipping the metadata write for them is
   // intentional (Tiffany etc. keep their unlock permanently).
   stripeSessionId?: string;
-  // Per-photo retouch tier (Path B 2026-05-15). Same index as photoUrls.
-  // "realistic" = no retouch, ship the input photo as-is. "polished" /
-  // "glam" = Pro retouching pass via Gemini 3 Pro Image Preview using
-  // the prompts in api/lib/retouchPrompts.ts. Optional for back-compat —
-  // a missing or empty array falls back to "realistic" for every photo.
-  retouchTiers?: ("realistic" | "polished" | "glam")[];
+  // Per-photo retouch tier (Glow Up Deluxe pivot 2026-05-18). Same index
+  // as photoUrls.
+  //   "basic"  — Realistic only, no retouching. $9.99 per photo.
+  //   "deluxe" — Customer receives all 3 versions of the headshot:
+  //              Realistic + Polished + Glam. $14.99 per photo.
+  // Optional for back-compat — a missing or empty array falls back to
+  // "basic" for every photo (the safest fallback: no Pro calls, no
+  // unexpected per-photo cost).
+  retouchTiers?: RetouchTier[];
+};
+
+// One delivered headshot, expanded to N versions based on tier.
+//   Basic  → just `realistic`. polished and glam are undefined.
+//   Deluxe → all three versions populated. If Gemini Pro fails on a
+//            sub-tier pass, that field falls back to the realistic URL
+//            (so the customer always sees 3 download buttons for a
+//            deluxe photo, even if one of the Pro passes hiccupped).
+export type DeliveredHeadshot = {
+  tier: RetouchTier;
+  realistic: string;
+  polished?: string;
+  glam?: string;
 };
 
 export type DeliveryManifest = {
@@ -97,10 +116,17 @@ export type DeliveryManifest = {
   background?: Background;
   skin?: Skin;
   referencePhotoUrls: string[];
+  // Structured per-photo delivery info. New shape 2026-05-18 (Glow Up
+  // Deluxe pivot). Each entry has a tier + 1-3 URLs depending on tier.
+  deliveredHeadshots: DeliveredHeadshot[];
+  // Flattened list of all deliverable URLs in the order they appear in
+  // deliveredHeadshots (realistic, polished?, glam?). Useful for legacy
+  // tooling that wants a flat array; kept in sync with deliveredHeadshots.
   deliveredHeadshotUrls: string[];
-  // Auto-generated share graphics, one per delivered photo. Same array
-  // order as deliveredHeadshotUrls so [i] in one corresponds to [i] in
-  // the other. Added 2026-05-04.
+  // Auto-generated share graphics, one per delivered headshot (not one
+  // per URL). Same array order as deliveredHeadshots. For Basic photos
+  // the share graphic uses the Realistic version; for Deluxe photos it
+  // uses the Polished version (middle-tier, safest visual default).
   shareGraphicUrls?: string[];
 };
 
@@ -308,30 +334,94 @@ export async function sendCustomerDeliveryEmail(args: {
       </table>`
     : "";
 
-  // Backup high-res photo download row — minimal styling (small thumbnail
-  // + gold-underline text link), intentionally less prominent than the
-  // share-graphic forest-green pills above. Customer already downloaded
-  // these on the Download screen at purchase time; this section is purely
-  // re-download insurance to cut "I lost my files" support tickets.
-  const photoRow = (url: string, i: number) => `
-    <tr>
-      <td style="padding: 6px; vertical-align: middle; width: 64px;">
-        <a href="${escapeHtml(url)}" style="text-decoration: none;">
-          <img src="${escapeHtml(url)}" alt="Headshot ${i + 1}" style="width: 56px; height: 70px; object-fit: cover; border-radius: 4px; border: 1px solid #E2DFD8; display: block;" />
-        </a>
-      </td>
-      <td style="padding: 6px 6px 6px 14px; vertical-align: middle;">
-        <a href="${escapeHtml(url)}" style="color: #2A2A2A; font-size: 13px; text-decoration: none; border-bottom: 1px solid #C9A961; padding-bottom: 2px;">
-          Re-download headshot ${i + 1}
-        </a>
-      </td>
-    </tr>`;
+  // Per-version photo download row (Glow Up Deluxe layout 2026-05-18).
+  // Each delivered version (Realistic, Polished, Glam) renders as its
+  // own rectangular card matching the app's download-screen pattern:
+  // photo on the left, label + one-liner in the middle, Download button
+  // on the right.
+  const versionRow = (args: {
+    url: string;
+    label: string;
+    blurb: string;
+    photoIndex: number;
+  }) => `
+    <tr><td style="padding: 6px 0;">
+      <table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; border: 1px solid #E2DFD8; border-radius: 8px;">
+        <tr>
+          <td style="padding: 10px; width: 76px; vertical-align: middle;">
+            <a href="${escapeHtml(args.url)}" style="text-decoration: none;">
+              <img src="${escapeHtml(args.url)}" alt="${escapeHtml(args.label)} version of photo ${args.photoIndex + 1}" style="width: 64px; height: 80px; object-fit: cover; border-radius: 6px; display: block;" />
+            </a>
+          </td>
+          <td style="padding: 10px 14px; vertical-align: middle;">
+            <div style="font-size: 14px; font-weight: 500; color: #2A2A2A; line-height: 1.3;">${escapeHtml(args.label)}</div>
+            <div style="font-size: 12px; color: #888; line-height: 1.4; margin-top: 2px;">${escapeHtml(args.blurb)}</div>
+          </td>
+          <td style="padding: 10px; vertical-align: middle; text-align: right; white-space: nowrap;">
+            <a href="${escapeHtml(args.url)}" style="display: inline-block; color: #C9A961; font-size: 13px; text-decoration: none; padding: 6px 14px; border: 1px solid #C9A961; border-radius: 6px;">
+              Download
+            </a>
+          </td>
+        </tr>
+      </table>
+    </td></tr>`;
+
+  // One photo block — wraps one (Basic) or three (Deluxe) versionRows
+  // under a single photo header with a tier badge.
+  const photoBlock = (h: DeliveredHeadshot, i: number) => {
+    const isDeluxe = h.tier === "deluxe";
+    const tierBadge = isDeluxe
+      ? `<span style="display: inline-block; font-size: 11px; font-weight: 500; color: #185FA5; background: #E6F1FB; padding: 2px 10px; border-radius: 6px; margin-left: 8px; letter-spacing: 0.3px;">Glow Up Deluxe</span>`
+      : `<span style="display: inline-block; font-size: 11px; color: #888; background: #F1EFE8; padding: 2px 10px; border-radius: 6px; margin-left: 8px; letter-spacing: 0.3px;">Basic</span>`;
+    const deluxeSub = isDeluxe
+      ? `<p style="font-size: 12px; color: #888; line-height: 1.5; margin: 0 0 10px;">Three versions of the same headshot — keep them all or pick your favorite.</p>`
+      : "";
+
+    const rows: string[] = [
+      versionRow({
+        url: h.realistic,
+        label: "Realistic",
+        blurb: isDeluxe ? "No retouching. As generated." : "Your headshot exactly as generated.",
+        photoIndex: i,
+      }),
+    ];
+    if (h.polished) {
+      rows.push(
+        versionRow({
+          url: h.polished,
+          label: "Polished",
+          blurb: "Light retouching. Magazine-profile finish.",
+          photoIndex: i,
+        }),
+      );
+    }
+    if (h.glam) {
+      rows.push(
+        versionRow({
+          url: h.glam,
+          label: "Glam",
+          blurb: "Editorial beauty-campaign retouching.",
+          photoIndex: i,
+        }),
+      );
+    }
+
+    return `
+      <div style="margin: 22px 0 0;">
+        <div style="margin: 0 0 8px;">
+          <span style="font-size: 13px; font-weight: 500; color: #2A2A2A;">Photo ${i + 1}</span>${tierBadge}
+        </div>
+        ${deluxeSub}
+        <table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; max-width: 540px; margin: 0; border-spacing: 0;">
+          ${rows.join("")}
+        </table>
+      </div>
+    `;
+  };
 
   const photoTable =
-    manifest.deliveredHeadshotUrls.length > 0
-      ? `<table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; max-width: 480px; margin: 0 auto;">
-          ${manifest.deliveredHeadshotUrls.map(photoRow).join("")}
-        </table>`
+    manifest.deliveredHeadshots.length > 0
+      ? manifest.deliveredHeadshots.map(photoBlock).join("")
       : "";
 
   // The customer already downloaded their full-resolution headshots on
@@ -389,15 +479,12 @@ export async function sendCustomerDeliveryEmail(args: {
            Smaller styling than the share-graphic pills above — these are
            insurance, not the primary action. Added 2026-05-04. -->
       ${
-        manifest.deliveredHeadshotUrls.length > 0
+        manifest.deliveredHeadshots.length > 0
           ? `
         <div style="margin: 48px 0 0; padding: 24px 0 0; border-top: 1px solid #EFEAE0;">
-          <h3 style="font-size: 13px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; color: #888; margin: 0 0 8px; text-align: center;">
+          <h3 style="font-size: 13px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; color: #888; margin: 0 0 16px; text-align: center;">
             Your purchased headshots
           </h3>
-          <p style="font-size: 13px; line-height: 1.55; color: #888; margin: 0 0 18px; text-align: center; max-width: 440px; margin-left: auto; margin-right: auto;">
-            Already saved to your device — these links are here if you need to re-download later.
-          </p>
           ${photoTable}
         </div>
       `
@@ -549,70 +636,62 @@ async function generateShareGraphics(args: {
   return results;
 }
 
-// -------------------- Per-photo retouch (Path B) --------------------
+// -------------------- Per-photo retouch (Glow Up Deluxe) --------------------
 //
-// For each photo whose retouchTier is "polished" or "glam", fetch the
-// original from Blob, run Gemini 3 Pro Image Preview with the matching
-// retouching prompt, and upload the retouched bytes back to Blob. The
-// returned array is the same length and order as the input photoUrls,
-// with each non-Realistic entry replaced by the URL of its retouched
-// version. Realistic entries are passed through unchanged.
+// For each photo with tier "deluxe", fan out into TWO parallel Gemini Pro
+// Image Preview passes — one Polished, one Glam — using the prompts in
+// api/lib/retouchPrompts.ts. The customer receives all three versions
+// (Realistic + Polished + Glam) as separate download links in the email.
 //
-// Failure mode: any single photo's retouch failure (Gemini Pro 429, 5xx,
-// no image returned, timeout) falls back to the original photo URL for
-// that index. The customer still gets their initial-generation photo —
-// the email isn't blocked on Pro retouch failures. Logged loudly so the
-// pattern of failures is visible without breaking customer delivery.
+// For tier "basic", no Pro call is needed. The photo passes through with
+// just the Realistic URL.
 //
-// Parallelism: all retouches fire concurrently via Promise.allSettled.
-// Pro Image Preview's Tier 2 rate limits allow this comfortably for up
-// to 6 simultaneous photos. Total wall-clock is dominated by the slowest
-// of the parallel calls (~15-20s typical, up to 30s long tail).
+// Failure mode per sub-tier: if either Pro call fails (429, 5xx, no image,
+// timeout), the failed sub-tier falls back to the Realistic URL. The
+// customer still gets 3 download buttons for a deluxe photo — one of
+// them will just be a duplicate Realistic. Logged loudly so the failure
+// pattern is visible without breaking customer delivery.
+//
+// Parallelism: every sub-tier call across every deluxe photo fires
+// concurrently via Promise.all. For 6 all-deluxe photos that's 12
+// simultaneous Pro calls. Tier 2 rate limits accommodate this. Total
+// wall-clock is dominated by the slowest individual call (~15-25s).
 async function applyRetouchPass(
   photoUrls: string[],
   tiers: RetouchTier[],
   deliveryId: string,
-): Promise<string[]> {
+): Promise<DeliveredHeadshot[]> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     console.warn(
-      "[deliver] retouch skipped — GEMINI_API_KEY missing; shipping originals",
+      "[deliver] retouch skipped — GEMINI_API_KEY missing; shipping basics",
     );
-    return photoUrls;
+    return photoUrls.map((url) => ({ tier: "basic", realistic: url }));
   }
   const ai = new GoogleGenAI({ apiKey });
 
-  const tasks = photoUrls.map(async (url, i): Promise<string> => {
-    const tier = tiers[i] ?? "realistic";
-    if (tier === "realistic") {
-      return url; // pass through unchanged
-    }
+  // Run one sub-tier (polished or glam) Pro pass against a single photo.
+  // Returns the Blob URL of the retouched image, or the original URL on
+  // any failure path.
+  async function runSubTier(
+    sourceUrl: string,
+    sourceBytes: Buffer,
+    sourceMime: string,
+    subTier: RetouchSubTier,
+    photoIndex: number,
+  ): Promise<string> {
     try {
-      // Fetch original bytes from Blob
-      const fetchResp = await fetch(url);
-      if (!fetchResp.ok) {
-        console.warn(
-          JSON.stringify({
-            type: "retouch_fetch_failed",
-            deliveryId,
-            photoIndex: i,
-            status: fetchResp.status,
-          }),
-        );
-        return url;
-      }
-      const buf = Buffer.from(await fetchResp.arrayBuffer());
-      const mimeType = fetchResp.headers.get("content-type") ?? "image/jpeg";
-
-      // Build the prompt. Age band is unknown server-side (we don't
-      // collect age from the customer) — default to "mature" for the
-      // more conservative under-eye treatment. Glam ignores age band.
-      const prompt = buildRetouchPrompt(tier, "mature");
-
+      // Age band is unknown server-side (we don't collect age from the
+      // customer) — default to "mature" for the more conservative
+      // under-eye treatment. Glam ignores the age band entirely.
+      const prompt = buildRetouchPrompt(subTier, "mature");
       const parts: Part[] = [
         { text: prompt },
         {
-          inlineData: { mimeType, data: buf.toString("base64") },
+          inlineData: {
+            mimeType: sourceMime,
+            data: sourceBytes.toString("base64"),
+          },
         },
       ];
       const resp = await ai.models.generateContent({
@@ -620,7 +699,6 @@ async function applyRetouchPass(
         contents: [{ role: "user", parts }],
       });
 
-      // Find the first inline image in the response.
       const candidates = resp.candidates ?? [];
       for (const c of candidates) {
         const cParts = c.content?.parts ?? [];
@@ -629,10 +707,8 @@ async function applyRetouchPass(
             p as { inlineData?: { mimeType?: string; data?: string } }
           ).inlineData;
           if (inline?.data && inline.mimeType) {
-            // Upload retouched bytes back to Blob with a distinct path
-            // so the original and retouched versions don't collide.
             const ext = inline.mimeType === "image/png" ? "png" : "jpg";
-            const retouchedKey = `deliveries/${deliveryId}/retouched-${i}-${tier}.${ext}`;
+            const retouchedKey = `deliveries/${deliveryId}/retouched-${photoIndex}-${subTier}.${ext}`;
             const blob = await put(
               retouchedKey,
               Buffer.from(inline.data, "base64"),
@@ -650,27 +726,94 @@ async function applyRetouchPass(
         JSON.stringify({
           type: "retouch_no_image_returned",
           deliveryId,
-          photoIndex: i,
-          tier,
+          photoIndex,
+          subTier,
         }),
       );
-      return url;
+      return sourceUrl;
     } catch (err) {
       console.warn(
         JSON.stringify({
           type: "retouch_threw",
           deliveryId,
-          photoIndex: i,
-          tier,
+          photoIndex,
+          subTier,
           error: err instanceof Error ? err.message : String(err),
         }),
       );
-      return url;
+      return sourceUrl;
     }
-  });
+  }
 
-  // Promise.all is fine — each task is wrapped in its own try/catch and
-  // never throws, so we can't lose the partial results.
+  const tasks = photoUrls.map(
+    async (url, i): Promise<DeliveredHeadshot> => {
+      const tier = tiers[i] ?? "basic";
+
+      if (tier === "basic") {
+        // No Pro call needed. Just return the original Realistic URL.
+        return { tier: "basic", realistic: url };
+      }
+
+      // Deluxe: fetch the source bytes ONCE, then run both sub-tier
+      // passes in parallel against those bytes. Fetching the original
+      // twice would double the Blob bandwidth for no reason.
+      try {
+        const fetchResp = await fetch(url);
+        if (!fetchResp.ok) {
+          console.warn(
+            JSON.stringify({
+              type: "retouch_fetch_failed",
+              deliveryId,
+              photoIndex: i,
+              status: fetchResp.status,
+            }),
+          );
+          // Soft-fall: deluxe degrades to basic if we can't even fetch
+          // the source. Customer gets the Realistic version 3x. Better
+          // than failing the whole delivery.
+          return {
+            tier: "deluxe",
+            realistic: url,
+            polished: url,
+            glam: url,
+          };
+        }
+        const buf = Buffer.from(await fetchResp.arrayBuffer());
+        const mimeType =
+          fetchResp.headers.get("content-type") ?? "image/jpeg";
+
+        // Parallel Polished + Glam.
+        const subTiers = subTiersForTier("deluxe"); // ["polished", "glam"]
+        const [polished, glam] = await Promise.all(
+          subTiers.map((s) => runSubTier(url, buf, mimeType, s, i)),
+        );
+
+        return {
+          tier: "deluxe",
+          realistic: url,
+          polished,
+          glam,
+        };
+      } catch (err) {
+        console.warn(
+          JSON.stringify({
+            type: "retouch_deluxe_outer_threw",
+            deliveryId,
+            photoIndex: i,
+            error: err instanceof Error ? err.message : String(err),
+          }),
+        );
+        // Catastrophic fall: deluxe photo degrades to all-realistic.
+        return {
+          tier: "deluxe",
+          realistic: url,
+          polished: url,
+          glam: url,
+        };
+      }
+    },
+  );
+
   return Promise.all(tasks);
 }
 
@@ -740,58 +883,59 @@ export default async function handler(
   const timestamp = new Date().toISOString();
 
   try {
-    // ---- Per-photo retouch pass (Path B, 2026-05-15) ----
+    // ---- Per-photo retouch pass (Glow Up Deluxe 2026-05-18) ----
     //
-    // For each photo whose retouchTier is "polished" or "glam", run
-    // Gemini 3 Pro Image Preview with the corresponding retouching
-    // prompt and replace the photo's URL with the retouched version.
-    // Realistic-tier photos pass through unchanged.
+    // Each photo has tier "basic" or "deluxe". Basic photos skip the
+    // Pro pass entirely. Deluxe photos fan out into Polished + Glam
+    // sub-tier passes in parallel, producing 3 deliverable URLs each.
     //
-    // If retouchTiers is missing or empty (back-compat with old client
-    // versions still deployed during the rollout), every photo is
-    // treated as Realistic — no retouch, ship as-is.
+    // If retouchTiers is missing, malformed, or length-mismatched (e.g.
+    // back-compat with old client versions still deployed during the
+    // rollout), every photo defaults to "basic" — no Pro calls, safest
+    // fallback both for cost and behavior.
     const incomingTiers: RetouchTier[] =
       Array.isArray(body.retouchTiers) &&
-      body.retouchTiers.length === body.photoUrls.length
-        ? body.retouchTiers
-        : body.photoUrls.map(() => "realistic" as RetouchTier);
-    const finalPhotoUrls = await applyRetouchPass(
+      body.retouchTiers.length === body.photoUrls.length &&
+      body.retouchTiers.every(
+        (t) => t === "basic" || t === "deluxe",
+      )
+        ? (body.retouchTiers as RetouchTier[])
+        : body.photoUrls.map(() => "basic" as RetouchTier);
+    const deliveredHeadshots = await applyRetouchPass(
       body.photoUrls,
       incomingTiers,
       deliveryId,
     );
 
-    // ---- Write the manifest JSON. ----
-    // Tiny payload (a few KB at most) so we happily do this server-side — no
-    // 413 risk here; the bulky image bytes are already in Blob by the time
-    // this endpoint is called.
     // ---- Generate one before/after share graphic per delivered photo. ----
     //
-    // Random reference picking, sample-without-replacement so each delivered
-    // photo gets a different "before." If the customer bought more photos than
-    // they uploaded references (rare), refill the pool by reshuffling. The
-    // randomness intentionally leans toward unflattering befores — most
-    // uploaded references are casual phone selfies, so a random pick will
-    // usually land on something rough enough to make the AFTER pop. Per
-    // Kristi's spec on 2026-05-04: "I dont mind if the before's look bad.
-    // cause it makes my product look better."
+    // Share graphic source per photo:
+    //   basic  → use the Realistic URL (it's all the customer has)
+    //   deluxe → use the Polished URL (middle tier, safest visual default;
+    //            per Kristi's spec 2026-05-18 — Polished reads as polished
+    //            without the more dramatic Glam reshape risk for shares)
     //
-    // QR code points to generationheadshots.com (the marketing site).
-    //
-    // Compositing happens IN PARALLEL across all photos to keep the deliver
-    // round-trip fast — sharp + qrcode are both fast in absolute terms (~1-2s
-    // per graphic) but serial would scale poorly. Errors on individual photos
-    // are caught and logged; missing share graphics show up as undefined in
-    // the result array and the frontend gracefully omits the share UI for
-    // those photos.
+    // Random reference picking, sample-without-replacement so each
+    // delivered photo gets a different "before." Per Kristi 2026-05-04:
+    // "I dont mind if the before's look bad. cause it makes my product
+    // look better." QR points to generationheadshots.com.
+    const shareSourceUrls: string[] = deliveredHeadshots.map((h) =>
+      h.tier === "deluxe" ? (h.polished ?? h.realistic) : h.realistic,
+    );
     const shareGraphicUrls = await generateShareGraphics({
       deliveryId,
-      // Use the RETOUCHED URLs for the share graphic AFTERs so the
-      // customer (and anyone they share the graphic with) sees the
-      // editorial version, not the un-retouched initial generation.
-      deliveredPhotoUrls: finalPhotoUrls,
+      deliveredPhotoUrls: shareSourceUrls,
       referencePhotoUrls: body.referencePhotoUrls,
     });
+
+    // ---- Flatten the structured headshot list into a flat URL array
+    //      for manifest back-compat with any external tooling. ----
+    const flatDeliveredUrls: string[] = [];
+    for (const h of deliveredHeadshots) {
+      flatDeliveredUrls.push(h.realistic);
+      if (h.polished) flatDeliveredUrls.push(h.polished);
+      if (h.glam) flatDeliveredUrls.push(h.glam);
+    }
 
     const manifest: DeliveryManifest = {
       deliveryId,
@@ -803,11 +947,8 @@ export default async function handler(
       background: body.background,
       skin: body.skin,
       referencePhotoUrls: body.referencePhotoUrls,
-      // The manifest stores the FINAL (retouched, where applicable) URLs
-      // — that's what the customer downloads, what the share graphics
-      // reference, and what we'd serve again if Kristi later replays a
-      // delivery for support reasons.
-      deliveredHeadshotUrls: finalPhotoUrls,
+      deliveredHeadshots,
+      deliveredHeadshotUrls: flatDeliveredUrls,
       shareGraphicUrls,
     };
     const manifestKey = `deliveries/${deliveryId}/manifest.json`;
@@ -901,10 +1042,15 @@ export default async function handler(
 
     return res.status(200).json({
       deliveryId,
-      // Return the FINAL (retouched) URLs to the client. The download
-      // screen renders these directly — customer downloads the
-      // retouched version, not the un-retouched initial generation.
-      photoUrls: finalPhotoUrls,
+      // Structured per-photo delivery info. Each entry has tier +
+      // realistic + optional polished + optional glam. Frontend uses
+      // this to render the new Download screen with per-version cards
+      // for deluxe photos.
+      deliveredHeadshots,
+      // Flattened URL list for legacy callers / tooling that just wants
+      // a simple array of every downloadable file. Same content as
+      // deliveredHeadshots but flattened.
+      photoUrls: flatDeliveredUrls,
       shareGraphicUrls,
     });
   } catch (error) {

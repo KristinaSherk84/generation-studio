@@ -1,27 +1,28 @@
 /**
  * POST /api/create-photo-checkout-session
  *
- * Phase 2 paywall (2026-04-24, simplified 2026-05-14). Creates a Stripe
- * Checkout Session for the per-photo charge at delivery time.
- * Body: { count, customerEmail? }.
+ * Phase 2 paywall (2026-04-24, simplified 2026-05-14, Glow Up Deluxe
+ * pivot 2026-05-18). Creates a Stripe Checkout Session for the per-photo
+ * charge at delivery time.
  *
- * Pricing model (current 2026-05-15, Path B launch):
- *   - Each high-rez headshot is $11.99 flat — includes the customer's
- *     chosen retouch tier (Realistic / Polished / Glam). No upcharge.
- *   - Total = $11.99 × count, always. No credit, no per-customer discount.
+ * Body: { retouchTiers: ("basic" | "deluxe")[], customerEmail? }.
  *
- * Previously: the $2.99 entry fee was credited against the first photo
- * purchase, so 1 photo would cost $9.99 ($2.99 paid earlier + $7.00 at
- * checkout). That model was dropped because the client-side `credit_used`
- * tracking lived in sessionStorage, which resets per tab — customers
- * coming back in a new session were re-claiming the credit indefinitely.
- * Flat-price keeps the math honest and the copy simple. Paired with a
- * 48-hour TTL on the entry unlock so casual return visitors re-pay $2.99
- * to re-enter (see PAYWALL_UNLOCK_TTL_MS in src/App.tsx).
+ * Pricing model (current 2026-05-18, Glow Up Deluxe Bundle launch):
+ *   - Basic photo: $9.99 — Realistic only, no retouching.
+ *   - Glow Up Deluxe Bundle photo: $14.99 — customer receives all 3
+ *     versions of that headshot (Realistic + Polished + Glam).
+ *   - Per-photo tier is chosen on the new RetouchScreen. Mixed orders
+ *     are allowed — a customer can buy 1 Basic + 2 Deluxe for $39.97.
+ *
+ * Previous model (2026-05-15, dropped): every photo was $11.99 flat and
+ * the customer picked Realistic / Polished / Glam per photo. The Deluxe
+ * pivot replaces that with a simpler 2-tier model where the customer
+ * doesn't have to commit to a single retouching style — they can buy
+ * all 3 and pick later, hedging against any one tier missing on their face.
  *
  * Single-line-item design: ONE custom-priced line item whose `unit_amount`
- * is the computed total, instead of N separate $9.99 line items. Simpler
- * for us, clearer for the user at the Stripe page.
+ * is the computed total, instead of N separate per-photo line items.
+ * Simpler for us, clearer for the user at the Stripe page.
  *
  * success_url carries `photo_paid=1` to distinguish from Phase 1's `paid=1`.
  * The mount-time useEffect in App.tsx picks this up, verifies server-side,
@@ -32,17 +33,17 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 
 export const maxDuration = 15;
 
-// Per-photo download price in cents. Raised from 999 ($9.99) → 1199
-// ($11.99) on 2026-05-15 as part of the Path B retouch-tier launch.
-// The new $11.99 includes the chosen retouch tier (Realistic / Polished /
-// Glam) — no separate retouch upcharge. Customer pays once for the photo
-// + retouch they want. Uses Stripe price_data (custom unit_amount), not
-// the legacy "Buy it" Price ID in the Stripe dashboard — so the
-// dashboard's $9.99 Price ID is unused and can be archived later.
-const PRICE_PER_PHOTO_CENTS = 1199;
+// Glow Up Deluxe pricing in cents (2026-05-18). Bifurcated from the prior
+// flat $11.99 model.
+const PRICE_BASIC_CENTS = 999;     // $9.99 — Realistic only, no retouching
+const PRICE_DELUXE_CENTS = 1499;   // $14.99 — Realistic + Polished + Glam
+
+type RetouchTier = "basic" | "deluxe";
 
 type CreatePhotoCheckoutBody = {
-  count: number;
+  // One entry per picked photo, in the same order the photos were picked.
+  // The length of this array determines the total photo count.
+  retouchTiers: RetouchTier[];
   // Optional — the email captured by Stripe during the Phase 1 entry
   // checkout. When present we pass it as `customer_email` on the Phase 2
   // session so the Stripe page shows it pre-filled AND so Stripe Link can
@@ -54,6 +55,10 @@ type CreatePhotoCheckoutBody = {
 type CreatePhotoCheckoutResponse = {
   url: string;
 };
+
+function priceCentsForTier(tier: RetouchTier): number {
+  return tier === "deluxe" ? PRICE_DELUXE_CENTS : PRICE_BASIC_CENTS;
+}
 
 export default async function handler(
   req: VercelRequest,
@@ -71,23 +76,39 @@ export default async function handler(
   }
 
   const body = req.body as Partial<CreatePhotoCheckoutBody>;
-  const count = Number(body?.count);
+  const rawTiers = Array.isArray(body?.retouchTiers) ? body.retouchTiers : null;
   const customerEmail =
     typeof body?.customerEmail === "string" &&
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.customerEmail.trim())
       ? body.customerEmail.trim()
       : undefined;
 
-  if (
-    !Number.isInteger(count) ||
-    count < 1 ||
-    count > 20 // generous ceiling — typical user buys 1–3
-  ) {
-    return res.status(400).json({ error: "Invalid count" });
+  // Validate the tier array: must be present, 1-20 entries, each
+  // entry "basic" or "deluxe". Generous count ceiling — typical user
+  // buys 1–3 photos but we don't want to artificially cap larger orders.
+  if (!rawTiers || rawTiers.length < 1 || rawTiers.length > 20) {
+    return res
+      .status(400)
+      .json({ error: "Invalid retouchTiers — expected 1-20 entries" });
   }
+  const tiers: RetouchTier[] = [];
+  for (const t of rawTiers) {
+    if (t !== "basic" && t !== "deluxe") {
+      return res.status(400).json({
+        error: `Invalid tier: ${String(t)} — expected "basic" or "deluxe"`,
+      });
+    }
+    tiers.push(t);
+  }
+  const count = tiers.length;
+  const basicCount = tiers.filter((t) => t === "basic").length;
+  const deluxeCount = tiers.filter((t) => t === "deluxe").length;
 
-  // Flat pricing — no credit, no discount.
-  const totalCents = PRICE_PER_PHOTO_CENTS * count;
+  // Mixed total: Basic at $9.99 each + Deluxe at $14.99 each.
+  const totalCents = tiers.reduce(
+    (sum, t) => sum + priceCentsForTier(t),
+    0,
+  );
 
   const host = req.headers.host;
   if (!host) {
@@ -95,9 +116,16 @@ export default async function handler(
   }
   const origin = `https://${host}`;
 
-  // Line item name shows on the Stripe page. Plural-aware so the user
-  // recognizes what they're paying for.
-  const itemName = `${count} high-rez AI headshot${count > 1 ? "s" : ""}`;
+  // Line item name shows on the Stripe page. Spells out the mix so the
+  // customer recognizes what they're paying for (basic vs deluxe).
+  let itemName: string;
+  if (basicCount > 0 && deluxeCount > 0) {
+    itemName = `${basicCount} basic + ${deluxeCount} Glow Up Deluxe headshot${count > 1 ? "s" : ""}`;
+  } else if (deluxeCount > 0) {
+    itemName = `${deluxeCount} Glow Up Deluxe headshot${deluxeCount > 1 ? "s" : ""} (3 versions each)`;
+  } else {
+    itemName = `${basicCount} basic AI headshot${basicCount > 1 ? "s" : ""}`;
+  }
 
   const formBody = new URLSearchParams();
   formBody.append("mode", "payment");
