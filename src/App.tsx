@@ -100,27 +100,12 @@ const PAYWALL_EXPIRED_MESSAGE =
 //                       — currently transitions to step 5 immediately
 //                       until that endpoint ships
 //   5 (Download)      → "success"
-const FLOW_STEPS: { label: string; description: string }[] = [
-  {
-    label: "Upload your shots",
-    description: "5–8 of your favorite recent photos so the AI can learn your face.",
-  },
-  {
-    label: "Pick your style",
-    description: "Choose the look — corporate, natural, executive, or urban.",
-  },
-  {
-    label: "Pick your favorites to polish",
-    description: "Review your 6 headshots and pick the ones you love most.",
-  },
-  {
-    label: "Retouch your headshots",
-    description: "We polish the ones you picked with our pro retouching pass.",
-  },
-  {
-    label: "Download your shots",
-    description: "Your finished headshots are emailed to you and ready to download.",
-  },
+const FLOW_STEPS: { label: string }[] = [
+  { label: "Upload 5-8 cropped shots of your face" },
+  { label: "Pick your styles: Backgrounds, Lighting, Outfit" },
+  { label: "Pick the realistic headshots that look like you." },
+  { label: "Choose your Retouching Level" },
+  { label: "Download your New Headshots!" },
 ];
 
 // Map a Screen value to the current 1-based step number (or null if no
@@ -727,19 +712,10 @@ const IntroStepsModal = ({ onDismiss }: IntroStepsModalProps) => (
                   fontSize: 15,
                   fontWeight: 500,
                   color: C.dark,
-                  marginBottom: 2,
+                  lineHeight: 1.4,
                 }}
               >
                 {step.label}
-              </div>
-              <div
-                style={{
-                  fontSize: 13,
-                  color: C.mediumGrey,
-                  lineHeight: 1.5,
-                }}
-              >
-                {step.description}
               </div>
             </div>
           </li>
