@@ -85,9 +85,19 @@ async function verifyUnlock(
   promoCode: string | undefined,
   stripeSecretKey: string,
 ): Promise<{ ok: true } | { ok: false; reason: string }> {
+  // Case-insensitive promo compare — see note in api/generate.ts verifyUnlock.
+  // The landing-page input force-uppercases; PROMO_CODE env var is likely
+  // lowercase; verify-promo lowercases both sides. Mirror that here so
+  // promo-unlock users don't 402 on retouch. Bug fixed 2026-05-18.
   if (promoCode && typeof promoCode === "string") {
     const envCode = process.env.PROMO_CODE;
-    if (envCode && constantTimeEquals(promoCode.trim(), envCode.trim())) {
+    if (
+      envCode &&
+      constantTimeEquals(
+        promoCode.trim().toLowerCase(),
+        envCode.trim().toLowerCase(),
+      )
+    ) {
       return { ok: true };
     }
   }

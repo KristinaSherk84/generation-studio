@@ -1107,9 +1107,22 @@ async function verifyUnlock(
 ): Promise<UnlockCheck> {
   // Promo path takes precedence — cheaper (no network call) and the promo
   // code is a power-user bypass that Kristi gates by sharing manually.
+  //
+  // Case-insensitive compare (lowercased both sides) — matches the behavior
+  // of /api/verify-promo. The landing-page input force-uppercases the user's
+  // typed code before submission, while PROMO_CODE in Vercel env is likely
+  // stored lowercase. Without lowercasing here, verify-promo accepts the
+  // code at the landing screen but /api/generate then 402's every call.
+  // Bug found 2026-05-18.
   if (promoCode && typeof promoCode === "string") {
     const envCode = process.env.PROMO_CODE;
-    if (envCode && constantTimeEquals(promoCode.trim(), envCode.trim())) {
+    if (
+      envCode &&
+      constantTimeEquals(
+        promoCode.trim().toLowerCase(),
+        envCode.trim().toLowerCase(),
+      )
+    ) {
       return { ok: true, via: "promo" };
     }
     // Fall through to stripe check if a promo was sent but didn't match —
