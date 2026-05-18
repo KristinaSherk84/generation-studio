@@ -7241,20 +7241,21 @@ export default function App() {
     setHasSeenRetouchIntro(true);
   };
 
-  // Fire the "you control the retouching" popup ~3 seconds after the
-  // customer enters the loading screen for the first time this session.
-  // The 3s delay lets them watch the first slot start generating before
-  // we interrupt — this is a heads-up about what's COMING, not a
-  // reminder of what's happening now. Once dismissed it doesn't re-fire
-  // (controlled by hasSeenLoadingRetouchPopup).
+  // Fire the "you control the retouching" popup once readyCount hits 3
+  // (halfway through the 6 generations). Earlier (2026-05-18) the trigger
+  // was a flat 3-second timer, but Kristi found that fired before any
+  // photos were visible, so the heads-up felt disconnected from what
+  // was on screen. Triggering at 3-of-6 ready means the customer has
+  // already seen real generated headshots — the popup explains the
+  // visible "realistic skin on purpose" output and previews what's
+  // coming next. Once dismissed it doesn't re-fire.
   useEffect(() => {
     if (screen !== "loading" || hasSeenLoadingRetouchPopup) return;
-    const id = setTimeout(() => {
+    if (readyCount >= 3) {
       setShowLoadingRetouchPopup(true);
       setHasSeenLoadingRetouchPopup(true);
-    }, 3000);
-    return () => clearTimeout(id);
-  }, [screen, hasSeenLoadingRetouchPopup]);
+    }
+  }, [screen, hasSeenLoadingRetouchPopup, readyCount]);
 
   // Transition handler from Grid → Retouch (replaces the previous
   // Grid → Checkout direct jump). Pre-fills retouchTiers for any newly
