@@ -737,12 +737,6 @@ function assemblePrompt(req: GenerateRequest): string {
   parts.push(buildBlock4Attire(req.attire, req.variationIndex));
   parts.push(BLOCK_EYEWEAR);
   parts.push(buildBlockHair(req.skin, req.variationIndex));
-  // Smile-style fidelity rule. Tells Gemini to match the smile style of
-  // the reference photos (closed-mouth references → closed-mouth output)
-  // and to OVERRIDE the per-slot expression directive in Block 8 when
-  // the references unanimously show closed mouths. Reduces uncanny
-  // "AI teeth" complaints. Added 2026-05-15.
-  parts.push(BLOCK_SMILE_FIDELITY);
   parts.push(BLOCK_5_LIGHTING[req.lighting]);
 
   // Wide-angle lens detected on the client via EXIF? Append the stronger
@@ -777,6 +771,20 @@ function assemblePrompt(req: GenerateRequest): string {
 
   parts.push(buildBlock7Technical(req.skin));
   parts.push(buildBlock8(req.attire, req.variationIndex, req.skin));
+
+  // Smile-style fidelity rule — INTENTIONALLY LAST IN THE PROMPT
+  // (2026-05-19 position fix). Tells Gemini to match the smile style of
+  // the reference photos (closed-mouth references → closed-mouth output)
+  // and to OVERRIDE the per-slot expression directive in Block 8 when
+  // the references unanimously show closed mouths.
+  //
+  // Why this is last: Kristi found that with this block placed earlier
+  // in the prompt, the model would still follow Block 8's "teeth-showing
+  // smile" directive even when references were all closed-mouth (recency
+  // bias — Block 8 was the last thing the model read about expressions).
+  // Moving the fidelity rule to LAST position gives it the recency
+  // advantage, so the override takes effect.
+  parts.push(BLOCK_SMILE_FIDELITY);
 
   return parts.join("\n\n");
 }
