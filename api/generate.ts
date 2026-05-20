@@ -121,9 +121,21 @@ type InlineImage = { mimeType: string; data: string };
 // The Skin Polished and Skin Glam blocks (still injected based on user
 // choice) layer additional tone-evening + editorial finish direction on
 // top of Block 1's per-tier aesthetic. The aesthetic is owned by Block 1.
+// 2026-05-19 cleanup: stripped ~half of the original block. Removed the
+// gendered Polished/Glam skin-smoothing branches, the per-tier reference-
+// fidelity anchor, the pore micro-texture rule, and the 10% jawline-
+// refinement allowance — all of which were Path A relics from when initial
+// generation handled retouching. In the Glow Up Deluxe (Path B) model,
+// retouching is a separate post-purchase Gemini Pro pass via /api/retouch
+// with its own dedicated prompts in api/lib/retouchPrompts.ts. Initial
+// generation only needs to do ONE thing now: render this specific person
+// realistically. The diagnosis: cumulative prompt bloat from leftover
+// Path A directives was burying identity preservation and pulling Flash
+// 3.1 toward generic stock-photo output (see Ken's bad-render incident
+// 2026-05-19).
 const BLOCK_1_IDENTITY = `Generate a professional headshot of the person shown in the reference photos.
 
-IDENTITY PRESERVATION (RULE #1 — NON-NEGOTIABLE, OVERRIDES EVERY OTHER DIRECTIVE IN THIS PROMPT INCLUDING THE SKIN SMOOTHING DIRECTIVE BELOW):
+IDENTITY PRESERVATION (RULE #1 — NON-NEGOTIABLE, OVERRIDES EVERY OTHER DIRECTIVE IN THIS PROMPT):
 
 Preserve the subject's facial features with 100% precision. The generated face must be UNMISTAKABLY the same person — a coworker, friend, or family member viewing the headshot would recognize them immediately with zero hesitation. Match the reference photos EXACTLY for:
 - Face shape and overall facial proportions
@@ -132,24 +144,12 @@ Preserve the subject's facial features with 100% precision. The generated face m
 - Nose shape, nose width, nostril shape, nose tip
 - Mouth shape, lip thickness, lip width, mouth corners
 - Hairline (where the hair meets the forehead)
-- Underlying skin tone and ethnicity (the base shade — surface unevenness is separately handled by the smoothing directive)
+- Underlying skin tone and ethnicity
 - Any distinguishing marks: freckles, beauty marks, moles, scars, dimples, asymmetries
 
-DO NOT idealize features. DO NOT blend toward generic 'attractive' proportions, the conventional Instagram look, or AI-default beauty patterns. DO NOT alter the structural asymmetries that make this person them — an eye slightly higher than the other, a uniquely curved nose, a chin off-center, a smile that pulls more to one side. A real human face is slightly asymmetrical at the BONE/STRUCTURE level — keep all of that exactly. ('Asymmetries' here refers to facial STRUCTURE only, not to skin tone variations — those are handled by the smoothing directive below.) The smoothing directive operates ONLY on surface evenness — it NEVER touches facial structure, proportions, feature placement, pore structure, or distinguishing structural characteristics.
+DO NOT idealize features. DO NOT blend toward generic 'attractive' proportions, the conventional Instagram look, or AI-default beauty patterns. DO NOT alter the structural asymmetries that make this person them — an eye slightly higher than the other, a uniquely curved nose, a chin off-center, a smile that pulls more to one side. A real human face is slightly asymmetrical at the BONE/STRUCTURE level — keep all of that exactly.
 
-SKIN SMOOTHING DIRECTIVE — apply based on BOTH the user's chosen Skin option (provided elsewhere in this prompt) AND the subject's apparent gender from the reference photos. This directive operates STRICTLY on the skin SURFACE — never on facial structure or features (Rule #1 above):
-
-REFERENCE-FIDELITY ANCHOR (CRITICAL — APPLIES TO ALL TIERS): Match the reference photos' actual skin condition. If the reference photos show smooth, well-rested skin around the eyes, render the output with the same smooth, well-rested skin. Do not invent texture, shadows, or signs of fatigue that aren't visible in the references. The subject's skin appears exactly as it does in the references, then the tier-specific aesthetic below is applied on top of that.
-
-- If the user chose "Realistic" skin, OR the subject appears to be a MAN regardless of choice: Completely natural skin treatment — no skin retouch. Keep pores, fine lines, freckles, beauty marks and accentuate natural skin texture. Remove transient blemishes (active acne, temporary redness). Skin reads as un-retouched, authentically real — no airbrushed look, no editorial polish, just a great natural-light portrait.
-
-- If the subject appears to be a WOMAN AND the user chose "Polished" skin: Light Lightroom-style retouching. Even out hot spots on skin, preserve pore structure, even skin tone across the face, remove blemishes. Render the skin around the eyes rested, bright, and smooth — like a senior executive who slept well last night. The result reads as 'lightly retouched and realistic' — the kind of headshot you'd see on a senior executive's company website.
-
-- If the subject appears to be a WOMAN AND the user chose "Glam" skin: Editorial luxury beauty retouching, equivalent to a Vogue cover photograph or high-end L'Oréal/Estée Lauder beauty campaign. Skin retains pore detail and structure; tone renders flawlessly even and illuminated. The skin around the eyes renders editorial-flawless — soft, smooth, luminous, like a magazine beauty shot. Filled-in softbox lighting with almost no shadows, professionally retouched in post-production by a high-end beauty retoucher. Skin reads as editorial-magazine-quality but still retains all pore structure. CRITICAL IDENTITY GUARDRAIL FOR THIS TIER: at editorial-level smoothing the model has a strong tendency to drift toward generic-pretty / AI-default features and lose the subject's actual identity — do NOT let that happen. The smoothing only applies to surface evenness. Every facial feature, every proportion, every distinguishing mark, the eye SHAPE itself, the nose, the mouth, the bone structure, the asymmetries — all of those remain UNMISTAKABLY the subject's own. Smooth the surface, not the person.
-
-PORE MICRO-TEXTURE — CRITICAL FOR ALL TIERS: Preserve the 3D micro-texture of the skin surface — the tiny raised/recessed terrain visible at close magnification (the literal pores themselves). This is the ONLY skin attribute that gets 100% preservation across all tiers. Pore preservation is a separate concept from surface evenness — pore micro-texture stays at 100% on the face, neck, and visible décolletage, while surface evenness follows the tier-specific aesthetic above.
-
-Up to approximately 10% structural refinement to the jawline or any double chin if present. Do not exceed that amount.
+SKIN RENDERING: Render the subject's skin exactly as it appears in the reference photos — pores, fine lines, freckles, beauty marks, natural texture all preserved. Remove only transient blemishes (active acne, temporary redness). The output reads as un-retouched, authentically real — no airbrushed look, no editorial polish. Any retouching the customer wants is applied in a SEPARATE step AFTER this generation completes, not here.
 
 The goal is to photograph THIS SPECIFIC PERSON in a new setting — not to produce a generic, plastic, smooth, emotionless face that vaguely resembles them.
 
