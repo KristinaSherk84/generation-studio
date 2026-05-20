@@ -708,7 +708,9 @@ ${outfitLine}
 
 REFERENCE PHOTO USAGE RULE: The uploaded reference photos are provided ONLY so you can learn the subject's facial likeness — face shape, features, hair, skin tone. You MUST NOT copy, sample, or draw inspiration from the reference photos' backgrounds, environments, colors, lighting, or scenes. The new photograph's background and lighting come ENTIRELY from the direction in the prompt above — ignore anything visible behind or around the subject in the reference photos.${womenSkinAnchor}${glamUnderEyeOverride}
 
-IMPORTANT OUTPUT CONSTRAINT: Return exactly ONE single photograph. Do NOT return a grid, contact sheet, collage, multi-panel image, side-by-side comparison, or any composition containing more than one headshot. One photo only. The most important thing is preserving the subject's real likeness from the reference photos.`;
+FINAL IDENTITY CHECK (most important rule in this entire prompt): Above all else, the face in this output must look UNMISTAKABLY like the person in the reference photos — same face shape, same bone structure, same eye shape and color, same nose, same mouth, same hairline, same ethnicity, same distinguishing marks. If the generated face wouldn't be recognized by a coworker, friend, or family member at first glance, you have failed this image. The style, lighting, and outfit directives above NEVER override identity. Do NOT default to a generic professional-headshot face. Do NOT blend toward stock-photo proportions. This is THIS SPECIFIC PERSON in a new setting, not a generic professional in their general age and ethnic range.
+
+IMPORTANT OUTPUT CONSTRAINT: Return exactly ONE single photograph. Do NOT return a grid, contact sheet, collage, multi-panel image, side-by-side comparison, or any composition containing more than one headshot. One photo only.`;
 }
 
 // -------------------- Prompt assembly --------------------
