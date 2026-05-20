@@ -229,6 +229,19 @@ export default async function handler(
     const response = await ai.models.generateContent({
       model: RETOUCH_MODEL,
       contents: [{ role: "user", parts }],
+      // Explicitly request 2K output (1792x2400 at 3:4). Without this
+      // config, Pro Image Preview defaults to ~896x1200 — less than half
+      // the resolution of the Flash initial generation it's retouching.
+      // That meant Glow Up Deluxe customers were paying more (\$14.99)
+      // for SMALLER deliverables than Basic (\$9.99 at 2K). Set to "2K"
+      // for size parity with the Realistic photo in the bundle. Bug
+      // surfaced 2026-05-20 (Kristi noticed retouched files were 896x1200).
+      config: {
+        imageConfig: {
+          aspectRatio: "3:4",
+          imageSize: "2K",
+        },
+      },
     });
 
     // Walk the response for the first inline image part.
