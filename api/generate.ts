@@ -40,7 +40,7 @@ export const maxDuration = 300;
 //   executive    → "Executive"
 //   urban        → "Urban Industrial" (NEW — combines the old Creative
 //                  industrial-office background with a new urban-street one)
-type Style = "corporate" | "creative" | "executive" | "urban";
+type Style = "corporate" | "creative" | "executive" | "urban" | "healthcare";
 type Attire = "formal" | "casual" | "keep" | "medical";
 type Lighting = "studio" | "natural" | "dramatic" | "golden";
 type Background =
@@ -267,6 +267,10 @@ const BLOCK_3_STYLE_BASE: Record<Style, string> = {
   creative: `Style: Warm, approachable, personable, with a clear outdoor or natural-environment feel. Softer edges than corporate. Hints of personality — a senior creative, a consultant, or a thought leader who does keynote talks. Less "Wall Street," more "TED stage outdoors." The lighting reads as natural daylight even when shot in a studio — never artificial-fluorescent or harsh-direct. Absolutely zero expressionless eyes. The expression must be realistic, active, engaged, and smiling.`,
   executive: `Style: Bold, authoritative, commanding. Strong presence — reads as "in charge." Darker tones, higher contrast, more gravitas — C-suite or board member energy. Background is deep and moody: near-black charcoal, deep gradient to black at the edges, or dark architectural backdrop softly blurred. Hair rim light is essential for separation. Directional lighting is welcome (see lighting rule below), but the downward-facing planes of the face must never fall into deep shadow — the eye sockets, under the nose, the nasolabial folds, and under the chin all stay well-filled so the subject's eyes are clearly visible and expressive. The realistic expression leans fierce and captivating rather than warm-and-smiling: "ready to take on the world," the knowing look that says "I have a secret I'm not telling you," a confident realistic half-smile that pulls the viewer in.`,
   urban: `Style: Modern, on-location, lifestyle. Reads as a polished professional photographed in a real city environment — a downtown senior tech leader, a designer, a content creator with executive presence. The "I just walked out for coffee" professional vibe — unstuffy but elevated. Background is always a real urban setting (city street, modern office interior) rendered with extreme bokeh so no specific location is identifiable. Absolutely zero expressionless eyes. The expression must be realistic, active, engaged.`,
+  // Healthcare — STARTER PROMPT, written 2026-05-22. Kristi will iterate on
+  // the wording. Mirrors the Urban Industrial structural pattern (base style
+  // + 2 rotating backgrounds, 3/3 split across the 6-image batch).
+  healthcare: `Style: Clean, modern, professional medical setting. Reads as a healthcare professional photographed in a real clinical environment — a physician in a contemporary hospital, a nurse practitioner in a modern wellness center, a clinician at a private practice. Competent, approachable, trustworthy. Background is always a real medical setting (hospital interior or modern medical office) rendered with extreme bokeh so no specific location is identifiable. Absolutely zero expressionless eyes. The expression must be realistic, active, engaged, and warm.`,
 };
 
 // Background variants — the frontend passes variationIndex 0-5; the
@@ -284,6 +288,15 @@ const CREATIVE_BG_FALL_TREES = `Background: A distant outdoor autumn setting at 
 const URBAN_BG_INDUSTRIAL = `Background: A bright, modern industrial office interior — exposed concrete, steel beams, polished wood, large windows flooded with natural daylight. Photographed with extreme bokeh blur (as if shot on a 200mm lens at f/1.2 with the background 40+ feet behind the subject). The background must be SO heavily blurred that NO specific beam, window, wall, surface, or object is identifiable. What should be visible: soft ambient light, abstract geometric washes in light grey, white, and warm wood tones, gentle out-of-focus highlights. What must NOT be visible: any recognizable architectural detail, specific window mullion, visible beam, door, or piece of furniture. Think "ambient light and color washes," not "photo of an office."`;
 
 const URBAN_BG_STREET = `Background: A city sidewalk and storefronts at golden hour — brick facades, shop windows, awnings, railings, the subtle suggestion of distant pedestrians. Architectural elements placed 40+ feet behind the subject, photographed with the most extreme creamy bokeh imaginable (as if shot on a 200mm lens at f/1.2 on a full-frame camera). The background must be SO heavily blurred that NO specific sign, doorway, window mullion, person, or business is identifiable. What should be visible: warm afternoon golden-hour light, soft architectural color washes (warm brick reds, deep stone greys, warm window glows), gentle out-of-focus highlights. What must NOT be visible: any recognizable storefront, sign text, doorway, pedestrian, or vehicle. Think "lifestyle headshot taken on a charming city street" — but the street itself is a soft impressionist wash of warm tones, not a recognizable place.`;
+
+// HEALTHCARE (2 backgrounds × 3 variations each = 3/3 split).
+// STARTER PROMPTS, written 2026-05-22. Kristi will iterate on the wording.
+// Anti-text/anti-equipment guardrails mirror the medical attire variants
+// — Gemini hallucinates fake hospital signage, gibberish equipment labels,
+// and clinical-looking text on backgrounds unless explicitly forbidden.
+const HEALTHCARE_BG_HOSPITAL = `Background: A modern hospital interior — soft white walls, polished floors, large windows with diffused daylight, a hint of contemporary clinical architecture (a wide corridor, an open reception area). Architectural elements placed 40+ feet behind the subject, photographed with the most extreme creamy bokeh imaginable (as if shot on a 200mm lens at f/1.2 on a full-frame camera). The background must be SO heavily blurred that NO specific room, door, sign, monitor, gurney, badge, hospital crest, or piece of medical equipment is identifiable. NO text or logos of any kind in the background. What should be visible: bright clean diffused light, abstract architectural washes in soft whites, pale blues, and warm wood tones, gentle out-of-focus highlights. What must NOT be visible: any recognizable hospital signage, equipment, doorway, badge, monitor, person, or text. Think "ambient clinical light and color washes," not "photo of a hospital."`;
+
+const HEALTHCARE_BG_OFFICE = `Background: A clean, modern medical office interior — soft neutral walls, contemporary furniture, warm professional lighting, perhaps a softly suggested wood-paneled accent or framed wall art in the deep distance. Architectural elements placed 40+ feet behind the subject, photographed with the most extreme creamy bokeh imaginable (as if shot on a 200mm lens at f/1.2 on a full-frame camera). The background must be SO heavily blurred that NO specific furniture, framed poster, anatomy chart, doorway, examination table, or detail is identifiable. NO text or logos of any kind in the background. What should be visible: warm professional ambient light, soft architectural color washes (warm cream, pale sage, gentle wood tones), gentle out-of-focus highlights. What must NOT be visible: any recognizable framed image, doorway, examination table, equipment, or specific furniture piece. Think "warm modern medical office wash," not "photo of an exam room."`;
 
 function buildBlock3Style(style: Style, variationIndex: number): string {
   // Corporate / Executive: no rotating background — Block 3 is the full style,
@@ -313,6 +326,13 @@ function buildBlock3Style(style: Style, variationIndex: number): string {
     // Even indices = industrial office, odd = street.
     const bg = variationIndex % 2 === 0 ? URBAN_BG_INDUSTRIAL : URBAN_BG_STREET;
     return `${BLOCK_3_STYLE_BASE.urban}\n\n${bg}`;
+  }
+
+  if (style === "healthcare") {
+    // 2 backgrounds × 3 variations each = 3/3 split.
+    // Even indices = hospital, odd = medical office.
+    const bg = variationIndex % 2 === 0 ? HEALTHCARE_BG_HOSPITAL : HEALTHCARE_BG_OFFICE;
+    return `${BLOCK_3_STYLE_BASE.healthcare}\n\n${bg}`;
   }
 
   // Defensive default — shouldn't be reachable since Style type is exhaustive.
@@ -1202,7 +1222,7 @@ export default async function handler(
     // must move together so the user doesn't sneak past the UI gate.
     return res.status(400).json({ error: "At least 5 reference photos required" });
   }
-  if (!body.style || !["corporate", "creative", "executive", "urban"].includes(body.style)) {
+  if (!body.style || !["corporate", "creative", "executive", "urban", "healthcare"].includes(body.style)) {
     return res.status(400).json({ error: "Invalid style" });
   }
   if (!body.attire || !["formal", "casual", "keep", "medical"].includes(body.attire)) {

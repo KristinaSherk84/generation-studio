@@ -52,7 +52,7 @@ export const maxDuration = 300;
 
 // -------------------- Types --------------------
 
-type Style = "corporate" | "creative" | "executive" | "urban";
+type Style = "corporate" | "creative" | "executive" | "urban" | "healthcare";
 type Attire = "formal" | "casual" | "keep" | "medical";
 type Lighting = "studio" | "natural" | "dramatic" | "golden";
 type Background =
@@ -889,7 +889,7 @@ export default async function handler(
   if (!Array.isArray(body.referencePhotoUrls)) {
     return res.status(400).json({ error: "referencePhotoUrls must be an array" });
   }
-  if (!body.style || !["corporate", "creative", "executive", "urban"].includes(body.style)) {
+  if (!body.style || !["corporate", "creative", "executive", "urban", "healthcare"].includes(body.style)) {
     return res.status(400).json({ error: "Invalid style" });
   }
   if (

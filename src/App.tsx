@@ -2954,7 +2954,7 @@ const STYLES: readonly StyleEntry[] = [
   { id: "creative",   name: "Creative Natural",  swatch: "#7A8A5C", silhouette: "#3D452E", visual: "creative" },
   { id: "executive",  name: "Executive",         swatch: "#2A2A28", silhouette: "#6C6B66", visual: "executive" },
   { id: "urban",      name: "Urban Industrial",  swatch: "#6F614F", silhouette: "#3D362A", visual: "urban" },
-  { id: "healthcare", name: "Healthcare",        swatch: "#BCCDCB", silhouette: "#4A6868", visual: "healthcare", comingSoon: true },
+  { id: "healthcare", name: "Healthcare",        swatch: "#BCCDCB", silhouette: "#4A6868", visual: "healthcare" },
   { id: "realtor",    name: "Realtor",           swatch: "#C8B68E", silhouette: "#7A6A4A", visual: "realtor", comingSoon: true },
 ] as const;
 
@@ -3062,7 +3062,7 @@ const SectionLabel = ({ children, style = {} }: SectionLabelProps) => (
 // except `background` — which is only meaningful for Corporate style. Creative
 // and Executive get their background direction from the style prompt itself.
 export type StyleSelections = {
-  style: "corporate" | "creative" | "executive" | "urban";
+  style: "corporate" | "creative" | "executive" | "urban" | "healthcare";
   attire: "formal" | "casual" | "keep" | "medical";
   lighting: "studio" | "natural" | "dramatic" | "golden";
   background?: "white" | "lightgrey" | "midgrey" | "dark" | "blue" | "green" | "rainbow";
@@ -5834,7 +5834,7 @@ const DownloadScreen = ({
   // randomly pick ONE of them to preview below (alternates per page load)
   // so the bonus row is a single human teaser + a pet example card.
   const OTHER_STYLES: StyleSelections["style"][] = chosenStyle
-    ? (["corporate", "creative", "executive", "urban"] as const).filter(
+    ? (["corporate", "creative", "executive", "urban", "healthcare"] as const).filter(
         (s): s is StyleSelections["style"] => s !== chosenStyle,
       )
     : [];
@@ -5939,6 +5939,7 @@ const DownloadScreen = ({
     creative: "Creative Natural",
     urban: "Urban Industrial",
     executive: "Executive",
+    healthcare: "Healthcare",
   };
 
   return (
