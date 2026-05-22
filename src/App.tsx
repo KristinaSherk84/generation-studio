@@ -2940,7 +2940,7 @@ const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) 
 // at a glance. Each silhouette is a darker variant of its swatch color,
 // EXCEPT Executive — its swatch is already near-black, so the silhouette
 // is LIGHTER than the bg to remain visible.
-type StyleVisual = "creative" | "corporate" | "executive" | "urban" | "realtor";
+type StyleVisual = "creative" | "corporate" | "executive" | "urban" | "healthcare" | "realtor";
 type StyleEntry = {
   id: string;
   name: string;
@@ -2950,11 +2950,12 @@ type StyleEntry = {
   comingSoon?: boolean;
 };
 const STYLES: readonly StyleEntry[] = [
-  { id: "corporate", name: "Corporate",         swatch: "#D3D1C7", silhouette: "#6C6B66", visual: "corporate" },
-  { id: "creative",  name: "Creative Natural",  swatch: "#7A8A5C", silhouette: "#3D452E", visual: "creative" },
-  { id: "executive", name: "Executive",         swatch: "#2A2A28", silhouette: "#6C6B66", visual: "executive" },
-  { id: "urban",     name: "Urban Industrial",  swatch: "#6F614F", silhouette: "#3D362A", visual: "urban" },
-  { id: "realtor",   name: "Realtor",           swatch: "#C8B68E", silhouette: "#7A6A4A", visual: "realtor", comingSoon: true },
+  { id: "corporate",  name: "Corporate",         swatch: "#D3D1C7", silhouette: "#6C6B66", visual: "corporate" },
+  { id: "creative",   name: "Creative Natural",  swatch: "#7A8A5C", silhouette: "#3D452E", visual: "creative" },
+  { id: "executive",  name: "Executive",         swatch: "#2A2A28", silhouette: "#6C6B66", visual: "executive" },
+  { id: "urban",      name: "Urban Industrial",  swatch: "#6F614F", silhouette: "#3D362A", visual: "urban" },
+  { id: "healthcare", name: "Healthcare",        swatch: "#BCCDCB", silhouette: "#4A6868", visual: "healthcare", comingSoon: true },
+  { id: "realtor",    name: "Realtor",           swatch: "#C8B68E", silhouette: "#7A6A4A", visual: "realtor", comingSoon: true },
 ] as const;
 
 // Colored bokeh orbs for the Creative Natural swatch — designed to evoke the
@@ -3186,7 +3187,7 @@ const StyleScreen = ({ onGenerate, onBack }: StyleScreenProps) => {
         <div
           style={{
             display: "flex",
-            gap: 8,
+            gap: 5,
             paddingLeft: 32,
             paddingRight: 32,
             width: "max-content",
@@ -3200,13 +3201,14 @@ const StyleScreen = ({ onGenerate, onBack }: StyleScreenProps) => {
               key={s.id}
               onClick={disabled ? undefined : () => setStyle(s.id)}
               style={{
-                // Fixed-width cards in the horizontal scroll row. 95px lines
-                // up roughly 3 fully-visible + 1 partial on a 380px viewport
-                // (with parent padding), telegraphing the swipe affordance.
-                flex: "0 0 95px",
+                // Fixed-width cards in the horizontal scroll row. 56px lines
+                // up roughly 5 fully-visible cards on a 360px mobile viewport
+                // (296px content after 32px parent padding). On 380px+
+                // viewports, additional cards become visible.
+                flex: "0 0 56px",
                 background: C.white,
                 borderRadius: 6,
-                padding: 6,
+                padding: 4,
                 border: `1.5px solid ${selected ? C.dark : C.border}`,
                 cursor: disabled ? "default" : "pointer",
                 transition: "border-color 0.15s",
@@ -3220,7 +3222,7 @@ const StyleScreen = ({ onGenerate, onBack }: StyleScreenProps) => {
                   borderRadius: 4,
                   position: "relative",
                   overflow: "hidden",
-                  marginBottom: 6,
+                  marginBottom: 4,
                 }}
               >
                 {/* Creative Natural — colored bokeh orbs over green base.
@@ -3329,6 +3331,37 @@ const StyleScreen = ({ onGenerate, onBack }: StyleScreenProps) => {
                   </>
                 )}
 
+                {/* Healthcare — clean clinical-light treatment. Cool teal-
+                    grey base with a subtle bright wash from upper-center
+                    evoking diffused medical-office light. Placeholder
+                    visual only — final treatment dials in when the
+                    healthcare-background prompts are ready. */}
+                {s.visual === "healthcare" && (
+                  <>
+                    <div
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        background:
+                          "linear-gradient(180deg, rgba(220,232,232,0.55) 0%, rgba(140,168,168,0.40) 100%)",
+                      }}
+                    />
+                    {/* Soft clinical-light wash from upper center */}
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: "5%",
+                        left: "20%",
+                        width: "60%",
+                        height: "50%",
+                        background:
+                          "radial-gradient(circle, rgba(255,255,255,0.32) 0%, transparent 70%)",
+                        filter: "blur(5px)",
+                      }}
+                    />
+                  </>
+                )}
+
                 {/* Realtor — warm beige base evoking suburban/residential
                     interior (staged living room, neutral wall, warm window
                     light). Placeholder visual only — final treatment can
@@ -3409,7 +3442,7 @@ const StyleScreen = ({ onGenerate, onBack }: StyleScreenProps) => {
                   </div>
                 )}
               </div>
-              <div style={{ fontSize: 12, fontWeight: 500, color: C.dark, lineHeight: 1.2, textAlign: "center" }}>
+              <div style={{ fontSize: 11, fontWeight: 500, color: C.dark, lineHeight: 1.2, textAlign: "center" }}>
                 {s.name}
               </div>
             </div>
