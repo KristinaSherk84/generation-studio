@@ -67,6 +67,12 @@ type Skin = "realistic" | "polished" | "glam";
 
 type DeliverRequest = {
   email: string;
+  // Customer full name (added 2026-05-22). Required. Captured on the
+  // CheckoutScreen alongside email so Kristi can track customers down by
+  // name if a support request comes in — email alone isn't always enough.
+  // Surfaced in the $$$-AI-Generator-Used usage-alert email + the customer
+  // delivery email greeting + the on-disk manifest.
+  customerName: string;
   // Public Blob URLs for the CLEAN 2K images — the browser already uploaded
   // them via @vercel/blob/client before calling this endpoint.
   photoUrls: string[];
@@ -110,6 +116,11 @@ export type DeliveryManifest = {
   deliveryId: string;
   timestamp: string;
   email: string;
+  // Customer full name (added 2026-05-22). Mirrored to the manifest so a
+  // future audit / support lookup can find a customer by name from the
+  // saved manifest blob without having to cross-reference the Stripe
+  // customer record.
+  customerName: string;
   style: Style;
   attire: Attire;
   lighting: Lighting;
@@ -204,7 +215,8 @@ async function sendUsageAlertEmail(args: {
     <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#2c2c2a;max-width:640px;">
       <h2 style="margin:0 0 8px 0;font-weight:500;">Someone just used the AI Generator</h2>
       <p style="margin:0 0 16px 0;color:#666;">
-        <strong>Customer:</strong> ${escapeHtml(manifest.email)}<br/>
+        <strong>Name:</strong> ${escapeHtml(manifest.customerName)}<br/>
+        <strong>Email:</strong> ${escapeHtml(manifest.email)}<br/>
         <strong>When:</strong> ${escapeHtml(manifest.timestamp)}<br/>
         <strong>Delivery ID:</strong> ${escapeHtml(manifest.deliveryId)}
       </p>
@@ -241,7 +253,10 @@ async function sendUsageAlertEmail(args: {
         // these don't trip spam on Kristi's own inbox.
         from: "AI Generator Alerts <kristi@kristinasherk.com>",
         to: ["kristi@kristinasherk.com"],
-        subject: "$$$-AI-Generator-Used",
+        // Subject includes the customer name so Kristi can see at a glance
+        // in her Gmail list who used the generator without opening the
+        // email. Kept the "$$$" prefix so existing filter rules still match.
+        subject: `$$$-AI-Generator-Used — ${manifest.customerName}`,
         html,
       }),
     });
@@ -850,6 +865,15 @@ export default async function handler(
   ) {
     return res.status(400).json({ error: "Please enter a valid email address." });
   }
+  // Customer name (added 2026-05-22). Required, trimmed, soft length cap.
+  // Trim first so "  " or whitespace-only inputs are rejected. 2-char floor
+  // matches the client-side gate; 120-char ceiling is generous (longest
+  // realistic full name is ~80 chars) and just stops absurd payloads.
+  const customerNameTrimmed =
+    typeof body.customerName === "string" ? body.customerName.trim() : "";
+  if (customerNameTrimmed.length < 2 || customerNameTrimmed.length > 120) {
+    return res.status(400).json({ error: "Please enter your full name." });
+  }
   if (
     !Array.isArray(body.photoUrls) ||
     body.photoUrls.length === 0 ||
@@ -954,6 +978,7 @@ export default async function handler(
       deliveryId,
       timestamp,
       email: body.email,
+      customerName: customerNameTrimmed,
       style: body.style,
       attire: body.attire,
       lighting: body.lighting,

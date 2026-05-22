@@ -69,7 +69,7 @@ type GenerateRequest = {
   //   - stripeSessionId: the Stripe Checkout Session ID from the $2.99
   //     entry payment. Server verifies via Stripe API that
   //     metadata.unlock_expires_at > now AND metadata.unlock_consumed !== "true".
-  //   - promoCode: the env-var-defined promo code (kristi-vip-xyz at time
+  //   - promoCode: the env-var-defined promo code (kristi-vip-abc at time
   //     of writing). Server compares against process.env.PROMO_CODE with
   //     constant-time equality.
   // If neither is present, the request is rejected with 402 Payment Required
@@ -180,23 +180,7 @@ If any reference photo appears to have been taken with a wide-angle lens (phone 
 //   - Under 35   → 40% reduction (light touch — younger skin needs less)
 //   - 35–50      → 55% reduction (heavier — where pronounced lines live)
 //   - 50 or older → preserve natural texture (no softening, reads authentic)
-const BLOCK_UNDER_EYE = `Under-eye rendering rule (women only). Apply per the subject's apparent age, evaluated from the reference photos.
-
-REGION SCOPE: This rule applies ONLY to the under-eye zone (the area immediately between the lower lash line and the top of the cheekbone). Cheeks, forehead, nose, and jawline keep full natural skin texture per Block 1.
-
-REFERENCE-FIDELITY ANCHOR: Match what the reference photos actually show in the under-eye area. If the references show smooth, rested under-eye skin, the output renders smooth and rested. Do not invent shadows or texture that aren't visible in the references.
-
-TIER 1 — WOMAN UNDER APPROXIMATELY 35 YEARS OLD:
-Render the skin around the eyes rested, bright, and smooth. Target: "well-rested young adult after a good night's sleep." Avoid the over-smooth filter / filler-injected look.
-
-TIER 2 — WOMAN BETWEEN APPROXIMATELY 35 AND 50 YEARS OLD:
-Render the skin around the eyes rested, bright, and smooth — like a professional in her 40s who slept well last night. The result reads as the same person as the references, just well-rested. Avoid the over-smooth filter / filler-injected look.
-
-TIER 3 — WOMAN 50 OR OLDER:
-Render the under-eye area naturally per Block 1's Realistic aesthetic. Real skin texture remains visible — refusing to over-retouch reads as deliberate craft. Customers in this band typically prefer realistic to "youthful."
-
-FOR MEN of any age:
-No special rule. Use the standard Block 1 retouch allowance.`;
+const BLOCK_UNDER_EYE = `Under-eye rule (women only). Match the reference photos' actual under-eye condition. If references show rested, bright skin, render rested and bright. Do not invent shadows, lines, or fatigue that aren't visible in the references. For men: no special rule.`;
 
 // Block SKIN_POLISHED — TONE-EVENING companion to Block 1's Polished tier.
 //
@@ -209,19 +193,7 @@ No special rule. Use the standard Block 1 retouch allowance.`;
 // Block is gender-gated inside the prompt itself: it only fires for women.
 // For men the block is injected but the body says "ignore for men" — so
 // Gemini reads it, evaluates apparent gender, and applies as appropriate.
-const BLOCK_SKIN_POLISHED = `Polished tone treatment (women only — ignore entirely if subject appears to be a man, regardless of any other instruction in this block).
-
-For women: The smoothing aesthetic for the Polished tier is set by Block 1's SKIN SMOOTHING DIRECTIVE (the 'slightly retouched and realistic / senior executive's company website' description). This block layers additional TONE direction and pore reinforcement on top of that baseline.
-
-- TONE EVENING: Smooth out color inconsistencies in skintones — uneven redness, blotchiness, post-acne marks, sunspots, hyperpigmentation patches, and tone variation between forehead / cheeks / chin / neck. The end result reads as an even, healthy skin tone across the face — but not so flat that it loses dimension.
-
-- PORE STRUCTURE: Add or reinforce pore structure and detail across face, neck, and any visible décolletage, even if the reference photos do not show clear skin texture (low-resolution phone selfies, harsh lighting, heavy compression). The end result must read as a real human face with real skin — pores visible at normal viewing distance, with the only "retouch" being the descriptive aesthetic from Block 1, not erased texture.
-
-- NO plastic skin. NO airbrushed or filter-smoothed appearance. NO doll-like or AI-tell smoothness.
-
-This block coexists with Block UNDER_EYE — apply both. The under-eye softening rules from Block UNDER_EYE still apply by tier; this block governs the rest of the face's tone evenness and pore-detail reinforcement.
-
-For men: ignore this block entirely. Apply the standard Block 1 skin treatment unchanged.`;
+const BLOCK_SKIN_POLISHED = `Polished tone allowance (women only — ignore for men). When references show uneven skintone (redness, blotchiness, post-acne marks, sunspots, hyperpigmentation), render with a more even, healthy tone. Preserve all natural pore texture, fine lines, and identity features. No plastic, airbrushed, doll-like, or filter-smoothed skin. Detailed retouching is applied in a separate post-generation pass.`;
 
 // Block SKIN_GLAM — TONE-EVENING + EDITORIAL FINISH companion to Block 1's
 // Glam tier.
@@ -239,23 +211,7 @@ For men: ignore this block entirely. Apply the standard Block 1 skin treatment u
 //
 // Like the other skin blocks, Glam is gender-gated internally. Men's
 // treatment never changes.
-const BLOCK_SKIN_GLAM = `Glamorous editorial tone treatment (women only — ignore entirely if subject appears to be a man, regardless of any other instruction in this block).
-
-For women: The smoothing aesthetic for the Glam tier is set by Block 1's SKIN SMOOTHING DIRECTIVE (the 'Vogue cover / L'Oréal beauty campaign' description). This block layers additional editorial finish direction on top of that baseline. The aesthetic target is "red-carpet luxury beauty editorial that hasn't erased the human" — Vogue cover where the model still has visible pores under close inspection. Polished, even-toned, glowing, aspirational — but real skin.
-
-- TONE EVENING (AGGRESSIVE): Completely eliminate color inconsistencies across the entire face — redness on cheeks and nose, blotchiness, post-acne marks, hyperpigmentation, sunspots, melasma, broken capillaries, and color variation between forehead/cheeks/chin/neck. The end result reads as ONE EVEN luminous tone across the entire face. If the reference photos show patchy color, that patchiness is THE THING being retouched away — do not preserve it as "authentic." The whole face should read as a single skin tone with subtle dimensional shading from the lighting, not blotchy color zones.
-
-- SURFACE EVENNESS (FACE AND NECK): Per the Glam aesthetic in Block 1, render the face and neck as smooth, luminous, editorial skin — the forehead, the area between the brows, the cheeks, the area around the mouth, and the front of the neck all render even and rested. Match the reference photos for facial structure exactly; the smoothing applies only to surface evenness. The skin retains pore micro-texture per Block 1's directive — it stays smooth and luminous, not blurred.
-
-- PORE STRUCTURE AND SKIN TEXTURE: Preserve fully per Block 1's pore-preservation directive. Visible pores across cheeks, forehead, nose, chin, neck, décolletage — the skin should still read as actual human skin under close inspection. CRITICAL DISTINCTION: pore preservation refers to the physical 3D micro-texture of the skin surface (the raised / recessed terrain of pores at close magnification). It does NOT mean preserving color inconsistencies that happen to occur in the same regions. Pores stay; redness/blotchiness goes. Treat these as TWO SEPARATE concerns — texture and color — and only the texture is preserved.
-
-- LUMINOUS FINISH: Skin should look luminous and softly glowing, as though professionally lit. Healthy radiance, not matte, not greasy.
-
-- SKIN AROUND THE EYES (PRIORITY ZONE FOR GLAM): Render the skin around the eyes editorial-flawless — soft, smooth, luminous, magazine-beauty-shot quality. The zone covers the area immediately below the lower lash line, extending down to the top of the cheekbone, and outward to the outer corner of the eye. Pore micro-texture across this zone still applies per Block 1's universal pore-preservation directive. Do NOT alter the eye shape, eyelid shape, or eye position — only the SKIN around the eye is being smoothed. This rule EXPLICITLY OVERRIDES Block UNDER_EYE's age-tiered preservation rules for the Glam tier.
-
-- ANTI-PLASTIC GUARDRAIL: Glam should NEVER produce plastic, doll-like, or filter-smoothed skin. The pore preservation is the safeguard against that.
-
-For men: ignore this block entirely. Apply the standard Block 1 skin treatment unchanged.`;
+const BLOCK_SKIN_GLAM = `Glamorous editorial allowance (women only — ignore for men). When references show uneven skintone (redness, blotchiness, post-acne marks, hyperpigmentation, sunspots, broken capillaries), render with a more even, luminous tone. Preserve all natural pore texture, fine lines, and identity features. No plastic, doll-like, or filter-smoothed skin. Editorial-level smoothing and final polish are applied in a separate post-generation retouch pass — do NOT attempt them here.`;
 
 // Block PET — conditional override that only applies when the subject is an
 // animal rather than a human. Added 2026-04-23 to support the #professionalpets

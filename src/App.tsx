@@ -5026,6 +5026,15 @@ const CheckoutScreen = ({
     if (typeof window === "undefined") return "";
     return window.sessionStorage.getItem("stripe_customer_email") ?? "";
   });
+  // Full name (added 2026-05-22). Required field. Kristi needs the name on
+  // file so she can track customers down by name if a delivery issue or
+  // support request comes in — email alone isn't always enough (people forget
+  // which address they used). Captured here, threaded through pending_delivery
+  // stash + /api/deliver payload, and surfaced in the usage-alert email.
+  const [customerName, setCustomerName] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
+    return window.sessionStorage.getItem("customer_name") ?? "";
+  });
   const [processing, setProcessing] = useState(false);
   // Human-readable progress line shown on the button while we're uploading
   // each image to Blob. Cleared when not in-flight.
@@ -5037,6 +5046,9 @@ const CheckoutScreen = ({
   // check catches typos before we burn a round-trip; server-side check is
   // the real gate.
   const emailLooksValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  // Name is required and must contain at least one non-whitespace character.
+  // Trim before comparing so " " or "    " doesn't pass.
+  const nameLooksValid = customerName.trim().length >= 2;
 
   // --- Phase 2 pricing math (simplified 2026-05-14) ---
   // Pricing model: $2.99 to try (entry fee — pays for app access), then a
@@ -5071,7 +5083,16 @@ const CheckoutScreen = ({
   const fmt = (n: number) => `$${n.toFixed(2)}`;
 
   const submit = async () => {
-    if (!emailLooksValid || processing) return;
+    if (!emailLooksValid || !nameLooksValid || processing) return;
+    // Persist name to sessionStorage so a page refresh during the Stripe
+    // round-trip doesn't drop it. Same pattern email already uses.
+    if (typeof window !== "undefined") {
+      try {
+        window.sessionStorage.setItem("customer_name", customerName.trim());
+      } catch {
+        // sessionStorage write may fail in private browsing — non-fatal.
+      }
+    }
     setProcessing(true);
     setErrorMessage(null);
     try {
@@ -5123,6 +5144,7 @@ const CheckoutScreen = ({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             email,
+            customerName: customerName.trim(),
             photoUrls: uploadedUrls,
             referencePhotoUrls,
             style: selections.style,
@@ -5166,6 +5188,11 @@ const CheckoutScreen = ({
       setProgressLabel("Redirecting to secure checkout…");
       const stash = {
         email,
+        // Full name (added 2026-05-22). Same reason as retouchTiers: the
+        // Stripe redirect blows React state away, and we need the name on
+        // the return trip so /api/deliver can include it on Kristi's
+        // usage-alert email.
+        customerName: customerName.trim(),
         uploadedUrls,
         referencePhotoUrls,
         selections,
@@ -5314,6 +5341,33 @@ const CheckoutScreen = ({
 
       <div style={{ marginTop: 32 }}>
         <label style={{ fontSize: 13, color: C.mediumGrey, fontWeight: 500 }}>
+          Full name
+        </label>
+        <input
+          type="text"
+          value={customerName}
+          onChange={(e) => setCustomerName(e.target.value)}
+          placeholder="Your name"
+          disabled={processing}
+          autoComplete="name"
+          style={{
+            width: "100%",
+            padding: "12px 14px",
+            marginTop: 8,
+            border: `1px solid ${C.border}`,
+            borderRadius: 8,
+            fontSize: 14,
+            background: C.white,
+            color: C.dark,
+            outline: "none",
+            boxSizing: "border-box",
+            ...font,
+          }}
+        />
+      </div>
+
+      <div style={{ marginTop: 20 }}>
+        <label style={{ fontSize: 13, color: C.mediumGrey, fontWeight: 500 }}>
           Email
         </label>
         <input
@@ -5322,6 +5376,7 @@ const CheckoutScreen = ({
           onChange={(e) => setEmail(e.target.value)}
           placeholder="you@email.com"
           disabled={processing}
+          autoComplete="email"
           style={{
             width: "100%",
             padding: "12px 14px",
@@ -5360,7 +5415,7 @@ const CheckoutScreen = ({
       )}
 
       <div style={{ marginTop: 24 }}>
-        <Button onClick={submit} disabled={!emailLooksValid || processing} full>
+        <Button onClick={submit} disabled={!emailLooksValid || !nameLooksValid || processing} full>
           {processing
             ? progressLabel || "Preparing your download…"
             : isPromoUnlock
@@ -7092,6 +7147,11 @@ export default function App() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             email: stash.email,
+            // Customer name (added 2026-05-22). Falls back to empty string
+            // for stashes that predate this field — server-side validation
+            // will reject those with a clear error, prompting the customer
+            // to contact Kristi (the legacy unlock path is rare anyway).
+            customerName: (stash.customerName ?? "").trim(),
             photoUrls: stash.uploadedUrls,
             referencePhotoUrls: stash.referencePhotoUrls,
             style: stash.selections.style,
