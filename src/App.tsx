@@ -2927,11 +2927,15 @@ const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) 
 //
 // `swatch` is the base color the inline visual layers on top of.
 // `visual` keys to a render branch in the StyleScreen — see the JSX below.
+// Order: Corporate first (default selection on screen mount) so the studio
+// background color swatches are visible without an extra click. Creative,
+// Executive, Urban follow in the original order. Healthcare + Realtor
+// categories will be added here when ready.
 const STYLES = [
-  { id: "creative", name: "Creative Natural", desc: "Outdoor bokeh", swatch: "#7A8A5C", visual: "creative" as const },
-  { id: "corporate", name: "Corporate", desc: "Clean studio", swatch: "#D3D1C7", visual: "corporate" as const },
-  { id: "executive", name: "Executive", desc: "Bold, moody", swatch: "#2A2A28", visual: "executive" as const },
-  { id: "urban", name: "Urban Industrial", desc: "Modern street", swatch: "#6F614F", visual: "urban" as const },
+  { id: "corporate", name: "Corporate", swatch: "#D3D1C7", visual: "corporate" as const },
+  { id: "creative", name: "Creative Natural", swatch: "#7A8A5C", visual: "creative" as const },
+  { id: "executive", name: "Executive", swatch: "#2A2A28", visual: "executive" as const },
+  { id: "urban", name: "Urban Industrial", swatch: "#6F614F", visual: "urban" as const },
 ] as const;
 
 // Colored bokeh orbs for the Creative Natural swatch — designed to evoke the
@@ -2970,13 +2974,18 @@ const STUDIO_BGS = [
 const ATTIRE = [
   { id: "formal", label: "Business formal" },
   { id: "casual", label: "Business casual" },
-  { id: "medical", label: "Healthcare" },
+  { id: "medical", label: "🩺 Healthcare" },
   { id: "keep", label: "Keep my outfit" },
 ] as const;
 
+// "natural" was removed from the UI on 2026-05-22 — Kristi found it
+// redundant with "golden" / "studio." The server-side BLOCK_5_LIGHTING.natural
+// entry in api/generate.ts is intentionally left in place as dead code so
+// that any in-flight session with lighting: "natural" still validates and
+// renders (back-compat for stale tabs). Remove the server block in a future
+// cleanup once Kristi is sure no one's mid-flight on the old chip.
 const LIGHTING = [
   { id: "studio", label: "Studio clean" },
-  { id: "natural", label: "Natural / warm" },
   { id: "dramatic", label: "Dramatic" },
   { id: "golden", label: "Golden hour" },
 ] as const;
@@ -3056,7 +3065,11 @@ type StyleScreenProps = {
 };
 
 const StyleScreen = ({ onGenerate, onBack }: StyleScreenProps) => {
-  const [style, setStyle] = useState<string | null>(null);
+  // Default to "corporate" so the background-color swatches appear on screen
+  // mount without an extra click (2026-05-22). The studio background picker
+  // only renders when style === "corporate", so pre-selecting it surfaces
+  // Kristi's customer's most likely first step.
+  const [style, setStyle] = useState<string | null>("corporate");
   const [background, setBackground] = useState<string>("lightgrey");
   const [attire, setAttire] = useState<string | null>(null);
   const [lighting, setLighting] = useState<string | null>(null);
@@ -3134,12 +3147,16 @@ const StyleScreen = ({ onGenerate, onBack }: StyleScreenProps) => {
           Each style gets a distinct visual treatment instead of a flat
           color swatch — per-style rendering branches below evoke the actual
           generated-headshot aesthetic at a glance. */}
-      <SectionLabel>Style</SectionLabel>
+      <SectionLabel>Background</SectionLabel>
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
-          gap: 10,
+          // Smaller cards (was minmax(130px, 1fr)) so the section takes
+          // less vertical real estate, and so more categories fit in one
+          // row when Healthcare + Realtor backgrounds get added. At 95px
+          // min, 6 categories fit comfortably on most desktop widths.
+          gridTemplateColumns: "repeat(auto-fit, minmax(95px, 1fr))",
+          gap: 8,
         }}
       >
         {STYLES.map((s) => {
@@ -3150,8 +3167,8 @@ const StyleScreen = ({ onGenerate, onBack }: StyleScreenProps) => {
               onClick={() => setStyle(s.id)}
               style={{
                 background: C.white,
-                borderRadius: 8,
-                padding: 8,
+                borderRadius: 6,
+                padding: 6,
                 border: `1.5px solid ${selected ? C.dark : C.border}`,
                 cursor: "pointer",
                 transition: "border-color 0.15s",
@@ -3161,10 +3178,10 @@ const StyleScreen = ({ onGenerate, onBack }: StyleScreenProps) => {
                 style={{
                   aspectRatio: "1",
                   background: s.swatch,
-                  borderRadius: 5,
+                  borderRadius: 4,
                   position: "relative",
                   overflow: "hidden",
-                  marginBottom: 8,
+                  marginBottom: 6,
                 }}
               >
                 {/* Creative Natural — colored bokeh orbs over green base.
@@ -3273,10 +3290,9 @@ const StyleScreen = ({ onGenerate, onBack }: StyleScreenProps) => {
                   </>
                 )}
               </div>
-              <div style={{ fontSize: 13, fontWeight: 500, color: C.dark, lineHeight: 1.25 }}>
+              <div style={{ fontSize: 12, fontWeight: 500, color: C.dark, lineHeight: 1.2, textAlign: "center" }}>
                 {s.name}
               </div>
-              <div style={{ fontSize: 11, color: C.mediumGrey, marginTop: 2 }}>{s.desc}</div>
             </div>
           );
         })}
