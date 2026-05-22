@@ -4636,28 +4636,21 @@ const LoadingRetouchPreviewModal = ({
         width: "100%",
       }}
     >
-      <div
-        style={{
-          fontSize: 11,
-          fontWeight: 500,
-          letterSpacing: 1.5,
-          color: C.mediumGrey,
-          textTransform: "uppercase",
-          marginBottom: 8,
-        }}
-      >
-        Heads up
-      </div>
+      {/* Title: 🛑 Don't Self-Judge! 🛑 — stop emojis flank the title to
+          interrupt the customer's "am I really this wrinkly?" reaction
+          BEFORE they read the body. Per Kristi 2026-05-22 after recurring
+          women-customer complaints about realistic-skin output. */}
       <h2
         style={{
-          fontSize: 20,
+          fontSize: 22,
           fontWeight: 500,
           color: C.dark,
-          margin: "0 0 12px",
+          margin: "0 0 16px",
           lineHeight: 1.3,
+          textAlign: "center",
         }}
       >
-        You're in control of the retouching
+        🛑 Don't Self-Judge! 🛑
       </h2>
       <p
         style={{
@@ -4667,8 +4660,10 @@ const LoadingRetouchPreviewModal = ({
           lineHeight: 1.55,
         }}
       >
-        In the next step, you'll get to choose to retouch the photos you
-        choose! You get all the control.
+        This step intentionally creates headshots with hyper realistic
+        skin and all the wrinkles intact so these headshots actually look
+        like REAL people. By design, this app generates realistic skin
+        texture in this step.
       </p>
       <p
         style={{
@@ -4678,8 +4673,9 @@ const LoadingRetouchPreviewModal = ({
           lineHeight: 1.55,
         }}
       >
-        The app is made to generate realistic skin on purpose — but you
-        can polish the shots you like in the next step.
+        The NEXT step, is where you get to ADD RETOUCHING. So sit tight
+        and pick the ones that actually look like you now, they will get
+        a glow up in the next step. 💋
       </p>
       <button
         onClick={onDismiss}
