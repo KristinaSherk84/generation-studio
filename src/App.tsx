@@ -7115,6 +7115,11 @@ export default function App() {
       window.sessionStorage.removeItem("pending_delivery");
       let stash: {
         email: string;
+        // Full name (added 2026-05-22). Optional because in-flight pre-deploy
+        // checkouts have stashes without this field — the deliver call below
+        // falls back to "" and the server-side validator will reject those
+        // with a clear message, prompting the customer to contact support.
+        customerName?: string;
         uploadedUrls: string[];
         referencePhotoUrls: string[];
         selections: StyleSelections;
