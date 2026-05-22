@@ -137,23 +137,21 @@ const BLOCK_1_IDENTITY = `Generate a professional headshot of the person shown i
 
 IDENTITY PRESERVATION (RULE #1 — NON-NEGOTIABLE, OVERRIDES EVERY OTHER DIRECTIVE IN THIS PROMPT):
 
-Preserve the subject's facial features with 100% precision. The generated face must be UNMISTAKABLY the same person — a coworker, friend, or family member viewing the headshot would recognize them immediately with zero hesitation. Match the reference photos EXACTLY for:
-- Face shape and overall facial proportions
+Preserve the subject's facial features with 100% precision. The generated face must be UNMISTAKABLY the same person. Match the reference photos EXACTLY for:
+- Face shape and facial proportions
 - Bone structure (cheekbones, jawline, brow ridge, chin shape)
 - Eye shape, eye color, eyelid shape, eye spacing, brow shape
 - Nose shape, nose width, nostril shape, nose tip
 - Mouth shape, lip thickness, lip width, mouth corners
-- Hairline (where the hair meets the forehead)
-- Underlying skin tone and ethnicity
-- Any distinguishing marks: freckles, beauty marks, moles, scars, dimples, asymmetries
+- Hairline
+- Skin tone and ethnicity
+- All distinguishing marks: freckles, beauty marks, moles, scars, dimples, asymmetries
 
-DO NOT idealize features. DO NOT blend toward generic 'attractive' proportions, the conventional Instagram look, or AI-default beauty patterns. DO NOT alter the structural asymmetries that make this person them — an eye slightly higher than the other, a uniquely curved nose, a chin off-center, a smile that pulls more to one side. A real human face is slightly asymmetrical at the BONE/STRUCTURE level — keep all of that exactly.
+DO NOT idealize features. DO NOT blend toward generic 'attractive' proportions, or AI-default beauty. DO NOT alter the structural asymmetries that make this person them. NO identity drift. Maintain and keep eye asymmetry, unique nose and chin characteristics. Protect uneven smiles. Keep all asymmetrical BONE/STRUCTURE.
 
-SKIN RENDERING: Render the subject's skin exactly as it appears in the reference photos — pores, fine lines, freckles, beauty marks, natural texture all preserved. Remove only transient blemishes (active acne, temporary redness). The output reads as un-retouched, authentically real — no airbrushed look, no editorial polish. Any retouching the customer wants is applied in a SEPARATE step AFTER this generation completes, not here.
+SKIN RENDERING: Render extremely realistic skin texture, exactly as it appears in the reference photos. Remove blemishes only. Keep pores, freckles, moles, texture. Render authentically real skin — no airbrushed look. If no skin texture is visible in reference photos, add texture and skin details for realism.
 
-The goal is to photograph THIS SPECIFIC PERSON in a new setting — not to produce a generic, plastic, smooth, emotionless face that vaguely resembles them.
-
-If any reference photo appears to have been taken with a wide-angle lens (phone selfies commonly distort the nose and mid-face), correct that distortion in the generated image so the face appears as if photographed with a prime 85mm or 135mm portrait lens on a full-frame camera — slight compression of features, natural proportions, no bulging nose or elongated jaw.`;
+REFERENCE IMAGE PROCESSING: If any reference photo metadata shows it was taken with a wide-angle lens (phone selfies commonly distort the nose and mid-face), correct the lens distortion in the generated image so the face appears as if photographed with a prime 85mm or 135mm portrait lens — slight compression of features, natural proportions, no bulging nose or elongated jaw.`;
 
 // Block UNDER_EYE — age-aware under-eye rendering for women.
 //
@@ -180,7 +178,7 @@ If any reference photo appears to have been taken with a wide-angle lens (phone 
 //   - Under 35   → 40% reduction (light touch — younger skin needs less)
 //   - 35–50      → 55% reduction (heavier — where pronounced lines live)
 //   - 50 or older → preserve natural texture (no softening, reads authentic)
-const BLOCK_UNDER_EYE = `Under-eye rule (women only). Match the reference photos' actual under-eye condition. If references show rested, bright skin, render rested and bright. Do not invent shadows, lines, or fatigue that aren't visible in the references. For men: no special rule.`;
+const BLOCK_UNDER_EYE = `Under-eye rule (women only). Use reference photos' under-eye condition as a reference but moderately improve under-eye skin appearance. Do not invent shadows, lines, or fatigue that aren't visible in the references. For men: no special rule.`;
 
 // Block SKIN_POLISHED — TONE-EVENING companion to Block 1's Polished tier.
 //
@@ -250,11 +248,9 @@ function buildBlockPet(variationIndex: number): string {
 }
 
 const BLOCK_2_COMPOSITION = `Frame as a professional business headshot. The specific body angle and crop are specified in the variation block at the end of this prompt — follow those instructions precisely. General rules:
-- Eye line positioned on the upper third of the frame. The subject's eyes should sit approximately one-third of the way down from the top edge of the image — NOT centered vertically.
-- Minimal headroom above the top of the head. The space between the top of the subject's hair and the top edge of the frame should be extremely small — approximately 2–3% of the total frame height. The top of the head should nearly touch the top of the frame. Do NOT leave empty space above the head.
-- The subject's face should occupy the TOP HALF of the frame. The shoulders/chest/body live in the bottom half.
-- Strong posture without stiffness. Classic subject-to-lens relationship (head rotated slightly back toward the lens), avoiding the flatness of a full-frontal pose.
-- Crop tightly per the variation block's "Framing" instruction. If the variation says "from just above the top of the head to the collarbone," the top of the head should be right near the top edge — not floating in the middle of the frame.`;
+- Extremely minimal headroom above the top of the head. Only add 2–3% of the total frame height above the top of the head. The top of the head should nearly touch the top of the frame. No empty space above the head.
+- The subject's face should occupy the top third to top half of the frame.
+- Strong posture, proud posture with shoulders back. Classic subject-to-lens relationship (head rotated slightly back toward the lens).`;
 
 // Block 3 Style base text (no background) per style.
 //
@@ -476,7 +472,7 @@ const BLOCK_LENS_CORRECTION = `CRITICAL LENS CORRECTION: The reference photos we
 //      because headshots are almost always a clear-lens context.
 //   3. Do NOT add glasses if the subject isn't wearing any in the reference
 //      photos — this must never become an accessory invention.
-const BLOCK_EYEWEAR = `Eyewear: If the subject is wearing glasses (prescription eyeglasses, not sunglasses) in most or all of the reference photos, preserve the same glasses in the generated headshot — match the frame shape, color, and material as closely as possible. If the reference photos show a mix of clear-lens glasses and tinted/sunglasses frames, default to the clear-lens professional pair — a proper business headshot should have clear lenses so the subject's eyes are fully visible. If the subject is NOT wearing glasses in the reference photos, do NOT add any — never invent eyewear that isn't in the reference set.`;
+const BLOCK_EYEWEAR = `Eyewear: Only if the subject is wearing clear eyeglasses in most or all of the reference photos, preserve the same glasses in the generated headshot — match the frame shape, frame color, and material as closely as possible. Remove all tint and all reflections from lenses. If the subject is NOT wearing glasses in the reference photos, do NOT add glasses.`;
 
 // Block HAIR — same pattern as Block EYEWEAR. Added 2026-05-01 after Kristi
 // noticed that when reference photos showed the subject with hair both DOWN
@@ -494,19 +490,13 @@ const BLOCK_EYEWEAR = `Eyewear: If the subject is wearing glasses (prescription 
 // and half render hair down — so a Glam customer who only uploaded
 // hair-up shots still sees 3 hair-down options in their grid. Realistic
 // and Polished keep the original strict-match rule.
-const BLOCK_HAIR_DEFAULT = `CRITICAL HAIR STYLING RULE: Evaluate how the subject is wearing their hair across the reference photos.
+const BLOCK_HAIR_DEFAULT = `CRITICAL HAIR STYLING RULE: Match hair styles from reference photos.
 
-- If the references show the SAME style consistently (all hair down OR all hair tied back / up / clipped), match that style exactly.
+- If ALL reference photos show the same hair style (all hair down OR all hair tied back / up / clipped), match that style exactly.
 
-- If the references show a MIX of styles (some down, some tied back / up / pulled away from face / in a ponytail or bun or clip), the generated headshot MUST render hair DOWN — loose, flowing, framing the face. This is non-negotiable when the references are mixed. Hair down is the more flattering and editorial choice for a professional portrait, and the customer benefits from the more polished option. Do not default to "easier to render" tied-back styles when the references give you the option of down.
+- If reference photo hairstyles are mixed (some down, some tied back), the generated headshot MUST render hair DOWN — loose, flowing, framing the face. This is non-negotiable when the references are mixed.
 
-- If only one or two reference photos exist and the styling is ambiguous, default to hair DOWN.
-
-When generating hair-down: render the hair as the subject's natural length and texture would actually look when worn down — not slicked back, not pulled tight, not held off the face. Frame the face naturally with the hair.
-
-Always match the subject's actual hair length, color, texture, density, and natural part. Do NOT invent a different cut, lengthen or shorten the hair, or change its natural flow or color.
-
-For subjects with very short hair (under approximately chin length), no styling decision applies — just match the reference photos exactly.`;
+Match hair length, color, texture, density, and natural part to the reference photos.`;
 
 function buildBlockHair(skin: Skin | undefined, variationIndex: number): string {
   if (skin === "glam") {
