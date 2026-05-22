@@ -2929,13 +2929,32 @@ const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) 
 // `visual` keys to a render branch in the StyleScreen — see the JSX below.
 // Order: Corporate first (default selection on screen mount) so the studio
 // background color swatches are visible without an extra click. Creative,
-// Executive, Urban follow in the original order. Healthcare + Realtor
-// categories will be added here when ready.
-const STYLES = [
-  { id: "corporate", name: "Corporate", swatch: "#D3D1C7", visual: "corporate" as const },
-  { id: "creative", name: "Creative Natural", swatch: "#7A8A5C", visual: "creative" as const },
-  { id: "executive", name: "Executive", swatch: "#2A2A28", visual: "executive" as const },
-  { id: "urban", name: "Urban Industrial", swatch: "#6F614F", visual: "urban" as const },
+// Executive, Urban follow in the original order. Realtor is queued as a
+// "coming soon" placeholder — clicking it is a no-op. Healthcare attire is
+// already shipped (under Attire), but a Healthcare *Background* category
+// will be added here when its prompt-engineering is ready.
+//
+// silhouette = color of the head-and-shoulders foreground overlay rendered
+// on top of each swatch. The overlay communicates "this is what your
+// background will look like (the person is just the foreground subject)"
+// at a glance. Each silhouette is a darker variant of its swatch color,
+// EXCEPT Executive — its swatch is already near-black, so the silhouette
+// is LIGHTER than the bg to remain visible.
+type StyleVisual = "creative" | "corporate" | "executive" | "urban" | "realtor";
+type StyleEntry = {
+  id: string;
+  name: string;
+  swatch: string;
+  silhouette: string;
+  visual: StyleVisual;
+  comingSoon?: boolean;
+};
+const STYLES: readonly StyleEntry[] = [
+  { id: "corporate", name: "Corporate",         swatch: "#D3D1C7", silhouette: "#6C6B66", visual: "corporate" },
+  { id: "creative",  name: "Creative Natural",  swatch: "#7A8A5C", silhouette: "#3D452E", visual: "creative" },
+  { id: "executive", name: "Executive",         swatch: "#2A2A28", silhouette: "#6C6B66", visual: "executive" },
+  { id: "urban",     name: "Urban Industrial",  swatch: "#6F614F", silhouette: "#3D362A", visual: "urban" },
+  { id: "realtor",   name: "Realtor",           swatch: "#C8B68E", silhouette: "#7A6A4A", visual: "realtor", comingSoon: true },
 ] as const;
 
 // Colored bokeh orbs for the Creative Natural swatch — designed to evoke the
@@ -3148,30 +3167,50 @@ const StyleScreen = ({ onGenerate, onBack }: StyleScreenProps) => {
           color swatch — per-style rendering branches below evoke the actual
           generated-headshot aesthetic at a glance. */}
       <SectionLabel>Background</SectionLabel>
+      {/* Horizontal scroll row (2026-05-22) — single row of fixed-width
+          cards that the user swipes to see more. Keeps vertical real estate
+          constant no matter how many background categories we add. The
+          negative margins on left/right pull the scroll area out to the
+          edge of the parent's padding so the last card can scroll fully
+          into view on mobile, then re-add padding on the inner scroll
+          container so the first card still aligns with the left text. */}
       <div
         style={{
-          display: "grid",
-          // Smaller cards (was minmax(130px, 1fr)) so the section takes
-          // less vertical real estate, and so more categories fit in one
-          // row when Healthcare + Realtor backgrounds get added. At 95px
-          // min, 6 categories fit comfortably on most desktop widths.
-          gridTemplateColumns: "repeat(auto-fit, minmax(95px, 1fr))",
-          gap: 8,
+          marginLeft: -32,
+          marginRight: -32,
+          overflowX: "auto",
+          paddingBottom: 4,
+          scrollbarWidth: "thin",
         }}
       >
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            paddingLeft: 32,
+            paddingRight: 32,
+            width: "max-content",
+          }}
+        >
         {STYLES.map((s) => {
           const selected = style === s.id;
+          const disabled = s.comingSoon === true;
           return (
             <div
               key={s.id}
-              onClick={() => setStyle(s.id)}
+              onClick={disabled ? undefined : () => setStyle(s.id)}
               style={{
+                // Fixed-width cards in the horizontal scroll row. 95px lines
+                // up roughly 3 fully-visible + 1 partial on a 380px viewport
+                // (with parent padding), telegraphing the swipe affordance.
+                flex: "0 0 95px",
                 background: C.white,
                 borderRadius: 6,
                 padding: 6,
                 border: `1.5px solid ${selected ? C.dark : C.border}`,
-                cursor: "pointer",
+                cursor: disabled ? "default" : "pointer",
                 transition: "border-color 0.15s",
+                opacity: disabled ? 0.78 : 1,
               }}
             >
               <div
@@ -3289,6 +3328,86 @@ const StyleScreen = ({ onGenerate, onBack }: StyleScreenProps) => {
                     />
                   </>
                 )}
+
+                {/* Realtor — warm beige base evoking suburban/residential
+                    interior (staged living room, neutral wall, warm window
+                    light). Placeholder visual only — final treatment can
+                    differentiate further once the prompt-engineering for
+                    realtor backgrounds is dialed in. */}
+                {s.visual === "realtor" && (
+                  <>
+                    <div
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        background:
+                          "linear-gradient(180deg, rgba(232,210,170,0.45) 0%, rgba(150,120,85,0.45) 100%)",
+                      }}
+                    />
+                  </>
+                )}
+
+                {/* Head-and-shoulders silhouette overlay (added 2026-05-22).
+                    Renders ON TOP of all per-style visuals so the viewer
+                    immediately reads "this is the background — a person
+                    will be in front of it." Silhouette color is per-style
+                    (darker than the swatch — except Executive, which uses
+                    a LIGHTER silhouette to remain visible on near-black). */}
+                <svg
+                  viewBox="0 0 100 100"
+                  preserveAspectRatio="xMidYMid meet"
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    width: "100%",
+                    height: "100%",
+                    pointerEvents: "none",
+                  }}
+                  aria-hidden="true"
+                >
+                  {/* Head */}
+                  <circle cx="50" cy="38" r="16" fill={s.silhouette} />
+                  {/* Neck + shoulders + chest (single path, sweeps from
+                      bottom-left up to a narrow neck and back down to
+                      bottom-right, producing a classic profile bust shape). */}
+                  <path
+                    d="M 16 100 C 20 76, 38 64, 50 64 C 62 64, 80 76, 84 100 Z"
+                    fill={s.silhouette}
+                  />
+                </svg>
+
+                {/* Coming Soon overlay — covers the swatch with a dark
+                    scrim + centered text. Click is already blocked at the
+                    card-level onClick, but pointerEvents:none here ensures
+                    the overlay never traps stray clicks either. */}
+                {s.comingSoon && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      background: "rgba(0,0,0,0.55)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      pointerEvents: "none",
+                    }}
+                  >
+                    <span
+                      style={{
+                        color: "#FFFFFF",
+                        fontSize: 11,
+                        fontWeight: 500,
+                        letterSpacing: 0.6,
+                        textTransform: "uppercase",
+                        textAlign: "center",
+                        padding: "0 4px",
+                        lineHeight: 1.15,
+                      }}
+                    >
+                      Coming<br />soon
+                    </span>
+                  </div>
+                )}
               </div>
               <div style={{ fontSize: 12, fontWeight: 500, color: C.dark, lineHeight: 1.2, textAlign: "center" }}>
                 {s.name}
@@ -3296,6 +3415,7 @@ const StyleScreen = ({ onGenerate, onBack }: StyleScreenProps) => {
             </div>
           );
         })}
+        </div>
       </div>
 
       {/* Creative style info banner */}
