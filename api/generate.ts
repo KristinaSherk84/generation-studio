@@ -563,15 +563,28 @@ For subjects with very short hair (under approximately chin length), no styling 
 // already see whether the reference photos show teeth — we just need to
 // give it permission (and instruction) to override the per-slot direction
 // when references unanimously show closed-mouth smiles.
-const BLOCK_SMILE_FIDELITY = `SMILE STYLE FIDELITY RULE: Look carefully at the reference photos before deciding what kind of smile to render in this image.
+const BLOCK_SMILE_FIDELITY = `SMILE / TEETH LOCK (MANDATORY — OVERRIDES EVERY OTHER EXPRESSION DIRECTIVE IN THIS PROMPT, INCLUDING THE PER-IMAGE FLAVOR INSTRUCTION ABOVE):
 
-- If ALL reference photos show the subject with a closed-mouth smile (no teeth visible in any reference), generate a closed-mouth smile in this image too — EVEN IF the per-image expression directive in the variation block below asks for a teeth-showing or "open" smile. The expression directive is a suggestion; reference fidelity overrides it. Closed-mouth subjects who are forced into teeth-showing smiles by AI generation produce visibly uncanny, "AI-looking" teeth. The warmth of the smile comes from cheek lift and slight eye-squint — neither of which requires visible teeth.
+STEP 1. Inspect every reference photo for visible teeth.
 
-- If AT LEAST ONE reference photo clearly shows the subject smiling with teeth visible in a natural open smile, the per-image expression directive applies as written — teeth-showing smiles are appropriate. When you render teeth, match the subject's reference teeth closely: keep the same alignment, shape, size, spacing, and natural irregularities. A slight brightening or de-yellowing is fine — the subject can look like they just had a routine cleaning. Do NOT straighten or align the teeth. Do NOT enlarge or plump them. Do NOT remove gaps, chips, overlaps, slight rotations, or other distinctive features. The teeth should still look like the customer's teeth — just at their best — not like generic "Hollywood-perfect" teeth.
+CASE A — ZERO reference photos show ANY visible teeth (upper or lower):
+The output MUST be a CLOSED-MOUTH smile. No exceptions. Lips touch each other or rest gently together. NO upper teeth visible. NO lower teeth visible. NO gap between the lips. The mouth stays composed throughout the smile.
 
-- When in doubt about whether teeth are visible in the references, default to a closed-mouth smile. Closed-mouth smiles are universally flattering; uncanny AI-generated teeth ruin a headshot.
+This rule applies REGARDLESS of what the per-image flavor instruction above said. If the flavor said "warm teeth-showing smile" or "open smile" or "bright smile" — IGNORE that specific wording and render a closed-mouth smile instead. The flavor instruction loses to this rule. Every time. No exceptions.
 
-The subject's natural smile style AND the recognizable appearance of the subject's teeth — as evidenced by their reference photos — are more important than the slot-level variation in this batch.`;
+Why: AI-generated teeth on a subject who never shows teeth in their reference photos produce visibly fake, uncanny, "AI-tell" output. Customers reject those headshots. The warmth of the smile comes ENTIRELY from cheek lift, slight eye-squint, and the Duchenne smile pattern at the eyes — NOT from visible teeth. A closed-mouth smile is universally flattering.
+
+If your output for this image shows ANY visible teeth and the reference photos contain ZERO teeth, you have failed this directive. There is no edge case, no exception, no flavor override that justifies generating teeth in CASE A.
+
+CASE B — AT LEAST ONE reference photo clearly shows visible teeth in a natural open smile:
+The per-image flavor instruction above applies as written. Teeth-showing smiles are appropriate when the flavor calls for one.
+
+When you render teeth, match the subject's reference teeth closely: same alignment, same shape, same size, same spacing, same natural irregularities. A slight brightening or de-yellowing is fine — like the customer just had a routine cleaning. Do NOT straighten or align the teeth. Do NOT enlarge or plump them. Do NOT remove gaps, chips, overlaps, slight rotations, or other distinguishing features. The teeth must still look like the customer's actual teeth — just at their best — never generic "Hollywood-perfect" teeth.
+
+CASE C — Ambiguous (one or two references where it's unclear whether teeth are showing):
+Default to CASE A behavior. Render a closed-mouth smile. When in doubt, never invent teeth.
+
+The reference photos are the source of truth. The flavor instruction above is secondary to reference fidelity. If you are about to generate teeth in this output, first verify a reference photo clearly shows the subject's teeth. If no reference shows teeth, you MUST close the mouth.`;
 
 // Block 8 — Single-photo variation instruction.
 //
