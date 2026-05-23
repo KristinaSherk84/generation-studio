@@ -712,17 +712,18 @@ async function applyRetouchPass(
       const resp = await ai.models.generateContent({
         model: RETOUCH_MODEL,
         contents: [{ role: "user", parts }],
-        // Explicitly request 2K output (1792x2400 at 3:4). Without this
-        // config, Pro Image Preview defaults to ~896x1200 — less than
-        // half the resolution of the Flash initial generation it's
-        // retouching. That meant Glow Up Deluxe customers were paying
-        // more (\$14.99) for SMALLER deliverables than Basic (\$9.99
-        // at 2K). Set to "2K" for size parity with the Realistic photo
-        // in the bundle. Bug surfaced 2026-05-20.
+        // Keep aspectRatio: "3:4" so Gemini doesn't recompose the framing.
+        // imageSize was previously "2K" (added 2026-05-20 to fix small-
+        // output bug), but Kristi observed on 2026-05-22 that pinning
+        // imageSize made the Pro model apply LESS aggressive retouching
+        // than her tester (which sends no imageConfig at all). Letting
+        // Gemini pick its own size restores the tester-quality retouching;
+        // trade-off is the output is ~896x1200 instead of 2K. Acceptable
+        // because the aesthetic gain outweighs the size loss for retouched
+        // photos. Realistic version in the Deluxe bundle stays 2K.
         config: {
           imageConfig: {
             aspectRatio: "3:4",
-            imageSize: "2K",
           },
         },
       });
