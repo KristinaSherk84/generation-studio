@@ -32,6 +32,7 @@
 import { put } from "@vercel/blob";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { GoogleGenAI, type Part } from "@google/genai";
+import sharp from "sharp";
 import { buildShareGraphic } from "./lib/compositeBeforeAfter.js";
 import {
   buildRetouchPrompt,
@@ -781,17 +782,52 @@ async function applyRetouchPass(
             p as { inlineData?: { mimeType?: string; data?: string } }
           ).inlineData;
           if (inline?.data && inline.mimeType) {
-            const ext = inline.mimeType === "image/png" ? "png" : "jpg";
+            const rawBuffer = Buffer.from(inline.data, "base64");
+
+            // Upscale to 1792x2400 with lanczos3. Background: dropping
+            // imageSize "2K" from Gemini Pro's imageConfig on 2026-05-22
+            // got us better retouching aesthetic but shrunk the output to
+            // ~896x1200 — half the resolution of the Realistic photo in
+            // the Deluxe bundle. Lanczos3 is the highest-quality
+            // photographic upscaling kernel sharp ships with, and a 2x
+            // upscale on a clean retouched portrait is within its sweet
+            // spot. Soft-degrade to the raw Pro output on sharp failure
+            // so a transient processing error never fails a delivery.
+            let outputBuffer: Buffer;
+            let outputMime: string;
+            try {
+              outputBuffer = await sharp(rawBuffer)
+                .resize(1792, 2400, {
+                  kernel: sharp.kernel.lanczos3,
+                  fit: "cover",
+                })
+                .jpeg({ quality: 92, mozjpeg: true })
+                .toBuffer();
+              outputMime = "image/jpeg";
+            } catch (sharpErr) {
+              console.warn(
+                JSON.stringify({
+                  type: "retouch_upscale_failed",
+                  deliveryId,
+                  photoIndex,
+                  subTier,
+                  error:
+                    sharpErr instanceof Error
+                      ? sharpErr.message
+                      : String(sharpErr),
+                }),
+              );
+              outputBuffer = rawBuffer;
+              outputMime = inline.mimeType;
+            }
+
+            const ext = outputMime === "image/png" ? "png" : "jpg";
             const retouchedKey = `deliveries/${deliveryId}/retouched-${photoIndex}-${subTier}.${ext}`;
-            const blob = await put(
-              retouchedKey,
-              Buffer.from(inline.data, "base64"),
-              {
-                access: "public",
-                contentType: inline.mimeType,
-                allowOverwrite: true,
-              },
-            );
+            const blob = await put(retouchedKey, outputBuffer, {
+              access: "public",
+              contentType: outputMime,
+              allowOverwrite: true,
+            });
             return blob.url;
           }
         }
