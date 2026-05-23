@@ -680,7 +680,7 @@ function buildBlock8(
       : "";
 
   return `Photograph direction for this single image:
-- Expression: ${flavor.expression}. Eyes must look alert, engaged, and realistic — never blank, glazed, doll-like, or expressionless.
+- Expression: ${flavor.expression}. Eyes must look alert, engaged, and realistic — never blank, glazed, doll-like, or expressionless. REFERENCE TEETH CHECK (applies to THIS image regardless of the expression wording above): Inspect every reference photo for visible teeth before deciding what kind of smile to render. If NO reference photo shows any visible teeth, render a CLOSED-MOUTH smile that matches the lip style shown in the references — lips together, no upper teeth, no lower teeth, no gap between the lips — even if the expression wording above said "open smile," "teeth-showing," or "bright." Reference fidelity wins over the expression wording. AI-generated teeth on a subject who shows no teeth in references produce uncanny, "AI-tell" output that fails the headshot.
 - Body and head: ${flavor.bodyPose}.
 - Framing: ${flavor.crop}.
 ${outfitLine}
