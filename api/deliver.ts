@@ -151,6 +151,17 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // caller from stuffing arbitrary external links into the manifest.
 const BLOB_URL_HOST_RE = /^https?:\/\/[^/]*\.public\.blob\.vercel-storage\.com\//;
 
+// Per-attempt timeout for Gemini Pro retouch calls in runSubTier.
+//
+// History (2026-05-22): /api/deliver returned 504 to a customer because
+// one of the 6 parallel Pro retouch calls hung silently — Promise.all
+// never resolved, and the whole function timed out at Vercel's 300s
+// ceiling. With this race-against-timeout pattern, a hung call gets
+// killed at 90s and a retry fires. Worst case per sub-tier: 2 attempts
+// × 90s + 500ms backoff = 180.5s. Six parallel sub-tiers all hitting
+// worst case still stay well under the 300s function maxDuration.
+const PRO_PER_ATTEMPT_TIMEOUT_MS = 90_000;
+
 // Human-sortable, URL-safe delivery id — e.g. "2026-04-21T09-15-22-a1b2c3".
 // The timestamp prefix means browsing /deliveries in the Blob dashboard lists
 // newest-last (or newest-first after a simple reverse) without any metadata.
@@ -709,24 +720,58 @@ async function applyRetouchPass(
           },
         },
       ];
-      const resp = await ai.models.generateContent({
-        model: RETOUCH_MODEL,
-        contents: [{ role: "user", parts }],
-        // Keep aspectRatio: "3:4" so Gemini doesn't recompose the framing.
-        // imageSize was previously "2K" (added 2026-05-20 to fix small-
-        // output bug), but Kristi observed on 2026-05-22 that pinning
-        // imageSize made the Pro model apply LESS aggressive retouching
-        // than her tester (which sends no imageConfig at all). Letting
-        // Gemini pick its own size restores the tester-quality retouching;
-        // trade-off is the output is ~896x1200 instead of 2K. Acceptable
-        // because the aesthetic gain outweighs the size loss for retouched
-        // photos. Realistic version in the Deluxe bundle stays 2K.
-        config: {
-          imageConfig: {
-            aspectRatio: "3:4",
-          },
-        },
-      });
+      // Pro Image Preview can occasionally hang silently. Race each call
+      // against a hard timeout (PRO_PER_ATTEMPT_TIMEOUT_MS) and retry once.
+      // imageConfig.aspectRatio "3:4" is kept (prevents recompose); imageSize
+      // is intentionally NOT set — see 2026-05-22 finding in
+      // feedback_gemini_pro_imageconfig that pinning size constrained the
+      // model's retouching aggressiveness.
+      let resp: Awaited<
+        ReturnType<typeof ai.models.generateContent>
+      > | null = null;
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          const apiCall = ai.models.generateContent({
+            model: RETOUCH_MODEL,
+            contents: [{ role: "user", parts }],
+            config: { imageConfig: { aspectRatio: "3:4" } },
+          });
+          const timeoutPromise = new Promise<never>((_, reject) => {
+            setTimeout(
+              () =>
+                reject(
+                  new Error(
+                    `Pro timeout after ${PRO_PER_ATTEMPT_TIMEOUT_MS}ms (attempt ${attempt})`,
+                  ),
+                ),
+              PRO_PER_ATTEMPT_TIMEOUT_MS,
+            );
+          });
+          resp = await Promise.race([apiCall, timeoutPromise]);
+          break;
+        } catch (err) {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          console.warn(
+            JSON.stringify({
+              type: "retouch_attempt_failed",
+              deliveryId,
+              photoIndex,
+              subTier,
+              attempt,
+              error: errMsg,
+            }),
+          );
+          if (attempt >= 2) throw err;
+          // Brief backoff before retry — a transient hang sometimes
+          // clears if the second call routes to a different worker.
+          await new Promise((r) => setTimeout(r, 500));
+        }
+      }
+      if (!resp) {
+        // Unreachable in practice (the loop either sets resp or throws),
+        // but TypeScript needs the guard before we deref candidates.
+        return sourceUrl;
+      }
 
       const candidates = resp.candidates ?? [];
       for (const c of candidates) {
