@@ -984,6 +984,20 @@ function isRetryableGeminiError(error: unknown): boolean {
   // JSON "code" and "status" fields are literally present in the string.
   if (msg.includes('"code":503') || msg.includes("UNAVAILABLE")) return true;
   if (msg.includes('"code":429') || msg.includes("RESOURCE_EXHAUSTED")) return true;
+  // INVALID_ARGUMENT (400) added 2026-05-22 after Kristi saw 5/6 parallel
+  // generations succeed and 1 fail with this status — same prompt, same
+  // reference photos, same config, but one worker returned 400 transiently
+  // while five others returned 200. Re-routing to a different worker on
+  // retry consistently fixes it. The tradeoff: a LEGITIMATELY malformed
+  // request (e.g., a code change breaks the payload shape) will now retry
+  // up to 4 times before giving up, taking ~12s to fail instead of ~3s.
+  // Acceptable — the transient case is far more common in production.
+  if (
+    msg.includes('"code":400') ||
+    msg.includes("INVALID_ARGUMENT")
+  ) {
+    return true;
+  }
   // Transient network hiccups also worth one more try.
   if (msg.includes("ECONNRESET") || msg.includes("ETIMEDOUT")) return true;
   if (msg.includes("fetch failed")) return true;
