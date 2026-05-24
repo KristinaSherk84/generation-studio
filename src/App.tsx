@@ -8558,10 +8558,15 @@ export default function App() {
 
   return (
     <div style={{ minHeight: "100vh", background: C.pageBg, ...font }}>
-      {/* Old "Generation Studio / Selected (N)" navbar — hidden on the
-          landing screen because LandingV2 has its own GenerAItion top nav.
-          Showing both at once stacks two header bars and visually clashes. */}
-      {screen !== "landing" && (
+      {/* Old "Generation Studio / Selected (N)" navbar — hidden on landing
+          and healthcare screens because LandingV2 + HealthcareScreen each
+          have their own GenerAItion top nav. Showing both at once stacks
+          two header bars and visually clashes, AND surfaces the old
+          "Generation Studio" brand name on a public marketing page where
+          we want only "GenerAItion Headshots" for brand-entity consistency
+          (Google + AI search engines associate the domain with one brand
+          string only). */}
+      {screen !== "landing" && screen !== "healthcare" && (
         <Navbar
           cartCount={selectedImageIndices.length}
           onLogoClick={reset}
