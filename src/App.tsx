@@ -114,6 +114,7 @@ const FLOW_STEPS: { label: string }[] = [
 function getStepFromScreen(
   screen:
     | "landing"
+    | "healthcare"
     | "gallery"
     | "upload"
     | "style"
