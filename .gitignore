@@ -30,3 +30,9 @@ dist-ssr
 # them; they're ~7MB and would bloat the repo.
 api/lib/skin/models/*.json
 api/lib/skin/models/*.bin
+
+# Original (full-size) source photos for the healthcare landing page. Only
+# the web-optimized files under public/marketing/healthcare/web/ ship to the
+# site; the per-pair subfolders here stay local as source-of-truth in case
+# we ever need to regenerate at different sizes.
+public/marketing/healthcare/Pair*/

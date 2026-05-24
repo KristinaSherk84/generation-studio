@@ -2493,6 +2493,775 @@ const LandingV2 = ({ onStart, onPromoUnlock, onShowGallery }: LandingV2Props) =>
   );
 };
 
+// -------------------- Screen 1b: Healthcare vertical landing --------------------
+//
+// /healthcare — vertical-specific landing page for medical professionals.
+// Same brand language as LandingV2 but tuned for the audience:
+//   - Medical-only filmstrip (7 pairs, composited large-AFTER + circular-BEFORE
+//     inset matching the home page filmstrip style).
+//   - Time-savings copy ("about 1% the cost of an in-person session").
+//   - "Recommended settings" block that points visitors to the Healthcare
+//     option on Background AND Attire when they land on the style screen.
+//   - Click any pair card → full-screen lightbox showing the separate BEFORE
+//     and AFTER images side-by-side (stacked on mobile) for a real comparison.
+//
+// Reachable at the URL path /healthcare (App reads window.location.pathname
+// on mount + listens for popstate; vercel.json has a rewrite so direct visits
+// serve the SPA). Not currently linked from LandingV2 nav — discoverable via
+// search + ads + (future) sitemap.
+
+const HEALTHCARE_PAIRS: { composite: string; before: string; after: string; alt: string }[] = [
+  {
+    composite: "/marketing/healthcare/web/ai-headshot-for-doctors-1.jpg",
+    before: "/marketing/healthcare/web/ai-headshot-for-doctors-1-before.jpg",
+    after: "/marketing/healthcare/web/ai-headshot-for-doctors-1-after.jpg",
+    alt: "AI headshot for doctors — before and after",
+  },
+  {
+    composite: "/marketing/healthcare/web/ai-physician-headshot-1.jpg",
+    before: "/marketing/healthcare/web/ai-physician-headshot-1-before.jpg",
+    after: "/marketing/healthcare/web/ai-physician-headshot-1-after.jpg",
+    alt: "AI physician headshot — before and after",
+  },
+  {
+    composite: "/marketing/healthcare/web/doctor-headshot-generator-1.jpg",
+    before: "/marketing/healthcare/web/doctor-headshot-generator-1-before.jpg",
+    after: "/marketing/healthcare/web/doctor-headshot-generator-1-after.jpg",
+    alt: "Doctor headshot from AI generator — before and after",
+  },
+  {
+    composite: "/marketing/healthcare/web/ai-medical-headshot-1.jpg",
+    before: "/marketing/healthcare/web/ai-medical-headshot-1-before.jpg",
+    after: "/marketing/healthcare/web/ai-medical-headshot-1-after.jpg",
+    alt: "AI medical headshot — before and after",
+  },
+  {
+    composite: "/marketing/healthcare/web/ai-headshot-for-medical-professionals-1.jpg",
+    before: "/marketing/healthcare/web/ai-headshot-for-medical-professionals-1-before.jpg",
+    after: "/marketing/healthcare/web/ai-headshot-for-medical-professionals-1-after.jpg",
+    alt: "AI headshot for medical professionals — before and after",
+  },
+  {
+    composite: "/marketing/healthcare/web/healthcare-headshot-ai-1.jpg",
+    before: "/marketing/healthcare/web/healthcare-headshot-ai-1-before.jpg",
+    after: "/marketing/healthcare/web/healthcare-headshot-ai-1-after.jpg",
+    alt: "Healthcare headshot from AI — before and after",
+  },
+  {
+    composite: "/marketing/healthcare/web/medical-professional-headshot-ai-1.jpg",
+    before: "/marketing/healthcare/web/medical-professional-headshot-ai-1-before.jpg",
+    after: "/marketing/healthcare/web/medical-professional-headshot-ai-1-after.jpg",
+    alt: "Medical professional headshot — AI generated",
+  },
+];
+
+// Strip displays 7 pairs × 2 copies for the seamless infinite loop. Slightly
+// faster than the home page strip because there are fewer pairs to cycle.
+const HEALTHCARE_STRIP_DURATION_S = 35;
+
+// Lightbox overlay shown when a healthcare filmstrip card is clicked. Renders
+// the separate BEFORE and AFTER images side-by-side (auto-stacks on narrow
+// screens via grid auto-fit) at a much larger size than the strip card. Esc
+// key, X button, and clicking the dark backdrop all close it.
+type HealthcareLightboxProps = {
+  pair: typeof HEALTHCARE_PAIRS[number] | null;
+  onClose: () => void;
+};
+const HealthcareLightbox = ({ pair, onClose }: HealthcareLightboxProps) => {
+  useEffect(() => {
+    if (!pair) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    // Lock body scroll while the lightbox is open so the background page
+    // doesn't move behind the overlay on mobile.
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [pair, onClose]);
+
+  if (!pair) return null;
+
+  return (
+    <div
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label={pair.alt}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0, 0, 0, 0.92)",
+        zIndex: 1000,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "clamp(16px, 4vw, 56px)",
+        overflowY: "auto",
+      }}
+    >
+      <button
+        onClick={onClose}
+        aria-label="Close"
+        style={{
+          position: "absolute",
+          top: 24,
+          right: 24,
+          width: 44,
+          height: 44,
+          borderRadius: "50%",
+          background: "rgba(255,255,255,0.12)",
+          border: "1px solid rgba(255,255,255,0.25)",
+          color: BRAND.white,
+          fontSize: 22,
+          lineHeight: 1,
+          cursor: "pointer",
+          zIndex: 1,
+        }}
+      >
+        ×
+      </button>
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: "100%",
+          maxWidth: 1400,
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(min(380px,100%), 1fr))",
+          gap: 24,
+        }}
+      >
+        <figure style={{ margin: 0 }}>
+          <img
+            src={pair.before}
+            alt={`Before — ${pair.alt}`}
+            style={{
+              width: "100%",
+              height: "auto",
+              maxHeight: "82vh",
+              objectFit: "contain",
+              borderRadius: 8,
+              display: "block",
+            }}
+          />
+          <figcaption
+            style={{
+              marginTop: 12,
+              textAlign: "center",
+              color: BRAND.white,
+              fontFamily: SANS_STACK,
+              fontSize: 13,
+              letterSpacing: 1.5,
+              textTransform: "uppercase",
+              opacity: 0.85,
+            }}
+          >
+            Before — phone selfie
+          </figcaption>
+        </figure>
+        <figure style={{ margin: 0 }}>
+          <img
+            src={pair.after}
+            alt={`After — ${pair.alt}`}
+            style={{
+              width: "100%",
+              height: "auto",
+              maxHeight: "82vh",
+              objectFit: "contain",
+              borderRadius: 8,
+              display: "block",
+            }}
+          />
+          <figcaption
+            style={{
+              marginTop: 12,
+              textAlign: "center",
+              color: BRAND.white,
+              fontFamily: SANS_STACK,
+              fontSize: 13,
+              letterSpacing: 1.5,
+              textTransform: "uppercase",
+              opacity: 0.85,
+            }}
+          >
+            After — AI-generated
+          </figcaption>
+        </figure>
+      </div>
+    </div>
+  );
+};
+
+type HealthcareScreenProps = {
+  onStart: () => void;
+  onBackToHome: () => void;
+};
+const HealthcareScreen = ({ onStart, onBackToHome }: HealthcareScreenProps) => {
+  const [openPair, setOpenPair] = useState<typeof HEALTHCARE_PAIRS[number] | null>(null);
+
+  return (
+    <div
+      style={{
+        background: BRAND.white,
+        color: BRAND.bodyText,
+        fontFamily: SANS_STACK,
+        minHeight: "100vh",
+      }}
+    >
+      {/* TOP NAV — Wordmark links back to home, Start CTA on the right */}
+      <nav
+        style={{
+          height: 76,
+          padding: "0 clamp(16px, 4vw, 56px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          borderBottom: `1px solid #EFEAE0`,
+          background: BRAND.white,
+          position: "sticky",
+          top: 0,
+          zIndex: 10,
+        }}
+      >
+        <button
+          onClick={onBackToHome}
+          aria-label="Back to home"
+          style={{
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            padding: 0,
+          }}
+        >
+          <Wordmark size={20} />
+        </button>
+        <Pill onClick={onStart} variant="primary" size="sm">
+          Start now
+        </Pill>
+      </nav>
+
+      {/* HERO — centered text, no photo (filmstrip is the visual below) */}
+      <section
+        style={{
+          padding: "clamp(48px, 9vw, 112px) clamp(16px, 4vw, 56px) clamp(32px, 6vw, 64px)",
+          textAlign: "center",
+          maxWidth: 980,
+          margin: "0 auto",
+        }}
+      >
+        <h1
+          style={{
+            fontFamily: SERIF_STACK,
+            fontWeight: 400,
+            fontSize: "clamp(34px, 5.4vw, 64px)",
+            lineHeight: 1.05,
+            letterSpacing: -0.5,
+            margin: "0 0 16px",
+            color: BRAND.charcoal,
+          }}
+        >
+          AI Headshots for Healthcare Professionals
+        </h1>
+        <p
+          style={{
+            fontFamily: SERIF_STACK,
+            fontStyle: "italic",
+            fontSize: "clamp(18px, 2.2vw, 24px)",
+            lineHeight: 1.4,
+            color: BRAND.subText,
+            margin: "0 0 28px",
+          }}
+        >
+          realistic ai headshots, made by an actual photographer.
+        </p>
+        <p
+          style={{
+            fontSize: "clamp(15px, 1.6vw, 18px)",
+            lineHeight: 1.6,
+            color: BRAND.bodyText,
+            maxWidth: 720,
+            margin: "0 auto 36px",
+          }}
+        >
+          Three lab coats, three colored scrubs, all of you. Ready in under five minutes
+          — for about 1% the cost of an in-person session.
+        </p>
+        <Pill onClick={onStart} variant="primary" size="lg">
+          Get Six Headshots
+        </Pill>
+      </section>
+
+      {/* MEDICAL FILMSTRIP — 7 composited pairs, infinite scroll, click to enlarge */}
+      <section style={{ padding: "0 0 clamp(32px, 6vw, 64px)" }}>
+        <div
+          style={{
+            width: "100%",
+            overflow: "hidden",
+            maskImage:
+              "linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent)",
+            WebkitMaskImage:
+              "linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent)",
+          }}
+        >
+          <div
+            className="hc-strip-track"
+            style={{
+              display: "flex",
+              gap: 16,
+              width: "max-content",
+              animation: `hc-strip-scroll ${HEALTHCARE_STRIP_DURATION_S}s linear infinite`,
+            }}
+          >
+            {[...HEALTHCARE_PAIRS, ...HEALTHCARE_PAIRS].map((pair, i) => (
+              <button
+                key={i}
+                onClick={() => setOpenPair(pair)}
+                aria-label={`Open ${pair.alt}`}
+                style={{
+                  flex: "0 0 auto",
+                  width: "clamp(220px, 24vw, 360px)",
+                  aspectRatio: "3 / 4",
+                  border: "none",
+                  padding: 0,
+                  background: "transparent",
+                  cursor: "pointer",
+                  borderRadius: 6,
+                  overflow: "hidden",
+                  boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
+                }}
+              >
+                <img
+                  src={pair.composite}
+                  alt={pair.alt}
+                  loading="eager"
+                  fetchPriority={i < 5 ? "high" : "auto"}
+                  decoding="async"
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                    display: "block",
+                  }}
+                />
+              </button>
+            ))}
+          </div>
+        </div>
+        <p
+          style={{
+            textAlign: "center",
+            marginTop: 20,
+            fontSize: 13,
+            color: BRAND.subText,
+            letterSpacing: 0.3,
+          }}
+        >
+          Real selfies, transformed. Tap any pair to enlarge.
+        </p>
+      </section>
+
+      {/* WHAT YOU GET — cream section, gold bullet dots, short lines */}
+      <section
+        style={{
+          background: BRAND.cream,
+          padding: "clamp(56px, 9vw, 112px) clamp(16px, 4vw, 56px)",
+        }}
+      >
+        <div style={{ maxWidth: 760, margin: "0 auto" }}>
+          <h2
+            style={{
+              fontFamily: SERIF_STACK,
+              fontWeight: 400,
+              fontSize: "clamp(28px, 4vw, 44px)",
+              lineHeight: 1.15,
+              color: BRAND.charcoal,
+              margin: "0 0 28px",
+              textAlign: "center",
+            }}
+          >
+            What you get
+          </h2>
+          <div
+            style={{
+              display: "grid",
+              gap: 18,
+              fontSize: 17,
+              lineHeight: 1.55,
+              color: BRAND.bodyText,
+            }}
+          >
+            {[
+              "Six finished headshots — three in lab coats, three in scrubs in different colors.",
+              "2K resolution. The same file size I deliver to my in-person clients.",
+              "Tailored to your specialty and your look.",
+              "Done in under five minutes.",
+            ].map((line, i) => (
+              <div key={i} style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
+                <span
+                  aria-hidden
+                  style={{
+                    flex: "0 0 auto",
+                    width: 8,
+                    height: 8,
+                    marginTop: 12,
+                    borderRadius: "50%",
+                    background: BRAND.gold,
+                  }}
+                />
+                <span>{line}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* WHY IT WORKS — centered first-person credibility */}
+      <section
+        style={{
+          padding: "clamp(56px, 9vw, 112px) clamp(16px, 4vw, 56px)",
+        }}
+      >
+        <div style={{ maxWidth: 720, margin: "0 auto", textAlign: "center" }}>
+          <p
+            style={{
+              fontFamily: SANS_STACK,
+              fontSize: 12,
+              letterSpacing: 2.5,
+              textTransform: "uppercase",
+              color: BRAND.gold,
+              margin: "0 0 14px",
+            }}
+          >
+            Why it works
+          </p>
+          <h2
+            style={{
+              fontFamily: SERIF_STACK,
+              fontWeight: 400,
+              fontSize: "clamp(26px, 3.6vw, 40px)",
+              lineHeight: 1.18,
+              color: BRAND.charcoal,
+              margin: "0 0 28px",
+            }}
+          >
+            Twenty years behind the camera, baked into every generation.
+          </h2>
+          <p
+            style={{
+              fontSize: 17,
+              lineHeight: 1.65,
+              color: BRAND.bodyText,
+              margin: 0,
+            }}
+          >
+            I'm Kristina Sherk — a portrait photographer with over 20 years behind the
+            camera and 400+ five-star Google reviews on KristinaSherk.com. Across that
+            career I've photographed hundreds of physicians and healthcare professionals.
+            The lighting, posing, and retouching that make my in-person headshots work
+            are baked into every generation this app produces.
+          </p>
+        </div>
+      </section>
+
+      {/* RECOMMENDED SETTINGS — visual guide to picking Healthcare in app */}
+      <section
+        style={{
+          background: BRAND.cream,
+          padding: "clamp(56px, 9vw, 112px) clamp(16px, 4vw, 56px)",
+        }}
+      >
+        <div style={{ maxWidth: 780, margin: "0 auto" }}>
+          <p
+            style={{
+              fontFamily: SANS_STACK,
+              fontSize: 12,
+              letterSpacing: 2.5,
+              textTransform: "uppercase",
+              color: BRAND.gold,
+              textAlign: "center",
+              margin: "0 0 14px",
+            }}
+          >
+            Recommended settings
+          </p>
+          <h2
+            style={{
+              fontFamily: SERIF_STACK,
+              fontWeight: 400,
+              fontSize: "clamp(26px, 3.6vw, 40px)",
+              lineHeight: 1.18,
+              color: BRAND.charcoal,
+              textAlign: "center",
+              margin: "0 0 36px",
+            }}
+          >
+            When you get to the style screen, pick these.
+          </h2>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+              gap: 24,
+              marginBottom: 28,
+            }}
+          >
+            {/* Card 1: Background = Healthcare */}
+            <div
+              style={{
+                background: BRAND.white,
+                border: `1px solid #EFEAE0`,
+                borderRadius: 10,
+                padding: "32px 24px 28px",
+                textAlign: "center",
+              }}
+            >
+              <p
+                style={{
+                  fontSize: 11,
+                  letterSpacing: 2,
+                  textTransform: "uppercase",
+                  color: BRAND.subText,
+                  margin: "0 0 22px",
+                }}
+              >
+                Background
+              </p>
+              {/* Mini-mockup of the Healthcare background tile (matches app's
+                  actual chip look — light blue/teal swatch with a person icon),
+                  ringed in forest green with a green checkmark badge to signal
+                  "this is the one to pick" */}
+              <div
+                style={{
+                  width: 96,
+                  height: 96,
+                  margin: "0 auto 16px",
+                  borderRadius: 8,
+                  background: "#C8D7DE",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  border: `2px solid ${BRAND.forestGreen}`,
+                  position: "relative",
+                  boxShadow: `0 0 0 4px ${BRAND.white}, 0 0 0 6px ${BRAND.forestGreen}33`,
+                }}
+              >
+                <svg width="44" height="44" viewBox="0 0 24 24" fill="#6E7E84" aria-hidden="true">
+                  <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+                </svg>
+                <span
+                  aria-hidden
+                  style={{
+                    position: "absolute",
+                    top: -8,
+                    right: -8,
+                    width: 26,
+                    height: 26,
+                    borderRadius: "50%",
+                    background: BRAND.forestGreen,
+                    color: BRAND.white,
+                    fontSize: 15,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontWeight: 600,
+                  }}
+                >
+                  ✓
+                </span>
+              </div>
+              <p
+                style={{
+                  fontFamily: SERIF_STACK,
+                  fontSize: 20,
+                  color: BRAND.charcoal,
+                  margin: 0,
+                }}
+              >
+                Healthcare
+              </p>
+            </div>
+
+            {/* Card 2: Attire = Healthcare */}
+            <div
+              style={{
+                background: BRAND.white,
+                border: `1px solid #EFEAE0`,
+                borderRadius: 10,
+                padding: "32px 24px 28px",
+                textAlign: "center",
+              }}
+            >
+              <p
+                style={{
+                  fontSize: 11,
+                  letterSpacing: 2,
+                  textTransform: "uppercase",
+                  color: BRAND.subText,
+                  margin: "0 0 22px",
+                }}
+              >
+                Attire
+              </p>
+              {/* Mini-mockup of the Healthcare attire pill (stethoscope icon +
+                  "Healthcare" label), ringed in forest green w/ checkmark */}
+              <div style={{ position: "relative", display: "inline-block", margin: "0 0 26px" }}>
+                <div
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "12px 22px",
+                    borderRadius: 999,
+                    background: BRAND.white,
+                    border: `2px solid ${BRAND.forestGreen}`,
+                    boxShadow: `0 0 0 4px ${BRAND.forestGreen}22`,
+                  }}
+                >
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke={BRAND.charcoal}
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M6 3v6a5 5 0 0 0 10 0V3" />
+                    <path d="M5 3h2M17 3h2" />
+                    <circle cx="20" cy="14" r="2" />
+                    <path d="M11 14v3a4 4 0 0 0 8 0v-1" />
+                  </svg>
+                  <span
+                    style={{
+                      fontFamily: SANS_STACK,
+                      fontSize: 15,
+                      color: BRAND.charcoal,
+                    }}
+                  >
+                    Healthcare
+                  </span>
+                </div>
+                <span
+                  aria-hidden
+                  style={{
+                    position: "absolute",
+                    top: -10,
+                    right: -10,
+                    width: 26,
+                    height: 26,
+                    borderRadius: "50%",
+                    background: BRAND.forestGreen,
+                    color: BRAND.white,
+                    fontSize: 15,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontWeight: 600,
+                  }}
+                >
+                  ✓
+                </span>
+              </div>
+              <p
+                style={{
+                  fontFamily: SERIF_STACK,
+                  fontSize: 20,
+                  color: BRAND.charcoal,
+                  margin: 0,
+                }}
+              >
+                Healthcare
+              </p>
+            </div>
+          </div>
+          <p
+            style={{
+              textAlign: "center",
+              fontSize: 15,
+              lineHeight: 1.6,
+              color: BRAND.subText,
+              margin: 0,
+            }}
+          >
+            On the style screen, choose Healthcare for both — that's tuned for lab
+            coats and scrubs.
+          </p>
+        </div>
+      </section>
+
+      {/* CLOSING CTA */}
+      <section
+        style={{
+          padding: "clamp(72px, 11vw, 144px) clamp(16px, 4vw, 56px)",
+          textAlign: "center",
+        }}
+      >
+        <h2
+          style={{
+            fontFamily: SERIF_STACK,
+            fontWeight: 400,
+            fontSize: "clamp(32px, 5vw, 56px)",
+            lineHeight: 1.1,
+            color: BRAND.charcoal,
+            margin: "0 0 32px",
+          }}
+        >
+          Ready when you are.
+        </h2>
+        <Pill onClick={onStart} variant="primary" size="lg">
+          Generate My Headshots
+        </Pill>
+      </section>
+
+      {/* FOOTER — charcoal block matching home page */}
+      <footer
+        style={{
+          background: BRAND.charcoal,
+          color: "rgba(255,255,255,0.7)",
+          padding: "clamp(32px, 5vw, 56px) clamp(16px, 4vw, 56px)",
+          textAlign: "center",
+          fontSize: 13,
+        }}
+      >
+        <div style={{ marginBottom: 12 }}>
+          <span style={{ color: BRAND.white, fontFamily: SERIF_STACK, fontSize: 18 }}>
+            Gener
+            <span style={{ fontStyle: "italic", color: BRAND.gold, fontWeight: 600 }}>
+              AI
+            </span>
+            tion <span style={{ fontWeight: 500 }}>Headshots</span>
+          </span>
+        </div>
+        <p style={{ margin: 0, opacity: 0.6 }}>
+          Made by Kristina Sherk · KristinaSherk.com
+        </p>
+      </footer>
+
+      {/* Lightbox overlay — null pair means hidden */}
+      <HealthcareLightbox pair={openPair} onClose={() => setOpenPair(null)} />
+
+      {/* Keyframes + hover pause for the strip. Scoped via the .hc-strip-track
+          class so it doesn't collide with the home page's film-strip-track. */}
+      <style>{`
+        @keyframes hc-strip-scroll {
+          from { transform: translateX(0); }
+          to { transform: translateX(-50%); }
+        }
+        .hc-strip-track:hover {
+          animation-play-state: paused;
+        }
+      `}</style>
+    </div>
+  );
+};
+
 // -------------------- Screen 2: Upload --------------------
 
 type UploadScreenProps = {
@@ -6744,6 +7513,8 @@ const PaywallModal = ({ onClose }: PaywallModalProps) => (
 
 type Screen =
   | "landing"
+  | "healthcare" // /healthcare vertical landing — reached via URL path, see App's
+                 // pathname-on-mount + popstate effects below
   | "gallery" // before/after gallery — accessible from landing nav
   | "upload"
   | "style"
@@ -6761,6 +7532,30 @@ const TOTAL_HEADSHOTS = 6;
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>("landing");
+
+  // URL-path routing for vertical landing pages. The app is otherwise driven
+  // by `screen` state (button clicks), but vertical landers like /healthcare
+  // need to be reachable as real URLs for SEO. On initial mount we read
+  // window.location.pathname and set the matching screen; we also listen for
+  // popstate so browser back/forward works between / and /healthcare.
+  // Vercel.json has a matching rewrite so direct visits to /healthcare serve
+  // the SPA's index.html.
+  useEffect(() => {
+    const screenForPath = (path: string): Screen | null => {
+      if (path === "/healthcare" || path === "/healthcare/") return "healthcare";
+      if (path === "/" || path === "") return "landing";
+      return null;
+    };
+    const initial = screenForPath(window.location.pathname);
+    if (initial) setScreen(initial);
+    const onPopState = () => {
+      const next = screenForPath(window.location.pathname);
+      if (next) setScreen(next);
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
   // Indices of the thumbnails the user selected on the Grid screen. Passed to
   // CheckoutScreen so we can forward the matching clean base64 images to
   // /api/deliver. Navbar "Selected (N)" reads this set's size.
@@ -7905,6 +8700,25 @@ export default function App() {
           onStart={handleStart}
           onPromoUnlock={handlePromoUnlock}
           onShowGallery={() => setScreen("gallery")}
+        />
+      )}
+      {screen === "healthcare" && (
+        <HealthcareScreen
+          onStart={() => {
+            // CTA on /healthcare drops the visitor into the same upload flow
+            // as the home page. URL stays at /healthcare while they're in
+            // the flow — fine for now; can rewire later if attribution wants
+            // a /healthcare/start path.
+            handleStart();
+          }}
+          onBackToHome={() => {
+            setScreen("landing");
+            // Sync the URL so browser back works and refreshing lands them
+            // on the right page.
+            if (window.location.pathname !== "/") {
+              window.history.pushState({}, "", "/");
+            }
+          }}
         />
       )}
       {screen === "gallery" && (
