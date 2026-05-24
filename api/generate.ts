@@ -149,7 +149,11 @@ Preserve the subject's facial features with 100% precision. The generated face m
 
 DO NOT idealize features. DO NOT blend toward generic 'attractive' proportions, or AI-default beauty. DO NOT alter the structural asymmetries that make this person them. NO identity drift. Maintain and keep eye asymmetry, unique nose and chin characteristics. Protect uneven smiles. Keep all asymmetrical BONE/STRUCTURE.
 
-SKIN RENDERING: Render extremely realistic skin texture, exactly as it appears in the reference photos. Remove blemishes only. Keep pores, freckles, moles, texture. Render authentically real skin — no airbrushed look. If no skin texture is visible in reference photos, add texture and skin details for realism.
+SKIN RENDERING: Render extremely realistic skin texture, exactly as it appears in the reference photos. Remove blemishes only. Keep pores, freckles, moles, and texture EXACTLY as visible in the references. Render authentically real skin — no airbrushed look.
+
+CRITICAL — DO NOT INVENT SKIN MARKS: Freckles, moles, beauty marks, scars, age spots, dimples, and any distinguishing marks are PART OF THE SUBJECT'S IDENTITY. Only render the ones that are clearly visible in the reference photos. Do NOT add freckles, moles, beauty marks, scars, age spots, or any other distinguishing marks that do not appear in the references — inventing those changes who the person is.
+
+If the reference photos show smooth skin with no visible micro-texture (filtered selfies, low-resolution phone photos, well-lit smooth-skinned subjects), render with subtle generic pore micro-texture only — fine pore terrain to avoid plastic skin, NEVER freckles or moles or marks that weren't in the references.
 
 REFERENCE IMAGE PROCESSING: If any reference photo metadata shows it was taken with a wide-angle lens (phone selfies commonly distort the nose and mid-face), correct the lens distortion in the generated image so the face appears as if photographed with a prime 85mm or 135mm portrait lens — slight compression of features, natural proportions, no bulging nose or elongated jaw.`;
 
