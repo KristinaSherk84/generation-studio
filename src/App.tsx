@@ -2792,8 +2792,24 @@ const HealthcareScreen = ({ onStart, onBackToHome }: HealthcareScreenProps) => {
           — for about 1% the cost of an in-person session.
         </p>
         <Pill onClick={onStart} variant="primary" size="lg">
-          Get Six Headshots
+          Try it for $2.99
         </Pill>
+        {/* Price clarification under the hero CTA. Customers don't "get" the
+            6 previews — they pay $2.99 to try, then $9.99 per keeper they
+            actually want to download. This line prevents an over-promise
+            that would damage trust at the checkout screen. */}
+        <p
+          style={{
+            marginTop: 16,
+            fontSize: 14,
+            lineHeight: 1.5,
+            color: BRAND.subText,
+            maxWidth: 480,
+            margin: "16px auto 0",
+          }}
+        >
+          Only buy what looks like you. Downloads starting at $9.99.
+        </p>
       </section>
 
       {/* MEDICAL FILMSTRIP — 7 composited pairs, infinite scroll, click to enlarge */}
@@ -2896,7 +2912,7 @@ const HealthcareScreen = ({ onStart, onBackToHome }: HealthcareScreenProps) => {
             }}
           >
             {[
-              "Six finished headshots — three in lab coats, three in scrubs in different colors.",
+              "Six previews to choose from — three in lab coats, three in scrubs in different colors.",
               "2K resolution. The same file size I deliver to my in-person clients.",
               "Tailored to your specialty and your look.",
               "Done in under five minutes.",
@@ -3217,7 +3233,7 @@ const HealthcareScreen = ({ onStart, onBackToHome }: HealthcareScreenProps) => {
           Ready when you are.
         </h2>
         <Pill onClick={onStart} variant="primary" size="lg">
-          Generate My Headshots
+          Start Creating — $2.99
         </Pill>
       </section>
 
