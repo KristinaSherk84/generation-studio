@@ -2232,33 +2232,50 @@ const LandingV2 = ({
           <table
             style={{
               width: "100%",
-              minWidth: 720,
+              // Mobile: shrink minWidth so 3 columns (row label + GenerAItion +
+              // 1 competitor) fit on a ~375px phone viewport — the 4th column
+              // (second competitor) is reached via horizontal scroll. Desktop
+              // keeps the original 720 minimum so the whole table reads at
+              // once. Updated 2026-05-27 after Kristi noted only her column
+              // was visible on phone screens.
+              minWidth: isMobile ? 500 : 720,
               borderCollapse: "collapse",
               fontFamily: SANS_STACK,
               textAlign: "left",
-              fontSize: isMobile ? 13 : 14,
+              fontSize: isMobile ? 12 : 14,
             }}
           >
             <thead>
               <tr>
                 <th style={{
-                  padding: "16px 14px",
+                  padding: isMobile ? "12px 10px" : "16px 14px",
                   fontWeight: 500,
                   fontSize: 12,
                   color: BRAND.subText,
                   background: BRAND.cream,
                   borderBottom: `0.5px solid #EFEAE0`,
-                  width: "1%",
-                  whiteSpace: "nowrap",
+                  // Mobile: fixed narrow width + label wrapping so the row
+                  // label column doesn't eat half the viewport. Desktop: keep
+                  // the original auto-fit behavior.
+                  width: isMobile ? 110 : "1%",
+                  minWidth: isMobile ? 110 : undefined,
+                  whiteSpace: isMobile ? "normal" : "nowrap",
+                  // Sticky-left so the row labels stay visible as the user
+                  // scrolls horizontally to see the 4th column. Mobile only —
+                  // on desktop the whole table fits without scrolling.
+                  position: isMobile ? "sticky" : "static",
+                  left: 0,
+                  zIndex: 2,
                 }}></th>
                 <th style={{
-                  padding: "16px 14px",
+                  padding: isMobile ? "12px 10px" : "16px 14px",
                   background: "#F4F8F4",
                   borderBottom: `2px solid ${BRAND.forestGreen}`,
                   borderLeft: `2px solid ${BRAND.forestGreen}`,
                   borderRight: `2px solid ${BRAND.forestGreen}`,
                   borderTop: `2px solid ${BRAND.forestGreen}`,
                   textAlign: "left",
+                  minWidth: isMobile ? 130 : undefined,
                 }}>
                   <div style={{
                     fontSize: 10,
@@ -2296,10 +2313,11 @@ const LandingV2 = ({
                   </div>
                 </th>
                 <th style={{
-                  padding: "16px 14px",
+                  padding: isMobile ? "12px 10px" : "16px 14px",
                   background: BRAND.cream,
                   borderBottom: `0.5px solid #EFEAE0`,
                   textAlign: "left",
+                  minWidth: isMobile ? 130 : undefined,
                 }}>
                   <div style={{
                     fontSize: 10,
@@ -2312,7 +2330,7 @@ const LandingV2 = ({
                   </div>
                   <div style={{
                     fontFamily: SERIF_STACK,
-                    fontSize: 17,
+                    fontSize: isMobile ? 14 : 17,
                     fontWeight: 500,
                     color: BRAND.charcoal,
                     marginTop: 4,
@@ -2321,10 +2339,11 @@ const LandingV2 = ({
                   </div>
                 </th>
                 <th style={{
-                  padding: "16px 14px",
+                  padding: isMobile ? "12px 10px" : "16px 14px",
                   background: BRAND.cream,
                   borderBottom: `0.5px solid #EFEAE0`,
                   textAlign: "left",
+                  minWidth: isMobile ? 130 : undefined,
                 }}>
                   <div style={{
                     fontSize: 10,
@@ -2337,7 +2356,7 @@ const LandingV2 = ({
                   </div>
                   <div style={{
                     fontFamily: SERIF_STACK,
-                    fontSize: 17,
+                    fontSize: isMobile ? 14 : 17,
                     fontWeight: 500,
                     color: BRAND.charcoal,
                     marginTop: 4,
@@ -2403,22 +2422,32 @@ const LandingV2 = ({
                 return (
                   <tr key={row.label}>
                     <td style={{
-                      padding: "14px",
+                      padding: isMobile ? "12px 10px" : "14px",
                       color: BRAND.subText,
                       fontWeight: 500,
                       borderBottom: cellBorder,
-                      whiteSpace: "nowrap",
+                      whiteSpace: isMobile ? "normal" : "nowrap",
                       verticalAlign: "top",
+                      // Sticky-left so the row label stays visible as the
+                      // user scrolls the table horizontally. Background must
+                      // be opaque or the scrolling cells would show through.
+                      // Mobile-only — desktop fits the whole table at once.
+                      position: isMobile ? "sticky" : "static",
+                      left: 0,
+                      zIndex: 1,
+                      background: BRAND.white,
+                      minWidth: isMobile ? 110 : undefined,
                     }}>
                       {row.label}
                     </td>
                     <td style={{
-                      padding: "14px",
+                      padding: isMobile ? "12px 10px" : "14px",
                       borderBottom: cellBorder,
                       borderLeft: `2px solid ${BRAND.forestGreen}`,
                       borderRight: `2px solid ${BRAND.forestGreen}`,
                       background: "#F4F8F4",
                       verticalAlign: "top",
+                      minWidth: isMobile ? 130 : undefined,
                     }}>
                       <span style={{
                         display: "inline-flex",
@@ -2464,10 +2493,11 @@ const LandingV2 = ({
                     </td>
                     {row.values.map((v, i) => (
                       <td key={i} style={{
-                        padding: "14px",
+                        padding: isMobile ? "12px 10px" : "14px",
                         color: BRAND.charcoal,
                         borderBottom: cellBorder,
                         verticalAlign: "top",
+                        minWidth: isMobile ? 130 : undefined,
                       }}>
                         <div>{v}</div>
                         {row.valuesSub[i] && (
