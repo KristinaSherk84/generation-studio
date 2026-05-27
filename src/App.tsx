@@ -2248,18 +2248,23 @@ const LandingV2 = ({
             <thead>
               <tr>
                 <th style={{
-                  padding: isMobile ? "12px 10px" : "16px 14px",
+                  padding: isMobile ? "12px 8px" : "16px 14px",
                   fontWeight: 500,
                   fontSize: 12,
                   color: BRAND.subText,
                   background: BRAND.cream,
                   borderBottom: `0.5px solid #EFEAE0`,
-                  // Mobile: fixed narrow width + label wrapping so the row
-                  // label column doesn't eat half the viewport. Desktop: keep
-                  // the original auto-fit behavior.
-                  width: isMobile ? 110 : "1%",
-                  minWidth: isMobile ? 110 : undefined,
+                  // Mobile: roughly-half-width row-label column so each cell
+                  // wraps to ~2 lines, leaving more room for the 3 visible
+                  // value columns. Padding tightened to recover content width.
+                  // Desktop: keep the original auto-fit behavior.
+                  // (Updated 2026-05-27 per Kristi — was 110px, now ~75px.)
+                  width: isMobile ? 75 : "1%",
+                  minWidth: isMobile ? 75 : undefined,
+                  maxWidth: isMobile ? 75 : undefined,
                   whiteSpace: isMobile ? "normal" : "nowrap",
+                  wordBreak: isMobile ? "normal" : undefined,
+                  overflowWrap: isMobile ? "break-word" : undefined,
                   // Sticky-left so the row labels stay visible as the user
                   // scrolls horizontally to see the 4th column. Mobile only —
                   // on desktop the whole table fits without scrolling.
@@ -2422,7 +2427,7 @@ const LandingV2 = ({
                 return (
                   <tr key={row.label}>
                     <td style={{
-                      padding: isMobile ? "12px 10px" : "14px",
+                      padding: isMobile ? "12px 8px" : "14px",
                       color: BRAND.subText,
                       fontWeight: 500,
                       borderBottom: cellBorder,
@@ -2436,7 +2441,14 @@ const LandingV2 = ({
                       left: 0,
                       zIndex: 1,
                       background: BRAND.white,
-                      minWidth: isMobile ? 110 : undefined,
+                      // Match the header cell width (~75px on mobile) so
+                      // labels wrap to ~2 lines instead of stretching the
+                      // column wide. (Updated 2026-05-27 per Kristi.)
+                      width: isMobile ? 75 : undefined,
+                      minWidth: isMobile ? 75 : undefined,
+                      maxWidth: isMobile ? 75 : undefined,
+                      overflowWrap: isMobile ? "break-word" : undefined,
+                      lineHeight: isMobile ? 1.3 : undefined,
                     }}>
                       {row.label}
                     </td>
