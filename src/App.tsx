@@ -837,11 +837,25 @@ const PHOTOG_TIPS = [
 
 // Tips that cycle on the LoadingScreen while the 6 headshots are generating.
 // Pulled from PHOTOG_TIPS so they stay in sync with the pre-upload modal,
-// plus two loading-specific tips: the regenerate icon hint (was the only
-// thing shown before) and Kristi's "crap in = crap out" reminder. The user
-// sees one tip for a few seconds, then it rotates to the next — turns the
-// wait from "staring at a spinner" into "learning how to get a better result."
+// plus loading-specific tips. The user sees one tip for a few seconds, then
+// it rotates to the next — turns the wait from "staring at a spinner" into
+// "learning how to get a better result."
+//
+// Ordering note (2026-05-27): the first two tips are the only ones that
+// are actionable RIGHT NOW (phone-lock + cellular). They're placed at the
+// front of the array so they're the first thing a customer sees when the
+// loading screen mounts at tipIndex=0. Wake Lock API (in LoadingScreen
+// below) actively keeps the screen awake on supported browsers, but the
+// tip is the fallback for Safari < 16.4 and older Android Chrome.
 const LOADING_TIPS: { title: string; body: string }[] = [
+  {
+    title: "Don't let your phone go to sleep.",
+    body: "If your screen locks during generation, your browser may interrupt the process and you'll have to start over. Keep the screen on for the next 30–60 seconds.",
+  },
+  {
+    title: "Stay on WiFi if you can.",
+    body: "Cellular connections can drop mid-generation. WiFi gives the most reliable results for getting all 6 headshots back cleanly.",
+  },
   {
     title: "Don't love one? Regenerate just that one.",
     body: "Once your grid is ready, tap the refresh icon on any photo to swap only that headshot — no need to restart the batch.",
@@ -2372,9 +2386,10 @@ const LandingV2 = ({ onStart, onPromoUnlock, onShowGallery }: LandingV2Props) =>
             margin: "28px auto 0",
           }}
         >
-          $2.99 to start your session. $9.99 per basic keeper, or $14.99
-          for the Glow Up Deluxe Bundle (3 retouching levels of the same headshot).
-          No surprise fees, no charges for headshots that don't look like you.
+          $2.99 to start your session. $9.99 per Basic keeper, or $14.99 for the
+          Glow Up Deluxe Bundle — smoother skin + magazine-style polish across
+          3 retouched versions (just $5 more than Basic). No surprise fees, no
+          charges for headshots that don't look like you.
         </p>
         <div style={{ marginTop: 36 }}>
           <Pill onClick={onStart} size="lg">
@@ -4434,6 +4449,58 @@ const LoadingScreen = ({
   }, [errorMessage, allDone]);
   const activeTip = LOADING_TIPS[tipIndex];
 
+  // Screen Wake Lock API (added 2026-05-27). Actively keeps the phone
+  // screen awake while generation is in flight, so a customer who sets
+  // their phone down doesn't get their browser tab suspended by the OS
+  // mid-batch. Supported in Chrome/Edge on most platforms and Safari
+  // iOS 16.4+; older browsers (incl. older iOS Safari) fall through the
+  // catch and rely on the first cycling tip ("Don't let your phone go
+  // to sleep") as the fallback signal.
+  //
+  // Visibilitychange handler re-acquires the lock when the tab becomes
+  // visible again — iOS quietly releases the lock when the user
+  // backgrounds the tab even momentarily.
+  useEffect(() => {
+    if (errorMessage || allDone) return;
+    if (typeof navigator === "undefined") return;
+
+    // Local type alias — lib.dom.d.ts ships WakeLockSentinel in newer
+    // TS but we keep this loose to avoid build-config dependency.
+    type WakeLockHandle = { release: () => Promise<void> };
+    let wakeLock: WakeLockHandle | null = null;
+
+    const acquireWakeLock = async () => {
+      try {
+        const nav = navigator as unknown as {
+          wakeLock?: {
+            request: (type: "screen") => Promise<WakeLockHandle>;
+          };
+        };
+        if (!nav.wakeLock) return; // unsupported — fall back to tip
+        wakeLock = await nav.wakeLock.request("screen");
+      } catch {
+        // Permission denied / not visible / etc. — silent fallback.
+      }
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible" && !wakeLock) {
+        void acquireWakeLock();
+      }
+    };
+
+    void acquireWakeLock();
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      if (wakeLock) {
+        void wakeLock.release().catch(() => {});
+        wakeLock = null;
+      }
+    };
+  }, [errorMessage, allDone]);
+
   return (
     <div
       style={{
@@ -5371,14 +5438,14 @@ const RETOUCH_TIER_DESCRIPTIONS: {
     tier: "basic",
     label: "Basic",
     price: "$9.99",
-    description: "As is, what you see is what you get",
+    description: "Realistic version only — what you see is what you get.",
   },
   {
     tier: "deluxe",
     label: "Glow Up Deluxe Bundle",
     price: "$14.99",
     description:
-      "Receive 3 versions of your headshot with different levels of retouching.",
+      "Get smoother skin + magazine-style polish — just $5 more for 3 retouched versions.",
   },
 ];
 
@@ -5725,10 +5792,10 @@ const RetouchScreen = ({
         }}
       >
         <p style={{ fontSize: 13, color: C.dark, margin: "0 0 6px", lineHeight: 1.5 }}>
-          <span style={{ fontWeight: 500 }}>Basic:</span> As is, what you see is what you get
+          <span style={{ fontWeight: 500 }}>Basic ($9.99):</span> Realistic version only.
         </p>
         <p style={{ fontSize: 13, color: C.dark, margin: 0, lineHeight: 1.5 }}>
-          <span style={{ fontWeight: 500 }}>Glow Up Deluxe:</span> Receive 3 versions of your headshot with different levels of retouching.
+          <span style={{ fontWeight: 500 }}>Glow Up Deluxe ($14.99):</span> Smoother skin + magazine-style polish — just $5 more for 3 retouched versions.
         </p>
       </div>
 
@@ -7296,8 +7363,9 @@ const DownloadScreen = ({
           to creative, indoor to outdoor, whatever direction you want.
           Your uploaded reference photos are still saved, so you'll skip
           straight to the style picker — no re-uploading. Just $2.99 to
-          start a fresh session, then $9.99 per basic keeper or $14.99 for the
-          Glow Up Deluxe Bundle (3 retouching versions of each headshot).
+          start a fresh session, then $9.99 per Basic keeper or $14.99 for
+          the Glow Up Deluxe Bundle — smoother skin + magazine-style polish
+          across 3 retouched versions ($5 more than Basic).
         </div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <Button onClick={onNewStyle}>Try a different style</Button>
@@ -7526,6 +7594,81 @@ const PaywallModal = ({ onClose }: PaywallModalProps) => (
   </div>
 );
 
+// -------------------- Back-button warning --------------------
+//
+// Added 2026-05-27 after the 2026-05-26 night Stripe audit showed
+// a probable session-loss event: a customer paid the $2.99 entry
+// fee then hit 12 sequential /api/generate 402 errors over 90s.
+// The most plausible cause is a browser-back navigation wiping
+// the unlock state. This modal fires when the customer is on a
+// post-generation screen (grid / retouch / checkout) AND hits
+// the browser back button — blocks the silent transition and
+// asks them to confirm so they don't accidentally throw away
+// their generated headshots and have to pay again.
+
+type BackWarningModalProps = {
+  onStay: () => void;
+  onLeave: () => void;
+};
+
+const BackWarningModal = ({ onStay, onLeave }: BackWarningModalProps) => (
+  <div
+    role="dialog"
+    aria-modal="true"
+    aria-label="Going back will lose your headshots"
+    style={{
+      position: "fixed",
+      inset: 0,
+      background: "rgba(44, 44, 42, 0.55)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      zIndex: 1100,
+      padding: 24,
+      ...font,
+    }}
+  >
+    <div
+      style={{
+        background: C.white,
+        borderRadius: 8,
+        padding: 32,
+        maxWidth: 460,
+        width: "100%",
+      }}
+    >
+      <div style={{ fontSize: 18, fontWeight: 500, color: C.dark }}>
+        Hang on — going back will lose your headshots
+      </div>
+      <div
+        style={{
+          fontSize: 14,
+          color: C.mediumGrey,
+          marginTop: 12,
+          lineHeight: 1.6,
+        }}
+      >
+        Your generated headshots and any retouch choices will be cleared if
+        you go back. You'd need to start a new session ($2.99) and generate
+        a fresh batch.
+      </div>
+      <div
+        style={{
+          display: "flex",
+          gap: 10,
+          marginTop: 24,
+          flexWrap: "wrap",
+        }}
+      >
+        <Button onClick={onStay}>Stay on this page</Button>
+        <Button variant="ghost" onClick={onLeave}>
+          Go back anyway
+        </Button>
+      </div>
+    </div>
+  </div>
+);
+
 // -------------------- Root app --------------------
 
 type Screen =
@@ -7550,6 +7693,16 @@ const TOTAL_HEADSHOTS = 6;
 export default function App() {
   const [screen, setScreen] = useState<Screen>("landing");
 
+  // Back-button warning state (added 2026-05-27 after Stripe data showed
+  // a customer paying entry fee then losing session). When the customer
+  // is on a post-generation screen (grid / retouch / checkout) and hits
+  // the browser back button, we intercept and show a warning modal so
+  // they don't accidentally throw away their generated headshots and have
+  // to pay $2.99 again. The ref is read inside the existing pathname-based
+  // popstate handler so the two effects don't fight over the same event.
+  const [showBackWarning, setShowBackWarning] = useState(false);
+  const protectedScreenGuardActiveRef = useRef(false);
+
   // URL-path routing for vertical landing pages. The app is otherwise driven
   // by `screen` state (button clicks), but vertical landers like /healthcare
   // need to be reachable as real URLs for SEO. On initial mount we read
@@ -7566,12 +7719,71 @@ export default function App() {
     const initial = screenForPath(window.location.pathname);
     if (initial) setScreen(initial);
     const onPopState = () => {
+      // When the customer is on a protected post-generation screen, the
+      // back-warning guard owns this popstate event — defer to it so we
+      // don't yank the customer to the landing screen behind the modal.
+      if (protectedScreenGuardActiveRef.current) return;
       const next = screenForPath(window.location.pathname);
       if (next) setScreen(next);
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
+
+  // Back-button guard for grid / retouch / checkout screens. When the
+  // customer enters one of these screens, push a marker history entry
+  // so the next browser-back press is intercepted. Show a warning modal
+  // instead of silently losing their generated headshots and forcing a
+  // re-pay. Customer 2 from the 2026-05-26 night log appears to have
+  // hit something like this (12 paywall-rejected /api/generate calls
+  // after entry payment) — surfacing the warning is the preventive
+  // half; the recovery half (localStorage unlock survival) is roadmap
+  // item #19.
+  useEffect(() => {
+    const isProtected =
+      screen === "grid" || screen === "retouch" || screen === "checkout";
+    if (!isProtected) {
+      protectedScreenGuardActiveRef.current = false;
+      return;
+    }
+
+    // Push a marker entry so the FIRST browser-back press lands on this
+    // pathname (no visible URL change) and fires popstate — which we
+    // intercept below.
+    window.history.pushState({ guard: true }, "", window.location.pathname);
+    protectedScreenGuardActiveRef.current = true;
+
+    const onPopState = () => {
+      if (!protectedScreenGuardActiveRef.current) return;
+      // Surface the warning, then re-push the marker so the user visually
+      // stays on the protected screen until they confirm or dismiss.
+      setShowBackWarning(true);
+      window.history.pushState({ guard: true }, "", window.location.pathname);
+    };
+
+    window.addEventListener("popstate", onPopState);
+    return () => {
+      window.removeEventListener("popstate", onPopState);
+      protectedScreenGuardActiveRef.current = false;
+    };
+  }, [screen]);
+
+  // Handlers for the back-warning modal. "Go back anyway" tears down the
+  // guard and routes the customer to the landing screen — the natural
+  // place a back press from the grid would have taken them. We don't
+  // aggressively clear progress state here; if they re-enter the flow
+  // within their 2h unlock TTL their generated photos are still in
+  // component state. (When the tab is closed, sessionStorage is lost
+  // anyway — that's the lost-session-after-payment bug tracked
+  // separately as roadmap item #19.)
+  const handleConfirmLeaveProtectedScreen = () => {
+    protectedScreenGuardActiveRef.current = false;
+    setShowBackWarning(false);
+    setScreen("landing");
+  };
+  const handleStayOnProtectedScreen = () => {
+    setShowBackWarning(false);
+  };
 
   // Indices of the thumbnails the user selected on the Grid screen. Passed to
   // CheckoutScreen so we can forward the matching clean base64 images to
@@ -8894,6 +9106,17 @@ export default function App() {
         <IntroRetouchModal onDismiss={handleDismissRetouchIntro} />
       )}
       {showTipsModal && <PhotographerTipsModal onDismiss={handleDismissTips} />}
+      {/* Back-button warning. Rendered last so its z-index sits on top of
+          any other modal (e.g. someone hits back while the retouch intro
+          modal is up — the back-warning takes precedence). Only fires
+          when the customer is on grid / retouch / checkout AND triggered
+          a back navigation; the screen-guard useEffect handles that. */}
+      {showBackWarning && (
+        <BackWarningModal
+          onStay={handleStayOnProtectedScreen}
+          onLeave={handleConfirmLeaveProtectedScreen}
+        />
+      )}
     </div>
   );
 }
