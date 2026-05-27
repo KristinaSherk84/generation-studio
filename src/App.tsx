@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
-import { Upload, Check, X, ArrowLeft, RefreshCw, Loader2, Download, Maximize2 } from "lucide-react";
+import { Upload, Check, X, ArrowLeft, RefreshCw, Loader2, Download, Maximize2, ChevronDown } from "lucide-react";
 import { upload } from "@vercel/blob/client";
 import exifr from "exifr";
 
@@ -1539,10 +1539,20 @@ const GalleryScreen = ({ onBack, onStart }: GalleryScreenProps) => (
 );
 
 type LandingV2Props = LandingProps & {
+  // Navigate the customer to the /healthcare vertical landing page.
+  // Wired into App.tsx, which sets the URL + screen state + clears any
+  // stale entry-specialty so the healthcare flow starts clean. Added
+  // 2026-05-27 alongside the Specialty nav dropdown.
+  onNavigateHealthcare: () => void;
   onShowGallery: () => void;
 };
 
-const LandingV2 = ({ onStart, onPromoUnlock, onShowGallery }: LandingV2Props) => {
+const LandingV2 = ({
+  onStart,
+  onPromoUnlock,
+  onShowGallery,
+  onNavigateHealthcare,
+}: LandingV2Props) => {
   // Mobile detection drives the hero photo's aspect-ratio crop. On phones
   // (<= 640px) we use a tighter aspect (1.2 vs desktop's 1.86) so the dark
   // empty space on either side of Kristi gets cropped off and the LinkedIn
@@ -1560,6 +1570,33 @@ const LandingV2 = ({ onStart, onPromoUnlock, onShowGallery }: LandingV2Props) =>
     mq.addEventListener("change", handler);
     return () => mq.removeEventListener("change", handler);
   }, []);
+
+  // Specialty dropdown nav state (added 2026-05-27). Houses the vertical
+  // sub-pages — currently Healthcare (live) and Realtor (greyed out,
+  // coming soon). Click trigger to toggle, click outside or hit Escape
+  // to close. Visible on both desktop and mobile so vertical visitors
+  // can self-route from the home page (the rest of the nav is hidden
+  // on mobile but Specialty is the gateway to verticals, so it stays).
+  const [specialtyOpen, setSpecialtyOpen] = useState(false);
+  const specialtyRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!specialtyOpen) return;
+    const onDocClick = (e: globalThis.MouseEvent) => {
+      const node = specialtyRef.current;
+      if (node && !node.contains(e.target as Node)) {
+        setSpecialtyOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSpecialtyOpen(false);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [specialtyOpen]);
 
   // Keep promo code functionality alive — discreet "have a code?" link at
   // the bottom of the page rather than a prominent input. We don't want to
@@ -1638,44 +1675,173 @@ const LandingV2 = ({ onStart, onPromoUnlock, onShowGallery }: LandingV2Props) =>
         }}
       >
         <Wordmark size={20} />
-        {/* Nav links — kept on desktop for orientation, hidden on mobile
-            because they were pushing the wordmark off the screen edge.
+        {/* Nav links. Specialty dropdown is always shown (mobile + desktop)
+            because it's the gateway to vertical landing pages — leaving
+            mobile users with no way to reach /healthcare from the home
+            page would defeat the point of the dropdown. "How it works"
+            and "Examples" stay desktop-only since they push the wordmark
+            off-edge on phones (the dropdown is much narrower).
             The "Start now" pill that used to live here was removed
             entirely 2026-05-04 — the big "CREATE MY HEADSHOTS" CTA below
-            the hero is the primary conversion surface, and a duplicate
-            in the nav added clutter without adding value. */}
-        {!isMobile && (
-          <div style={{ display: "flex", alignItems: "center", gap: 28 }}>
-            <a
-              href="#how"
-              style={{
-                fontSize: 14,
-                color: BRAND.charcoal,
-                textDecoration: "none",
-                borderBottom: `1px solid ${BRAND.gold}`,
-                paddingBottom: 2,
-              }}
-            >
-              How it works
-            </a>
+            the hero is the primary conversion surface. */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: isMobile ? 0 : 28,
+          }}
+        >
+          {/* Specialty dropdown — Healthcare (live) + Realtor (coming soon). */}
+          <div ref={specialtyRef} style={{ position: "relative" }}>
             <button
-              onClick={onShowGallery}
+              type="button"
+              onClick={() => setSpecialtyOpen((o) => !o)}
+              aria-haspopup="menu"
+              aria-expanded={specialtyOpen}
               style={{
                 background: "none",
                 border: "none",
                 cursor: "pointer",
                 fontSize: 14,
                 color: BRAND.charcoal,
-                borderBottom: `1px solid ${BRAND.gold}`,
-                paddingBottom: 2,
                 fontFamily: SANS_STACK,
                 padding: 0,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                borderBottom: `1px solid ${BRAND.gold}`,
+                paddingBottom: 2,
               }}
             >
-              Examples
+              Specialty
+              <ChevronDown
+                size={14}
+                style={{
+                  transform: specialtyOpen ? "rotate(180deg)" : "rotate(0)",
+                  transition: "transform 0.15s",
+                }}
+              />
             </button>
+            {specialtyOpen && (
+              <div
+                role="menu"
+                aria-label="Specialty options"
+                style={{
+                  position: "absolute",
+                  top: "calc(100% + 10px)",
+                  right: 0,
+                  minWidth: 200,
+                  background: BRAND.white,
+                  border: `1px solid #EFEAE0`,
+                  borderRadius: 8,
+                  boxShadow: "0 8px 24px rgba(0, 0, 0, 0.08)",
+                  padding: 6,
+                  zIndex: 50,
+                }}
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setSpecialtyOpen(false);
+                    onNavigateHealthcare();
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "#F6F1E6";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "transparent";
+                  }}
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    textAlign: "left",
+                    background: "transparent",
+                    border: "none",
+                    padding: "10px 12px",
+                    fontSize: 14,
+                    color: BRAND.charcoal,
+                    fontFamily: SANS_STACK,
+                    cursor: "pointer",
+                    borderRadius: 4,
+                    transition: "background 0.12s",
+                  }}
+                >
+                  Healthcare
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled
+                  aria-disabled="true"
+                  style={{
+                    display: "flex",
+                    width: "100%",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 8,
+                    background: "transparent",
+                    border: "none",
+                    padding: "10px 12px",
+                    fontSize: 14,
+                    color: BRAND.charcoal,
+                    opacity: 0.45,
+                    fontFamily: SANS_STACK,
+                    cursor: "not-allowed",
+                    textAlign: "left",
+                    borderRadius: 4,
+                  }}
+                >
+                  <span>Realtor</span>
+                  <span
+                    style={{
+                      fontSize: 10,
+                      letterSpacing: 0.5,
+                      textTransform: "uppercase",
+                      color: BRAND.gold,
+                      opacity: 0.85,
+                      fontWeight: 500,
+                    }}
+                  >
+                    Coming soon
+                  </span>
+                </button>
+              </div>
+            )}
           </div>
-        )}
+          {!isMobile && (
+            <>
+              <a
+                href="#how"
+                style={{
+                  fontSize: 14,
+                  color: BRAND.charcoal,
+                  textDecoration: "none",
+                  borderBottom: `1px solid ${BRAND.gold}`,
+                  paddingBottom: 2,
+                }}
+              >
+                How it works
+              </a>
+              <button
+                onClick={onShowGallery}
+                style={{
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  fontSize: 14,
+                  color: BRAND.charcoal,
+                  borderBottom: `1px solid ${BRAND.gold}`,
+                  paddingBottom: 2,
+                  fontFamily: SANS_STACK,
+                  padding: 0,
+                }}
+              >
+                Examples
+              </button>
+            </>
+          )}
+        </div>
       </nav>
 
       {/* ========== HERO ========== */}
@@ -3883,16 +4049,31 @@ export type StyleSelections = {
 type StyleScreenProps = {
   onGenerate: (selections: StyleSelections) => void;
   onBack: () => void;
+  // Optional preselection driven by entry context. When a customer arrives
+  // via /healthcare (or future vertical landers), App passes the relevant
+  // defaults so the screen pre-checks the correct cards rather than the
+  // generic "corporate" default. Pass null/undefined for the generic flow.
+  // Added 2026-05-27 alongside the Specialty nav dropdown.
+  defaultStyle?: string;
+  defaultAttire?: string;
 };
 
-const StyleScreen = ({ onGenerate, onBack }: StyleScreenProps) => {
+const StyleScreen = ({
+  onGenerate,
+  onBack,
+  defaultStyle,
+  defaultAttire,
+}: StyleScreenProps) => {
   // Default to "corporate" so the background-color swatches appear on screen
   // mount without an extra click (2026-05-22). The studio background picker
   // only renders when style === "corporate", so pre-selecting it surfaces
   // Kristi's customer's most likely first step.
-  const [style, setStyle] = useState<string | null>("corporate");
+  //
+  // If an entry-specialty default was passed (e.g. healthcare-vertical user),
+  // honor it instead so the customer lands on the right preselection.
+  const [style, setStyle] = useState<string | null>(defaultStyle ?? "corporate");
   const [background, setBackground] = useState<string>("lightgrey");
-  const [attire, setAttire] = useState<string | null>(null);
+  const [attire, setAttire] = useState<string | null>(defaultAttire ?? null);
   const [lighting, setLighting] = useState<string | null>(null);
   // Skin tier is hardcoded to "realistic" for initial generation (Path B
   // 2026-05-15). The UI picker that used to set this on the Style screen
@@ -7703,6 +7884,27 @@ export default function App() {
   const [showBackWarning, setShowBackWarning] = useState(false);
   const protectedScreenGuardActiveRef = useRef(false);
 
+  // Entry-specialty context (added 2026-05-27). When a customer enters the
+  // flow via a vertical landing page like /healthcare, this records which
+  // vertical they came from so the Style screen can seed its defaults
+  // accordingly (Healthcare entry → style="healthcare", attire="medical").
+  // null = generic entry, no preselection. Reset to null when the customer
+  // navigates back to the home landing so a subsequent generic session
+  // doesn't accidentally inherit healthcare defaults.
+  const [entrySpecialty, setEntrySpecialty] =
+    useState<null | "healthcare" | "realtor">(null);
+
+  // Clear any stale specialty context when the customer returns to the
+  // generic home landing. Without this, a customer who finished a
+  // healthcare-vertical session and clicked "back to home" would carry
+  // the "healthcare" preselection into their next (generic) session.
+  // Added 2026-05-27.
+  useEffect(() => {
+    if (screen === "landing" && entrySpecialty !== null) {
+      setEntrySpecialty(null);
+    }
+  }, [screen, entrySpecialty]);
+
   // URL-path routing for vertical landing pages. The app is otherwise driven
   // by `screen` state (button clicks), but vertical landers like /healthcare
   // need to be reachable as real URLs for SEO. On initial mount we read
@@ -8934,6 +9136,16 @@ export default function App() {
           onStart={handleStart}
           onPromoUnlock={handlePromoUnlock}
           onShowGallery={() => setScreen("gallery")}
+          onNavigateHealthcare={() => {
+            // Sync URL + screen state. We don't set entrySpecialty here yet —
+            // it's only set when the customer actually clicks "Start" on the
+            // /healthcare page so backing out before starting doesn't leave
+            // a stale preselection in state.
+            if (window.location.pathname !== "/healthcare") {
+              window.history.pushState({}, "", "/healthcare");
+            }
+            setScreen("healthcare");
+          }}
         />
       )}
       {screen === "healthcare" && (
@@ -8943,10 +9155,19 @@ export default function App() {
             // as the home page. URL stays at /healthcare while they're in
             // the flow — fine for now; can rewire later if attribution wants
             // a /healthcare/start path.
+            //
+            // Record the entry specialty so the Style screen lands with
+            // Healthcare style + Medical attire pre-checked instead of the
+            // generic "corporate" default. Added 2026-05-27.
+            setEntrySpecialty("healthcare");
             handleStart();
           }}
           onBackToHome={() => {
             setScreen("landing");
+            // Generic entry from home shouldn't inherit a leftover healthcare
+            // preselection — clear the specialty when the customer returns
+            // to the main landing page.
+            setEntrySpecialty(null);
             // Sync the URL so browser back works and refreshing lands them
             // on the right page.
             if (window.location.pathname !== "/") {
@@ -8973,6 +9194,15 @@ export default function App() {
         <StyleScreen
           onGenerate={handleGenerate}
           onBack={() => setScreen("upload")}
+          // Preselect Healthcare style + Medical attire if the customer
+          // entered via /healthcare. Generic landing entries leave both
+          // undefined so the screen falls back to its own defaults.
+          defaultStyle={
+            entrySpecialty === "healthcare" ? "healthcare" : undefined
+          }
+          defaultAttire={
+            entrySpecialty === "healthcare" ? "medical" : undefined
+          }
         />
       )}
       {screen === "loading" && (
