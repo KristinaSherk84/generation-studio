@@ -122,6 +122,7 @@ function getStepFromScreen(
     | "grid"
     | "retouch"
     | "checkout"
+    | "delivering"
     | "success",
 ): number | null {
   switch (screen) {
@@ -139,6 +140,12 @@ function getStepFromScreen(
       // the retouch pass actually fires server-side (in /api/deliver),
       // so it conceptually belongs in the same step.
       return 4;
+    case "delivering":
+      // The Stripe-redirect interstitial — payment is done, the delivery
+      // pass is running. Step 5 ("Success") shows immediately after, so
+      // mapping this to step 5 gives the customer the satisfying "final
+      // dot lit up" feel during the 1-2 minute wait. (Added 2026-05-27.)
+      return 5;
     case "success":
       return 5;
     default:
@@ -7892,6 +7899,96 @@ const BackWarningModal = ({ onStay, onLeave }: BackWarningModalProps) => (
   </div>
 );
 
+// -------------------- Post-checkout delivering interstitial --------------------
+//
+// Added 2026-05-27 to fix the "home page flash" customers saw after
+// completing photo checkout. Stripe redirects back to "/?photo_paid=1&..."
+// which means React mounts fresh on the landing screen for the 30–90s
+// while /api/verify-checkout + /api/deliver run. The photo_paid useEffect
+// now sets `screen` to "delivering" immediately on mount, displaying
+// this component so the customer sees a clear "preparing your headshots"
+// message rather than the home page.
+//
+// Mirrors the LoadingScreen visual language (working pill + headline +
+// reassurance copy) so the in-flow aesthetic stays consistent. No
+// cycling tips or thumbnail grid — there's nothing to show yet, and
+// the wait is shorter than the initial generation wait.
+
+const DeliveringScreen = () => (
+  <div
+    style={{
+      maxWidth: 560,
+      margin: "0 auto",
+      padding: "120px 32px",
+      textAlign: "center",
+      ...font,
+    }}
+  >
+    {/* Local keyframes — matches the LoadingScreen pattern. The animation
+        is defined inline in multiple components so each is self-contained. */}
+    <style>{`
+      @keyframes spin {
+        from { transform: rotate(0deg); }
+        to   { transform: rotate(360deg); }
+      }
+    `}</style>
+
+    <div
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 8,
+        padding: "8px 14px",
+        background: C.white,
+        border: `1px solid ${C.border}`,
+        borderRadius: 999,
+        fontSize: 12,
+        color: C.mediumGrey,
+        marginBottom: 24,
+      }}
+    >
+      <span
+        style={{
+          display: "inline-block",
+          width: 10,
+          height: 10,
+          borderRadius: "50%",
+          border: `2px solid ${C.mediumGrey}`,
+          borderTopColor: "transparent",
+          animation: "spin 0.8s linear infinite",
+        }}
+      />
+      Working
+    </div>
+
+    <h1
+      style={{
+        fontSize: 32,
+        fontWeight: 500,
+        color: C.dark,
+        margin: 0,
+        letterSpacing: -0.5,
+        lineHeight: 1.2,
+      }}
+    >
+      Hold tight — preparing your headshots
+    </h1>
+
+    <p
+      style={{
+        fontSize: 15,
+        color: C.mediumGrey,
+        marginTop: 16,
+        lineHeight: 1.6,
+      }}
+    >
+      Your payment came through. We're putting together your downloadable
+      files now. This usually takes 1–2 minutes. Please don't close this
+      tab — your headshots will appear here as soon as they're ready.
+    </p>
+  </div>
+);
+
 // -------------------- Root app --------------------
 
 type Screen =
@@ -7909,6 +8006,14 @@ type Screen =
   // (in /api/deliver).
   | "retouch"
   | "checkout"
+  // "delivering" (added 2026-05-27): post-Stripe-redirect interstitial
+  // shown while /api/verify-checkout + /api/deliver run. Without this,
+  // the customer briefly sees the home landing during the 30-90s wait
+  // because React state resets on the redirect — looks like they got
+  // dumped somewhere wrong. The photo_paid useEffect sets screen here
+  // immediately on mount so the friendly hold-tight UI displays
+  // throughout the async work.
+  | "delivering"
   | "success";
 
 const TOTAL_HEADSHOTS = 6;
@@ -8512,6 +8617,14 @@ export default function App() {
 
     if (photoPaid !== "1" || !sessionId) return;
 
+    // Switch to the hold-tight interstitial IMMEDIATELY so the customer
+    // doesn't see the home landing flash during the 30-90s of async
+    // verify+deliver work below. Without this, React's screen-state
+    // initializer ran on mount and put them on "landing" — they came
+    // back from Stripe to the home page for a few seconds before the
+    // success screen took over. (Added 2026-05-27 per Kristi.)
+    setScreen("delivering");
+
     const cleanUrl = `${url.origin}${url.pathname}`;
     window.history.replaceState({}, "", cleanUrl);
 
@@ -8527,10 +8640,14 @@ export default function App() {
         const verifyData = (await verifyResp.json()) as { paid?: boolean };
         if (!verifyData.paid) {
           console.warn("Photo Stripe session not marked as paid");
+          // Reset to landing so the customer isn't stuck on "delivering"
+          // forever after we put them there a few lines up. (2026-05-27)
+          setScreen("landing");
           return;
         }
       } catch (err) {
         console.error("verify-checkout (photo) failed:", err);
+        setScreen("landing");
         return;
       }
 
@@ -8544,6 +8661,7 @@ export default function App() {
         console.error(
           "photo_paid return without pending_delivery in sessionStorage",
         );
+        setScreen("landing");
         return;
       }
       window.sessionStorage.removeItem("pending_delivery");
@@ -8567,6 +8685,7 @@ export default function App() {
         stash = JSON.parse(stashRaw);
       } catch {
         console.error("pending_delivery JSON parse failed");
+        setScreen("landing");
         return;
       }
 
@@ -8636,6 +8755,10 @@ export default function App() {
         alert(
           "Your payment went through but the delivery step hit a snag. Contact kristi@kristinasherk.com with your email and we'll send your files directly.",
         );
+        // Drop them back to landing so they're not stuck on "delivering"
+        // behind the alert. The alert above carries the action they need
+        // to take (email Kristi). (2026-05-27)
+        setScreen("landing");
       }
     })();
     // Run exactly once on mount.
@@ -9302,6 +9425,11 @@ export default function App() {
           onBack={() => setScreen("retouch")}
         />
       )}
+      {/* Post-Stripe-redirect interstitial. Shown while /api/verify-checkout
+          + /api/deliver finish in the background. Without this the customer
+          briefly sees the home landing because React mounts fresh after the
+          Stripe redirect. Added 2026-05-27. */}
+      {screen === "delivering" && <DeliveringScreen />}
       {screen === "success" && lastSelections && (
         <DownloadScreen
           email={email}
