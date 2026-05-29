@@ -59,20 +59,43 @@ const PORE_ANCHOR = `Pore micro-texture preservation — applies to every tier b
 // from "senior executive's company website" to "Forbes/Fast Company magazine
 // profile" — meaningfully more retouched. TONE EVENING marked AGGRESSIVE.
 // Young variant keeps the original young-specific under-eye direction.
-export const RETOUCH_POLISHED_YOUNG = `${IDENTITY_ANCHOR}
+// Polished — under 35 (Tier 1). v3 2026-05-27: full rewrite to match
+// the same prompt Kristi shipped for the MATURE (35-50) cohort. Now
+// SELF-CONTAINED (no IDENTITY_ANCHOR prepend, no PORE_ANCHOR append).
+// Only difference vs MATURE is the age-cohort descriptor on the
+// POLISHED RETOUCH header line ("woman under approximately 35 years old"
+// instead of "woman between approximately 35 and 50 years old"). All
+// other directives — identity-preservation paragraph, BACKGROUND LOCK,
+// master directive, under-eye direction, TONE EVENING (AGGRESSIVE),
+// ORBITAL FILL LIGHT, PORE STRUCTURE, NO plastic skin, and pore
+// micro-texture footer — are identical to the MATURE prompt.
+//
+// Key changes from v2:
+//   - Identity-preservation paragraph now includes an explicit
+//     BACKGROUND LOCK clause.
+//   - Master directive dropped the Forbes/Fast Company reference and
+//     the "visible difference should be obvious" line.
+//   - Under-eye direction simplified — dropped the young-adult-specific
+//     "well-rested, hydrated young adult after a good night's sleep"
+//     framing and the "Keep fine texture but remove large wrinkles"
+//     line. Now matches the MATURE under-eye direction word-for-word.
+//   - TONE EVENING gained the "Soften forehead lines and 11 lines
+//     between the eyebrows" bullet.
+//   - Pore micro-texture paragraph baked in at the bottom inline.
+export const RETOUCH_POLISHED_YOUNG = `Identity preservation — non-negotiable, overrides every other directive below. Preserve the subject's facial features and expression with 100% precision. The retouched face must remain UNMISTAKABLY the same person. Match the input photo EXACTLY for face shape, bone structure, all facial features, hairline, ethnicity, distinguishing marks (freckles, beauty marks, moles, scars, asymmetries). DO NOT idealize features. The retouching below operates ONLY on the skin SURFACE — never on facial structure, proportions, or features. Act as a high end makeup artist and retoucher changing only surface level items. BACKGROUND LOCK: The background of the photo (everything outside the subject) MUST be preserved IDENTICALLY to the input photo. Do NOT change the background in any way. If the input background is blurred, the output background is blurred the same way. If the input background is a specific scene, the output background is the same scene.
 
 POLISHED RETOUCH (woman under approximately 35 years old):
 
-Master directive: Skin renders smooth, evenly toned, and dimensional. AGGRESSIVELY even out hot spots, redness, blotchiness, and tone variation. Noticeably reduce visible fine lines and texture variation. Even out skin tone strongly, remove blemishes entirely, and brighten the under-eye area to neutralize shadows. The result reads as 'professionally retouched magazine profile photo' — the kind of headshot you'd see in a Forbes or Fast Company executive feature, NOT a raw company-website snapshot. The visible difference from the input photo should be obvious to the eye.
+Master directive: Skin renders smooth, evenly toned, and dimensional. AGGRESSIVELY even out hot spots, redness, blotchiness, and tone variation. Noticeably reduce visible fine lines and texture variation. Even out skin tone strongly, remove blemishes entirely. The result reads as 'professionally retouched magazine profile photo'.
 
-Under-eye direction: Render the skin around the eyes rested, bright, and even in color. Keep fine texture but remove large wrinkles. Target: "well-rested, hydrated, young adult after a good night's sleep." Avoid over-smoothing the texture of this area. You can brighten and color correct this area to add the look of concealer under the eyes. No plastic skin look.
+Under-eye direction: Render the skin around the eyes rested, bright, and color corrected as if a light concealer was used under the eyes. The result reads as the same person as the input, just well-rested. NO over-smoothed under-eye area.
 
-- TONE EVENING (AGGRESSIVE): COMPLETELY eliminate uneven redness, blotchiness, post-acne marks, sunspots, hyperpigmentation patches, and tone variation between forehead / cheeks / chin / neck. End result must read as a single even, healthy skin tone across the entire face — dimensional shading comes ONLY from lighting (highlights and shadows kept intact), NOT from blotchy color zones.
+- TONE EVENING (AGGRESSIVE): COMPLETELY eliminate uneven redness, blotchiness, post-acne marks, sunspots, hyperpigmentation patches, and tone variation between forehead / cheeks / chin / neck. End result must read as a single even, healthy skin tone across the entire face — dimensional shading comes ONLY from lighting (highlights and shadows kept intact), NOT from blotchy color zones. Soften forehead lines and 11 lines between the eyebrows.
 - ORBITAL FILL LIGHT: Illuminate the orbital sockets (the bony eye-socket area surrounding and including the under-eye region) with simulated fill light. The fill should be just slightly darker than the key light — a close-ratio fill (approximately 1:1.5 key-to-fill ratio) — which softens the natural shadow that falls inside the eye socket when only key light is present. Render the eye-socket area noticeably brighter and more lifted than it appears under raw lighting, with minimal residual shadow under the brow and no darkness under the eye.
 - PORE STRUCTURE: Add or reinforce pore structure and detail across face, neck, and any visible décolletage, even if the input photo does not show clear skin texture. The end result must read as a real human face with real skin — pores visible at normal viewing distance, not erased texture.
 - NO plastic skin. NO airbrushed or filter-smoothed appearance. NO doll-like or AI-tell smoothness.
 
-${PORE_ANCHOR}`;
+Pore micro-texture preservation — applies to every tier below. Preserve the 3D micro-texture of the skin surface (the raised/recessed terrain of pores at close magnification). Pore micro-texture stays at 100% on the face, neck, and visible décolletage. The smoothing operates on surface evenness only — the pore texture itself remains visible at normal viewing distance.`;
 
 // Polished — 35-50 (Tier 2). v3 2026-05-27: full rewrite by Kristi.
 // Now SELF-CONTAINED (no IDENTITY_ANCHOR prepend, no PORE_ANCHOR append —
