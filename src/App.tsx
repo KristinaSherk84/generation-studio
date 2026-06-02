@@ -2417,9 +2417,35 @@ const LandingV2 = ({
         </button>
       </div>
 
-      {/* Post-filmstrip CTA section was here (removed 2026-05-11). With the
-          new primary CTA placed above the hero photo + a second CTA in the
-          editorial tagline band below, having a third here was redundant. */}
+      {/* ========== POST-HOWITWORKS CTA (added 2026-06-02) ==========
+          Per Kristi: put a CTA right before the founder section so visitors
+          who liked what they saw in HowItWorks can convert without having
+          to scroll all the way through the trust strip + comparison chart.
+          Uses the price-anchored variant so this slot reinforces the
+          $2.99 entry point while the hero + promise CTAs use the simpler
+          action-verb variant. Background stays cream to visually group
+          with the HowItWorks section above. */}
+      <section
+        style={{
+          background: BRAND.cream,
+          textAlign: "center",
+          padding: isMobile ? "8px 16px 56px" : "8px clamp(20px, 4vw, 56px) 72px",
+        }}
+      >
+        <Pill onClick={onStart} size="lg">
+          Generate 6 Headshots $2.99
+        </Pill>
+        <div
+          style={{
+            marginTop: 10,
+            fontSize: 13,
+            color: BRAND.subText,
+            letterSpacing: 0.3,
+          }}
+        >
+          Money-back guarantee · 5 minutes
+        </div>
+      </section>
 
       {/* ========== FOUNDER (photo + personal note) ==========
           Moved ABOVE the trust strip on 2026-06-02 per Kristi: on mobile
@@ -2945,22 +2971,11 @@ const LandingV2 = ({
           </table>
         </div>
 
-        <div style={{ marginTop: 36 }}>
-          <Pill onClick={onStart} size="lg">
-            Generate 6 Headshots $2.99
-          </Pill>
-          <div
-            style={{
-              marginTop: 10,
-              fontSize: 13,
-              color: BRAND.subText,
-              letterSpacing: 0.3,
-            }}
-          >
-            Starts at <strong style={{ color: BRAND.charcoal }}>$2.99</strong> ·
-            Money-back guarantee · 5 minutes
-          </div>
-        </div>
+        {/* After-comparison-chart CTA was removed 2026-06-02 per Kristi.
+            The conversion slot moved up the page to right before the
+            Founder section. The Promise Band below still has a CTA at
+            the end of the page so visitors who scroll all the way still
+            have an action surface. */}
       </section>
 
       {/* ========== EDITORIAL TAGLINE BAND ========== */}
