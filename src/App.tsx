@@ -2392,28 +2392,94 @@ const LandingV2 = ({
           Examples nav link + the "View all transformations" link below this
           section, so customers who want visual proof can still get it. */}
       <HowItWorks isMobile={isMobile} />
+
+      {/* ========== GALLERY TEASER (added 2026-06-02) ==========
+          Variant A from the mockup pass: single composite image
+          (public/marketing/gallery-teaser-composite.jpg — 6 representative
+          before/after pairs composited into one 1200x267 strip, 51KB) with
+          a gradient overlay + serif caption + gold arrow. Whole card is
+          clickable, routes to the full GalleryScreen. One image = one HTTP
+          request — avoids the LCP problem the old auto-scrolling filmstrip
+          had. The composite was built by _scripts via Pillow; to refresh
+          the 6 featured photos, re-run that script (or ask Claude). */}
       <div
         id="examples"
         style={{
-          textAlign: "center",
-          padding: isMobile ? "0 16px 32px" : "0 16px 40px",
+          padding: isMobile ? "0 16px 32px" : "0 clamp(20px, 4vw, 56px) 40px",
           background: BRAND.cream,
         }}
       >
         <button
           onClick={onShowGallery}
+          aria-label="View the transformation gallery"
           style={{
-            background: "none",
+            display: "block",
+            width: "100%",
+            maxWidth: 720,
+            margin: "0 auto",
             border: "none",
+            padding: 0,
+            background: "transparent",
             cursor: "pointer",
-            fontSize: 14,
-            fontFamily: SANS_STACK,
-            color: BRAND.charcoal,
-            borderBottom: `1px solid ${BRAND.gold}`,
-            paddingBottom: 2,
+            borderRadius: 12,
+            overflow: "hidden",
+            boxShadow: "0 6px 20px rgba(0, 0, 0, 0.08)",
+            position: "relative",
+            // The 1200x267 composite is 4.49:1 aspect, so the container
+            // height auto-adapts to the width via the img element below.
           }}
         >
-          View the transformation gallery →
+          <img
+            src="/marketing/gallery-teaser-composite.jpg"
+            alt="Six AI headshot transformations — view the full gallery"
+            loading="lazy"
+            decoding="async"
+            style={{
+              display: "block",
+              width: "100%",
+              height: "auto",
+            }}
+          />
+          {/* Dark gradient overlay — strongest at the bottom so the caption
+              has guaranteed contrast against any photo it sits over. */}
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              background:
+                "linear-gradient(180deg, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0.55) 100%)",
+              pointerEvents: "none",
+            }}
+          />
+          {/* Caption — serif headline + gold arrow, dropped shadow for legibility. */}
+          <div
+            style={{
+              position: "absolute",
+              bottom: 0,
+              left: 0,
+              right: 0,
+              padding: isMobile ? "16px 16px 18px" : "20px 20px 24px",
+              textAlign: "center",
+              pointerEvents: "none",
+            }}
+          >
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                fontFamily: SERIF_STACK,
+                fontSize: isMobile ? 18 : 22,
+                color: BRAND.white,
+                textShadow: "0 2px 8px rgba(0, 0, 0, 0.7)",
+                letterSpacing: 0.3,
+                lineHeight: 1.2,
+              }}
+            >
+              View the transformation gallery
+              <span style={{ color: BRAND.gold }}>→</span>
+            </span>
+          </div>
         </button>
       </div>
 
