@@ -2440,18 +2440,24 @@ const LandingV2 = ({
               height: "auto",
             }}
           />
-          {/* Dark gradient overlay — strongest at the bottom so the caption
-              has guaranteed contrast against any photo it sits over. */}
+          {/* Dark overlay — two-stop gradient so the photos stay readable
+              at the top but the bottom (where the caption sits) is heavily
+              darkened. Strengthened 2026-06-02 after Kristi noted the
+              original gradient wasn't strong enough to make the white
+              text pop against lighter photos. */}
           <div
             style={{
               position: "absolute",
               inset: 0,
               background:
-                "linear-gradient(180deg, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0.55) 100%)",
+                "linear-gradient(180deg, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.2) 45%, rgba(0,0,0,0.78) 100%)",
               pointerEvents: "none",
             }}
           />
-          {/* Caption — serif headline + gold arrow, dropped shadow for legibility. */}
+          {/* Caption — serif headline + gold arrow. Layered text shadow
+              (a tight halo + a wider drop) gives a "ringed" black outline
+              effect without needing a separate -webkit-text-stroke that
+              renders inconsistently across browsers. */}
           <div
             style={{
               position: "absolute",
@@ -2471,13 +2477,23 @@ const LandingV2 = ({
                 fontFamily: SERIF_STACK,
                 fontSize: isMobile ? 18 : 22,
                 color: BRAND.white,
-                textShadow: "0 2px 8px rgba(0, 0, 0, 0.7)",
+                textShadow:
+                  "0 0 6px rgba(0,0,0,0.9), 0 2px 4px rgba(0,0,0,0.85), 0 4px 16px rgba(0,0,0,0.7)",
                 letterSpacing: 0.3,
                 lineHeight: 1.2,
+                fontWeight: 500,
               }}
             >
               View the transformation gallery
-              <span style={{ color: BRAND.gold }}>→</span>
+              <span
+                style={{
+                  color: BRAND.gold,
+                  textShadow:
+                    "0 0 6px rgba(0,0,0,0.9), 0 2px 4px rgba(0,0,0,0.85)",
+                }}
+              >
+                →
+              </span>
             </span>
           </div>
         </button>
