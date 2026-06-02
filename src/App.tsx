@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
-import { Upload, Check, X, ArrowLeft, RefreshCw, Loader2, Download, Maximize2, ChevronDown } from "lucide-react";
+import { Upload, Check, X, ArrowLeft, RefreshCw, Loader2, Download, Maximize2, ChevronDown, User, Sparkles, CircleUser, ArrowDown, ArrowRight } from "lucide-react";
 import { upload } from "@vercel/blob/client";
 import exifr from "exifr";
 
@@ -1162,7 +1162,9 @@ const GALLERY_PAIRS: { src: string; alt: string }[] = SHUFFLE_ORDER.map(
   (sourceIdx) => GALLERY_SOURCE[sourceIdx],
 );
 
-const STRIP_DURATION_S = 90; // full-loop duration; matches "slow film-reel" pace
+// STRIP_DURATION_S constant was here until 2026-06-02. Removed when the
+// home-page filmstrip was replaced by the HowItWorks section. The matching
+// @keyframes film-strip-scroll CSS in LandingV2 was also removed.
 
 // Wordmark: "GenerAItion" with AI emphasized via italic + gold so it survives
 // at logo size (per brand notes — hyphenated "Gener-AI-tion" disappears).
@@ -1257,83 +1259,11 @@ const Pill = ({
 
 
 // Continuously-scrolling horizontal "film strip" of before/after posters.
-// Pure CSS animation — no JS interval. The track contains TWO copies of
-// GALLERY_PAIRS so the loop is seamless: when the first copy scrolls fully
-// out of view, the second copy occupies the visible area and the animation
-// jumps back to start (invisible because the second copy is identical).
-//
-// Hover pauses the strip via the .film-strip-track:hover rule injected by
-// LandingV2's <style> tag. Clicking a frame routes to the full gallery.
-const HeroFilmStrip = ({ onShowGallery }: { onShowGallery: () => void }) => (
-  <div
-    style={{
-      width: "100%",
-      overflow: "hidden",
-      maskImage:
-        "linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent)",
-      WebkitMaskImage:
-        "linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent)",
-    }}
-  >
-    <div
-      className="film-strip-track"
-      style={{
-        display: "flex",
-        gap: 16,
-        width: "max-content",
-        animation: `film-strip-scroll ${STRIP_DURATION_S}s linear infinite`,
-      }}
-    >
-      {[...GALLERY_PAIRS, ...GALLERY_PAIRS].map((pair, i) => (
-        <button
-          key={i}
-          onClick={onShowGallery}
-          aria-label="View full before-and-after gallery"
-          style={{
-            flex: "0 0 auto",
-            // Larger cards (was clamp(160, 18vw, 260)). Bigger feels more
-            // premium and lets users see the headshot detail at a glance.
-            width: "clamp(220px, 24vw, 360px)",
-            aspectRatio: "3 / 4",
-            border: "none",
-            padding: 0,
-            background: "transparent",
-            cursor: "pointer",
-            borderRadius: 6,
-            overflow: "hidden",
-            boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
-          }}
-        >
-          <img
-            src={pair.src}
-            alt={pair.alt}
-            // ALL strip cards eager — the auto-scrolling strip moves past
-            // any lazy-loaded ones before they finish fetching, causing
-            // blank-card flashes. There are 32 unique URLs (the 64-card
-            // map duplicates each for the seamless loop, so browsers
-            // serve the duplicates from cache). Total payload ~3MB, loads
-            // in parallel over HTTP/2; below the fold so doesn't block
-            // initial paint. (Earlier "first 20 eager" wasn't enough —
-            // by the time the strip auto-scrolled past those, the lazy
-            // ones still hadn't loaded.)
-            loading="eager"
-            // High fetch priority on the first 6 (visible on widest
-            // viewports) so browsers grab those before lower-priority
-            // page assets.
-            fetchPriority={i < 6 ? "high" : "auto"}
-            decoding="async"
-            style={{
-              width: "100%",
-              height: "100%",
-              objectFit: "cover",
-              display: "block",
-            }}
-          />
-        </button>
-      ))}
-    </div>
-  </div>
-);
+// HeroFilmStrip component was here until 2026-06-02. Removed when the
+// auto-scrolling filmstrip was replaced by the HowItWorks section on the
+// home page (Clarity scroll data showed 30% of desktop visitors bounced
+// at the filmstrip's scroll position). GALLERY_PAIRS data is still used
+// by GalleryScreen for the full "Examples" gallery view.
 
 // -------------------- Gallery Screen --------------------
 //
@@ -1529,7 +1459,7 @@ const GalleryScreen = ({ onBack, onStart }: GalleryScreenProps) => (
         Yours could be next.
       </h2>
       <Pill onClick={onStart} size="lg">
-        Create my headshots
+        Generate 6 Headshots $2.99
       </Pill>
       <div
         style={{
@@ -1544,6 +1474,333 @@ const GalleryScreen = ({ onBack, onStart }: GalleryScreenProps) => (
     </section>
   </div>
 );
+
+// -------------------- HowItWorks section --------------------
+//
+// Added 2026-06-02 to replace the auto-scrolling filmstrip per Clarity
+// scroll-depth data: 30% of desktop visitors dropped off between 20-25%
+// scroll exactly where the filmstrip began. Hypothesis: heavy LCP +
+// "this looks like a portfolio, not a tool" confusion. The three-step
+// explainer below converts that scroll position from a dead zone into
+// an active hand-off ("here's what you do").
+//
+// Layout: 3 horizontal columns on desktop, vertical stack on mobile.
+// Each step has an illustrated icon-card + step-eyebrow + serif title +
+// one-line descriptor. Step 2 uses an inverted forest-green card to
+// signal "the magic happens here." Step 3 shows 2 of 6 headshot icons
+// checked off — implies the customer pays only for what they keep.
+
+type HowItWorksProps = {
+  isMobile: boolean;
+};
+
+const HowItWorks = ({ isMobile }: HowItWorksProps) => {
+  // Reusable inner sub-components keep the JSX below readable. None
+  // need to be top-level because they're tied to this section's visual
+  // language and never reused elsewhere.
+  const stepEyebrow = (text: string) => (
+    <div
+      style={{
+        display: "inline-block",
+        fontSize: 10,
+        letterSpacing: 1.6,
+        textTransform: "uppercase",
+        color: BRAND.gold,
+        fontWeight: 500,
+        marginBottom: 4,
+      }}
+    >
+      {text}
+    </div>
+  );
+  const stepTitle = (text: string) => (
+    <div
+      style={{
+        fontFamily: SERIF_STACK,
+        fontSize: isMobile ? 17 : 15,
+        color: BRAND.charcoal,
+        lineHeight: 1.4,
+      }}
+    >
+      {text}
+    </div>
+  );
+  const stepDescriptor = (text: string) => (
+    <div
+      style={{
+        fontSize: isMobile ? 12 : 11,
+        color: BRAND.subText,
+        lineHeight: 1.5,
+        marginTop: 6,
+      }}
+    >
+      {text}
+    </div>
+  );
+
+  // STEP 1 — pyramid of 5 selfie icons (2 + 2 + 1).
+  const step1Card = (
+    <div
+      style={{
+        width: isMobile ? 120 : 110,
+        height: isMobile ? 160 : 150,
+        margin: "0 auto",
+        background: BRAND.white,
+        border: `1.5px solid ${BRAND.charcoal}`,
+        borderRadius: 14,
+        padding: "10px 6px",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 6,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 4,
+        }}
+      >
+        <div style={{ display: "flex", gap: 6 }}>
+          <CircleUser size={isMobile ? 24 : 22} color={BRAND.gold} strokeWidth={1.5} />
+          <CircleUser size={isMobile ? 24 : 22} color={BRAND.gold} strokeWidth={1.5} />
+        </div>
+        <div style={{ display: "flex", gap: 6 }}>
+          <CircleUser size={isMobile ? 24 : 22} color={BRAND.gold} strokeWidth={1.5} />
+          <CircleUser size={isMobile ? 24 : 22} color={BRAND.gold} strokeWidth={1.5} />
+        </div>
+        <CircleUser size={isMobile ? 24 : 22} color={BRAND.gold} strokeWidth={1.5} />
+      </div>
+      <div
+        style={{
+          fontSize: 9,
+          letterSpacing: 1,
+          color: BRAND.subText,
+          textTransform: "uppercase",
+          marginTop: 6,
+        }}
+      >
+        selfies
+      </div>
+    </div>
+  );
+
+  // STEP 2 — inverted forest-green processing card.
+  const step2Card = (
+    <div
+      style={{
+        width: isMobile ? 120 : 110,
+        height: isMobile ? 160 : 150,
+        margin: "0 auto",
+        background: BRAND.forestGreen,
+        borderRadius: 14,
+        padding: 10,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 8,
+      }}
+    >
+      <Sparkles size={isMobile ? 44 : 40} color={BRAND.gold} strokeWidth={1.5} />
+      <div
+        style={{
+          fontSize: 9,
+          letterSpacing: 1,
+          color: BRAND.gold,
+          textTransform: "uppercase",
+        }}
+      >
+        processing
+      </div>
+      <div style={{ display: "flex", gap: 3 }}>
+        <div style={{ width: 4, height: 4, borderRadius: "50%", background: BRAND.gold }} />
+        <div style={{ width: 4, height: 4, borderRadius: "50%", background: BRAND.gold, opacity: 0.5 }} />
+        <div style={{ width: 4, height: 4, borderRadius: "50%", background: BRAND.gold, opacity: 0.25 }} />
+      </div>
+    </div>
+  );
+
+  // STEP 3 — 3x2 grid of 6 headshot icons; icons 1 and 5 have checkmarks.
+  const headshotIcon = (checked: boolean, key: number) => (
+    <div
+      key={key}
+      style={{
+        position: "relative",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <User size={isMobile ? 24 : 22} color={BRAND.forestGreen} strokeWidth={1.5} />
+      {checked && (
+        <div
+          style={{
+            position: "absolute",
+            top: -4,
+            right: -4,
+            width: 13,
+            height: 13,
+            borderRadius: "50%",
+            background: BRAND.forestGreen,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Check size={8} color={BRAND.white} strokeWidth={3} />
+        </div>
+      )}
+    </div>
+  );
+  const step3Card = (
+    <div
+      style={{
+        width: isMobile ? 120 : 110,
+        height: isMobile ? 160 : 150,
+        margin: "0 auto",
+        background: BRAND.white,
+        border: `1.5px solid ${BRAND.charcoal}`,
+        borderRadius: 14,
+        padding: "10px 6px",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 8,
+      }}
+    >
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(3, auto)",
+          gap: "8px 6px",
+        }}
+      >
+        {headshotIcon(true, 0)}
+        {headshotIcon(false, 1)}
+        {headshotIcon(false, 2)}
+        {headshotIcon(false, 3)}
+        {headshotIcon(true, 4)}
+        {headshotIcon(false, 5)}
+      </div>
+      <div
+        style={{
+          fontSize: 9,
+          letterSpacing: 1,
+          color: BRAND.forestGreen,
+          textTransform: "uppercase",
+          fontWeight: 500,
+          marginTop: 4,
+        }}
+      >
+        headshots
+      </div>
+    </div>
+  );
+
+  // Per-step column (card + eyebrow + title + descriptor).
+  const stepColumn = (
+    card: ReactNode,
+    eyebrow: string,
+    title: string,
+    descriptor: string,
+  ) => (
+    <div style={{ textAlign: "center" }}>
+      <div style={{ marginBottom: 14 }}>{card}</div>
+      {stepEyebrow(eyebrow)}
+      {stepTitle(title)}
+      {stepDescriptor(descriptor)}
+    </div>
+  );
+
+  return (
+    <section
+      id="how-it-works"
+      style={{
+        background: BRAND.cream,
+        padding: isMobile ? "48px 20px" : "64px clamp(20px, 4vw, 56px)",
+      }}
+    >
+      <div style={{ textAlign: "center", marginBottom: isMobile ? 28 : 36 }}>
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            letterSpacing: 2.4,
+            textTransform: "uppercase",
+            color: BRAND.gold,
+            marginBottom: 8,
+          }}
+        >
+          How it works
+        </div>
+        <h2
+          style={{
+            fontFamily: SERIF_STACK,
+            fontSize: isMobile ? 22 : "clamp(26px, 3vw, 36px)",
+            fontWeight: 400,
+            color: BRAND.charcoal,
+            lineHeight: 1.2,
+            margin: 0,
+            letterSpacing: -0.3,
+          }}
+        >
+          It's simpler than you think.
+        </h2>
+      </div>
+
+      {isMobile ? (
+        // ----- Mobile: stacked vertically with down-arrows -----
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "stretch",
+            gap: 20,
+            maxWidth: 360,
+            margin: "0 auto",
+          }}
+        >
+          {stepColumn(step1Card, "Step one", "Upload a few selfies", "More variation = better results")}
+          <div style={{ display: "flex", justifyContent: "center" }}>
+            <ArrowDown size={20} color={BRAND.gold} strokeWidth={2} />
+          </div>
+          {stepColumn(step2Card, "Step two", "Choose your styles", "Facial mapping and style integration")}
+          <div style={{ display: "flex", justifyContent: "center" }}>
+            <ArrowDown size={20} color={BRAND.gold} strokeWidth={2} />
+          </div>
+          {stepColumn(step3Card, "Step three", "Download your headshots", "Pay only for what looks like you")}
+        </div>
+      ) : (
+        // ----- Desktop: 3 columns with right-arrows between -----
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr auto 1fr auto 1fr",
+            gap: 16,
+            alignItems: "start",
+            maxWidth: 880,
+            margin: "0 auto",
+          }}
+        >
+          {stepColumn(step1Card, "Step one", "Upload a few selfies", "More variation = better results")}
+          <div style={{ display: "flex", justifyContent: "center", paddingTop: 70 }}>
+            <ArrowRight size={22} color={BRAND.gold} strokeWidth={2} />
+          </div>
+          {stepColumn(step2Card, "Step two", "Choose your styles", "Facial mapping and style integration")}
+          <div style={{ display: "flex", justifyContent: "center", paddingTop: 70 }}>
+            <ArrowRight size={22} color={BRAND.gold} strokeWidth={2} />
+          </div>
+          {stepColumn(step3Card, "Step three", "Download your headshots", "Pay only for what looks like you")}
+        </div>
+      )}
+    </section>
+  );
+};
 
 type LandingV2Props = LandingProps & {
   // Navigate the customer to the /healthcare vertical landing page.
@@ -1652,23 +1909,10 @@ const LandingV2 = ({
         minHeight: "100vh",
       }}
     >
-      {/* Inline keyframes for the film-strip auto-scroll. Two copies of the
-          GALLERY_PAIRS array are rendered side-by-side; we translate the
-          track left by exactly half its width over STRIP_DURATION_S seconds,
-          then the animation restarts from 0 — visually seamless because the
-          second copy is byte-identical to the first. */}
-      <style>{`
-        @keyframes film-strip-scroll {
-          from { transform: translateX(0); }
-          to   { transform: translateX(-50%); }
-        }
-        .film-strip-track:hover {
-          animation-play-state: paused;
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .film-strip-track { animation: none !important; }
-        }
-      `}</style>
+      {/* Inline keyframes for the film-strip auto-scroll were here until
+          2026-06-02. Removed alongside the HeroFilmStrip component when the
+          home-page filmstrip was swapped for the static HowItWorks section.
+          GalleryScreen has its own scoped keyframes for its own filmstrip. */}
       {/* ========== TOP NAV ========== */}
       <nav
         style={{
@@ -1915,7 +2159,7 @@ const LandingV2 = ({
             so it doesn't dominate the composition above the photo. */}
         <div style={{ marginBottom: isMobile ? 18 : 24 }}>
           <Pill onClick={onStart} size="lg">
-            Create my headshots
+            Generate 6 Headshots $2.99
           </Pill>
           <div
             style={{
@@ -1938,83 +2182,39 @@ const LandingV2 = ({
             proof → authority → founder face → trust story. */}
       </section>
 
-      {/* ========== FILM STRIP (auto-scrolling before/after gallery preview) ========== */}
-      {/* Replaces the previous 3-image hardcoded strip (2026-05-11). Pulls
-          from the same 32 composited posters used by the /gallery screen.
-          Continuously scrolls left-to-right; clicking any frame routes to
-          the full gallery. Hover pauses the strip. */}
-      <section
+      {/* ========== HOW IT WORKS (replaces the filmstrip 2026-06-02) ==========
+          Replaced the auto-scrolling filmstrip per Clarity scroll-depth data
+          showing 30% of desktop visitors bounced exactly at the filmstrip's
+          scroll position (20-25% depth). The 3-step explainer converts that
+          drop-off zone from passive eye-candy into an active hand-off
+          ("here's how this works"). Gallery is still accessible via the
+          Examples nav link + the "View all transformations" link below this
+          section, so customers who want visual proof can still get it. */}
+      <HowItWorks isMobile={isMobile} />
+      <div
         id="examples"
         style={{
-          background: BRAND.white,
-          // Zero top padding 2026-05-11 — strip sits FLUSH against
-          // Kristi's hand at the bottom of the hero photo.
-          padding: "0 0 16px",
+          textAlign: "center",
+          padding: isMobile ? "0 16px 32px" : "0 16px 40px",
+          background: BRAND.cream,
         }}
       >
-        {/* Filmstrip first — editorial composition with visual leading
-            the caption (per Kristi 2026-05-11). Description block moved
-            to below the strip. */}
-        <HeroFilmStrip onShowGallery={onShowGallery} />
-
-        {/* Caption block — eyebrow + headline + (desktop only) hover hint.
-            Sits BELOW the strip so the visual is the entry point and the
-            text reads as a caption rather than a section header. */}
-        <div
+        <button
+          onClick={onShowGallery}
           style={{
-            maxWidth: 1280,
-            margin: "0 auto",
-            padding: isMobile
-              ? "20px 16px 0"
-              : "28px clamp(16px, 4vw, 56px) 0",
-            textAlign: "center",
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            fontSize: 14,
+            fontFamily: SANS_STACK,
+            color: BRAND.charcoal,
+            borderBottom: `1px solid ${BRAND.gold}`,
+            paddingBottom: 2,
           }}
         >
-          {/* "Real Transformations" gold eyebrow removed 2026-05-11.
-              "32 selfies, transformed." headline carries the caption alone. */}
-          <h3
-            style={{
-              fontFamily: SERIF_STACK,
-              fontSize: isMobile ? 20 : "clamp(22px, 2.6vw, 32px)",
-              fontWeight: 400,
-              lineHeight: 1.15,
-              color: BRAND.charcoal,
-              margin: 0,
-            }}
-          >
-            32 selfies, transformed.
-          </h3>
-          {!isMobile && (
-            <p
-              style={{
-                fontSize: 14,
-                color: BRAND.subText,
-                margin: "10px 0 0",
-              }}
-            >
-              Hover to pause · click any image to see the full gallery
-            </p>
-          )}
-        </div>
-
-        <div style={{ textAlign: "center", marginTop: 20 }}>
-          <button
-            onClick={onShowGallery}
-            style={{
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              fontSize: 14,
-              fontFamily: SANS_STACK,
-              color: BRAND.charcoal,
-              borderBottom: `1px solid ${BRAND.gold}`,
-              paddingBottom: 2,
-            }}
-          >
-            View all 32 transformations →
-          </button>
-        </div>
-      </section>
+          View all 32 transformations →
+        </button>
+      </div>
 
       {/* Post-filmstrip CTA section was here (removed 2026-05-11). With the
           new primary CTA placed above the hero photo + a second CTA in the
@@ -2540,7 +2740,7 @@ const LandingV2 = ({
 
         <div style={{ marginTop: 36 }}>
           <Pill onClick={onStart} size="lg">
-            Create my headshots
+            Generate 6 Headshots $2.99
           </Pill>
           <div
             style={{
@@ -2608,7 +2808,7 @@ const LandingV2 = ({
         </p>
         <div style={{ marginTop: 36 }}>
           <Pill onClick={onStart} size="lg">
-            Create my headshots
+            Generate 6 Headshots $2.99
           </Pill>
         </div>
       </section>
@@ -2930,9 +3130,54 @@ const HealthcareLightbox = ({ pair, onClose }: HealthcareLightboxProps) => {
 type HealthcareScreenProps = {
   onStart: () => void;
   onBackToHome: () => void;
+  // Wired to App.tsx's handlePromoUnlock — same handler LandingV2 uses.
+  // Lets a healthcare-vertical visitor enter a promo code without having
+  // to detour through the home page. Added 2026-05-27.
+  onPromoUnlock: (code: string) => void;
 };
-const HealthcareScreen = ({ onStart, onBackToHome }: HealthcareScreenProps) => {
+const HealthcareScreen = ({
+  onStart,
+  onBackToHome,
+  onPromoUnlock,
+}: HealthcareScreenProps) => {
   const [openPair, setOpenPair] = useState<typeof HEALTHCARE_PAIRS[number] | null>(null);
+
+  // Promo code reveal — mirrors the LandingV2 footer pattern so a
+  // healthcare visitor can apply a code without leaving /healthcare.
+  // Added 2026-05-27.
+  const [showPromoInput, setShowPromoInput] = useState(false);
+  const [promoCode, setPromoCode] = useState("");
+  const [promoStatus, setPromoStatus] =
+    useState<"idle" | "submitting" | "success" | "error">("idle");
+  const [promoErrMsg, setPromoErrMsg] = useState("");
+
+  const submitPromo = async () => {
+    const trimmed = promoCode.trim();
+    if (!trimmed) return;
+    setPromoStatus("submitting");
+    setPromoErrMsg("");
+    try {
+      const resp = await fetch("/api/verify-promo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: trimmed }),
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = (await resp.json()) as { valid?: boolean };
+      if (data.valid) {
+        setPromoStatus("success");
+        // Brief checkmark pause before transitioning so the visitor sees
+        // the success state, then App routes them straight to Upload.
+        setTimeout(() => onPromoUnlock(trimmed), 700);
+      } else {
+        setPromoStatus("error");
+        setPromoErrMsg("That code isn't recognized.");
+      }
+    } catch {
+      setPromoStatus("error");
+      setPromoErrMsg("Something went wrong. Try again in a moment.");
+    }
+  };
 
   return (
     <div
@@ -3022,7 +3267,7 @@ const HealthcareScreen = ({ onStart, onBackToHome }: HealthcareScreenProps) => {
           — for about 1% the cost of an in-person session.
         </p>
         <Pill onClick={onStart} variant="primary" size="lg">
-          Try it for $2.99
+          Generate 6 Headshots $2.99
         </Pill>
         {/* Price clarification under the hero CTA. Customers don't "get" the
             6 previews — they pay $2.99 to try, then $9.99 per keeper they
@@ -3463,7 +3708,7 @@ const HealthcareScreen = ({ onStart, onBackToHome }: HealthcareScreenProps) => {
           Ready when you are.
         </h2>
         <Pill onClick={onStart} variant="primary" size="lg">
-          Start Creating — $2.99
+          Generate 6 Headshots $2.99
         </Pill>
       </section>
 
@@ -3489,6 +3734,93 @@ const HealthcareScreen = ({ onStart, onBackToHome }: HealthcareScreenProps) => {
         <p style={{ margin: 0, opacity: 0.6 }}>
           Made by Kristina Sherk · KristinaSherk.com
         </p>
+
+        {/* Promo code affordance — mirrors the LandingV2 footer pattern.
+            Dark-mode styling (white text, translucent border, white Apply
+            button on charcoal background) since this footer sits on a
+            charcoal block. Added 2026-05-27. */}
+        <div
+          style={{
+            marginTop: 18,
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          {!showPromoInput ? (
+            <button
+              onClick={() => setShowPromoInput(true)}
+              style={{
+                background: "none",
+                border: "none",
+                color: "rgba(255,255,255,0.7)",
+                fontSize: 12,
+                cursor: "pointer",
+                textDecoration: "underline",
+                fontFamily: SANS_STACK,
+                padding: 0,
+              }}
+            >
+              Have a promo code?
+            </button>
+          ) : (
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <input
+                type="text"
+                value={promoCode}
+                onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+                placeholder="Enter code"
+                style={{
+                  fontSize: 12,
+                  padding: "4px 8px",
+                  border: `1px solid rgba(255,255,255,0.35)`,
+                  background: "rgba(255,255,255,0.06)",
+                  color: BRAND.white,
+                  borderRadius: 4,
+                  fontFamily: SANS_STACK,
+                  width: 120,
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") submitPromo();
+                }}
+              />
+              <button
+                onClick={submitPromo}
+                disabled={promoStatus === "submitting" || !promoCode.trim()}
+                style={{
+                  fontSize: 12,
+                  padding: "4px 10px",
+                  background: BRAND.white,
+                  color: BRAND.charcoal,
+                  border: "none",
+                  borderRadius: 4,
+                  cursor: "pointer",
+                  fontFamily: SANS_STACK,
+                }}
+              >
+                {promoStatus === "submitting"
+                  ? "..."
+                  : promoStatus === "success"
+                    ? "✓"
+                    : "Apply"}
+              </button>
+            </div>
+          )}
+        </div>
+        {promoStatus === "error" && (
+          <div
+            style={{
+              marginTop: 8,
+              fontSize: 11,
+              color: "#FF8A8A",
+              fontFamily: SANS_STACK,
+            }}
+          >
+            {promoErrMsg}
+          </div>
+        )}
       </footer>
 
       {/* Lightbox overlay — null pair means hidden */}
@@ -9315,6 +9647,7 @@ export default function App() {
       )}
       {screen === "healthcare" && (
         <HealthcareScreen
+          onPromoUnlock={handlePromoUnlock}
           onStart={() => {
             // CTA on /healthcare drops the visitor into the same upload flow
             // as the home page. URL stays at /healthcare while they're in
