@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
-import { Upload, Check, X, ArrowLeft, RefreshCw, Loader2, Download, Maximize2, ChevronDown, User, Sparkles, CircleUser, ArrowDown, ArrowRight } from "lucide-react";
+import { Upload, Check, X, ArrowLeft, RefreshCw, Loader2, Download, Maximize2, ChevronDown, User, Sparkles, CircleUser, ArrowDown, ArrowRight, Menu } from "lucide-react";
 import { upload } from "@vercel/blob/client";
 import exifr from "exifr";
 
@@ -1729,13 +1729,14 @@ const HowItWorks = ({ isMobile }: HowItWorksProps) => {
       <div style={{ textAlign: "center", marginBottom: isMobile ? 28 : 36 }}>
         <h2
           style={{
-            fontFamily: SERIF_STACK,
-            fontSize: isMobile ? 32 : "clamp(36px, 4.2vw, 52px)",
-            fontWeight: 400,
-            color: BRAND.charcoal,
+            fontFamily: SANS_STACK,
+            fontSize: isMobile ? 22 : "clamp(26px, 3vw, 36px)",
+            fontWeight: 600,
+            color: BRAND.gold,
             lineHeight: 1.15,
             margin: 0,
-            letterSpacing: -0.5,
+            letterSpacing: 2.4,
+            textTransform: "uppercase",
           }}
         >
           How it works
@@ -1867,6 +1868,32 @@ const LandingV2 = ({
     };
   }, [specialtyOpen]);
 
+  // Mobile hamburger menu (added 2026-06-02). On mobile, the right-side
+  // nav collapses into a single hamburger icon that, when tapped, opens
+  // a single menu containing Specialty (with its sub-items inline),
+  // How it works, and Examples. Replaces the previous mobile nav where
+  // only Specialty was visible and How it works + Examples were hidden.
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const mobileMenuRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const onDocClick = (e: globalThis.MouseEvent) => {
+      const node = mobileMenuRef.current;
+      if (node && !node.contains(e.target as Node)) {
+        setMobileMenuOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMobileMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [mobileMenuOpen]);
+
   // Keep promo code functionality alive — discreet "have a code?" link at
   // the bottom of the page rather than a prominent input. We don't want to
   // distract from the primary CTA on the new editorial layout.
@@ -1940,53 +1967,36 @@ const LandingV2 = ({
             The "Start now" pill that used to live here was removed
             entirely 2026-05-04 — the big "CREATE MY HEADSHOTS" CTA below
             the hero is the primary conversion surface. */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: isMobile ? 0 : 28,
-          }}
-        >
-          {/* Specialty dropdown — Healthcare (live) + Realtor (coming soon). */}
-          <div ref={specialtyRef} style={{ position: "relative" }}>
+        {isMobile ? (
+          // -------- Mobile: hamburger icon that opens a comprehensive menu --------
+          <div ref={mobileMenuRef} style={{ position: "relative" }}>
             <button
               type="button"
-              onClick={() => setSpecialtyOpen((o) => !o)}
+              onClick={() => setMobileMenuOpen((o) => !o)}
               aria-haspopup="menu"
-              aria-expanded={specialtyOpen}
+              aria-expanded={mobileMenuOpen}
+              aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
               style={{
                 background: "none",
                 border: "none",
                 cursor: "pointer",
-                fontSize: 14,
-                color: BRAND.charcoal,
-                fontFamily: SANS_STACK,
-                padding: 0,
+                padding: 6,
                 display: "inline-flex",
                 alignItems: "center",
-                gap: 4,
-                borderBottom: `1px solid ${BRAND.gold}`,
-                paddingBottom: 2,
+                color: BRAND.charcoal,
               }}
             >
-              Specialty
-              <ChevronDown
-                size={14}
-                style={{
-                  transform: specialtyOpen ? "rotate(180deg)" : "rotate(0)",
-                  transition: "transform 0.15s",
-                }}
-              />
+              {mobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
             </button>
-            {specialtyOpen && (
+            {mobileMenuOpen && (
               <div
                 role="menu"
-                aria-label="Specialty options"
+                aria-label="Site menu"
                 style={{
                   position: "absolute",
                   top: "calc(100% + 10px)",
                   right: 0,
-                  minWidth: 200,
+                  minWidth: 220,
                   background: BRAND.white,
                   border: `1px solid #EFEAE0`,
                   borderRadius: 8,
@@ -1995,18 +2005,25 @@ const LandingV2 = ({
                   zIndex: 50,
                 }}
               >
+                {/* SPECIALTY section header */}
+                <div
+                  style={{
+                    fontSize: 10,
+                    letterSpacing: 1.6,
+                    textTransform: "uppercase",
+                    color: BRAND.gold,
+                    fontWeight: 600,
+                    padding: "8px 12px 4px",
+                  }}
+                >
+                  Specialty
+                </div>
                 <button
                   type="button"
                   role="menuitem"
                   onClick={() => {
-                    setSpecialtyOpen(false);
+                    setMobileMenuOpen(false);
                     onNavigateHealthcare();
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = "#F6F1E6";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = "transparent";
                   }}
                   style={{
                     display: "block",
@@ -2020,7 +2037,6 @@ const LandingV2 = ({
                     fontFamily: SANS_STACK,
                     cursor: "pointer",
                     borderRadius: 4,
-                    transition: "background 0.12s",
                   }}
                 >
                   Healthcare
@@ -2062,46 +2078,218 @@ const LandingV2 = ({
                     Coming soon
                   </span>
                 </button>
+                {/* Divider */}
+                <div
+                  style={{
+                    height: 1,
+                    background: "#EFEAE0",
+                    margin: "6px 6px",
+                  }}
+                />
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    onNavigateHowItWorks();
+                  }}
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    textAlign: "left",
+                    background: "transparent",
+                    border: "none",
+                    padding: "10px 12px",
+                    fontSize: 14,
+                    color: BRAND.charcoal,
+                    fontFamily: SANS_STACK,
+                    cursor: "pointer",
+                    borderRadius: 4,
+                  }}
+                >
+                  How it works
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    onShowGallery();
+                  }}
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    textAlign: "left",
+                    background: "transparent",
+                    border: "none",
+                    padding: "10px 12px",
+                    fontSize: 14,
+                    color: BRAND.charcoal,
+                    fontFamily: SANS_STACK,
+                    cursor: "pointer",
+                    borderRadius: 4,
+                  }}
+                >
+                  Examples
+                </button>
               </div>
             )}
           </div>
-          {!isMobile && (
-            <>
+        ) : (
+          // -------- Desktop: Specialty dropdown + How it works + Examples --------
+          <div style={{ display: "flex", alignItems: "center", gap: 28 }}>
+            {/* Specialty dropdown — Healthcare (live) + Realtor (coming soon). */}
+            <div ref={specialtyRef} style={{ position: "relative" }}>
               <button
-                onClick={onNavigateHowItWorks}
+                type="button"
+                onClick={() => setSpecialtyOpen((o) => !o)}
+                aria-haspopup="menu"
+                aria-expanded={specialtyOpen}
                 style={{
                   background: "none",
                   border: "none",
                   cursor: "pointer",
                   fontSize: 14,
                   color: BRAND.charcoal,
-                  borderBottom: `1px solid ${BRAND.gold}`,
-                  paddingBottom: 2,
                   fontFamily: SANS_STACK,
                   padding: 0,
-                }}
-              >
-                How it works
-              </button>
-              <button
-                onClick={onShowGallery}
-                style={{
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  fontSize: 14,
-                  color: BRAND.charcoal,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
                   borderBottom: `1px solid ${BRAND.gold}`,
                   paddingBottom: 2,
-                  fontFamily: SANS_STACK,
-                  padding: 0,
                 }}
               >
-                Examples
+                Specialty
+                <ChevronDown
+                  size={14}
+                  style={{
+                    transform: specialtyOpen ? "rotate(180deg)" : "rotate(0)",
+                    transition: "transform 0.15s",
+                  }}
+                />
               </button>
-            </>
-          )}
-        </div>
+              {specialtyOpen && (
+                <div
+                  role="menu"
+                  aria-label="Specialty options"
+                  style={{
+                    position: "absolute",
+                    top: "calc(100% + 10px)",
+                    right: 0,
+                    minWidth: 200,
+                    background: BRAND.white,
+                    border: `1px solid #EFEAE0`,
+                    borderRadius: 8,
+                    boxShadow: "0 8px 24px rgba(0, 0, 0, 0.08)",
+                    padding: 6,
+                    zIndex: 50,
+                  }}
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setSpecialtyOpen(false);
+                      onNavigateHealthcare();
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = "#F6F1E6";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = "transparent";
+                    }}
+                    style={{
+                      display: "block",
+                      width: "100%",
+                      textAlign: "left",
+                      background: "transparent",
+                      border: "none",
+                      padding: "10px 12px",
+                      fontSize: 14,
+                      color: BRAND.charcoal,
+                      fontFamily: SANS_STACK,
+                      cursor: "pointer",
+                      borderRadius: 4,
+                      transition: "background 0.12s",
+                    }}
+                  >
+                    Healthcare
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    disabled
+                    aria-disabled="true"
+                    style={{
+                      display: "flex",
+                      width: "100%",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 8,
+                      background: "transparent",
+                      border: "none",
+                      padding: "10px 12px",
+                      fontSize: 14,
+                      color: BRAND.charcoal,
+                      opacity: 0.45,
+                      fontFamily: SANS_STACK,
+                      cursor: "not-allowed",
+                      textAlign: "left",
+                      borderRadius: 4,
+                    }}
+                  >
+                    <span>Realtor</span>
+                    <span
+                      style={{
+                        fontSize: 10,
+                        letterSpacing: 0.5,
+                        textTransform: "uppercase",
+                        color: BRAND.gold,
+                        opacity: 0.85,
+                        fontWeight: 500,
+                      }}
+                    >
+                      Coming soon
+                    </span>
+                  </button>
+                </div>
+              )}
+            </div>
+            <button
+              onClick={onNavigateHowItWorks}
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                fontSize: 14,
+                color: BRAND.charcoal,
+                borderBottom: `1px solid ${BRAND.gold}`,
+                paddingBottom: 2,
+                fontFamily: SANS_STACK,
+                padding: 0,
+              }}
+            >
+              How it works
+            </button>
+            <button
+              onClick={onShowGallery}
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                fontSize: 14,
+                color: BRAND.charcoal,
+                borderBottom: `1px solid ${BRAND.gold}`,
+                paddingBottom: 2,
+                fontFamily: SANS_STACK,
+                padding: 0,
+              }}
+            >
+              Examples
+            </button>
+          </div>
+        )}
       </nav>
 
       {/* ========== HERO ========== */}
@@ -2165,10 +2353,14 @@ const LandingV2 = ({
         {/* Primary CTA sits ABOVE the hero photo on both mobile and desktop
             (2026-05-11 — Kristi flagged that putting it below pushed the
             button under the fold). Smaller "lg" pill (was "xl" on desktop)
-            so it doesn't dominate the composition above the photo. */}
+            so it doesn't dominate the composition above the photo.
+            CTA TEXT: Hero uses the short action-verb variant per Kristi
+            2026-06-02 — Clarity showed "Create my headshots" was the
+            previously-most-clicked CTA. After-chart CTA keeps the
+            price-anchored variant for the decision moment. */}
         <div style={{ marginBottom: isMobile ? 18 : 24 }}>
           <Pill onClick={onStart} size="lg">
-            Generate 6 Headshots $2.99
+            Create my headshots
           </Pill>
           <div
             style={{
@@ -2229,69 +2421,13 @@ const LandingV2 = ({
           new primary CTA placed above the hero photo + a second CTA in the
           editorial tagline band below, having a third here was redundant. */}
 
-      {/* ========== TRUST STRIP (charcoal full-bleed) ========== */}
-      <section
-        style={{
-          background: BRAND.charcoal,
-          color: BRAND.white,
-          padding: "56px clamp(20px, 4vw, 56px)",
-          textAlign: "center",
-        }}
-      >
-        <div
-          style={{
-            fontFamily: SANS_STACK,
-            fontSize: 11,
-            fontWeight: 600,
-            letterSpacing: 2.6,
-            textTransform: "uppercase",
-            color: BRAND.gold,
-            marginBottom: 32,
-          }}
-        >
-          Kristina Is Trusted By · Taught 1M+ to Retouch · Featured On
-        </div>
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            justifyContent: "center",
-            alignItems: "center",
-            gap: "clamp(20px, 4vw, 56px)",
-            opacity: 0.85,
-          }}
-        >
-          {[
-            "Microsoft",
-            "Marriott",
-            "Adobe",
-            "Canon",
-            "CNET",
-            "LinkedIn Learning",
-          ].map((brand) => (
-            <div
-              key={brand}
-              style={{
-                fontFamily: SERIF_STACK,
-                fontSize: "clamp(16px, 1.6vw, 22px)",
-                fontWeight: 400,
-                letterSpacing: 0.5,
-                color: BRAND.white,
-              }}
-            >
-              {brand}
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* ========== FOUNDER (photo + personal note) ========== */}
-      {/* Added 2026-05-13 per build-handoff. Photo MOVED here from the
-          hero (where it used to sit above the fold) so cold paid traffic
-          coming in from Google Ads sees hook → CTA → social proof FIRST,
-          then meets the founder once they're already engaged. Personal
-          note copy is the condensed 20-years-in-DC story from the old
-          kristinasherk.com/ai-headshots Squarespace page. */}
+      {/* ========== FOUNDER (photo + personal note) ==========
+          Moved ABOVE the trust strip on 2026-06-02 per Kristi: on mobile
+          the dark charcoal trust strip read as the page footer and stopped
+          scroll. Putting the founder portrait + personal note here gives
+          mobile visitors a face right after the action, and the (now
+          lighter-treatment) trust strip below reads as a content row
+          rather than the end of the page. */}
       <section
         style={{
           background: BRAND.white,
@@ -2365,6 +2501,68 @@ const LandingV2 = ({
           >
             — Kristina Sherk
           </div>
+        </div>
+      </section>
+
+      {/* ========== TRUST STRIP (light, restyled 2026-06-02) ==========
+          Was a dark charcoal full-bleed band. Restyled to light cream
+          with a subtle top + bottom border so it reads as a content row
+          rather than the page footer (the dark version was killing
+          mobile scroll because it visually closed the page). */}
+      <section
+        style={{
+          background: BRAND.cream,
+          color: BRAND.charcoal,
+          padding: "48px clamp(20px, 4vw, 56px)",
+          textAlign: "center",
+          borderTop: `1px solid #EFEAE0`,
+          borderBottom: `1px solid #EFEAE0`,
+        }}
+      >
+        <div
+          style={{
+            fontFamily: SANS_STACK,
+            fontSize: 11,
+            fontWeight: 600,
+            letterSpacing: 2.6,
+            textTransform: "uppercase",
+            color: BRAND.gold,
+            marginBottom: 28,
+          }}
+        >
+          Kristina Is Trusted By · Taught 1M+ to Retouch · Featured On
+        </div>
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            justifyContent: "center",
+            alignItems: "center",
+            gap: "clamp(20px, 4vw, 56px)",
+          }}
+        >
+          {[
+            "Microsoft",
+            "Marriott",
+            "Adobe",
+            "Canon",
+            "CNET",
+            "LinkedIn Learning",
+          ].map((brand) => (
+            <div
+              key={brand}
+              style={{
+                fontFamily: SERIF_STACK,
+                fontSize: "clamp(15px, 1.5vw, 20px)",
+                fontWeight: 400,
+                letterSpacing: 0.4,
+                color: BRAND.charcoal,
+                opacity: 0.78,
+              }}
+            >
+              {brand}
+            </div>
+          ))}
         </div>
       </section>
 
@@ -2815,9 +3013,12 @@ const LandingV2 = ({
           3 retouched versions (just $5 more than Basic). No surprise fees, no
           charges for headshots that don't look like you.
         </p>
+        {/* Promise-band CTA uses the short action variant per 2026-06-02
+            CTA-variation pass. After-chart CTA above this section is the
+            price-anchored one. */}
         <div style={{ marginTop: 36 }}>
           <Pill onClick={onStart} size="lg">
-            Generate 6 Headshots $2.99
+            Create my headshots
           </Pill>
         </div>
       </section>
