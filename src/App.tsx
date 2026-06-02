@@ -115,6 +115,7 @@ function getStepFromScreen(
   screen:
     | "landing"
     | "healthcare"
+    | "how-it-works"
     | "gallery"
     | "upload"
     | "style"
@@ -1726,31 +1727,30 @@ const HowItWorks = ({ isMobile }: HowItWorksProps) => {
       }}
     >
       <div style={{ textAlign: "center", marginBottom: isMobile ? 28 : 36 }}>
-        <div
-          style={{
-            fontSize: 11,
-            fontWeight: 600,
-            letterSpacing: 2.4,
-            textTransform: "uppercase",
-            color: BRAND.gold,
-            marginBottom: 8,
-          }}
-        >
-          How it works
-        </div>
         <h2
           style={{
             fontFamily: SERIF_STACK,
-            fontSize: isMobile ? 22 : "clamp(26px, 3vw, 36px)",
+            fontSize: isMobile ? 32 : "clamp(36px, 4.2vw, 52px)",
             fontWeight: 400,
             color: BRAND.charcoal,
-            lineHeight: 1.2,
+            lineHeight: 1.15,
             margin: 0,
-            letterSpacing: -0.3,
+            letterSpacing: -0.5,
+          }}
+        >
+          How it works
+        </h2>
+        <p
+          style={{
+            fontSize: isMobile ? 14 : 16,
+            color: BRAND.subText,
+            margin: "12px 0 0",
+            fontStyle: "italic",
+            fontFamily: SERIF_STACK,
           }}
         >
           It's simpler than you think.
-        </h2>
+        </p>
       </div>
 
       {isMobile ? (
@@ -1809,6 +1809,10 @@ type LandingV2Props = LandingProps & {
   // 2026-05-27 alongside the Specialty nav dropdown.
   onNavigateHealthcare: () => void;
   onShowGallery: () => void;
+  // Navigate to the /how-it-works dedicated explainer page. Added
+  // 2026-06-02 alongside the home-page filmstrip → HowItWorks swap; the
+  // "How it works" nav link now routes here instead of anchor-scrolling.
+  onNavigateHowItWorks: () => void;
 };
 
 const LandingV2 = ({
@@ -1816,6 +1820,7 @@ const LandingV2 = ({
   onPromoUnlock,
   onShowGallery,
   onNavigateHealthcare,
+  onNavigateHowItWorks,
 }: LandingV2Props) => {
   // Mobile detection drives the hero photo's aspect-ratio crop. On phones
   // (<= 640px) we use a tighter aspect (1.2 vs desktop's 1.86) so the dark
@@ -2062,18 +2067,22 @@ const LandingV2 = ({
           </div>
           {!isMobile && (
             <>
-              <a
-                href="#how"
+              <button
+                onClick={onNavigateHowItWorks}
                 style={{
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
                   fontSize: 14,
                   color: BRAND.charcoal,
-                  textDecoration: "none",
                   borderBottom: `1px solid ${BRAND.gold}`,
                   paddingBottom: 2,
+                  fontFamily: SANS_STACK,
+                  padding: 0,
                 }}
               >
                 How it works
-              </a>
+              </button>
               <button
                 onClick={onShowGallery}
                 style={{
@@ -2212,7 +2221,7 @@ const LandingV2 = ({
             paddingBottom: 2,
           }}
         >
-          View all 32 transformations →
+          View the transformation gallery →
         </button>
       </div>
 
@@ -3837,6 +3846,273 @@ const HealthcareScreen = ({
           animation-play-state: paused;
         }
       `}</style>
+    </div>
+  );
+};
+
+// -------------------- Screen 1c: How It Works dedicated page --------------------
+//
+// /how-it-works — full-page explainer reached from the "How it works"
+// nav link on the home page (or by direct URL). Shows the same 3-step
+// HowItWorks section that lives on the home page, plus a FAQ block with
+// generic Q&As Kristi will rewrite over time. Has its own top nav with
+// a back-to-home link and matches the home page's footer treatment.
+//
+// Added 2026-06-02 as part of the home-page filmstrip → HowItWorks swap.
+// The shared HowItWorks component (defined just before LandingV2) makes
+// the section consistent between home and this page.
+
+type HowItWorksScreenProps = {
+  onStart: () => void;
+  onBackToHome: () => void;
+};
+
+// FAQ content — generic placeholders Kristi will edit. Kept in a const
+// array so adding/removing items is a one-line change. Each item renders
+// as a serif question + sans-serif answer.
+const HOW_IT_WORKS_FAQ: { q: string; a: string }[] = [
+  {
+    q: "How does the AI actually generate my headshots?",
+    a: "You upload 5–8 selfies. Our AI studies your facial features — your face shape, eye color, hairline, distinguishing marks — and then renders six professional headshots in the style you chose. Each one is a unique pose, expression, and composition generated specifically for you.",
+  },
+  {
+    q: "What kind of photos work best?",
+    a: "Clear, well-lit photos of your face. Phone selfies with natural daylight are great. Avoid heavy filters, sunglasses, group shots, or photos where your face takes up less than half the frame. The more variation across your uploads (different angles, expressions, outfits), the better the AI captures what you actually look like.",
+  },
+  {
+    q: "How long does the whole process take?",
+    a: "About five minutes from upload to download. The AI generation itself takes 30–60 seconds. The rest is choosing your style and looking through the six headshots to pick the ones you love.",
+  },
+  {
+    q: "What if I don't like any of my headshots?",
+    a: "You only pay for the ones that look like you. Preview all six before you decide. If none of them feel right, you don't pay for any — and we have a money-back guarantee on the $2.99 session fee too. We'd rather you walk away happy than hand you headshots you can't use.",
+  },
+  {
+    q: "Can I use these for LinkedIn, my company website, real estate listings, anywhere professional?",
+    a: "Yes. Every delivered headshot is full 2K resolution, ready for LinkedIn, professional bios, press, real estate signage, email signatures, agency websites, and anywhere else you need a polished photo. They're yours to use.",
+  },
+  {
+    q: "What styles can I choose from?",
+    a: "Corporate, Creative, Executive, Urban Industrial, and Healthcare. More verticals (real estate, construction, and more) are on the way. Each style has tailored attire, lighting, and background options — picked to match what actually works in that profession's headshots.",
+  },
+  {
+    q: "What's the difference between Basic and Glow Up Deluxe?",
+    a: "Basic ($9.99 per headshot) gives you one realistic version of each chosen headshot — natural skin, professional finish. Glow Up Deluxe ($14.99 per headshot, just $5 more than Basic) gives you three versions of each chosen headshot — realistic, polished (smoother skin), and glam (magazine-style retouching). Most customers who pick Deluxe say the glam version is the one they end up using.",
+  },
+  {
+    q: "Are my photos kept private?",
+    a: "Your uploaded selfies are used only to generate your headshots. They're not shared, sold, or used to train our AI. The headshots themselves are delivered to your email and stored only as long as we need to deliver them. If you'd like your data deleted, just email us.",
+  },
+];
+
+const HowItWorksScreen = ({
+  onStart,
+  onBackToHome,
+}: HowItWorksScreenProps) => {
+  const [isMobile, setIsMobile] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia("(max-width: 640px)").matches;
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(max-width: 640px)");
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+
+  return (
+    <div
+      style={{
+        background: BRAND.white,
+        color: BRAND.bodyText,
+        fontFamily: SANS_STACK,
+        minHeight: "100vh",
+      }}
+    >
+      {/* ========== TOP NAV ========== */}
+      <nav
+        style={{
+          height: 52,
+          padding: "0 clamp(16px, 4vw, 56px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          borderBottom: `1px solid #EFEAE0`,
+          background: BRAND.white,
+        }}
+      >
+        <button
+          onClick={onBackToHome}
+          aria-label="Back to home"
+          style={{
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            padding: 0,
+            display: "flex",
+            alignItems: "center",
+          }}
+        >
+          <Wordmark size={20} />
+        </button>
+        <button
+          onClick={onBackToHome}
+          style={{
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            fontSize: 14,
+            color: BRAND.charcoal,
+            borderBottom: `1px solid ${BRAND.gold}`,
+            paddingBottom: 2,
+            fontFamily: SANS_STACK,
+            padding: 0,
+          }}
+        >
+          ← Back to home
+        </button>
+      </nav>
+
+      {/* ========== HOW IT WORKS 3-STEP SECTION ========== */}
+      <HowItWorks isMobile={isMobile} />
+
+      {/* ========== FAQ ========== */}
+      <section
+        style={{
+          background: BRAND.white,
+          padding: isMobile
+            ? "48px 20px"
+            : "72px clamp(20px, 4vw, 56px)",
+          maxWidth: 880,
+          margin: "0 auto",
+        }}
+      >
+        <div style={{ textAlign: "center", marginBottom: isMobile ? 32 : 48 }}>
+          <h2
+            style={{
+              fontFamily: SERIF_STACK,
+              fontSize: isMobile ? 32 : "clamp(36px, 4vw, 48px)",
+              fontWeight: 400,
+              color: BRAND.charcoal,
+              lineHeight: 1.15,
+              margin: 0,
+              letterSpacing: -0.5,
+            }}
+          >
+            Frequently asked questions
+          </h2>
+          <p
+            style={{
+              fontSize: isMobile ? 14 : 16,
+              color: BRAND.subText,
+              margin: "12px 0 0",
+              fontStyle: "italic",
+              fontFamily: SERIF_STACK,
+            }}
+          >
+            The questions we get most.
+          </p>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: isMobile ? 28 : 36,
+          }}
+        >
+          {HOW_IT_WORKS_FAQ.map((item, i) => (
+            <div key={i}>
+              <h3
+                style={{
+                  fontFamily: SERIF_STACK,
+                  fontSize: isMobile ? 18 : 22,
+                  fontWeight: 500,
+                  color: BRAND.charcoal,
+                  lineHeight: 1.3,
+                  margin: "0 0 10px",
+                }}
+              >
+                {item.q}
+              </h3>
+              <p
+                style={{
+                  fontSize: isMobile ? 14 : 15,
+                  color: BRAND.bodyText,
+                  lineHeight: 1.65,
+                  margin: 0,
+                }}
+              >
+                {item.a}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ========== BOTTOM CTA ========== */}
+      <section
+        style={{
+          background: BRAND.cream,
+          textAlign: "center",
+          padding: isMobile
+            ? "48px 20px"
+            : "72px clamp(20px, 4vw, 56px)",
+        }}
+      >
+        <h2
+          style={{
+            fontFamily: SERIF_STACK,
+            fontSize: isMobile ? 26 : "clamp(30px, 3.6vw, 42px)",
+            fontWeight: 400,
+            color: BRAND.charcoal,
+            lineHeight: 1.2,
+            margin: "0 auto 24px",
+            maxWidth: 640,
+            letterSpacing: -0.3,
+          }}
+        >
+          Ready to see what your headshot could look like?
+        </h2>
+        <Pill onClick={onStart} variant="primary" size="lg">
+          Generate 6 Headshots $2.99
+        </Pill>
+        <div
+          style={{
+            marginTop: 12,
+            fontSize: 13,
+            color: BRAND.subText,
+            letterSpacing: 0.3,
+          }}
+        >
+          Money-back guarantee · 5 minutes
+        </div>
+      </section>
+
+      {/* ========== FOOTER ========== */}
+      <footer
+        style={{
+          background: BRAND.charcoal,
+          color: "rgba(255,255,255,0.7)",
+          padding: "clamp(32px, 5vw, 56px) clamp(16px, 4vw, 56px)",
+          textAlign: "center",
+          fontSize: 13,
+        }}
+      >
+        <div style={{ marginBottom: 12 }}>
+          <span style={{ color: BRAND.white, fontFamily: SERIF_STACK, fontSize: 18 }}>
+            Gener
+            <span style={{ fontStyle: "italic", color: BRAND.gold, fontWeight: 600 }}>
+              AI
+            </span>
+            tion <span style={{ fontWeight: 500 }}>Headshots</span>
+          </span>
+        </div>
+        <p style={{ margin: 0, opacity: 0.6 }}>
+          Made by Kristina Sherk · KristinaSherk.com
+        </p>
+      </footer>
     </div>
   );
 };
@@ -8327,6 +8603,9 @@ type Screen =
   | "landing"
   | "healthcare" // /healthcare vertical landing — reached via URL path, see App's
                  // pathname-on-mount + popstate effects below
+  | "how-it-works" // /how-it-works dedicated explainer page — same 3-step section
+                   // from the home page + a FAQ block below. Reached via the
+                   // "How it works" nav link or by direct URL.
   | "gallery" // before/after gallery — accessible from landing nav
   | "upload"
   | "style"
@@ -8394,6 +8673,7 @@ export default function App() {
   useEffect(() => {
     const screenForPath = (path: string): Screen | null => {
       if (path === "/healthcare" || path === "/healthcare/") return "healthcare";
+      if (path === "/how-it-works" || path === "/how-it-works/") return "how-it-works";
       if (path === "/" || path === "") return "landing";
       return null;
     };
@@ -9633,6 +9913,14 @@ export default function App() {
           onStart={handleStart}
           onPromoUnlock={handlePromoUnlock}
           onShowGallery={() => setScreen("gallery")}
+          onNavigateHowItWorks={() => {
+            // Sync URL + screen so direct refresh + bookmarks land on
+            // /how-it-works. Mirrors the healthcare navigation pattern.
+            if (window.location.pathname !== "/how-it-works") {
+              window.history.pushState({}, "", "/how-it-works");
+            }
+            setScreen("how-it-works");
+          }}
           onNavigateHealthcare={() => {
             // Sync URL + screen state. We don't set entrySpecialty here yet —
             // it's only set when the customer actually clicks "Start" on the
@@ -9642,6 +9930,17 @@ export default function App() {
               window.history.pushState({}, "", "/healthcare");
             }
             setScreen("healthcare");
+          }}
+        />
+      )}
+      {screen === "how-it-works" && (
+        <HowItWorksScreen
+          onStart={handleStart}
+          onBackToHome={() => {
+            setScreen("landing");
+            if (window.location.pathname !== "/") {
+              window.history.pushState({}, "", "/");
+            }
           }}
         />
       )}

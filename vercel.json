@@ -11,6 +11,7 @@
     }
   },
   "rewrites": [
-    { "source": "/healthcare", "destination": "/index.html" }
+    { "source": "/healthcare", "destination": "/index.html" },
+    { "source": "/how-it-works", "destination": "/index.html" }
   ]
 }
