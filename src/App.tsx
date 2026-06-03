@@ -5055,6 +5055,11 @@ type StyleScreenProps = {
   // Added 2026-05-27 alongside the Specialty nav dropdown.
   defaultStyle?: string;
   defaultAttire?: string;
+  // Phase 4 batch counter (2026-06-03). Surfaces "N / 6 generations used"
+  // beneath the Generate button when batchesUsed > 0 so the customer sees
+  // the cap approaching before they hit it. Hidden on the first visit.
+  batchesUsed: number;
+  maxBatches: number;
 };
 
 const StyleScreen = ({
@@ -5062,6 +5067,8 @@ const StyleScreen = ({
   onBack,
   defaultStyle,
   defaultAttire,
+  batchesUsed,
+  maxBatches,
 }: StyleScreenProps) => {
   // Default to "corporate" so the background-color swatches appear on screen
   // mount without an extra click (2026-05-22). The studio background picker
@@ -5564,6 +5571,26 @@ const StyleScreen = ({
             ? "Choose your lighting"
             : "Generate 6 headshots"}
         </Button>
+        {/* Phase 4 batch counter (2026-06-03). Quietly surfaces the regen
+            cap when the customer has done at least one batch. Color
+            shifts to red when 1 generation away from the cap so they
+            see it coming. Hidden on the first visit to keep the screen
+            clean for new customers. */}
+        {batchesUsed > 0 && (
+          <div
+            style={{
+              fontSize: 12,
+              color:
+                batchesUsed >= maxBatches - 1 ? "#7A1F1B" : C.mediumGrey,
+              marginTop: 10,
+              textAlign: "center",
+            }}
+          >
+            {batchesUsed >= maxBatches
+              ? `You've used all ${maxBatches} generations this session.`
+              : `${batchesUsed} of ${maxBatches} generations used this session.`}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -9025,68 +9052,187 @@ const PaywallModal = ({ onClose }: PaywallModalProps) => (
 // asks them to confirm so they don't accidentally throw away
 // their generated headshots and have to pay again.
 
+// Regen-limit modal (Phase 4, 2026-06-03). Shown when a customer tries to
+// fire a new full batch after hitting MAX_FULL_BATCHES. Reassures them
+// that their cart is safe, points them to checkout. If cart is empty,
+// nudges them to start a new session.
+type RegenLimitModalProps = {
+  cartCount: number;
+  maxBatches: number;
+  onCheckout: () => void;
+  onClose: () => void;
+};
+
+const RegenLimitModal = ({
+  cartCount,
+  maxBatches,
+  onCheckout,
+  onClose,
+}: RegenLimitModalProps) => {
+  const hasCart = cartCount > 0;
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="You've hit the regeneration limit"
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(44, 44, 42, 0.55)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 1100,
+        padding: 24,
+        ...font,
+      }}
+    >
+      <div
+        style={{
+          background: C.white,
+          borderRadius: 8,
+          padding: 32,
+          maxWidth: 460,
+          width: "100%",
+        }}
+      >
+        <div style={{ fontSize: 18, fontWeight: 500, color: C.dark }}>
+          You've used all {maxBatches} of your free generations
+        </div>
+        <div
+          style={{
+            fontSize: 14,
+            color: C.mediumGrey,
+            marginTop: 12,
+            lineHeight: 1.6,
+          }}
+        >
+          {hasCart ? (
+            <>
+              Good news — your{" "}
+              <span style={{ fontWeight: 600, color: C.dark }}>
+                {cartCount} cart pick{cartCount === 1 ? "" : "s"}
+              </span>{" "}
+              {cartCount === 1 ? "is" : "are"} safe. Continue to checkout and
+              we'll deliver the unwatermarked 2K file
+              {cartCount === 1 ? "" : "s"} to you.
+            </>
+          ) : (
+            <>
+              Your cart is empty, so there's nothing to deliver. You can
+              start a new session with fresh source photos to keep going.
+            </>
+          )}
+        </div>
+        <div
+          style={{
+            display: "flex",
+            gap: 10,
+            marginTop: 24,
+            flexWrap: "wrap",
+          }}
+        >
+          {hasCart && (
+            <Button onClick={onCheckout}>Continue to checkout</Button>
+          )}
+          <Button variant="ghost" onClick={onClose}>
+            {hasCart ? "Keep looking" : "OK"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 type BackWarningModalProps = {
   onStay: () => void;
   onLeave: () => void;
+  // Cart contents at the moment the warning fires (Phase 3, 2026-06-03).
+  // Drives the copy: an empty cart wording is bleaker ("you'll lose the
+  // headshots on screen"), a non-empty cart wording is reassuring ("your
+  // N saved picks are safe — only the un-saved 6 get replaced").
+  cartCount: number;
 };
 
-const BackWarningModal = ({ onStay, onLeave }: BackWarningModalProps) => (
-  <div
-    role="dialog"
-    aria-modal="true"
-    aria-label="Going back will lose your headshots"
-    style={{
-      position: "fixed",
-      inset: 0,
-      background: "rgba(44, 44, 42, 0.55)",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      zIndex: 1100,
-      padding: 24,
-      ...font,
-    }}
-  >
+const BackWarningModal = ({ onStay, onLeave, cartCount }: BackWarningModalProps) => {
+  const hasCart = cartCount > 0;
+  return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Going back will replace your current headshots"
       style={{
-        background: C.white,
-        borderRadius: 8,
-        padding: 32,
-        maxWidth: 460,
-        width: "100%",
+        position: "fixed",
+        inset: 0,
+        background: "rgba(44, 44, 42, 0.55)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 1100,
+        padding: 24,
+        ...font,
       }}
     >
-      <div style={{ fontSize: 18, fontWeight: 500, color: C.dark }}>
-        Hang on — going back will lose your headshots
-      </div>
       <div
         style={{
-          fontSize: 14,
-          color: C.mediumGrey,
-          marginTop: 12,
-          lineHeight: 1.6,
+          background: C.white,
+          borderRadius: 8,
+          padding: 32,
+          maxWidth: 460,
+          width: "100%",
         }}
       >
-        Your generated headshots and any retouch choices will be cleared if
-        you go back. You'd need to start a new session ($2.99) and generate
-        a fresh batch.
-      </div>
-      <div
-        style={{
-          display: "flex",
-          gap: 10,
-          marginTop: 24,
-          flexWrap: "wrap",
-        }}
-      >
-        <Button onClick={onStay}>Stay on this page</Button>
-        <Button variant="ghost" onClick={onLeave}>
-          Go back anyway
-        </Button>
+        <div style={{ fontSize: 18, fontWeight: 500, color: C.dark }}>
+          {hasCart
+            ? "Going back will replace the headshots on screen"
+            : "Going back will clear your current headshots"}
+        </div>
+        <div
+          style={{
+            fontSize: 14,
+            color: C.mediumGrey,
+            marginTop: 12,
+            lineHeight: 1.6,
+          }}
+        >
+          {hasCart ? (
+            <>
+              Your{" "}
+              <span style={{ fontWeight: 600, color: C.dark }}>
+                {cartCount} saved cart pick{cartCount === 1 ? "" : "s"}
+              </span>{" "}
+              {cartCount === 1 ? "is" : "are"} safe — they stay in your cart
+              when you regenerate. Only the 6 un-saved headshots on screen
+              will be replaced.
+            </>
+          ) : (
+            <>
+              You haven't added any of these headshots to your cart yet. Tap
+              the <Plus size={12} strokeWidth={2.4} style={{ display: "inline", verticalAlign: "middle", marginBottom: 2 }} />{" "}
+              on any photo you want to save before going back, otherwise
+              they'll be replaced.
+            </>
+          )}
+        </div>
+        <div
+          style={{
+            display: "flex",
+            gap: 10,
+            marginTop: 24,
+            flexWrap: "wrap",
+          }}
+        >
+          <Button onClick={onStay}>
+            {hasCart ? "Stay here" : "Stay and save picks"}
+          </Button>
+          <Button variant="ghost" onClick={onLeave}>
+            Go back anyway
+          </Button>
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 // -------------------- Post-checkout delivering interstitial --------------------
 //
@@ -9252,7 +9398,14 @@ export default function App() {
   // and should be cleared. Putting this in one effect avoids scattering
   // the same setCart(new Set()) call across every navigation path.
   useEffect(() => {
-    if (screen === "upload") setCart([]);
+    if (screen === "upload") {
+      setCart([]);
+      // Phase 4 (2026-06-03). Going back to upload = changing source
+      // photos = fresh session for cost-budget purposes too. Reset the
+      // batch counter so the customer gets their full MAX_FULL_BATCHES
+      // allotment on the new set of source photos.
+      setBatchesUsed(0);
+    }
   }, [screen]);
 
   // URL-path routing for vertical landing pages. The app is otherwise driven
@@ -9450,6 +9603,21 @@ export default function App() {
   // 2 bulk-regens (~12 API calls worth); individual regens are cheaper so we
   // give users 6 single swaps, which is the same total cost ceiling at most.
   const MAX_SINGLE_REGENS = 6;
+  // Phase 4 (2026-06-03). Cap on FULL 6-image batches the customer can
+  // fire in one session. The first one (after upload+style) counts as
+  // batch #1; each "Back to style → Generate" cycle counts as another.
+  // At 6 batches × 6 images × $0.101/img = $3.64 max API spend per
+  // session. Combined with the per-slot regen budget (MAX_SINGLE_REGENS),
+  // worst-case total session cost ≈ $4.25 — still profitable on a
+  // single Basic ($9.99) purchase.
+  //
+  // After the cap, the next /api/generate is blocked client-side with
+  // a friendly "you've hit the limit, check out with your saved picks"
+  // modal. Cart contents are preserved across the gate so the customer
+  // can still complete a purchase.
+  const MAX_FULL_BATCHES = 6;
+  const [batchesUsed, setBatchesUsed] = useState(0);
+  const [showRegenLimitModal, setShowRegenLimitModal] = useState(false);
   // CART (Phase 1, 2026-06-03 — revised). Image URLs the user has added to
   // their cart. Stored as an ordered string[] (most-recently-added last so
   // we can render an "order of selection" feel later).
@@ -10070,6 +10238,10 @@ export default function App() {
     // Clear cart (Phase 1, 2026-06-03). Reset means new session, new source
     // photos — prior cart URLs no longer reference anything meaningful.
     setCart([]);
+    // Reset batch counter (Phase 4, 2026-06-03). Fresh session, fresh
+    // budget. Also clear any leftover gating modal state.
+    setBatchesUsed(0);
+    setShowRegenLimitModal(false);
     setHasSeenTips(false);
     setShowTipsModal(false);
     setHasSeenIntro(false);
@@ -10269,6 +10441,15 @@ export default function App() {
   //   2. Timeout safety on Vercel Hobby: each call only needs to fit inside
   //      its own 60s ceiling, rather than all 6 squeezing into one window.
   const handleGenerate = async (selections: StyleSelections) => {
+    // Phase 4 cap (2026-06-03). Refuse to start a new batch if the
+    // customer has already hit MAX_FULL_BATCHES. The modal explains
+    // the cap and surfaces the cart so they understand they can still
+    // check out. Cart is preserved either way.
+    if (batchesUsed >= MAX_FULL_BATCHES) {
+      setShowRegenLimitModal(true);
+      return;
+    }
+
     // Only send the photos that successfully uploaded to Blob. Silently drop
     // any that are still pending or errored — the user shouldn't be blocked
     // on a stray failed upload if they have 3+ good ones.
@@ -10298,6 +10479,11 @@ export default function App() {
     // This lets a customer keep their best shot from the suit/office round,
     // change to sweater/outdoor, generate 6 more, and have BOTH live in
     // the cart.
+    // Increment batch counter (Phase 4, 2026-06-03). Bumped BEFORE the
+    // calls fire so a customer who refreshes mid-generation can't bypass
+    // the cap by reloading. Worst case: a failed batch still counts —
+    // that's intentional, prevents the cap being burned by retry abuse.
+    setBatchesUsed((n) => n + 1);
     setGeneratedImages([]);
     setReadyCount(0);
     setGenerationError(null);
@@ -10674,6 +10860,8 @@ export default function App() {
           defaultAttire={
             entrySpecialty === "healthcare" ? "medical" : undefined
           }
+          batchesUsed={batchesUsed}
+          maxBatches={MAX_FULL_BATCHES}
         />
       )}
       {screen === "loading" && (
@@ -10785,6 +10973,27 @@ export default function App() {
 
       {showPaywall && <PaywallModal onClose={() => setShowPaywall(false)} />}
 
+      {/* Phase 4 (2026-06-03). Regen-limit modal fires when handleGenerate
+          refuses to start a new batch because batchesUsed >= MAX_FULL_BATCHES.
+          Two routes out: (1) cart has picks → "Continue to checkout" jumps
+          straight to the retouch screen so they can finish their order
+          without re-generating; (2) cart is empty → "OK" closes and they
+          can either start a new session or upload different photos. */}
+      {showRegenLimitModal && (
+        <RegenLimitModal
+          cartCount={cart.length}
+          maxBatches={MAX_FULL_BATCHES}
+          onCheckout={() => {
+            setShowRegenLimitModal(false);
+            // Same handler the Grid screen uses — sets selectedImageUrls,
+            // pre-fills tier defaults, and transitions to retouch. Cart
+            // contents become the order.
+            handleAdvanceToRetouch(cart);
+          }}
+          onClose={() => setShowRegenLimitModal(false)}
+        />
+      )}
+
       {/* Photographer's tips modal — shown once per session on Landing→Upload.
           Overlays the Upload screen until the user clicks "Got it." */}
       {/* Welcome popup with the 2-hour countdown — fires the moment a
@@ -10836,6 +11045,7 @@ export default function App() {
         <BackWarningModal
           onStay={handleStayOnProtectedScreen}
           onLeave={handleConfirmLeaveProtectedScreen}
+          cartCount={cart.length}
         />
       )}
     </div>
