@@ -9336,7 +9336,53 @@ export default function App() {
   // Cleared in reset() (back to landing) and whenever the user goes back to
   // Upload (changing source photos invalidates prior picks).
   const MAX_CART_SIZE = 6;
-  const [cart, setCart] = useState<string[]>([]);
+  // Cart persistence (Phase 2, 2026-06-03). Lazy initial state hydrates the
+  // cart from localStorage on mount so a refresh / accidental tab close
+  // during checkout doesn't wipe a customer's saved picks. Keyed with a
+  // version suffix (cart_v1) so future shape changes can drop old data
+  // safely. TTL: 6 hours — generous for a same-day session, short enough
+  // that very old carts don't restore stale Blob URLs that may have been
+  // garbage-collected server-side.
+  const CART_STORAGE_KEY = "cart_v1";
+  const CART_TTL_MS = 6 * 60 * 60 * 1000;
+  const [cart, setCart] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = window.localStorage.getItem(CART_STORAGE_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw) as { urls?: unknown; ts?: unknown };
+      const ts = typeof parsed.ts === "number" ? parsed.ts : 0;
+      if (Date.now() - ts > CART_TTL_MS) return [];
+      if (!Array.isArray(parsed.urls)) return [];
+      const urls = parsed.urls.filter(
+        (u): u is string => typeof u === "string" && u.length > 0,
+      );
+      // Defensive: clamp to MAX_CART_SIZE in case the cap was reduced
+      // between session start and restore.
+      return urls.slice(0, MAX_CART_SIZE);
+    } catch {
+      return [];
+    }
+  });
+  // Sync cart → localStorage on every change. Removing the key when cart
+  // is empty keeps localStorage tidy and means the reset/upload-clear paths
+  // get the persistence-clear for free (they already call setCart([])).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      if (cart.length === 0) {
+        window.localStorage.removeItem(CART_STORAGE_KEY);
+      } else {
+        window.localStorage.setItem(
+          CART_STORAGE_KEY,
+          JSON.stringify({ urls: cart, ts: Date.now() }),
+        );
+      }
+    } catch {
+      // localStorage unavailable (Safari private mode, quota exceeded, etc.) —
+      // silently skip. The in-memory cart still works for this session.
+    }
+  }, [cart]);
   const addToCart = (url: string) => {
     setCart((prev) => {
       if (prev.includes(url)) return prev;
