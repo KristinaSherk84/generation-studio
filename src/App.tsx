@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
-import { Upload, Check, X, ArrowLeft, RefreshCw, Loader2, Download, Maximize2, ChevronDown, User, Sparkles, CircleUser, ArrowDown, ArrowRight, Menu, Plus, ShoppingBag } from "lucide-react";
+import { Upload, Check, X, ArrowLeft, RefreshCw, Loader2, Download, Maximize2, ChevronDown, User, Sparkles, CircleUser, ArrowDown, ArrowRight, Menu, Plus, ShoppingBag, Trash2 } from "lucide-react";
 import { upload } from "@vercel/blob/client";
 import exifr from "exifr";
 
@@ -168,14 +168,31 @@ const StepIndicatorDots = ({
   currentStep,
   totalSteps = FLOW_STEPS.length,
 }: StepIndicatorDotsProps) => (
+  // Compact on mobile (2026-06-03) — sizes shrink via CSS variables driven
+  // by a media query so the navbar's three children fit a 390px viewport.
+  // Variables let us share one mobile rule across every dot + connector
+  // instead of cluttering each inline style with media-aware logic.
   <div
+    className="step-dots"
     aria-label={`Step ${currentStep} of ${totalSteps}: ${FLOW_STEPS[currentStep - 1]?.label ?? ""}`}
     style={{
       display: "flex",
       alignItems: "center",
       gap: 3,
+      flexShrink: 1,
+      minWidth: 0,
+      ["--dot-size" as string]: "22px",
+      ["--connector-w" as string]: "16px",
     }}
   >
+    <style>{`
+      @media (max-width: 600px) {
+        .step-dots {
+          --dot-size: 18px !important;
+          --connector-w: 10px !important;
+        }
+      }
+    `}</style>
     {Array.from({ length: totalSteps }, (_, i) => {
       const stepNum = i + 1;
       const isPast = stepNum < currentStep;
@@ -194,8 +211,8 @@ const StepIndicatorDots = ({
           <div
             title={stepLabel}
             style={{
-              width: 22,
-              height: 22,
+              width: "var(--dot-size)",
+              height: "var(--dot-size)",
               borderRadius: "50%",
               background: isPast || isCurrent ? C.dark : "transparent",
               border: isFuture ? `1px solid ${C.lightGrey}` : "none",
@@ -213,7 +230,7 @@ const StepIndicatorDots = ({
           {stepNum < totalSteps && (
             <div
               style={{
-                width: 16,
+                width: "var(--connector-w)",
                 height: 1,
                 background: stepNum < currentStep ? C.dark : C.lightGrey,
                 flexShrink: 0,
@@ -775,12 +792,35 @@ const Navbar = ({
       display: "flex",
       alignItems: "center",
       justifyContent: "space-between",
-      padding: "0 32px",
-      gap: 16,
+      padding: "0 20px",
+      gap: 12,
+      // Mobile overflow fix (2026-06-03). The three rigid children
+      // ("Generation Studio" with nowrap + 5-step indicator +
+      // "Selected (N)") summed wider than a 390px iPhone viewport,
+      // causing horizontal page overflow. iOS Safari handled the
+      // overflow by scaling the entire page ~73%, leaving an empty
+      // right column. min-width:0 + overflow:hidden contain the
+      // overflow; the .nav-* classes below hide non-essential
+      // pieces on narrow viewports.
+      minWidth: 0,
+      overflow: "hidden",
       ...font,
     }}
   >
+    {/* Responsive helpers — hidden on phones so the 3 navbar pieces
+        fit a 390px viewport. The brand text shrinks; the step
+        indicator stays (smaller) because it's load-bearing for
+        progress; "Selected (N)" is hidden on mobile because the
+        grid-screen cart pill already shows the same count and is
+        more discoverable. */}
+    <style>{`
+      @media (max-width: 600px) {
+        .nav-brand { font-size: 15px !important; }
+        .nav-selected { display: none !important; }
+      }
+    `}</style>
     <div
+      className="nav-brand"
       onClick={onLogoClick}
       style={{
         fontWeight: 500,
@@ -788,6 +828,7 @@ const Navbar = ({
         color: C.dark,
         cursor: "pointer",
         whiteSpace: "nowrap",
+        flexShrink: 0,
       }}
     >
       Generation Studio
@@ -800,7 +841,10 @@ const Navbar = ({
         estate. A single one-shot 15-minute warning modal (see
         SessionTimeWarningModal) handles the same notification need. */}
     {currentStep && <StepIndicatorDots currentStep={currentStep} />}
-    <div style={{ fontSize: 14, color: C.dark, fontWeight: 400 }}>
+    <div
+      className="nav-selected"
+      style={{ fontSize: 14, color: C.dark, fontWeight: 400, flexShrink: 0 }}
+    >
       Selected ({cartCount})
     </div>
   </div>
@@ -6732,14 +6776,17 @@ const RETOUCH_TIER_DESCRIPTIONS: {
     tier: "basic",
     label: "Basic",
     price: "$9.99",
+    // description retained in the type for the (now-disabled) IntroRetouchModal
+    // dead-code reference; not rendered on RetouchScreen any more — see the
+    // top-of-screen explainer block instead.
     description: "Realistic version only — what you see is what you get.",
   },
   {
     tier: "deluxe",
-    label: "Glow Up Deluxe Bundle",
+    label: "Glow Up Bundle",
     price: "$14.99",
     description:
-      "Get smoother skin + magazine-style polish — just $5 more for 3 retouched versions.",
+      "Smoother skin + magazine polish — $5 more for 3 versions.",
   },
 ];
 
@@ -6845,9 +6892,16 @@ const LoadingRetouchPreviewModal = ({
   </div>
 );
 
-// Intro popup that fires once when the customer reaches the Retouch
-// screen. Explains the three tier options so the radio choice on the
-// screen is meaningful.
+// IntroRetouchModal REMOVED 2026-06-03 (Kristi).
+// Clarity recordings showed customers tapping the "Realistic" and
+// "Glow Up Deluxe" labels INSIDE this popup as if they were tier-pick
+// buttons, then getting confused when nothing happened. The tier
+// descriptions now live inline on each radio row in RetouchScreen, so
+// this modal was both redundant and a UX trap. The component below
+// preserves the original markup behind a constant export gate — to
+// resurrect a non-blocking variant later, set EXPORT_INTRO_RETOUCH_MODAL
+// to true and re-wire it. Git history has the original trigger logic.
+const EXPORT_INTRO_RETOUCH_MODAL = false;
 type IntroRetouchModalProps = {
   onDismiss: () => void;
 };
@@ -6976,6 +7030,12 @@ const IntroRetouchModal = ({ onDismiss }: IntroRetouchModalProps) => (
     </div>
   </div>
 );
+// Keep the dead-code reference alive for the TS checker so we don't have
+// to delete the whole component. Only renders when EXPORT_INTRO_RETOUCH_MODAL
+// is true (never, until someone explicitly flips it).
+const _RETAIN_INTRO_RETOUCH_MODAL: typeof IntroRetouchModal | null =
+  EXPORT_INTRO_RETOUCH_MODAL ? IntroRetouchModal : null;
+void _RETAIN_INTRO_RETOUCH_MODAL;
 
 // The retouch screen itself.
 type RetouchScreenProps = {
@@ -6992,6 +7052,10 @@ type RetouchScreenProps = {
   >;
   onContinue: () => void;
   onBack: () => void;
+  // Remove a single URL from the cart (and from selectedUrls). Used by the
+  // per-photo trash icon — lets a customer drop a pick from the retouch
+  // step without backing out to the grid. Added 2026-06-03 per Kristi.
+  onRemovePick: (url: string) => void;
 };
 
 const RetouchScreen = ({
@@ -7000,6 +7064,7 @@ const RetouchScreen = ({
   setRetouchTiers,
   onContinue,
   onBack,
+  onRemovePick,
 }: RetouchScreenProps) => {
   // Defensive: if no photos somehow made it here, hand the user back to
   // the grid so they can pick favorites again rather than locking them
@@ -7059,40 +7124,57 @@ const RetouchScreen = ({
 
       <h1
         style={{
-          fontSize: 24,
+          fontSize: 22,
           fontWeight: 500,
           color: C.dark,
-          margin: "0 0 14px",
+          margin: "0 0 10px",
           lineHeight: 1.2,
           letterSpacing: -0.3,
         }}
       >
-        Retouch your Delivered Headshots:
+        Pick a retouch level for each headshot:
       </h1>
-
-      {/* Explainer card. Mirrors the intro modal copy so customers who
-          dismissed the modal still see the two-tier explanation inline. */}
+      {/* Compact 2-line explainer (2026-06-03 v2). Replaces both the
+          inline per-row descriptions AND the longer cream card so the
+          mobile layout stays dense — customer reads this once at the top
+          and from then on the rows are pure label + price + radio. */}
       <div
         style={{
-          background: C.lightGrey,
-          borderRadius: 8,
-          padding: "12px 14px",
-          margin: "0 0 22px",
+          marginBottom: 20,
+          fontSize: 13,
+          color: C.dark,
+          lineHeight: 1.55,
         }}
       >
-        <p style={{ fontSize: 13, color: C.dark, margin: "0 0 6px", lineHeight: 1.5 }}>
-          <span style={{ fontWeight: 500 }}>Basic ($9.99):</span> Realistic version only.
-        </p>
-        <p style={{ fontSize: 13, color: C.dark, margin: 0, lineHeight: 1.5 }}>
-          <span style={{ fontWeight: 500 }}>Glow Up Deluxe ($14.99):</span> Smoother skin + magazine-style polish — just $5 more for 3 retouched versions.
-        </p>
+        <div>
+          <span style={{ fontWeight: 700 }}>Basic:</span> Realistic version only{" "}
+          <span style={{ color: C.mediumGrey }}>$9.99</span>
+        </div>
+        <div>
+          <span style={{ fontWeight: 700 }}>Glow Up Bundle:</span> Smoother
+          skin + magazine polish — $5 more for 3 versions.
+        </div>
       </div>
 
       {/* Per-photo rows. On desktop the thumbnail sits on the left and
           the tier picker on the right. On narrow viewports (≤500px) the
           tier picker stacks below the thumbnail so the radio circles
           remain large and easy to tap. */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      {/* Mobile compactness rules (2026-06-03 v2):
+          - Thumbnail shrinks from 110px → 76px so the row fits side-by-side
+            on a 390px iPhone viewport without wrapping.
+          - Radio column min-width drops so it can sit beside the thumb
+            even on narrow screens.
+          - Row padding compresses on mobile so 2 full rows fit on one
+            phone screen instead of one. */}
+      <style>{`
+        @media (max-width: 600px) {
+          .retouch-row { padding: 10px 44px 10px 10px !important; gap: 12px !important; }
+          .retouch-thumb { width: 76px !important; }
+          .retouch-tiers { min-width: 0 !important; }
+        }
+      `}</style>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         {selectedUrls.map((url, position) => {
           // Default to "basic" — the cheaper option, safest for cost and
           // the most conservative customer assumption.
@@ -7100,20 +7182,26 @@ const RetouchScreen = ({
           return (
             <div
               key={url}
+              className="retouch-row"
               style={{
+                position: "relative", // anchors the absolute-positioned trash button
                 display: "flex",
-                flexWrap: "wrap",
-                gap: 16,
+                // NOTE: removed flexWrap: "wrap" 2026-06-03 v2 per Kristi —
+                // thumbnail + radios now stay side-by-side on every viewport
+                // so customers see more rows per screen on mobile.
+                gap: 14,
                 padding: 14,
+                paddingRight: 52, // leave room for the trash button at top-right
                 background: C.white,
                 border: `1px solid ${C.border}`,
                 borderRadius: 10,
-                alignItems: "flex-start",
+                alignItems: "center", // vertically center now that rows are short
               }}
             >
               {/* Thumbnail. Uses background-image div, matching the
                   anti-save-protection pattern from the grid screen. */}
               <div
+                className="retouch-thumb"
                 style={{
                   width: 110,
                   aspectRatio: "4/5",
@@ -7161,10 +7249,13 @@ const RetouchScreen = ({
                 </div>
               </div>
 
-              {/* Tier radio picker. Minimum width keeps it readable but
-                  the flex-wrap on the parent stacks it below the thumb
-                  on phone widths. */}
-              <div style={{ flex: 1, minWidth: 200 }}>
+              {/* Tier radio picker (compact 2026-06-03 v2). Inline
+                  descriptions removed per Kristi — the 2-line explainer
+                  at the top of the screen covers the difference. Each
+                  row here is now just radio + label + price, so two full
+                  rows fit on a single phone screen and customers don't
+                  have to scroll to compare. */}
+              <div className="retouch-tiers" style={{ flex: 1, minWidth: 140 }}>
                 {RETOUCH_TIER_DESCRIPTIONS.map((t) => {
                   const selected = currentTier === t.tier;
                   return (
@@ -7173,10 +7264,12 @@ const RetouchScreen = ({
                       onClick={() => setTier(url, t.tier)}
                       style={{
                         display: "flex",
-                        alignItems: "flex-start",
+                        alignItems: "center",
                         gap: 10,
                         padding: "8px 0",
                         cursor: "pointer",
+                        borderBottom:
+                          t.tier === "basic" ? `1px solid ${C.border}` : "none",
                       }}
                     >
                       {/* Custom radio circle — bigger tap target than
@@ -7193,7 +7286,6 @@ const RetouchScreen = ({
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "center",
-                          marginTop: 1,
                           transition: "border-color 0.15s, background 0.15s",
                         }}
                       >
@@ -7242,6 +7334,45 @@ const RetouchScreen = ({
                   );
                 })}
               </div>
+
+              {/* Trash button (2026-06-03 per Kristi). Lets the customer
+                  drop a photo from their order without backing out to the
+                  grid. Sits in the row's top-right corner — generous tap
+                  target, neutral grey at rest, brand-dark on hover.
+                  Positioned absolutely so it doesn't disrupt the
+                  thumbnail + radio column layout. */}
+              <button
+                onClick={() => onRemovePick(url)}
+                aria-label={`Remove headshot ${position + 1} from your order`}
+                title="Remove from order"
+                style={{
+                  position: "absolute",
+                  top: 10,
+                  right: 10,
+                  width: 32,
+                  height: 32,
+                  border: "none",
+                  borderRadius: "50%",
+                  background: "rgba(0,0,0,0.06)",
+                  color: C.mediumGrey,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: 0,
+                  transition: "background 0.15s, color 0.15s",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = "rgba(0,0,0,0.12)";
+                  e.currentTarget.style.color = C.dark;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = "rgba(0,0,0,0.06)";
+                  e.currentTarget.style.color = C.mediumGrey;
+                }}
+              >
+                <Trash2 size={15} />
+              </button>
             </div>
           );
         })}
@@ -9227,11 +9358,11 @@ export default function App() {
     Record<string, RetouchTier>
   >({});
 
-  // Intro popup for the Retouch screen. Fires once per session right
-  // before the customer reaches the RetouchScreen so they understand
-  // what each tier means before they tick a radio circle.
-  const [hasSeenRetouchIntro, setHasSeenRetouchIntro] = useState(false);
-  const [showRetouchIntroModal, setShowRetouchIntroModal] = useState(false);
+  // Intro popup for the Retouch screen — REMOVED 2026-06-03. Kristi
+  // saw on Clarity that customers were tapping the tier labels INSIDE
+  // the popup thinking they were the actual tier-pick buttons. Tier
+  // descriptions are now inline on each radio row in RetouchScreen,
+  // so the popup is gone.
 
   // Mid-loading popup (2026-05-18). Fires once per session shortly after
   // the customer enters the loading screen — explains that realistic
@@ -9922,8 +10053,6 @@ export default function App() {
     setScreen("landing");
     setSelectedImageUrls([]);
     setRetouchTiers({});
-    setHasSeenRetouchIntro(false);
-    setShowRetouchIntroModal(false);
     setHasSeenLoadingRetouchPopup(false);
     setShowLoadingRetouchPopup(false);
     setDeliveredPhotoUrls([]);
@@ -10012,13 +10141,6 @@ export default function App() {
     if (!hasSeenTips) setShowTipsModal(true);
   };
 
-  // Retouch intro popup dismissed → mark seen so it doesn't re-fire
-  // if the user navigates back and forward across the retouch screen.
-  const handleDismissRetouchIntro = () => {
-    setShowRetouchIntroModal(false);
-    setHasSeenRetouchIntro(true);
-  };
-
   // Fire the "you control the retouching" popup once readyCount hits 3
   // (halfway through the 6 generations). Earlier (2026-05-18) the trigger
   // was a flat 3-second timer, but Kristi found that fired before any
@@ -10053,9 +10175,11 @@ export default function App() {
       return next;
     });
     setScreen("retouch");
-    // Fire the intro popup once per session so the customer understands
-    // what the radio choice on the retouch screen actually means.
-    if (!hasSeenRetouchIntro) setShowRetouchIntroModal(true);
+    // Intro popup removed 2026-06-03 per Kristi — Clarity showed users
+    // tap the "Realistic" and "Glow Up Deluxe" labels inside the popup
+    // thinking they're the actual tier-pick buttons. The inline radio
+    // rows on RetouchScreen now carry the tier descriptions themselves,
+    // so the popup is redundant friction.
   };
 
   // Regenerate a SINGLE thumbnail slot, reusing the most recently-submitted
@@ -10589,6 +10713,22 @@ export default function App() {
           setRetouchTiers={setRetouchTiers}
           onContinue={() => setScreen("checkout")}
           onBack={() => setScreen("grid")}
+          onRemovePick={(url) => {
+            // Trash button on a retouch row (Phase 5, 2026-06-03).
+            // Remove the URL from both the cart AND the in-flight
+            // selectedImageUrls so the photo disappears from the screen
+            // immediately AND from the persistent cart strip if they
+            // back out to the grid. Also drop its retouchTiers entry so
+            // localStorage doesn't accumulate orphan keys over time.
+            removeFromCart(url);
+            setSelectedImageUrls((prev) => prev.filter((u) => u !== url));
+            setRetouchTiers((prev) => {
+              if (!(url in prev)) return prev;
+              const next = { ...prev };
+              delete next[url];
+              return next;
+            });
+          }}
         />
       )}
       {screen === "checkout" && lastSelections && (
@@ -10682,12 +10822,10 @@ export default function App() {
           onDismiss={() => setShowLoadingRetouchPopup(false)}
         />
       )}
-      {/* Retouch tier intro popup — fires once per session when the customer
-          reaches the Retouch screen. Explains what each of the 3 tiers does
-          before they tick a radio. */}
-      {showRetouchIntroModal && (
-        <IntroRetouchModal onDismiss={handleDismissRetouchIntro} />
-      )}
+      {/* Retouch intro popup removed 2026-06-03 — descriptions are now
+          inline on the RetouchScreen radio rows. See handleAdvanceToRetouch
+          for the rationale (popup labels were being mistaken for tier
+          buttons in Clarity recordings). */}
       {showTipsModal && <PhotographerTipsModal onDismiss={handleDismissTips} />}
       {/* Back-button warning. Rendered last so its z-index sits on top of
           any other modal (e.g. someone hits back while the retouch intro
