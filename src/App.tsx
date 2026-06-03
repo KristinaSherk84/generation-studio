@@ -124,7 +124,8 @@ function getStepFromScreen(
     | "retouch"
     | "checkout"
     | "delivering"
-    | "success",
+    | "success"
+    | "admin",
 ): number | null {
   switch (screen) {
     case "upload":
@@ -4508,6 +4509,508 @@ const readWideAngleFromFile = async (file: File): Promise<boolean | null> => {
     // → silently null so the generic Block 1 wording handles it.
     return null;
   }
+};
+
+// -------------------- Admin: single-use promo code dashboard --------------------
+//
+// /admin route (2026-06-03). Password-gated dashboard so Kristi + husband
+// can manage single-use promo codes. Auto-generated codes (gh-{6 chars})
+// are atomic-redeemable via /api/verify-promo; this screen creates them,
+// lists them with consumed/revoked status, and revokes them.
+//
+// Auth model: ADMIN_PASSWORD env var, entered on the login form, kept in
+// sessionStorage (so a refresh during a session stays logged in). The
+// password is sent on every API call to /api/admin/promos. No JWT
+// because there's no multi-tenant model — one password, shared.
+//
+// Mobile-first: the codes table collapses to vertical cards on narrow
+// viewports so husband can manage codes from his phone.
+
+// Mirrors the PromoRecord shape from api/lib/promoStore.ts. Duplicated
+// because we can't import server types into the client bundle without
+// build-config gymnastics — keep them in sync manually.
+type PromoRecordClient = {
+  code: string;
+  createdAt: string;
+  createdBy: string;
+  notes: string;
+  consumed: boolean;
+  consumedAt: string | null;
+  consumedFingerprint: string | null;
+  version: number;
+  revoked: boolean;
+};
+
+const ADMIN_PW_KEY = "admin_pw"; // sessionStorage
+
+const AdminScreen = () => {
+  // Hydrate password from sessionStorage so a refresh doesn't bounce them
+  // back to the login screen. Cleared on Sign out.
+  const [adminPassword, setAdminPassword] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
+    return window.sessionStorage.getItem(ADMIN_PW_KEY) ?? "";
+  });
+  const [loginInput, setLoginInput] = useState("");
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [codes, setCodes] = useState<PromoRecordClient[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [createNotes, setCreateNotes] = useState("");
+  const [recentlyCreatedCode, setRecentlyCreatedCode] = useState<string | null>(null);
+
+  const isAuthed = adminPassword.length > 0;
+
+  // Fetch codes on mount (if authed) and after every mutation. The
+  // dependency on adminPassword re-fires on successful login.
+  useEffect(() => {
+    if (!isAuthed) return;
+    let cancelled = false;
+    setLoading(true);
+    setActionError(null);
+    fetch("/api/admin/promos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "list", adminPassword }),
+    })
+      .then(async (r) => {
+        if (r.status === 401) {
+          // Password is wrong (or env var changed). Drop the cached
+          // password and bounce to the login form.
+          if (!cancelled) {
+            setAdminPassword("");
+            window.sessionStorage.removeItem(ADMIN_PW_KEY);
+            setLoginError("Password rejected. Try again.");
+          }
+          return;
+        }
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const data = (await r.json()) as { codes: PromoRecordClient[] };
+        if (!cancelled) setCodes(data.codes ?? []);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setActionError(
+            err instanceof Error ? err.message : "Failed to load codes",
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [adminPassword, isAuthed]);
+
+  const handleLogin = (e: { preventDefault: () => void }) => {
+    e.preventDefault();
+    if (!loginInput.trim()) return;
+    // Optimistic — we set the password and the useEffect above does the
+    // verification on the first list call. If it fails, the 401 handler
+    // clears it.
+    window.sessionStorage.setItem(ADMIN_PW_KEY, loginInput.trim());
+    setAdminPassword(loginInput.trim());
+    setLoginError(null);
+  };
+
+  const handleSignOut = () => {
+    window.sessionStorage.removeItem(ADMIN_PW_KEY);
+    setAdminPassword("");
+    setLoginInput("");
+    setCodes([]);
+  };
+
+  const handleCreate = async () => {
+    setLoading(true);
+    setActionError(null);
+    setRecentlyCreatedCode(null);
+    try {
+      const r = await fetch("/api/admin/promos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "create",
+          adminPassword,
+          notes: createNotes.trim(),
+        }),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const data = (await r.json()) as { code: PromoRecordClient | null };
+      if (data.code) {
+        setCodes((prev) => [data.code as PromoRecordClient, ...prev]);
+        setRecentlyCreatedCode(data.code.code);
+        setCreateNotes("");
+      }
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Failed to create");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRevoke = async (code: string) => {
+    if (!confirm(`Revoke ${code}? It can't be redeemed after this.`)) return;
+    setLoading(true);
+    setActionError(null);
+    try {
+      const r = await fetch("/api/admin/promos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "revoke", adminPassword, code }),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const data = (await r.json()) as { code: PromoRecordClient | null };
+      if (data.code) {
+        setCodes((prev) =>
+          prev.map((c) =>
+            c.code === code ? (data.code as PromoRecordClient) : c,
+          ),
+        );
+      }
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Failed to revoke");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const copyCode = (code: string) => {
+    if (typeof navigator === "undefined") return;
+    navigator.clipboard?.writeText(code).catch(() => {
+      // Silent — clipboard can fail in older browsers / non-https.
+      // The code is visible on screen so they can copy manually.
+    });
+  };
+
+  // ---- Login form ----
+  if (!isAuthed) {
+    return (
+      <div
+        style={{
+          maxWidth: 380,
+          margin: "120px auto",
+          padding: "0 20px",
+          ...font,
+        }}
+      >
+        <h1
+          style={{
+            fontSize: 26,
+            fontWeight: 500,
+            color: C.dark,
+            margin: "0 0 10px",
+            letterSpacing: -0.3,
+          }}
+        >
+          Admin
+        </h1>
+        <p style={{ fontSize: 13, color: C.mediumGrey, margin: "0 0 22px" }}>
+          Sign in to manage promo codes.
+        </p>
+        <form onSubmit={handleLogin}>
+          <input
+            type="password"
+            placeholder="Password"
+            value={loginInput}
+            onChange={(e) => setLoginInput(e.target.value)}
+            autoFocus
+            style={{
+              width: "100%",
+              padding: "12px 14px",
+              fontSize: 14,
+              border: `1px solid ${C.border}`,
+              borderRadius: 8,
+              outline: "none",
+              ...font,
+            }}
+          />
+          {loginError && (
+            <div
+              style={{
+                marginTop: 10,
+                fontSize: 12,
+                color: "#7A1F1B",
+              }}
+            >
+              {loginError}
+            </div>
+          )}
+          <div style={{ marginTop: 14 }}>
+            <Button full>Sign in</Button>
+          </div>
+        </form>
+      </div>
+    );
+  }
+
+  // ---- Authenticated dashboard ----
+  return (
+    <div style={{ maxWidth: 900, margin: "0 auto", padding: "40px 20px", ...font }}>
+      <style>{`
+        @media (max-width: 600px) {
+          .admin-row { grid-template-columns: 1fr !important; padding: 14px !important; }
+          .admin-cell-label { display: block !important; font-size: 10px !important; color: #999 !important; text-transform: uppercase !important; letter-spacing: 1px !important; margin-bottom: 2px !important; }
+        }
+      `}</style>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 28,
+          flexWrap: "wrap",
+          gap: 12,
+        }}
+      >
+        <div>
+          <h1
+            style={{
+              fontSize: 26,
+              fontWeight: 500,
+              color: C.dark,
+              margin: 0,
+              letterSpacing: -0.3,
+            }}
+          >
+            Promo codes
+          </h1>
+          <p
+            style={{
+              fontSize: 13,
+              color: C.mediumGrey,
+              margin: "4px 0 0",
+            }}
+          >
+            Single-use codes for friends, partners, and outreach.
+          </p>
+        </div>
+        <button
+          onClick={handleSignOut}
+          style={{
+            background: "transparent",
+            border: `1px solid ${C.border}`,
+            borderRadius: 8,
+            padding: "8px 14px",
+            fontSize: 13,
+            color: C.mediumGrey,
+            cursor: "pointer",
+            ...font,
+          }}
+        >
+          Sign out
+        </button>
+      </div>
+
+      {/* Create panel */}
+      <div
+        style={{
+          background: C.white,
+          border: `1px solid ${C.border}`,
+          borderRadius: 10,
+          padding: 18,
+          marginBottom: 22,
+        }}
+      >
+        <div
+          style={{
+            fontSize: 13,
+            fontWeight: 500,
+            color: C.dark,
+            marginBottom: 8,
+          }}
+        >
+          Mint a new code
+        </div>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <input
+            type="text"
+            placeholder="Notes (optional) — e.g. 'Mary, realtor outreach'"
+            value={createNotes}
+            onChange={(e) => setCreateNotes(e.target.value)}
+            style={{
+              flex: 1,
+              minWidth: 220,
+              padding: "10px 12px",
+              fontSize: 13,
+              border: `1px solid ${C.border}`,
+              borderRadius: 8,
+              outline: "none",
+              ...font,
+            }}
+          />
+          <button
+            onClick={handleCreate}
+            disabled={loading}
+            style={{
+              padding: "10px 18px",
+              fontSize: 13,
+              fontWeight: 500,
+              background: C.dark,
+              color: C.white,
+              border: "none",
+              borderRadius: 8,
+              cursor: loading ? "not-allowed" : "pointer",
+              opacity: loading ? 0.6 : 1,
+              ...font,
+            }}
+          >
+            Generate code
+          </button>
+        </div>
+        {recentlyCreatedCode && (
+          <div
+            style={{
+              marginTop: 12,
+              padding: "10px 12px",
+              background: "#F1FAEC",
+              border: "1px solid #C8E5B8",
+              borderRadius: 8,
+              fontSize: 13,
+              color: "#1F5A20",
+            }}
+          >
+            New code:{" "}
+            <span style={{ fontFamily: "monospace", fontWeight: 600 }}>
+              {recentlyCreatedCode}
+            </span>{" "}
+            — share this with one person.
+          </div>
+        )}
+      </div>
+
+      {actionError && (
+        <div
+          style={{
+            margin: "0 0 16px",
+            padding: "10px 14px",
+            background: "#FDECEC",
+            border: "1px solid #F5C7C5",
+            borderRadius: 8,
+            fontSize: 13,
+            color: "#7A1F1B",
+          }}
+        >
+          {actionError}
+        </div>
+      )}
+
+      {/* Codes list */}
+      <div
+        style={{
+          background: C.white,
+          border: `1px solid ${C.border}`,
+          borderRadius: 10,
+          overflow: "hidden",
+        }}
+      >
+        <div
+          className="admin-row"
+          style={{
+            display: "grid",
+            gridTemplateColumns: "180px 1fr 130px 130px 90px",
+            gap: 14,
+            padding: "12px 16px",
+            background: C.lightGrey,
+            fontSize: 11,
+            letterSpacing: 1,
+            textTransform: "uppercase",
+            color: C.mediumGrey,
+            fontWeight: 500,
+          }}
+        >
+          <div>Code</div>
+          <div>Notes</div>
+          <div>Created</div>
+          <div>Status</div>
+          <div></div>
+        </div>
+        {codes.length === 0 ? (
+          <div
+            style={{
+              padding: 24,
+              textAlign: "center",
+              fontSize: 13,
+              color: C.mediumGrey,
+            }}
+          >
+            {loading ? "Loading…" : "No codes yet. Mint one above."}
+          </div>
+        ) : (
+          codes.map((c) => {
+            const status = c.revoked
+              ? "Revoked"
+              : c.consumed
+              ? "Used"
+              : "Available";
+            const statusColor = c.revoked
+              ? "#7A1F1B"
+              : c.consumed
+              ? C.mediumGrey
+              : "#1F5A20";
+            const createdShort = c.createdAt.slice(0, 10);
+            return (
+              <div
+                key={c.code}
+                className="admin-row"
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "180px 1fr 130px 130px 90px",
+                  gap: 14,
+                  padding: "14px 16px",
+                  borderTop: `1px solid ${C.border}`,
+                  fontSize: 13,
+                  color: C.dark,
+                  alignItems: "center",
+                }}
+              >
+                <div>
+                  <span className="admin-cell-label">Code</span>
+                  <span
+                    style={{ fontFamily: "monospace", cursor: "pointer" }}
+                    onClick={() => copyCode(c.code)}
+                    title="Click to copy"
+                  >
+                    {c.code}
+                  </span>
+                </div>
+                <div style={{ color: c.notes ? C.dark : C.mediumGrey }}>
+                  <span className="admin-cell-label">Notes</span>
+                  {c.notes || "—"}
+                </div>
+                <div style={{ color: C.mediumGrey }}>
+                  <span className="admin-cell-label">Created</span>
+                  {createdShort}
+                </div>
+                <div style={{ color: statusColor, fontWeight: 500 }}>
+                  <span className="admin-cell-label">Status</span>
+                  {status}
+                </div>
+                <div>
+                  {!c.revoked && !c.consumed && (
+                    <button
+                      onClick={() => handleRevoke(c.code)}
+                      style={{
+                        background: "transparent",
+                        border: `1px solid ${C.border}`,
+                        borderRadius: 6,
+                        padding: "6px 10px",
+                        fontSize: 12,
+                        color: C.mediumGrey,
+                        cursor: "pointer",
+                        ...font,
+                      }}
+                    >
+                      Revoke
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
 };
 
 const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) => {
@@ -9352,7 +9855,11 @@ type Screen =
   // immediately on mount so the friendly hold-tight UI displays
   // throughout the async work.
   | "delivering"
-  | "success";
+  | "success"
+  // "admin" (2026-06-03): password-gated dashboard for Kristi + husband
+  // to create / list / revoke single-use promo codes. Reached at /admin.
+  // No public link — they navigate by typing the URL.
+  | "admin";
 
 const TOTAL_HEADSHOTS = 6;
 
@@ -9419,6 +9926,7 @@ export default function App() {
     const screenForPath = (path: string): Screen | null => {
       if (path === "/healthcare" || path === "/healthcare/") return "healthcare";
       if (path === "/how-it-works" || path === "/how-it-works/") return "how-it-works";
+      if (path === "/admin" || path === "/admin/") return "admin";
       if (path === "/" || path === "") return "landing";
       return null;
     };
@@ -10617,13 +11125,15 @@ export default function App() {
           we want only "GenerAItion Headshots" for brand-entity consistency
           (Google + AI search engines associate the domain with one brand
           string only). */}
-      {screen !== "landing" && screen !== "healthcare" && (
-        <Navbar
-          cartCount={cart.length}
-          onLogoClick={reset}
-          currentStep={getStepFromScreen(screen)}
-        />
-      )}
+      {screen !== "landing" &&
+        screen !== "healthcare" &&
+        screen !== "admin" && (
+          <Navbar
+            cartCount={cart.length}
+            onLogoClick={reset}
+            currentStep={getStepFromScreen(screen)}
+          />
+        )}
 
       {/* Stripe verification overlay — shown when the user just returned from
           Stripe Checkout. Card payments resolve instantly so this barely
@@ -10804,6 +11314,7 @@ export default function App() {
           }}
         />
       )}
+      {screen === "admin" && <AdminScreen />}
       {screen === "healthcare" && (
         <HealthcareScreen
           onPromoUnlock={handlePromoUnlock}
