@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
-import { Upload, Check, X, ArrowLeft, RefreshCw, Loader2, Download, Maximize2, ChevronDown, User, Sparkles, CircleUser, ArrowDown, ArrowRight, Menu } from "lucide-react";
+import { Upload, Check, X, ArrowLeft, RefreshCw, Loader2, Download, Maximize2, ChevronDown, User, Sparkles, CircleUser, ArrowDown, ArrowRight, Menu, Plus, ShoppingBag } from "lucide-react";
 import { upload } from "@vercel/blob/client";
 import exifr from "exifr";
 
@@ -6060,10 +6060,11 @@ const LoadingScreen = ({
 
 type GridScreenProps = {
   images: string[]; // base64 data URIs returned from /api/generate, one per card
-  // Called when the user clicks "Get my photos" — passes the INDICES of the
-  // selected thumbnails so the App can pull the matching base64 images out of
-  // the generated-images array and forward them to /api/deliver.
-  onDeliver: (selectedIndices: number[]) => void;
+  // Called when the user clicks "Check out" — passes the cart's URLs forward
+  // to the retouch + checkout flow. Cart is URL-keyed, not index-keyed, so a
+  // pick from a prior style/regen round is preserved even after Generate
+  // wiped the grid.
+  onDeliver: (selectedUrls: string[]) => void;
   onBack: () => void;
   onRegenerateSlot: (index: number) => void;
   regenCount: number;
@@ -6079,6 +6080,15 @@ type GridScreenProps = {
   // call resolves (so users don't burn a regen on a slot that's about to
   // populate naturally).
   initialBatchInFlight: Set<number>;
+  // CART (Phase 1, 2026-06-03). URLs the user has added. Lifted to App so
+  // it survives unmount-on-back-to-style — the whole point of the cart is
+  // persistence across regenerations. URL-keyed (not slot-index-keyed) so
+  // picks from different style choices coexist. + icon when URL isn't in
+  // cart; check when it is.
+  cart: string[];
+  onAddToCart: (url: string) => void;
+  onRemoveFromCart: (url: string) => void;
+  maxCartSize: number;
 };
 
 const GridScreen = ({
@@ -6091,18 +6101,33 @@ const GridScreen = ({
   regeneratingSlots,
   regenError,
   initialBatchInFlight,
+  cart,
+  onAddToCart,
+  onRemoveFromCart,
+  maxCartSize,
 }: GridScreenProps) => {
-  const [cart, setCart] = useState<Set<number>>(new Set());
+  // Cart is App-level URLs (Phase 1, 2026-06-03 revised) — lifted out of
+  // GridScreen's useState so it survives the user backing out to the Style
+  // screen and re-generating. URL-keyed so a pick from a prior style
+  // choice is preserved when the user changes their look and generates
+  // fresh. Toggle dispatches to the App handlers below.
   // Always render 6 slots. If generation returned fewer than 6 (some failed),
   // the missing slots render as empty placeholders — better than blanking the
   // whole grid, and it's clear to the user how many images actually arrived.
   const photos = Array.from({ length: 6 }, (_, i) => i);
+  // Set for fast .has() lookup. cart prop is an array (preserves add order
+  // for the future cart strip), so we narrow to a set per render.
+  const cartSet = new Set(cart);
+  const cartIsFull = cart.length >= maxCartSize;
 
   const toggle = (i: number) => {
-    const next = new Set(cart);
-    if (next.has(i)) next.delete(i);
-    else next.add(i);
-    setCart(next);
+    const src = images[i];
+    if (!src) return; // empty / failed slot — nothing to add
+    if (cartSet.has(src)) onRemoveFromCart(src);
+    else if (!cartIsFull) onAddToCart(src);
+    // If cart is full and the URL isn't in it, the tap is intentionally a
+    // no-op — the visible "Cart full" badge above the grid tells the user
+    // they need to remove one before adding another.
   };
 
   return (
@@ -6147,15 +6172,45 @@ const GridScreen = ({
             Pick the ones you want
           </h2>
           <p style={{ fontSize: 15, color: C.mediumGrey, marginTop: 12, lineHeight: 1.6 }}>
-            Tap your favorites. You'll get the clean, unwatermarked 2K files to download on the next screen.
+            Tap the <Plus size={13} strokeWidth={2.4} style={{ display: "inline", verticalAlign: "middle", marginBottom: 2 }} /> on any photo to add it to your cart. Saved picks stay safe when you regenerate.
           </p>
         </div>
-        <div style={{ fontSize: 12, color: C.mediumGrey, textAlign: "right" }}>
-          Regenerations used: {regenCount} / {maxRegens}
-          <div style={{ fontSize: 11, marginTop: 4, color: C.mediumGrey }}>
-            Don't love one? Click the refresh icon on any photo.
-          </div>
+        {/* Cart status pill (Phase 1, 2026-06-03). Lives in the upper right
+            of the page header so it stays visible as the user scrolls the
+            grid. Counter increments when a + is tapped. When full (6/6),
+            the pill flips to a gold "Cart full" state to make clear the +
+            buttons are now inert. Future: the pill will become a clickable
+            drawer that shows thumbnails of the cart contents (Phase 5/6). */}
+        <div
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "8px 14px",
+            borderRadius: 999,
+            background: cartIsFull ? "#C9A961" : C.dark,
+            color: C.white,
+            fontSize: 13,
+            fontWeight: 500,
+            letterSpacing: 0.2,
+            boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
+          }}
+          aria-live="polite"
+          aria-label={`Cart: ${cart.length} of ${maxCartSize} saved`}
+        >
+          <ShoppingBag size={15} />
+          {cartIsFull ? `Cart full · ${cart.length} / ${maxCartSize}` : `Cart · ${cart.length} / ${maxCartSize}`}
         </div>
+      </div>
+      <div
+        style={{
+          marginTop: 8,
+          fontSize: 11,
+          color: C.mediumGrey,
+          textAlign: "right",
+        }}
+      >
+        Regenerations used: {regenCount} / {maxRegens}
       </div>
 
       {/* Inline error banner — appears when a per-slot regenerate API call
@@ -6198,6 +6253,98 @@ const GridScreen = ({
         icon on any photo to regenerate just that one.
       </div>
 
+      {/* CART STRIP (Phase 1, 2026-06-03). Renders horizontally above the
+          main grid whenever the cart has 1+ items. Each thumbnail shows
+          a small × in the top-right so the user can drop a pick without
+          having to find it in the main grid (which they often can't —
+          the saved photo may be from a prior generation round and no
+          longer appear among the current 6). Empty cart hides this strip
+          entirely so it doesn't clutter the first-time view. */}
+      {cart.length > 0 && (
+        <div
+          style={{
+            marginTop: 18,
+            padding: "14px 14px 12px",
+            borderRadius: 10,
+            background: "#F7F3EA",
+            border: "1px solid #E8DBC1",
+          }}
+        >
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 500,
+              letterSpacing: 1.2,
+              textTransform: "uppercase",
+              color: "#8A7A4B",
+              marginBottom: 10,
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+            <ShoppingBag size={13} />
+            Your cart · {cart.length} / {maxCartSize}
+          </div>
+          <div
+            style={{
+              display: "flex",
+              gap: 10,
+              overflowX: "auto",
+              paddingBottom: 2,
+            }}
+          >
+            {cart.map((url, i) => (
+              <div
+                key={url}
+                style={{
+                  position: "relative",
+                  width: 72,
+                  height: 90,
+                  borderRadius: 6,
+                  overflow: "hidden",
+                  flexShrink: 0,
+                  backgroundImage: `url(${url})`,
+                  backgroundSize: "cover",
+                  backgroundPosition: "center",
+                  backgroundColor: C.lightGrey,
+                  boxShadow: "0 1px 3px rgba(0,0,0,0.12)",
+                }}
+                aria-label={`Cart item ${i + 1}`}
+                onContextMenu={(e) => e.preventDefault()}
+              >
+                {/* Remove button — small dark circle with × in top-right
+                    corner of each thumbnail. Generous tap target despite
+                    the small visual size. */}
+                <button
+                  onClick={() => onRemoveFromCart(url)}
+                  aria-label={`Remove cart item ${i + 1}`}
+                  title="Remove from cart"
+                  style={{
+                    position: "absolute",
+                    top: 4,
+                    right: 4,
+                    width: 22,
+                    height: 22,
+                    border: "none",
+                    borderRadius: "50%",
+                    background: "rgba(0,0,0,0.78)",
+                    color: C.white,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: 0,
+                  }}
+                >
+                  <X size={13} strokeWidth={2.5} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Responsive 3x2 on desktop, 2x3 on mobile. Inline style sets the
           desktop default; the <style> block below overrides to 2 columns
           when the viewport is narrow so each watermarked thumbnail stays
@@ -6218,8 +6365,8 @@ const GridScreen = ({
         }}
       >
         {photos.map((i) => {
-          const picked = cart.has(i);
           const src = images[i]; // may be undefined if this slot failed to generate
+          const picked = !!src && cartSet.has(src);
           const regenerating = regeneratingSlots.has(i);
           // True only for slots whose ORIGINAL /api/generate call hasn't come
           // back yet — i.e., the user advanced via "Continue with what's ready"
@@ -6238,13 +6385,15 @@ const GridScreen = ({
           const handleRegenClick = (e: MouseEvent) => {
             e.stopPropagation(); // don't also toggle selection
             if (!canRegenThisSlot) return;
-            // If the user had this slot selected, unselect it — the image is
-            // about to change so the old pick no longer applies.
-            if (picked) {
-              const next = new Set(cart);
-              next.delete(i);
-              setCart(next);
-            }
+            // Cart preservation (Phase 1 revision, 2026-06-03): we
+            // INTENTIONALLY do NOT remove the cart URL when the slot
+            // regenerates. The Blob URL for the old image is still valid —
+            // it lives in Vercel Blob and delivery can fetch it regardless
+            // of which slot it appeared in. So a single-slot regen now lets
+            // the customer "lock in" the prior image (via cart) AND get a
+            // fresh option in the same slot, doubling their effective pick
+            // pool. The user's prior pick stays visible in the cart strip
+            // above the grid. Per Kristi 2026-06-03.
             onRegenerateSlot(i);
           };
           return (
@@ -6381,28 +6530,36 @@ const GridScreen = ({
                 </div>
               )}
               {/* Selection indicator — always shown when there's a photo.
-                  Unselected = translucent empty circle (affordance that it CAN
-                  be selected). Selected = filled dark circle with checkmark. */}
+                  Unselected = white circle with a + sign (clear "add to cart"
+                  affordance). Selected = filled dark circle with checkmark.
+                  When the cart is full AND this slot isn't in it, the + is
+                  dimmed so the user understands the tap won't do anything
+                  until they remove one. */}
               {src && (
                 <div
                   style={{
                     position: "absolute",
                     top: 10,
                     right: 10,
-                    background: picked ? C.dark : "rgba(255, 255, 255, 0.35)",
-                    color: C.white,
-                    border: picked ? "none" : "1.5px solid rgba(255, 255, 255, 0.9)",
-                    boxShadow: picked ? "none" : "0 1px 3px rgba(0,0,0,0.25)",
+                    background: picked
+                      ? C.dark
+                      : cartIsFull
+                      ? "rgba(255, 255, 255, 0.4)"
+                      : "rgba(255, 255, 255, 0.92)",
+                    color: picked ? C.white : C.dark,
+                    border: picked ? "none" : "1.5px solid rgba(255, 255, 255, 0.95)",
+                    boxShadow: "0 1px 4px rgba(0,0,0,0.3)",
                     borderRadius: "50%",
-                    width: 28,
-                    height: 28,
+                    width: 30,
+                    height: 30,
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    transition: "background 0.15s",
+                    transition: "background 0.15s, transform 0.15s",
+                    opacity: !picked && cartIsFull ? 0.55 : 1,
                   }}
                 >
-                  {picked && <Check size={16} />}
+                  {picked ? <Check size={17} /> : <Plus size={17} strokeWidth={2.4} />}
                 </div>
               )}
               {/* Per-slot regenerate button — bottom-right corner. Lets users
@@ -6503,7 +6660,8 @@ const GridScreen = ({
       >
         <div>
           <div style={{ fontSize: 13, color: C.dark, fontWeight: 500 }}>
-            {cart.size} selected
+            <ShoppingBag size={14} style={{ display: "inline", verticalAlign: "middle", marginRight: 6, marginBottom: 2 }} />
+            {cart.length} in your cart
           </div>
           <div style={{ fontSize: 11, color: C.mediumGrey, marginTop: 4 }}>
             Enter your email on the next screen, then download your clean 2K files.
@@ -6511,10 +6669,10 @@ const GridScreen = ({
         </div>
         <div style={{ display: "flex", gap: 12 }}>
           <Button
-            onClick={() => onDeliver(Array.from(cart))}
-            disabled={cart.size === 0}
+            onClick={() => onDeliver(cart)}
+            disabled={cart.length === 0}
           >
-            Get my photos
+            Check out
           </Button>
         </div>
       </div>
@@ -6821,28 +6979,23 @@ const IntroRetouchModal = ({ onDismiss }: IntroRetouchModalProps) => (
 
 // The retouch screen itself.
 type RetouchScreenProps = {
-  // Indices into the original `images` array of the photos the customer
-  // selected on the grid screen. These are the photos they're going to
-  // pay for and retouch.
-  selectedIndices: number[];
-  // Full array of all 6 generated images (data URIs). We index into this
-  // with selectedIndices to show only the picked ones.
-  images: string[];
-  // Current tier choice per selected index. Populated in App-level state
-  // and passed down with a setter. Default "polished" per the framing
-  // (middle option = sensible default; customer downshifts to Realistic
-  // for an untouched photo, upshifts to Glam for editorial).
-  retouchTiers: Record<number, RetouchTier>;
+  // URLs of the images the customer added to their cart on the grid screen.
+  // These are the photos they're going to pay for and retouch. Cart may hold
+  // images from multiple generation rounds; URL is the only stable handle.
+  selectedUrls: string[];
+  // Current tier choice per URL. Populated in App-level state and passed
+  // down with a setter. Default "basic" — the cheaper option, safest for
+  // an unconfirmed customer choice.
+  retouchTiers: Record<string, RetouchTier>;
   setRetouchTiers: React.Dispatch<
-    React.SetStateAction<Record<number, RetouchTier>>
+    React.SetStateAction<Record<string, RetouchTier>>
   >;
   onContinue: () => void;
   onBack: () => void;
 };
 
 const RetouchScreen = ({
-  selectedIndices,
-  images,
+  selectedUrls,
   retouchTiers,
   setRetouchTiers,
   onContinue,
@@ -6851,7 +7004,7 @@ const RetouchScreen = ({
   // Defensive: if no photos somehow made it here, hand the user back to
   // the grid so they can pick favorites again rather than locking them
   // on an empty screen.
-  if (selectedIndices.length === 0) {
+  if (selectedUrls.length === 0) {
     return (
       <div
         style={{
@@ -6872,8 +7025,8 @@ const RetouchScreen = ({
     );
   }
 
-  const setTier = (index: number, tier: RetouchTier) => {
-    setRetouchTiers((prev) => ({ ...prev, [index]: tier }));
+  const setTier = (url: string, tier: RetouchTier) => {
+    setRetouchTiers((prev) => ({ ...prev, [url]: tier }));
   };
 
   return (
@@ -6940,14 +7093,13 @@ const RetouchScreen = ({
           tier picker stacks below the thumbnail so the radio circles
           remain large and easy to tap. */}
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        {selectedIndices.map((imgIndex) => {
-          const src = images[imgIndex];
+        {selectedUrls.map((url, position) => {
           // Default to "basic" — the cheaper option, safest for cost and
           // the most conservative customer assumption.
-          const currentTier = retouchTiers[imgIndex] ?? "basic";
+          const currentTier = retouchTiers[url] ?? "basic";
           return (
             <div
-              key={imgIndex}
+              key={url}
               style={{
                 display: "flex",
                 flexWrap: "wrap",
@@ -6969,13 +7121,13 @@ const RetouchScreen = ({
                   overflow: "hidden",
                   position: "relative",
                   flexShrink: 0,
-                  backgroundImage: `url(${src})`,
+                  backgroundImage: `url(${url})`,
                   backgroundSize: "cover",
                   backgroundPosition: "center",
                   backgroundColor: C.lightGrey,
                 }}
                 onContextMenu={(e) => e.preventDefault()}
-                aria-label={`Headshot ${imgIndex + 1}`}
+                aria-label={`Headshot ${position + 1}`}
                 role="img"
               >
                 {/* Watermark — same diagonal pattern as the grid. */}
@@ -7018,7 +7170,7 @@ const RetouchScreen = ({
                   return (
                     <label
                       key={t.tier}
-                      onClick={() => setTier(imgIndex, t.tier)}
+                      onClick={() => setTier(url, t.tier)}
                       style={{
                         display: "flex",
                         alignItems: "flex-start",
@@ -8961,6 +9113,17 @@ export default function App() {
     }
   }, [screen, entrySpecialty]);
 
+  // Cart auto-clear (Phase 1, 2026-06-03). Whenever the user lands on the
+  // Upload screen, wipe the cart. The Upload screen is either the start of
+  // a brand-new session (cart already empty, harmless no-op) or the user
+  // backed out to change their source photos — in which case prior cart
+  // entries reference images generated from photos that no longer apply
+  // and should be cleared. Putting this in one effect avoids scattering
+  // the same setCart(new Set()) call across every navigation path.
+  useEffect(() => {
+    if (screen === "upload") setCart([]);
+  }, [screen]);
+
   // URL-path routing for vertical landing pages. The app is otherwise driven
   // by `screen` state (button clicks), but vertical landers like /healthcare
   // need to be reachable as real URLs for SEO. On initial mount we read
@@ -9044,18 +9207,24 @@ export default function App() {
     setShowBackWarning(false);
   };
 
-  // Indices of the thumbnails the user selected on the Grid screen. Passed to
-  // CheckoutScreen so we can forward the matching clean base64 images to
-  // /api/deliver. Navbar "Selected (N)" reads this set's size.
-  const [selectedImageIndices, setSelectedImageIndices] = useState<number[]>([]);
+  // URLs of the images the user selected on the Grid screen — the cart's
+  // contents at the moment they clicked "Check out". Passed to
+  // CheckoutScreen and forwarded as photoUrls to /api/deliver.
+  //
+  // 2026-06-03: switched from index-based (number[]) to URL-based (string[])
+  // so picks survive style changes / multi-round regenerations. The cart
+  // lives independently of the current 6-slot grid and may contain images
+  // from prior generation rounds.
+  const [selectedImageUrls, setSelectedImageUrls] = useState<string[]>([]);
 
-  // Retouch tier choice per selected image. Keyed by the image's index
-  // in `generatedImages` (same index used by selectedImageIndices). Set
-  // on the new RetouchScreen between Grid and Checkout. Defaults to
-  // "polished" when a photo is first added — the sensible middle option;
-  // customer can downshift to Realistic or up to Glam per photo.
+  // Retouch tier choice per selected image, keyed by the image's URL.
+  // 2026-06-03: switched from index-keyed (Record<number, …>) to URL-keyed
+  // for the same reason as selectedImageUrls — the cart may contain images
+  // from multiple generation rounds, and indices aren't stable across rounds.
+  // Defaults to "basic" when a photo is first added (cheaper option, safer
+  // default for unconfirmed customer intent).
   const [retouchTiers, setRetouchTiers] = useState<
-    Record<number, RetouchTier>
+    Record<string, RetouchTier>
   >({});
 
   // Intro popup for the Retouch screen. Fires once per session right
@@ -9150,6 +9319,34 @@ export default function App() {
   // 2 bulk-regens (~12 API calls worth); individual regens are cheaper so we
   // give users 6 single swaps, which is the same total cost ceiling at most.
   const MAX_SINGLE_REGENS = 6;
+  // CART (Phase 1, 2026-06-03 — revised). Image URLs the user has added to
+  // their cart. Stored as an ordered string[] (most-recently-added last so
+  // we can render an "order of selection" feel later).
+  //
+  // URL-keyed, NOT slot-index-keyed, because the customer can change their
+  // style/outfit/background and regenerate. Every Generate refreshes ALL 6
+  // slots, but the cart contents persist because they reference uploaded
+  // image URLs in Vercel Blob — those URLs stay valid even when the grid
+  // refreshes. This lets a customer cherry-pick favorites from MULTIPLE
+  // style rounds: suit/office → save 1, sweater/outdoor → save 2,
+  // glasses/studio → save 3, check out with 6 from across the rounds.
+  //
+  // Capped at MAX_CART_SIZE (6) — matches what the customer pays for.
+  //
+  // Cleared in reset() (back to landing) and whenever the user goes back to
+  // Upload (changing source photos invalidates prior picks).
+  const MAX_CART_SIZE = 6;
+  const [cart, setCart] = useState<string[]>([]);
+  const addToCart = (url: string) => {
+    setCart((prev) => {
+      if (prev.includes(url)) return prev;
+      if (prev.length >= MAX_CART_SIZE) return prev;
+      return [...prev, url];
+    });
+  };
+  const removeFromCart = (url: string) => {
+    setCart((prev) => (prev.includes(url) ? prev.filter((u) => u !== url) : prev));
+  };
   // Photographer's tips modal: shown the first time the user arrives at the
   // Upload screen in a given session. Resets when reset() fires so starting
   // over from Landing shows it again.
@@ -9677,7 +9874,7 @@ export default function App() {
 
   const reset = () => {
     setScreen("landing");
-    setSelectedImageIndices([]);
+    setSelectedImageUrls([]);
     setRetouchTiers({});
     setHasSeenRetouchIntro(false);
     setShowRetouchIntroModal(false);
@@ -9695,6 +9892,9 @@ export default function App() {
     setLastPhotoUrls([]);
     setLastHasWideAngle(false);
     setRegeneratingSlots(new Set());
+    // Clear cart (Phase 1, 2026-06-03). Reset means new session, new source
+    // photos — prior cart URLs no longer reference anything meaningful.
+    setCart([]);
     setHasSeenTips(false);
     setShowTipsModal(false);
     setHasSeenIntro(false);
@@ -9791,16 +9991,18 @@ export default function App() {
 
   // Transition handler from Grid → Retouch (replaces the previous
   // Grid → Checkout direct jump). Pre-fills retouchTiers for any newly
-  // selected indices that don't have a tier yet — defaults to "basic"
+  // selected URLs that don't have a tier yet — defaults to "basic"
   // per Glow Up Deluxe (2026-05-18): basic is the cheaper option and
   // the safest default so a customer who just clicks through doesn't
   // get auto-upsold to $14.99/photo.
-  const handleAdvanceToRetouch = (selections: number[]) => {
-    setSelectedImageIndices(selections);
+  // 2026-06-03: takes URL list (was index list) so the cart can hold
+  // picks from across multiple generation rounds.
+  const handleAdvanceToRetouch = (selections: string[]) => {
+    setSelectedImageUrls(selections);
     setRetouchTiers((prev) => {
       const next = { ...prev };
-      for (const i of selections) {
-        if (!(i in next)) next[i] = "basic";
+      for (const url of selections) {
+        if (!(url in next)) next[url] = "basic";
       }
       return next;
     });
@@ -9919,14 +10121,18 @@ export default function App() {
     }
 
     // Reset prior generation state in case the user regenerated.
+    // Cart is independent (Phase 1, 2026-06-03 — revised): every Generate
+    // refreshes ALL 6 slots so the user sees the new style choice across
+    // the entire grid. The cart is URL-keyed, not slot-keyed, so saved
+    // picks survive untouched even though the grid completely refreshes.
+    // This lets a customer keep their best shot from the suit/office round,
+    // change to sweater/outdoor, generate 6 more, and have BOTH live in
+    // the cart.
     setGeneratedImages([]);
     setReadyCount(0);
     setGenerationError(null);
     setRegenCount(0);
     setRegeneratingSlots(new Set());
-    // All 6 slots are about to start firing — record them as in-flight.
-    // Each call removes its own index in its `finally` block so the grid
-    // can swap a spinner for the failed-placeholder at the right moment.
     setInitialBatchInFlight(new Set([0, 1, 2, 3, 4, 5]));
     // Persist selections + URLs so per-slot regeneration can reuse them
     // without asking the user to reselect anything.
@@ -10057,7 +10263,7 @@ export default function App() {
           string only). */}
       {screen !== "landing" && screen !== "healthcare" && (
         <Navbar
-          cartCount={selectedImageIndices.length}
+          cartCount={cart.length}
           onLogoClick={reset}
           currentStep={getStepFromScreen(screen)}
         />
@@ -10324,12 +10530,15 @@ export default function App() {
           maxRegens={MAX_SINGLE_REGENS}
           regeneratingSlots={regeneratingSlots}
           initialBatchInFlight={initialBatchInFlight}
+          cart={cart}
+          onAddToCart={addToCart}
+          onRemoveFromCart={removeFromCart}
+          maxCartSize={MAX_CART_SIZE}
         />
       )}
       {screen === "retouch" && (
         <RetouchScreen
-          selectedIndices={selectedImageIndices}
-          images={generatedImages}
+          selectedUrls={selectedImageUrls}
           retouchTiers={retouchTiers}
           setRetouchTiers={setRetouchTiers}
           onContinue={() => setScreen("checkout")}
@@ -10338,13 +10547,11 @@ export default function App() {
       )}
       {screen === "checkout" && lastSelections && (
         <CheckoutScreen
-          selectedImages={selectedImageIndices
-            .map((i) => generatedImages[i])
-            .filter((img): img is string => !!img)}
+          selectedImages={selectedImageUrls}
           referencePhotoUrls={lastPhotoUrls}
           selections={lastSelections}
-          retouchTiers={selectedImageIndices.map(
-            (i) => retouchTiers[i] ?? "basic",
+          retouchTiers={selectedImageUrls.map(
+            (url) => retouchTiers[url] ?? "basic",
           )}
           onComplete={({ email: submittedEmail, photoUrls, shareGraphicUrls }) => {
             setEmail(submittedEmail);
@@ -10377,7 +10584,7 @@ export default function App() {
             setGeneratedImages([]);
             setReadyCount(0);
             setGenerationError(null);
-            setSelectedImageIndices([]);
+            setSelectedImageUrls([]);
             setDeliveredPhotoUrls([]);
             setDeliveredShareGraphicUrls([]);
             setRegenCount(0);
