@@ -76,6 +76,11 @@ export default async function handler(
     if (result.valid) {
       return res.status(200).json({ valid: true, source: "kv" });
     }
+    // Result is the failure variant ({ valid: false; reason: string }).
+    // Structured this way (vs. checking `result.reason` after the early
+    // return) because TypeScript 6.0.2 — the build server's version —
+    // gives up on narrowing across the early-return boundary. The
+    // explicit `else` block keeps `result` narrowed inside.
     // The code WAS found in KV but couldn't be redeemed (already
     // consumed / revoked / etc.). Don't fall through to the env var —
     // a customer who tries to reuse a single-use code shouldn't be

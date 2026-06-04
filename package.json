@@ -15,6 +15,7 @@
     "@tensorflow/tfjs": "^4.22.0",
     "@tensorflow/tfjs-backend-cpu": "^4.22.0",
     "@tensorflow/tfjs-backend-wasm": "^4.22.0",
+    "@upstash/redis": "^1.38.0",
     "@vercel/blob": "^2.3.3",
     "@vladmandic/face-api": "^1.7.15",
     "exifr": "^7.1.3",

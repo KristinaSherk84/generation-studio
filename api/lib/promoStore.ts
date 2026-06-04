@@ -158,10 +158,19 @@ export async function revokeCode(code: string): Promise<PromoRecord | null> {
  * return `{ valid: false, reason: "consumed" }` — the other request
  * already redeemed it.
  */
+// Result type uses a non-discriminated union (both variants carry an
+// optional reason) so callers can read `.reason` without first narrowing
+// on `.valid`. TypeScript 6.0.2 (the build server) gives up narrowing
+// the strict discriminated form across early-return boundaries; this
+// shape is friendlier to its inference.
+export type RedeemResult =
+  | { valid: true; reason?: undefined }
+  | { valid: false; reason: "unknown" | "revoked" | "consumed" };
+
 export async function redeemCode(params: {
   code: string;
   fingerprint: string;
-}): Promise<{ valid: true } | { valid: false; reason: string }> {
+}): Promise<RedeemResult> {
   const key = recordKey(params.code);
   const existing = await redis.get<PromoRecord>(key);
   if (!existing) return { valid: false, reason: "unknown" };
