@@ -4747,6 +4747,13 @@ const AdminScreen = () => {
   return (
     <div style={{ maxWidth: 900, margin: "0 auto", padding: "40px 20px", ...font }}>
       <style>{`
+        /* Inline cell labels (Code/Notes/Created/Status) are hidden on
+           desktop because the grid already shows them in the header row.
+           Bug fix 2026-06-05: without this default, the spans rendered
+           inline alongside the values ("Codegh-y9cvu8" instead of just
+           "gh-y9cvu8"). On mobile the grid collapses to one column and
+           the labels become useful again. */
+        .admin-cell-label { display: none; }
         @media (max-width: 600px) {
           .admin-row { grid-template-columns: 1fr !important; padding: 14px !important; }
           .admin-cell-label { display: block !important; font-size: 10px !important; color: #999 !important; text-transform: uppercase !important; letter-spacing: 1px !important; margin-bottom: 2px !important; }
