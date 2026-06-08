@@ -4557,6 +4557,10 @@ const AdminScreen = () => {
   const [actionError, setActionError] = useState<string | null>(null);
   const [createNotes, setCreateNotes] = useState("");
   const [recentlyCreatedCode, setRecentlyCreatedCode] = useState<string | null>(null);
+  // Live search query (2026-06-05). Filters the codes table by code text
+  // OR notes. Case-insensitive substring match. No submit needed — filter
+  // applies as the admin types.
+  const [searchQuery, setSearchQuery] = useState("");
 
   const isAuthed = adminPassword.length > 0;
 
@@ -4673,6 +4677,47 @@ const AdminScreen = () => {
       setLoading(false);
     }
   };
+
+  // Permanent delete (2026-06-05). Drops the record AND the index entry
+  // from Redis. Unlike revoke, there's no audit trail left. Used for
+  // typos, test codes, or codes that no longer need to exist.
+  const handleDelete = async (code: string) => {
+    if (
+      !confirm(
+        `Permanently delete ${code}? This removes it completely — no record will remain. Use Revoke instead if you want to keep an audit trail.`,
+      )
+    )
+      return;
+    setLoading(true);
+    setActionError(null);
+    try {
+      const r = await fetch("/api/admin/promos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "delete", adminPassword, code }),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      // Optimistic: drop the row from local state regardless of server
+      // response (idempotent on the server side).
+      setCodes((prev) => prev.filter((c) => c.code !== code));
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Failed to delete");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Filtered codes list. Live search on code text + notes, case-insensitive.
+  // Empty query returns the full list unchanged.
+  const filteredCodes = (() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return codes;
+    return codes.filter(
+      (c) =>
+        c.code.toLowerCase().includes(q) ||
+        (c.notes && c.notes.toLowerCase().includes(q)),
+    );
+  })();
 
   const copyCode = (code: string) => {
     if (typeof navigator === "undefined") return;
@@ -4901,6 +4946,53 @@ const AdminScreen = () => {
         </div>
       )}
 
+      {/* Search input (2026-06-05). Live filter on code text OR notes —
+          no submit button needed, results update as the admin types.
+          Sits between the action error and the codes table so it's
+          easy to find right above the data it filters. */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          marginBottom: 12,
+        }}
+      >
+        <input
+          type="text"
+          placeholder="Search codes or notes…"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          style={{
+            flex: 1,
+            padding: "10px 12px",
+            fontSize: 13,
+            border: `1px solid ${C.border}`,
+            borderRadius: 8,
+            outline: "none",
+            ...font,
+          }}
+        />
+        {searchQuery && (
+          <button
+            onClick={() => setSearchQuery("")}
+            title="Clear search"
+            style={{
+              background: "transparent",
+              border: `1px solid ${C.border}`,
+              borderRadius: 8,
+              padding: "8px 12px",
+              fontSize: 12,
+              color: C.mediumGrey,
+              cursor: "pointer",
+              ...font,
+            }}
+          >
+            Clear
+          </button>
+        )}
+      </div>
+
       {/* Codes list */}
       <div
         style={{
@@ -4914,7 +5006,7 @@ const AdminScreen = () => {
           className="admin-row"
           style={{
             display: "grid",
-            gridTemplateColumns: "180px 1fr 130px 130px 90px",
+            gridTemplateColumns: "180px 1fr 130px 130px 150px",
             gap: 14,
             padding: "12px 16px",
             background: C.lightGrey,
@@ -4931,7 +5023,7 @@ const AdminScreen = () => {
           <div>Status</div>
           <div></div>
         </div>
-        {codes.length === 0 ? (
+        {filteredCodes.length === 0 ? (
           <div
             style={{
               padding: 24,
@@ -4940,10 +5032,14 @@ const AdminScreen = () => {
               color: C.mediumGrey,
             }}
           >
-            {loading ? "Loading…" : "No codes yet. Mint one above."}
+            {loading
+              ? "Loading…"
+              : searchQuery
+              ? `No codes match "${searchQuery}".`
+              : "No codes yet. Mint one above."}
           </div>
         ) : (
-          codes.map((c) => {
+          filteredCodes.map((c) => {
             const status = c.revoked
               ? "Revoked"
               : c.consumed
@@ -4961,7 +5057,7 @@ const AdminScreen = () => {
                 className="admin-row"
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "180px 1fr 130px 130px 90px",
+                  gridTemplateColumns: "180px 1fr 130px 130px 150px",
                   gap: 14,
                   padding: "14px 16px",
                   borderTop: `1px solid ${C.border}`,
@@ -4992,10 +5088,12 @@ const AdminScreen = () => {
                   <span className="admin-cell-label">Status</span>
                   {status}
                 </div>
-                <div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {/* Revoke = soft action, only on still-redeemable codes */}
                   {!c.revoked && !c.consumed && (
                     <button
                       onClick={() => handleRevoke(c.code)}
+                      title="Revoke (keeps record, can't be redeemed)"
                       style={{
                         background: "transparent",
                         border: `1px solid ${C.border}`,
@@ -5010,6 +5108,29 @@ const AdminScreen = () => {
                       Revoke
                     </button>
                   )}
+                  {/* Trash = hard delete, available on every code regardless
+                      of state. Used codes can be cleared from view after
+                      they've been redeemed. */}
+                  <button
+                    onClick={() => handleDelete(c.code)}
+                    title="Permanently delete (no audit trail)"
+                    aria-label={`Delete code ${c.code}`}
+                    style={{
+                      background: "transparent",
+                      border: `1px solid ${C.border}`,
+                      borderRadius: 6,
+                      padding: "6px 9px",
+                      fontSize: 12,
+                      color: "#7A1F1B",
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 4,
+                      ...font,
+                    }}
+                  >
+                    <Trash2 size={12} />
+                  </button>
                 </div>
               </div>
             );
@@ -5553,7 +5674,38 @@ export type StyleSelections = {
   // All three only affect WOMEN; men's skin treatment is unchanged
   // regardless of this setting (each backend block is gender-gated).
   skin?: "realistic" | "polished" | "glam";
+  // Customer-picked scrub color (2026-06-05). Only used when attire === "medical".
+  // All 6 generated healthcare headshots use this color (3 lab coat + 3 scrubs).
+  // Default "lightblue" when omitted server-side.
+  scrubColor?: ScrubColor;
 };
+
+// Scrub colors available in the picker. Keep order in sync with the
+// picker UI below; the order is the on-screen left-to-right order.
+export type ScrubColor =
+  | "navy"
+  | "royal"
+  | "huntergreen"
+  | "lightblue"
+  | "black"
+  | "burgundy";
+
+// Display config for each scrub color: visible name + the hex value
+// used to render the swatch circle. Hex values are RGB approximations
+// of real-world scrub fabric tones (validated against scrub-supplier
+// product photography — Figs, Cherokee, FIGS, etc.).
+const SCRUB_COLOR_SWATCHES: {
+  value: ScrubColor;
+  label: string;
+  hex: string;
+}[] = [
+  { value: "lightblue", label: "Light blue", hex: "#A8C3D9" },
+  { value: "navy", label: "Navy", hex: "#1B2D4F" },
+  { value: "royal", label: "Royal blue", hex: "#1E5BC6" },
+  { value: "huntergreen", label: "Hunter green", hex: "#1F4F30" },
+  { value: "black", label: "Black", hex: "#1A1A1A" },
+  { value: "burgundy", label: "Burgundy", hex: "#5C1F2A" },
+];
 
 type StyleScreenProps = {
   onGenerate: (selections: StyleSelections) => void;
@@ -5601,6 +5753,10 @@ const StyleScreen = ({
   // Realistic branch). Behavior of initial generation is unchanged from
   // pre-Path-B Realistic customers.
   const skin: "realistic" | "polished" | "glam" = "realistic";
+  // Scrub color picker (2026-06-05) — only relevant when attire === "medical".
+  // Default to "lightblue" which is the most common and matches the prior
+  // hardcoded baby-blue look so existing customer expectations don't shift.
+  const [scrubColor, setScrubColor] = useState<ScrubColor>("lightblue");
 
   const canGenerate = Boolean(style && attire && lighting);
 
@@ -6027,6 +6183,73 @@ const StyleScreen = ({
         ))}
       </div>
 
+      {/* Scrub color picker (2026-06-05). Only renders when the customer
+          has chosen Healthcare/Medical attire. All 6 generated headshots
+          will use this single color across the lab-coat AND scrubs-only
+          variants — the customer's healthcare deliverable reads as a
+          matched set rather than 3 different scrub colors. */}
+      {attire === "medical" && (
+        <>
+          <SectionLabel>Scrub color</SectionLabel>
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 10,
+              alignItems: "center",
+            }}
+            role="radiogroup"
+            aria-label="Scrub color"
+          >
+            {SCRUB_COLOR_SWATCHES.map((s) => {
+              const selected = scrubColor === s.value;
+              // Bright swatches (light blue, royal) need a darker text
+              // hint; the dark swatches don't. We just rely on the
+              // ring + label below the row.
+              return (
+                <button
+                  key={s.value}
+                  type="button"
+                  onClick={() => setScrubColor(s.value)}
+                  aria-label={s.label}
+                  aria-checked={selected}
+                  role="radio"
+                  title={s.label}
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: "50%",
+                    background: s.hex,
+                    border: selected
+                      ? `3px solid ${C.dark}`
+                      : `1px solid ${C.border}`,
+                    boxShadow: selected
+                      ? "0 0 0 2px white inset, 0 1px 3px rgba(0,0,0,0.2)"
+                      : "0 1px 2px rgba(0,0,0,0.1)",
+                    cursor: "pointer",
+                    padding: 0,
+                    transition: "transform 0.1s",
+                    transform: selected ? "scale(1.08)" : "scale(1)",
+                  }}
+                />
+              );
+            })}
+            <div
+              style={{
+                fontSize: 12,
+                color: C.mediumGrey,
+                marginLeft: 4,
+              }}
+            >
+              {SCRUB_COLOR_SWATCHES.find((s) => s.value === scrubColor)?.label}
+              <span style={{ marginLeft: 6, color: C.mediumGrey }}>
+                · all 6 headshots use this color
+              </span>
+            </div>
+          </div>
+        </>
+      )}
+
       {/* Lighting */}
       <SectionLabel>Lighting</SectionLabel>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -6068,6 +6291,11 @@ const StyleScreen = ({
                   ? (background as StyleSelections["background"])
                   : undefined,
               skin,
+              // Scrub color only matters when attire is medical. Pass it
+              // anyway — the server ignores it for non-medical attire and
+              // it gets stored in lastSelections so per-slot regen reuses
+              // the same color.
+              scrubColor: attire === "medical" ? scrubColor : undefined,
             });
           }}
           disabled={!canGenerate}
@@ -10911,6 +11139,10 @@ export default function App() {
           variationIndex: index,
           hasWideAngle: lastHasWideAngle,
           skin: lastSelections.skin,
+          // Per-slot regen needs the same scrub color as the original
+          // batch so the regenerated slot matches the other 5. Only
+          // meaningful when attire is medical; server ignores otherwise.
+          scrubColor: lastSelections.scrubColor,
           ...readUnlockRequestFields(),
         }),
       });
@@ -11057,6 +11289,11 @@ export default function App() {
             variationIndex: index,
             hasWideAngle,
             skin: selections.skin,
+            // Customer-picked scrub color (2026-06-05). Only meaningful
+            // when attire is medical; server ignores it otherwise. All 6
+            // parallel calls send the same value so the grid renders
+            // 6 matched-color healthcare headshots.
+            scrubColor: selections.scrubColor,
             // Paywall enforcement (2026-05-15): server requires either a
             // valid Stripe session ID or the promo code on every call.
             ...readUnlockRequestFields(),

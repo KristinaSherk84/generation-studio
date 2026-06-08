@@ -43,6 +43,46 @@ export const maxDuration = 300;
 type Style = "corporate" | "creative" | "executive" | "urban" | "healthcare";
 type Attire = "formal" | "casual" | "keep" | "medical";
 type Lighting = "studio" | "natural" | "dramatic" | "golden";
+// Scrub colors (2026-06-05) — customer-pickable when attire === "medical".
+// All 6 generated headshots use the SAME scrub color (3 with lab coat,
+// 3 scrubs-only) so the customer's healthcare deliverable looks like a
+// matched set. Defaults to "lightblue" on the server if the request
+// omits the field (preserves the old "soft pale clinical" look).
+type ScrubColor =
+  | "navy"
+  | "royal"
+  | "huntergreen"
+  | "lightblue"
+  | "black"
+  | "burgundy";
+
+const SCRUB_COLOR_VALUES: ScrubColor[] = [
+  "navy",
+  "royal",
+  "huntergreen",
+  "lightblue",
+  "black",
+  "burgundy",
+];
+
+// Descriptive language for each scrub color, anchored with explicit
+// "NOT X, NOT Y" exclusions because Gemini drifts toward similar tones
+// without them (e.g. "navy" leans royal-blue, "royal" leans teal).
+// Pattern follows the validated prompt patterns memory: specific exclusions
+// with concrete tonal anchors.
+const SCRUB_COLOR_DESCRIPTIONS: Record<ScrubColor, string> = {
+  navy: "NAVY BLUE (deep classic navy — NOT royal blue, NOT baby blue, NOT black)",
+  royal:
+    "ROYAL BLUE (vivid medium-saturation blue — NOT navy, NOT baby blue, NOT teal, NOT turquoise)",
+  huntergreen:
+    "HUNTER GREEN (deep saturated forest/surgical green, sometimes called 'scrub green' — NOT olive, NOT sage, NOT mint, NOT bright kelly green)",
+  lightblue:
+    "LIGHT BLUE (soft pale slightly desaturated blue, sometimes called 'ceil blue' or 'caribbean light blue' — NOT royal blue, NOT navy, NOT white)",
+  black:
+    "BLACK (true neutral black — NOT charcoal grey, NOT dark navy, NOT very-dark-brown)",
+  burgundy:
+    "BURGUNDY (deep wine-burgundy red — NOT bright crimson, NOT pink, NOT brown, NOT maroon-purple)",
+};
 type Background =
   | "white"
   | "lightgrey"
@@ -63,6 +103,9 @@ type GenerateRequest = {
   variationIndex: number; // 0-5; frontend fires 6 parallel calls, each with a unique index
   hasWideAngle?: boolean;
   skin?: Skin;
+  // Customer-picked scrub color (2026-06-05). Only used when attire === "medical".
+  // Defaults to "lightblue" server-side when omitted to keep old clients working.
+  scrubColor?: ScrubColor;
   // ---- Paywall enforcement (added 2026-05-15) ----
   // Exactly one of these two must be present and valid for the request to
   // be processed:
@@ -353,28 +396,52 @@ Well-tailored and intentional in either case — not boxy, not ill-fitting.`,
 };
 
 // Medical attire — 6 distinct variants rotated across the 6-image batch
-// (variationIndex 0-5). Three lab-coat variants + three scrubs colors.
-// Added 2026-05-04 per Kristi for the healthcare-professional vertical.
+// (variationIndex 0-5). 2026-06-05 redesign per Kristi: all 6 variants use
+// the SAME customer-picked scrub color. Three lab-coat variants (0-2) +
+// three scrubs-only variants (3-5). Customer picks the color on the
+// Style screen; before this change the 5 variants were hardcoded to
+// baby blue / navy / medical green, which gave a representative sample
+// across the grid but not a coherent delivery for a customer who wanted
+// e.g. all-burgundy or all-hunter-green.
 //
 // CRITICAL universal rule for ALL medical variants: NO names, badges,
 // hospital logos, embroidered text, ID lanyards, or any other text-bearing
 // element on the garments. Gemini routinely hallucinates gibberish hospital
 // names + fake credentials when given medical attire prompts; we forbid
 // every text-rendering surface explicitly to head this off.
-const MEDICAL_ATTIRE_VARIATIONS: string[] = [
-  // 0 — Doctor's white coat over collared shirt OR blouse (gender-aware)
-  `A DOCTOR'S WHITE COAT (also called a physician's white coat or medical lab coat). NOT a suit jacket, NOT a blazer, NOT a sport coat. The garment must clearly read as a doctor's white coat — pure white color, simple notched collar (no formal suit lapels), worn open or with the top button only. Underneath, GENDER-AWARE: if the subject appears to be a MAN, a crisp collared dress shirt in a clean neutral color (white, light blue, or pale grey). If the subject appears to be a WOMAN, a soft feminine blouse, fine-knit top, or silk shell with a clean neckline (cream, blush, light grey, or pale blue). NO necktie either way. The white of the coat must dominate the image.`,
-  // 1 — Doctor's white coat over BABY BLUE scrubs
-  `A DOCTOR'S WHITE COAT (physician's white coat / medical lab coat) worn open over freshly pressed, wrinkle-free medical SCRUBS visible at the V-neck. NOT a suit jacket, NOT a blazer. The white coat must be pure white and dominate the upper torso. Beneath the coat, only the V-neck of the scrubs is visible — scrubs color: BABY BLUE (soft, pale, slightly desaturated blue — NOT royal blue, NOT navy). A classic medical stethoscope draped around the subject's neck and hanging over the white coat — black tubing, silver-tone chestpiece, plain (no engraved text). The look reads as a doctor mid-shift wearing a white coat over baby blue scrubs.`,
-  // 2 — Doctor's white coat over NAVY scrubs
-  `A DOCTOR'S WHITE COAT (physician's white coat / medical lab coat) worn open over freshly pressed, wrinkle-free medical SCRUBS visible at the V-neck. NOT a suit jacket, NOT a blazer. The white coat must be pure white and dominate the upper torso. Beneath the coat, only the V-neck of the scrubs is visible — scrubs color: NAVY BLUE (deep classic navy — NOT royal blue, NOT baby blue). The look reads as a doctor mid-shift wearing a white coat over navy scrubs. CRITICAL: the dominant color in the image MUST be the white coat. If navy dominates, the rendering is wrong — Gemini sometimes mistakes "navy scrubs under white coat" for "navy suit jacket"; this variant must NOT render as a suit.`,
-  // 3 — Scrubs in baby blue (no white coat)
-  `Freshly pressed, wrinkle-free medical SCRUBS only (no white coat) — short-sleeve V-neck medical scrub top in BABY BLUE (soft, pale, slightly desaturated blue — NOT royal blue, NOT navy). The garment must clearly read as hospital scrubs: loose drape, V-neck collar, short sleeves, unstructured. NOT a t-shirt, NOT a polo, NOT workout wear.`,
-  // 4 — Scrubs in navy blue (no white coat)
-  `Freshly pressed, wrinkle-free medical SCRUBS only (no white coat) — short-sleeve V-neck medical scrub top in NAVY BLUE (deep classic navy — NOT royal blue, NOT baby blue, NOT black). The garment must clearly read as hospital scrubs: loose drape, V-neck collar, short sleeves, unstructured. NOT a t-shirt, NOT a polo, NOT a sweater.`,
-  // 5 — Scrubs in medical green (no white coat)
-  `Freshly pressed, wrinkle-free medical SCRUBS only (no white coat) — short-sleeve V-neck medical scrub top in MEDICAL GREEN (the classic surgical / OR scrub-green color — a muted blue-green or teal-green, sometimes called "scrub green" or "ceil"). NOT bright kelly green, NOT lime, NOT olive, NOT forest. The garment must clearly read as hospital scrubs: loose drape, V-neck collar, short sleeves, unstructured. A classic medical stethoscope draped around the subject's neck — black tubing, silver-tone chestpiece, plain (no engraved text).`,
-];
+function buildMedicalAttireVariant(
+  scrubColor: ScrubColor,
+  variationIndex: number,
+): string {
+  const colorDesc = SCRUB_COLOR_DESCRIPTIONS[scrubColor];
+  // Clamp out-of-range variationIndex (per-slot regens use 0-5 but
+  // defensive in case of future drift).
+  const i = Math.max(0, Math.min(5, variationIndex));
+
+  // Variants 0-2: white coat with the chosen scrubs color visible at
+  // the V-neck. Each variant adds a small detail (plain, stethoscope,
+  // posed-hands) so the lab-coat trio isn't 3 identical compositions.
+  if (i === 0) {
+    return `A DOCTOR'S WHITE COAT (physician's white coat / medical lab coat) worn open over freshly pressed, wrinkle-free medical SCRUBS visible at the V-neck. NOT a suit jacket, NOT a blazer, NOT a sport coat. The white coat must be pure white, simple notched collar (no formal suit lapels), and dominate the upper torso. Beneath the coat, only the V-neck of the scrubs is visible — scrubs color: ${colorDesc}. The look reads as a physician mid-shift wearing a white coat over ${scrubColor} scrubs. CRITICAL: white must dominate the image. Gemini sometimes mistakes "scrubs under white coat" for a suit jacket — this variant must NOT render as a suit.`;
+  }
+  if (i === 1) {
+    return `A DOCTOR'S WHITE COAT (physician's white coat / medical lab coat) worn open over freshly pressed, wrinkle-free medical SCRUBS visible at the V-neck. NOT a suit jacket, NOT a blazer. The white coat must be pure white and dominate the upper torso. Beneath the coat, only the V-neck of the scrubs is visible — scrubs color: ${colorDesc}. A classic medical stethoscope draped around the subject's neck and hanging over the white coat — black tubing, silver-tone chestpiece, plain (no engraved text). The look reads as a physician mid-shift.`;
+  }
+  if (i === 2) {
+    return `A DOCTOR'S WHITE COAT (physician's white coat / medical lab coat) worn open over freshly pressed, wrinkle-free medical SCRUBS visible at the V-neck. NOT a suit jacket, NOT a blazer. The white coat is pure white, simple notched collar, dominates the upper torso. Beneath the coat, only the V-neck of the scrubs is visible — scrubs color: ${colorDesc}. Subject's hands either rest naturally at the sides or one hand is tucked casually into the coat pocket. The look reads as a confident physician on rounds. CRITICAL: white must dominate the image; do NOT render as a suit jacket.`;
+  }
+
+  // Variants 3-5: scrubs only (no white coat). Each variant adds a
+  // small detail so the scrubs-only trio also has visual variety.
+  if (i === 3) {
+    return `Freshly pressed, wrinkle-free medical SCRUBS only (no white coat) — short-sleeve V-neck medical scrub top in ${colorDesc}. The garment must clearly read as hospital scrubs: loose drape, V-neck collar, short sleeves, unstructured. NOT a t-shirt, NOT a polo, NOT a sweater, NOT workout wear. The ${scrubColor} of the scrubs must dominate the upper torso of the image.`;
+  }
+  if (i === 4) {
+    return `Freshly pressed, wrinkle-free medical SCRUBS only (no white coat) — short-sleeve V-neck medical scrub top in ${colorDesc}. Loose drape, V-neck collar, short sleeves, unstructured. NOT a t-shirt, NOT a polo. A classic medical stethoscope draped around the subject's neck — black tubing, silver-tone chestpiece, plain (no engraved text). The ${scrubColor} of the scrubs must dominate.`;
+  }
+  // i === 5
+  return `Freshly pressed, wrinkle-free medical SCRUBS only (no white coat) — short-sleeve V-neck medical scrub top in ${colorDesc}. Loose drape, V-neck collar, short sleeves, unstructured. NOT a t-shirt, NOT a polo, NOT athletic wear. The sleeves may show a subtle natural fold from being worn (not perfectly crisp) so the look reads as authentic mid-shift attire rather than studio styling. The ${scrubColor} of the scrubs must dominate the image.`;
+}
 
 const MEDICAL_GUARDRAILS_RULE = `CRITICAL MEDICAL ATTIRE GUARDRAILS — these override any default rendering tendencies:
 
@@ -384,12 +451,13 @@ const MEDICAL_GUARDRAILS_RULE = `CRITICAL MEDICAL ATTIRE GUARDRAILS — these ov
 
 3. The dominant garment color in this image must match the variant specified above. If the variant says "white coat," white must dominate. If "baby blue scrubs," baby blue must dominate. Do not blend toward a different color than specified.`;
 
-function buildBlock4Attire(attire: Attire, variationIndex: number): string {
+function buildBlock4Attire(
+  attire: Attire,
+  variationIndex: number,
+  scrubColor: ScrubColor,
+): string {
   if (attire === "medical") {
-    const variant =
-      MEDICAL_ATTIRE_VARIATIONS[
-        Math.max(0, Math.min(MEDICAL_ATTIRE_VARIATIONS.length - 1, variationIndex))
-      ];
+    const variant = buildMedicalAttireVariant(scrubColor, variationIndex);
     return `Attire: ${variant}\n\n${MEDICAL_GUARDRAILS_RULE}`;
   }
   return BLOCK_4_ATTIRE_STATIC[attire];
@@ -719,7 +787,13 @@ function assemblePrompt(req: GenerateRequest): string {
   parts.push(buildBlockPet(req.variationIndex));
   parts.push(BLOCK_2_COMPOSITION);
   parts.push(buildBlock3Style(req.style, req.variationIndex));
-  parts.push(buildBlock4Attire(req.attire, req.variationIndex));
+  parts.push(
+    buildBlock4Attire(
+      req.attire,
+      req.variationIndex,
+      req.scrubColor ?? "lightblue",
+    ),
+  );
   parts.push(BLOCK_EYEWEAR);
   parts.push(buildBlockHair(req.skin, req.variationIndex));
   parts.push(BLOCK_5_LIGHTING[req.lighting]);
@@ -1284,6 +1358,14 @@ export default async function handler(
   // (no block injected) when omitted or set to "realistic".
   if (body.skin && !["realistic", "polished", "glam"].includes(body.skin)) {
     return res.status(400).json({ error: "Invalid skin" });
+  }
+  // scrubColor is optional; if present, must be a known value. Server
+  // defaults to "lightblue" when omitted (handled inline in assemblePrompt).
+  if (
+    body.scrubColor &&
+    !SCRUB_COLOR_VALUES.includes(body.scrubColor as ScrubColor)
+  ) {
+    return res.status(400).json({ error: "Invalid scrubColor" });
   }
 
   const apiKey = process.env.GEMINI_API_KEY;
