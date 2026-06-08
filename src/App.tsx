@@ -5611,15 +5611,20 @@ type ChipProps = {
   selected: boolean;
   onClick: () => void;
   children: ReactNode;
+  // `compact` shrinks padding + font so 3 chips fit on one mobile line.
+  // Added 2026-06-05 for the lighting row. Existing Attire chips keep
+  // the default size because "Business casual" / "Keep my outfit" are
+  // longer strings that would feel cramped at compact size.
+  compact?: boolean;
 };
 
-const Chip = ({ selected, onClick, children }: ChipProps) => (
+const Chip = ({ selected, onClick, children, compact = false }: ChipProps) => (
   <div
     onClick={onClick}
     style={{
-      padding: "8px 14px",
+      padding: compact ? "6px 11px" : "8px 14px",
       borderRadius: 999,
-      fontSize: 13,
+      fontSize: compact ? 12 : 13,
       border: `1px solid ${selected ? C.dark : C.border}`,
       background: selected ? C.dark : C.white,
       color: selected ? C.buttonText : C.dark,
@@ -5688,7 +5693,8 @@ export type ScrubColor =
   | "huntergreen"
   | "lightblue"
   | "black"
-  | "burgundy";
+  | "burgundy"
+  | "pink";
 
 // Display config for each scrub color: visible name + the hex value
 // used to render the swatch circle. Hex values are RGB approximations
@@ -5705,6 +5711,7 @@ const SCRUB_COLOR_SWATCHES: {
   { value: "huntergreen", label: "Hunter green", hex: "#1F4F30" },
   { value: "black", label: "Black", hex: "#1A1A1A" },
   { value: "burgundy", label: "Burgundy", hex: "#5C1F2A" },
+  { value: "pink", label: "Pink", hex: "#DEA7A7" },
 ];
 
 type StyleScreenProps = {
@@ -5809,7 +5816,7 @@ const StyleScreen = ({
           letterSpacing: -0.5,
         }}
       >
-        What style fits your world?
+        Style Customization
       </h1>
       <p style={{ fontSize: 15, color: C.mediumGrey, marginTop: 12, lineHeight: 1.6 }}>
         Pick a style, set the scene, and we'll generate 6 varied headshots to choose from.
@@ -6187,74 +6194,68 @@ const StyleScreen = ({
           has chosen Healthcare/Medical attire. All 6 generated headshots
           will use this single color across the lab-coat AND scrubs-only
           variants — the customer's healthcare deliverable reads as a
-          matched set rather than 3 different scrub colors. */}
+          matched set rather than 3 different scrub colors.
+          Sized + bordered to match the BACKGROUND COLOR swatch row
+          (28px, 2px-dark/1px-border) so the two color-picker rows on
+          the Style screen look like a matched pair. Updated 2026-06-05. */}
       {attire === "medical" && (
         <>
           <SectionLabel>Scrub color</SectionLabel>
           <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: 10,
-              alignItems: "center",
-            }}
+            style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
             role="radiogroup"
             aria-label="Scrub color"
           >
             {SCRUB_COLOR_SWATCHES.map((s) => {
               const selected = scrubColor === s.value;
-              // Bright swatches (light blue, royal) need a darker text
-              // hint; the dark swatches don't. We just rely on the
-              // ring + label below the row.
               return (
-                <button
+                <div
                   key={s.value}
-                  type="button"
                   onClick={() => setScrubColor(s.value)}
-                  aria-label={s.label}
-                  aria-checked={selected}
-                  role="radio"
                   title={s.label}
+                  role="radio"
+                  aria-checked={selected}
+                  aria-label={s.label}
                   style={{
-                    width: 36,
-                    height: 36,
+                    width: 28,
+                    height: 28,
                     borderRadius: "50%",
                     background: s.hex,
                     border: selected
-                      ? `3px solid ${C.dark}`
+                      ? `2px solid ${C.dark}`
                       : `1px solid ${C.border}`,
-                    boxShadow: selected
-                      ? "0 0 0 2px white inset, 0 1px 3px rgba(0,0,0,0.2)"
-                      : "0 1px 2px rgba(0,0,0,0.1)",
                     cursor: "pointer",
-                    padding: 0,
-                    transition: "transform 0.1s",
-                    transform: selected ? "scale(1.08)" : "scale(1)",
+                    transition: "border 0.15s",
                   }}
                 />
               );
             })}
-            <div
-              style={{
-                fontSize: 12,
-                color: C.mediumGrey,
-                marginLeft: 4,
-              }}
-            >
-              {SCRUB_COLOR_SWATCHES.find((s) => s.value === scrubColor)?.label}
-              <span style={{ marginLeft: 6, color: C.mediumGrey }}>
-                · all 6 headshots use this color
-              </span>
-            </div>
+          </div>
+          <div
+            style={{
+              fontSize: 12,
+              color: C.mediumGrey,
+              marginTop: 6,
+            }}
+          >
+            {SCRUB_COLOR_SWATCHES.find((s) => s.value === scrubColor)?.label}
+            <span style={{ marginLeft: 6 }}>
+              · all 6 headshots use this color
+            </span>
           </div>
         </>
       )}
 
       {/* Lighting */}
       <SectionLabel>Lighting</SectionLabel>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
         {LIGHTING.map((l) => (
-          <Chip key={l.id} selected={lighting === l.id} onClick={() => setLighting(l.id)}>
+          <Chip
+            key={l.id}
+            selected={lighting === l.id}
+            onClick={() => setLighting(l.id)}
+            compact
+          >
             {l.label}
           </Chip>
         ))}

@@ -54,7 +54,8 @@ type ScrubColor =
   | "huntergreen"
   | "lightblue"
   | "black"
-  | "burgundy";
+  | "burgundy"
+  | "pink";
 
 const SCRUB_COLOR_VALUES: ScrubColor[] = [
   "navy",
@@ -63,6 +64,7 @@ const SCRUB_COLOR_VALUES: ScrubColor[] = [
   "lightblue",
   "black",
   "burgundy",
+  "pink",
 ];
 
 // Descriptive language for each scrub color, anchored with explicit
@@ -82,6 +84,8 @@ const SCRUB_COLOR_DESCRIPTIONS: Record<ScrubColor, string> = {
     "BLACK (true neutral black — NOT charcoal grey, NOT dark navy, NOT very-dark-brown)",
   burgundy:
     "BURGUNDY (deep wine-burgundy red — NOT bright crimson, NOT pink, NOT brown, NOT maroon-purple)",
+  pink:
+    "PINK (soft dusty blush pink, sometimes called 'rose blush' or 'petal pink' — NOT hot pink, NOT magenta, NOT salmon-orange, NOT red)",
 };
 type Background =
   | "white"
