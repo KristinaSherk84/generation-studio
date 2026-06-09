@@ -72,20 +72,31 @@ const SCRUB_COLOR_VALUES: ScrubColor[] = [
 // without them (e.g. "navy" leans royal-blue, "royal" leans teal).
 // Pattern follows the validated prompt patterns memory: specific exclusions
 // with concrete tonal anchors.
+// Color descriptions for each scrub color.
+// 2026-06-05 v2 (after Kristi's navy test showed slot-0 + slot-5 rendering
+// as navy BLAZERS instead of scrubs/coat, and slot-4 rendering as GREY):
+//   - Every color description now starts with "soft cotton/poly medical
+//     scrub FABRIC" to anchor garment-type before color.
+//   - Dark colors (navy, black, huntergreen, burgundy) carry an inline
+//     "NOT a wool suit jacket fabric, NOT a blazer" exclusion because
+//     Gemini's strongest prior on those colors is "professional business
+//     suit." Repetition of this ANTI-suit clause directly tied to the
+//     color string is the only thing the model seems to honor.
+//   - Navy explicitly excludes grey/charcoal (slot-4 picked grey).
 const SCRUB_COLOR_DESCRIPTIONS: Record<ScrubColor, string> = {
-  navy: "NAVY BLUE (deep classic navy — NOT royal blue, NOT baby blue, NOT black)",
+  navy: "NAVY BLUE — soft cotton/poly medical scrub FABRIC in deep classic navy. NOT a wool suit jacket fabric, NOT a blazer, NOT a sport coat. NOT royal blue, NOT baby blue, NOT black, NOT grey, NOT charcoal. The garment is a hospital scrub top — V-neck pullover construction — never a tailored business jacket. Think Cherokee, FIGS, or Healing Hands scrub-brand fabric in their classic 'navy' colorway.",
   royal:
-    "ROYAL BLUE (vivid medium-saturation blue — NOT navy, NOT baby blue, NOT teal, NOT turquoise)",
+    "ROYAL BLUE — soft medical scrub FABRIC in vivid medium-saturation blue. NOT navy, NOT baby blue, NOT teal, NOT turquoise, NOT a wool suit jacket.",
   huntergreen:
-    "HUNTER GREEN (deep saturated forest/surgical green, sometimes called 'scrub green' — NOT olive, NOT sage, NOT mint, NOT bright kelly green)",
+    "HUNTER GREEN — soft cotton/poly medical scrub FABRIC in deep saturated forest/surgical green (sometimes called 'scrub green'). NOT a wool suit jacket fabric, NOT a sport coat. NOT olive, NOT sage, NOT mint, NOT bright kelly green. The garment is a hospital scrub top — V-neck pullover construction — never a tailored hunting blazer or military jacket.",
   lightblue:
-    "LIGHT BLUE (soft pale slightly desaturated blue, sometimes called 'ceil blue' or 'caribbean light blue' — NOT royal blue, NOT navy, NOT white)",
+    "LIGHT BLUE — soft medical scrub FABRIC in soft pale slightly desaturated blue, sometimes called 'ceil blue' or 'caribbean light blue'. NOT royal blue, NOT navy, NOT white.",
   black:
-    "BLACK (true neutral black — NOT charcoal grey, NOT dark navy, NOT very-dark-brown)",
+    "BLACK — soft cotton/poly medical scrub FABRIC in true neutral black. NOT a wool suit jacket fabric, NOT a blazer, NOT a tuxedo jacket. NOT charcoal grey, NOT dark navy, NOT very-dark-brown. The garment is a hospital scrub top — V-neck pullover construction — never a tailored business jacket.",
   burgundy:
-    "BURGUNDY (deep wine-burgundy red — NOT bright crimson, NOT pink, NOT brown, NOT maroon-purple)",
+    "BURGUNDY — soft medical scrub FABRIC in deep wine-burgundy red. NOT a wool suit jacket fabric, NOT a velvet blazer. NOT bright crimson, NOT pink, NOT brown, NOT maroon-purple.",
   pink:
-    "PINK (soft dusty blush pink, sometimes called 'rose blush' or 'petal pink' — NOT hot pink, NOT magenta, NOT salmon-orange, NOT red)",
+    "PINK — soft medical scrub FABRIC in soft dusty blush pink, sometimes called 'rose blush' or 'petal pink'. NOT hot pink, NOT magenta, NOT salmon-orange, NOT red.",
 };
 type Background =
   | "white"
@@ -425,26 +436,41 @@ function buildMedicalAttireVariant(
   // Variants 0-2: white coat with the chosen scrubs color visible at
   // the V-neck. Each variant adds a small detail (plain, stethoscope,
   // posed-hands) so the lab-coat trio isn't 3 identical compositions.
+  //
+  // 2026-06-05 v2 (after Kristi's navy test rendered slot-0 as a navy
+  // blazer with NO white coat at all): every lab-coat variant now
+  // OPENS with the no-suit guardrail rather than burying it mid-prompt,
+  // and CLOSES with an explicit "If you would render a [color] blazer
+  // instead, you have FAILED this variant" failure-detector clause.
+  // That belt-and-suspenders pattern has worked for the GLAM jaw-lock —
+  // applying it here too.
   if (i === 0) {
-    return `A DOCTOR'S WHITE COAT (physician's white coat / medical lab coat) worn open over freshly pressed, wrinkle-free medical SCRUBS visible at the V-neck. NOT a suit jacket, NOT a blazer, NOT a sport coat. The white coat must be pure white, simple notched collar (no formal suit lapels), and dominate the upper torso. Beneath the coat, only the V-neck of the scrubs is visible — scrubs color: ${colorDesc}. The look reads as a physician mid-shift wearing a white coat over ${scrubColor} scrubs. CRITICAL: white must dominate the image. Gemini sometimes mistakes "scrubs under white coat" for a suit jacket — this variant must NOT render as a suit.`;
+    return `STRICT GARMENT TYPE: The customer is wearing a DOCTOR'S WHITE COAT (physician's white coat / medical lab coat) over a hospital scrub top. The output IS NOT a business suit, IS NOT a tailored blazer, IS NOT a sport coat — even if other style cues might tempt that rendering. A DOCTOR'S WHITE COAT (physician's white coat / medical lab coat) worn open over freshly pressed, wrinkle-free medical SCRUBS visible at the V-neck. The white coat must be pure white, simple notched collar (no formal suit lapels), and dominate the upper torso. Beneath the coat, only the V-neck of the scrubs is visible — scrubs color: ${colorDesc}. The look reads as a physician mid-shift wearing a white coat over ${scrubColor} scrubs. FAILURE DETECTOR: if the rendered torso is a tailored ${scrubColor} blazer or business jacket with NO visible white coat, you have FAILED this variant — the white coat MUST be the dominant garment.`;
   }
   if (i === 1) {
-    return `A DOCTOR'S WHITE COAT (physician's white coat / medical lab coat) worn open over freshly pressed, wrinkle-free medical SCRUBS visible at the V-neck. NOT a suit jacket, NOT a blazer. The white coat must be pure white and dominate the upper torso. Beneath the coat, only the V-neck of the scrubs is visible — scrubs color: ${colorDesc}. A classic medical stethoscope draped around the subject's neck and hanging over the white coat — black tubing, silver-tone chestpiece, plain (no engraved text). The look reads as a physician mid-shift.`;
+    return `STRICT GARMENT TYPE: DOCTOR'S WHITE COAT (NOT a suit jacket, NOT a blazer, NOT a sport coat). A DOCTOR'S WHITE COAT (physician's white coat / medical lab coat) worn open over freshly pressed, wrinkle-free medical SCRUBS visible at the V-neck. The white coat must be pure white and dominate the upper torso. Beneath the coat, only the V-neck of the scrubs is visible — scrubs color: ${colorDesc}. A classic medical stethoscope draped around the subject's neck and hanging over the white coat — black tubing, silver-tone chestpiece, plain (no engraved text). The look reads as a physician mid-shift. FAILURE DETECTOR: white coat must be the dominant garment; if a ${scrubColor} blazer dominates instead, you have FAILED.`;
   }
   if (i === 2) {
-    return `A DOCTOR'S WHITE COAT (physician's white coat / medical lab coat) worn open over freshly pressed, wrinkle-free medical SCRUBS visible at the V-neck. NOT a suit jacket, NOT a blazer. The white coat is pure white, simple notched collar, dominates the upper torso. Beneath the coat, only the V-neck of the scrubs is visible — scrubs color: ${colorDesc}. Subject's hands either rest naturally at the sides or one hand is tucked casually into the coat pocket. The look reads as a confident physician on rounds. CRITICAL: white must dominate the image; do NOT render as a suit jacket.`;
+    return `STRICT GARMENT TYPE: DOCTOR'S WHITE COAT (NOT a suit jacket, NOT a blazer). A DOCTOR'S WHITE COAT (physician's white coat / medical lab coat) worn open over freshly pressed, wrinkle-free medical SCRUBS visible at the V-neck. The white coat is pure white, simple notched collar, dominates the upper torso. Beneath the coat, only the V-neck of the scrubs is visible — scrubs color: ${colorDesc}. Subject's hands either rest naturally at the sides or one hand is tucked casually into the coat pocket. The look reads as a confident physician on rounds. FAILURE DETECTOR: white coat must dominate the image; do NOT render as a suit jacket.`;
   }
 
   // Variants 3-5: scrubs only (no white coat). Each variant adds a
   // small detail so the scrubs-only trio also has visual variety.
+  //
+  // 2026-06-05 v2 (after Kristi's navy test rendered slot-5 as a navy
+  // BLAZER over a sweater, NOT scrubs): scrubs-only variants now also
+  // open with the no-suit guardrail and include a failure-detector
+  // tied specifically to the chosen scrub color. The dark-color
+  // exclusions inside the color description (see SCRUB_COLOR_DESCRIPTIONS
+  // above) reinforce this.
   if (i === 3) {
-    return `Freshly pressed, wrinkle-free medical SCRUBS only (no white coat) — short-sleeve V-neck medical scrub top in ${colorDesc}. The garment must clearly read as hospital scrubs: loose drape, V-neck collar, short sleeves, unstructured. NOT a t-shirt, NOT a polo, NOT a sweater, NOT workout wear. The ${scrubColor} of the scrubs must dominate the upper torso of the image.`;
+    return `STRICT GARMENT TYPE: short-sleeve V-neck medical SCRUB TOP. NOT a suit jacket, NOT a blazer, NOT a sport coat, NOT a t-shirt, NOT a polo, NOT a sweater, NOT athletic wear. Freshly pressed, wrinkle-free medical SCRUBS only (no white coat) in ${colorDesc}. The garment must clearly read as hospital scrubs: loose drape, V-neck collar, short sleeves, unstructured pullover construction. The ${scrubColor} of the scrubs must dominate the upper torso of the image. FAILURE DETECTOR: if the rendered torso is a tailored ${scrubColor} blazer/jacket instead of a V-neck scrub top, you have FAILED this variant.`;
   }
   if (i === 4) {
-    return `Freshly pressed, wrinkle-free medical SCRUBS only (no white coat) — short-sleeve V-neck medical scrub top in ${colorDesc}. Loose drape, V-neck collar, short sleeves, unstructured. NOT a t-shirt, NOT a polo. A classic medical stethoscope draped around the subject's neck — black tubing, silver-tone chestpiece, plain (no engraved text). The ${scrubColor} of the scrubs must dominate.`;
+    return `STRICT GARMENT TYPE: short-sleeve V-neck medical SCRUB TOP. NOT a suit jacket, NOT a blazer, NOT a sport coat, NOT a polo. Freshly pressed, wrinkle-free medical SCRUBS only (no white coat) in ${colorDesc}. Loose drape, V-neck collar, short sleeves, unstructured pullover. A classic medical stethoscope draped around the subject's neck — black tubing, silver-tone chestpiece, plain (no engraved text). The ${scrubColor} of the scrubs must dominate. FAILURE DETECTOR: if the rendered torso is a tailored ${scrubColor} blazer instead of a V-neck scrub top, you have FAILED this variant.`;
   }
   // i === 5
-  return `Freshly pressed, wrinkle-free medical SCRUBS only (no white coat) — short-sleeve V-neck medical scrub top in ${colorDesc}. Loose drape, V-neck collar, short sleeves, unstructured. NOT a t-shirt, NOT a polo, NOT athletic wear. The sleeves may show a subtle natural fold from being worn (not perfectly crisp) so the look reads as authentic mid-shift attire rather than studio styling. The ${scrubColor} of the scrubs must dominate the image.`;
+  return `STRICT GARMENT TYPE: short-sleeve V-neck medical SCRUB TOP. NOT a suit jacket, NOT a blazer, NOT a sport coat, NOT a sweater, NOT athletic wear. Freshly pressed, wrinkle-free medical SCRUBS only (no white coat) in ${colorDesc}. Loose drape, V-neck collar, short sleeves, unstructured pullover construction. The sleeves may show a subtle natural fold from being worn (not perfectly crisp) so the look reads as authentic mid-shift attire rather than studio styling. The ${scrubColor} of the scrubs must dominate the image. FAILURE DETECTOR: if the rendered torso is a tailored ${scrubColor} blazer or sweater instead of a V-neck scrub top, you have FAILED this variant.`;
 }
 
 const MEDICAL_GUARDRAILS_RULE = `CRITICAL MEDICAL ATTIRE GUARDRAILS — these override any default rendering tendencies:
