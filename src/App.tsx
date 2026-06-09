@@ -125,7 +125,8 @@ function getStepFromScreen(
     | "checkout"
     | "delivering"
     | "success"
-    | "admin",
+    | "admin"
+    | "faq",
 ): number | null {
   switch (screen) {
     case "upload":
@@ -1863,6 +1864,9 @@ type LandingV2Props = LandingProps & {
   // 2026-06-02 alongside the home-page filmstrip → HowItWorks swap; the
   // "How it works" nav link now routes here instead of anchor-scrolling.
   onNavigateHowItWorks: () => void;
+  // Navigate to the /faq spoke page. Added 2026-06-05 alongside the
+  // dedicated FAQScreen build.
+  onNavigateFAQ: () => void;
 };
 
 const LandingV2 = ({
@@ -1871,6 +1875,7 @@ const LandingV2 = ({
   onShowGallery,
   onNavigateHealthcare,
   onNavigateHowItWorks,
+  onNavigateFAQ,
 }: LandingV2Props) => {
   // Mobile detection drives the hero photo's aspect-ratio crop. On phones
   // (<= 640px) we use a tighter aspect (1.2 vs desktop's 1.86) so the dark
@@ -2157,6 +2162,29 @@ const LandingV2 = ({
                   }}
                 >
                   How it works
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    onNavigateFAQ();
+                  }}
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    textAlign: "left",
+                    background: "transparent",
+                    border: "none",
+                    padding: "10px 12px",
+                    fontSize: 14,
+                    color: BRAND.charcoal,
+                    fontFamily: SANS_STACK,
+                    cursor: "pointer",
+                    borderRadius: 4,
+                  }}
+                >
+                  FAQ
                 </button>
                 <button
                   type="button"
@@ -4513,6 +4541,285 @@ const readWideAngleFromFile = async (file: File): Promise<boolean | null> => {
     // → silently null so the generic Block 1 wording handles it.
     return null;
   }
+};
+
+// -------------------- /faq — full FAQ spoke page --------------------
+//
+// Standalone explainer reached from the hamburger menu (and direct URL).
+// Mirrors HowItWorksScreen's chrome (top nav with back link + bottom CTA)
+// but has a single FAQ section instead of the HowItWorks + FAQ pair.
+// Added 2026-06-05 per Kristi.
+//
+// 11 Q&As covering the full customer journey: process, likeness, photo
+// prep, cost, time, format, privacy, usage rights, regrets, brand
+// differentiator, money-back guarantee.
+
+const FAQ_QUESTIONS: { q: string; a: string }[] = [
+  {
+    q: "How does Generation Headshots work?",
+    a: "Upload 5 to 8 recent selfies, pick a style (Corporate, Creative, Healthcare, etc.) plus your preferred outfit, lighting, and background, and the AI generates 6 professional headshot variations in about 2 to 3 minutes. You preview all 6, pick your favorites, optionally add retouching, and download clean 2K files. No subscription — pay only when you generate.",
+  },
+  {
+    q: "Will the headshots actually look like me?",
+    a: "Yes — that's the whole point. The AI heavily weights your uploaded reference photos when learning your face, so the more representative your uploads (varied expressions, angles, good lighting), the closer the match. The first photo you upload counts the most, so lead with your favorite. We intentionally preserve real skin texture and your distinguishing features, including freckles, beauty marks, and asymmetries — these aren't filter-smoothed dolls; they're you.",
+  },
+  {
+    q: "What photos do I need to upload?",
+    a: "5 to 8 photos works best. Crop tightly to your head and shoulders, face a window for natural light (not overhead lighting — it casts shadows under the eyes), and use a rear camera if possible since selfie cameras are wide-angle and slightly distort the face. Avoid heavily filtered or low-resolution shots — blurry inputs give blurry results.",
+  },
+  {
+    q: "How much does it cost?",
+    a: "It's $2.99 to start a session — that unlocks the AI and lets you generate 6 headshots in your chosen style. After you preview the results, you pay per headshot you want to keep: $9.99 for Basic (realistic version only) or $14.99 for the Glow Up Bundle (realistic + polished + glam — three retouching levels of the same photo). No subscriptions, no monthly fees, no surprise charges.",
+  },
+  {
+    q: "How long does the whole process take?",
+    a: "About 5 to 10 minutes start to finish. The actual AI generation runs in 2 to 3 minutes. Picking favorites, choosing your retouch level, checking out, and receiving the final retouched files at delivery takes another few minutes. The fastest customers go from upload to final download in under 7 minutes.",
+  },
+  {
+    q: "What file format and resolution do I get?",
+    a: "Every delivered headshot is a high-quality 2K JPEG (1792 × 2400 pixels) suitable for LinkedIn, company directories, conference badges, press, and most professional uses. Files arrive in your inbox AND are available on-screen for direct download right after checkout.",
+  },
+  {
+    q: "Are my uploaded photos kept private?",
+    a: "Yes. Your uploads are used only to generate your headshots. We do not share them, sell them, or use them to train any AI model. Your reference photos and generated files are stored only as long as needed to deliver your order. If you'd like your data deleted at any time, email kristi@kristinasherk.com and we'll remove it.",
+  },
+  {
+    q: "Can I use these for LinkedIn, my business, or marketing materials?",
+    a: "Absolutely. You receive full personal and commercial usage rights to every headshot you purchase. Use them for LinkedIn, your company website, business cards, speaker bios, podcast guest bios, conference programs, press kits, dating apps — anywhere a professional photo belongs. The only thing we ask is that you not misrepresent the photos as something they aren't (e.g., government ID photos still require an actual photograph).",
+  },
+  {
+    q: "What if I don't love my first batch of headshots?",
+    a: "You're never stuck with a batch you don't like. Tap the refresh icon on any individual headshot to regenerate just that one, or go back to the style screen and generate a fresh batch of 6 with different settings (each customer gets up to 6 full batches per session). And if you choose the Glow Up Bundle at checkout, you get three retouching levels of the same final photo — realistic, polished, and glam — so you can pick whichever flavor reads best for your audience.",
+  },
+  {
+    q: "What makes this different from other AI headshot apps?",
+    a: "Generation Headshots was built and prompt-engineered by Kristina Sherk — a professional photographer with 20+ years of editorial and commercial portrait experience (clients include Refinery29 and Getty, with retouching on Hollywood campaigns and magazine covers). Most AI headshot tools are built by engineers and marketers; this one is built by someone who actually knows what makes a headshot look real, flattering, and professional — not plastic, AI-glossy, or 'off.' We deliberately preserve skin texture and distinguishing features, support realistic medical scrubs for healthcare professionals (with customer-pickable scrub colors), and tune every prompt with photographic intent.",
+  },
+  {
+    q: "What if I'm not happy with my purchase?",
+    a: "You get a full, no-questions-asked money-back guarantee. If you're unhappy with your delivered headshots for any reason — they don't look like you, they don't fit your needs, you change your mind — email kristi@kristinasherk.com and we'll refund you in full. No hoops, no satisfaction surveys, no fine print. The whole point is that you walk away with a headshot you actually love.",
+  },
+];
+
+type FAQScreenProps = {
+  onStart: () => void;
+  onBackToHome: () => void;
+};
+
+const FAQScreen = ({ onStart, onBackToHome }: FAQScreenProps) => {
+  const [isMobile, setIsMobile] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia("(max-width: 640px)").matches;
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(max-width: 640px)");
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+
+  return (
+    <div
+      style={{
+        background: BRAND.white,
+        color: BRAND.bodyText,
+        fontFamily: SANS_STACK,
+        minHeight: "100vh",
+      }}
+    >
+      {/* Top nav — back link + brand wordmark. Matches HowItWorksScreen. */}
+      <nav
+        style={{
+          height: 52,
+          padding: "0 clamp(16px, 4vw, 56px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          borderBottom: `1px solid #EFEAE0`,
+          background: BRAND.white,
+        }}
+      >
+        <button
+          onClick={onBackToHome}
+          aria-label="Back to home"
+          style={{
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            padding: 0,
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            fontFamily: SANS_STACK,
+            fontSize: 13,
+            color: BRAND.subText,
+            letterSpacing: 0.3,
+          }}
+        >
+          <ArrowLeft size={14} />
+          Back
+        </button>
+        <div
+          onClick={onBackToHome}
+          style={{
+            fontFamily: SERIF_STACK,
+            fontSize: 18,
+            fontWeight: 500,
+            color: BRAND.charcoal,
+            cursor: "pointer",
+            letterSpacing: -0.2,
+          }}
+        >
+          GenerAItion Headshots
+        </div>
+        <div style={{ width: 60 }} />
+      </nav>
+
+      {/* FAQ section */}
+      <section
+        style={{
+          maxWidth: 760,
+          margin: "0 auto",
+          padding: isMobile
+            ? "44px 20px 56px"
+            : "72px clamp(20px, 4vw, 56px) 84px",
+        }}
+      >
+        <div style={{ marginBottom: isMobile ? 32 : 44 }}>
+          <div
+            style={{
+              fontSize: 11,
+              letterSpacing: 2,
+              textTransform: "uppercase",
+              color: BRAND.gold,
+              fontWeight: 600,
+              marginBottom: 12,
+            }}
+          >
+            FAQ
+          </div>
+          <h2
+            style={{
+              fontFamily: SERIF_STACK,
+              fontSize: isMobile ? 30 : "clamp(34px, 4vw, 46px)",
+              fontWeight: 400,
+              color: BRAND.charcoal,
+              lineHeight: 1.15,
+              margin: 0,
+              letterSpacing: -0.5,
+            }}
+          >
+            Frequently asked questions
+          </h2>
+          <p
+            style={{
+              fontSize: isMobile ? 14 : 16,
+              color: BRAND.subText,
+              margin: "12px 0 0",
+              fontStyle: "italic",
+              fontFamily: SERIF_STACK,
+            }}
+          >
+            Everything customers ask before they generate.
+          </p>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: isMobile ? 28 : 36,
+          }}
+        >
+          {FAQ_QUESTIONS.map((item, i) => (
+            <div key={i}>
+              <h3
+                style={{
+                  fontFamily: SERIF_STACK,
+                  fontSize: isMobile ? 18 : 22,
+                  fontWeight: 500,
+                  color: BRAND.charcoal,
+                  lineHeight: 1.3,
+                  margin: "0 0 10px",
+                }}
+              >
+                {item.q}
+              </h3>
+              <p
+                style={{
+                  fontSize: isMobile ? 14 : 15,
+                  color: BRAND.bodyText,
+                  lineHeight: 1.65,
+                  margin: 0,
+                }}
+              >
+                {item.a}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Bottom CTA — mirrors HowItWorksScreen footer */}
+      <section
+        style={{
+          background: BRAND.cream,
+          textAlign: "center",
+          padding: isMobile
+            ? "48px 20px"
+            : "72px clamp(20px, 4vw, 56px)",
+        }}
+      >
+        <h2
+          style={{
+            fontFamily: SERIF_STACK,
+            fontSize: isMobile ? 26 : "clamp(30px, 3.6vw, 42px)",
+            fontWeight: 400,
+            color: BRAND.charcoal,
+            lineHeight: 1.2,
+            margin: "0 auto 24px",
+            maxWidth: 640,
+            letterSpacing: -0.3,
+          }}
+        >
+          Still have questions?
+        </h2>
+        <p
+          style={{
+            fontSize: 14,
+            color: BRAND.subText,
+            margin: "0 auto 24px",
+            maxWidth: 520,
+            lineHeight: 1.6,
+          }}
+        >
+          Email{" "}
+          <a
+            href="mailto:kristi@kristinasherk.com"
+            style={{ color: BRAND.charcoal, textDecoration: "underline" }}
+          >
+            kristi@kristinasherk.com
+          </a>{" "}
+          and I'll get back to you personally — or just try a session, it's
+          backed by a full money-back guarantee.
+        </p>
+        <Pill onClick={onStart} variant="primary" size="lg">
+          Generate 6 Headshots $2.99
+        </Pill>
+        <div
+          style={{
+            marginTop: 12,
+            fontSize: 13,
+            color: BRAND.subText,
+            letterSpacing: 0.3,
+          }}
+        >
+          Money-back guarantee · 5 minutes
+        </div>
+      </section>
+    </div>
+  );
 };
 
 // -------------------- Admin: single-use promo code dashboard --------------------
@@ -10116,7 +10423,10 @@ type Screen =
   // "admin" (2026-06-03): password-gated dashboard for Kristi + husband
   // to create / list / revoke single-use promo codes. Reached at /admin.
   // No public link — they navigate by typing the URL.
-  | "admin";
+  | "admin"
+  // "faq" (2026-06-05): full FAQ spoke page reached from the hamburger
+  // menu or direct /faq URL. Mirrors /how-it-works architecturally.
+  | "faq";
 
 const TOTAL_HEADSHOTS = 6;
 
@@ -10183,6 +10493,7 @@ export default function App() {
     const screenForPath = (path: string): Screen | null => {
       if (path === "/healthcare" || path === "/healthcare/") return "healthcare";
       if (path === "/how-it-works" || path === "/how-it-works/") return "how-it-works";
+      if (path === "/faq" || path === "/faq/") return "faq";
       if (path === "/admin" || path === "/admin/") return "admin";
       if (path === "/" || path === "") return "landing";
       return null;
@@ -11393,7 +11704,9 @@ export default function App() {
           string only). */}
       {screen !== "landing" &&
         screen !== "healthcare" &&
-        screen !== "admin" && (
+        screen !== "admin" &&
+        screen !== "faq" &&
+        screen !== "how-it-works" && (
           <Navbar
             cartCount={cart.length}
             onLogoClick={reset}
@@ -11557,6 +11870,13 @@ export default function App() {
             }
             setScreen("how-it-works");
           }}
+          onNavigateFAQ={() => {
+            // Sync URL + screen so direct refresh + bookmarks land on /faq.
+            if (window.location.pathname !== "/faq") {
+              window.history.pushState({}, "", "/faq");
+            }
+            setScreen("faq");
+          }}
           onNavigateHealthcare={() => {
             // Sync URL + screen state. We don't set entrySpecialty here yet —
             // it's only set when the customer actually clicks "Start" on the
@@ -11571,6 +11891,17 @@ export default function App() {
       )}
       {screen === "how-it-works" && (
         <HowItWorksScreen
+          onStart={handleStart}
+          onBackToHome={() => {
+            setScreen("landing");
+            if (window.location.pathname !== "/") {
+              window.history.pushState({}, "", "/");
+            }
+          }}
+        />
+      )}
+      {screen === "faq" && (
+        <FAQScreen
           onStart={handleStart}
           onBackToHome={() => {
             setScreen("landing");
