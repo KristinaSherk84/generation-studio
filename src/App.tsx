@@ -5769,6 +5769,22 @@ const StyleScreen = ({
   // hardcoded baby-blue look so existing customer expectations don't shift.
   const [scrubColor, setScrubColor] = useState<ScrubColor>("lightblue");
 
+  // Center the horizontal style-card carousel on mount (2026-06-05) so
+  // mobile users see partial Corporate on the left edge AND partial
+  // COMING SOON Realtor on the right edge — a visual hint that the row
+  // scrolls. Without this, the default scrollLeft=0 hides the right-hand
+  // cards entirely on narrow viewports and customers don't realize there
+  // are more styles to pick from.
+  const styleCarouselRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = styleCarouselRef.current;
+    if (!el) return;
+    // Only meaningful when content overflows the viewport (i.e. mobile).
+    // On desktop scrollWidth === clientWidth so we set 0 effectively.
+    const target = Math.max(0, (el.scrollWidth - el.clientWidth) / 2);
+    el.scrollLeft = target;
+  }, []);
+
   const canGenerate = Boolean(style && attire && lighting);
 
   return (
@@ -5841,6 +5857,7 @@ const StyleScreen = ({
           into view on mobile, then re-add padding on the inner scroll
           container so the first card still aligns with the left text. */}
       <div
+        ref={styleCarouselRef}
         style={{
           marginLeft: -32,
           marginRight: -32,
