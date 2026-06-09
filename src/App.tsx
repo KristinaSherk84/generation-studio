@@ -865,26 +865,30 @@ type PhotographerTipsModalProps = {
   onDismiss: () => void;
 };
 
+// Photographer's tips — shortened 2026-06-05 per Kristi. Each tip is now
+// one title line + one short body line. PHOTOG_TIPS is shared between
+// the PhotographerTipsModal (pre-upload popup) AND the LoadingScreen
+// cycling tips, so this single edit updates both.
 const PHOTOG_TIPS = [
   {
     title: "Upload your favorite shot first.",
-    body: "The AI weights the first photo heaviest when learning your face — lead with your best one.",
+    body: "The AI weights it the heaviest.",
   },
   {
-    title: "Face a window, not a ceiling.",
-    body: "Natural daylight beats overhead lights, which cast shadows under the eyes.",
+    title: "Face a Window.",
+    body: "Natural Light helps with face mapping.",
   },
   {
-    title: "No low-res photos.",
-    body: "Blurry inputs produce blurry results. Garbage in, garbage out.",
+    title: "No Low Rez Photos.",
+    body: "They hurt more than help.",
   },
   {
-    title: "5–8 varied photos.",
-    body: "Different expressions, angles, outfits. Include one close-crop — the AI mirrors your framing.",
+    title: "5-8 Diverse Photos.",
+    body: "Different expressions, angles, and lighting make for best results.",
   },
   {
-    title: "Use the rear camera, not selfie.",
-    body: "Selfie cameras are wide-angle and stretch your nose and face. Have a friend take it.",
+    title: "Crop to head and shoulders.",
+    body: "Zoomed-out shots aren't helpful.",
   },
 ];
 
@@ -970,7 +974,7 @@ const PhotographerTipsModal = ({ onDismiss }: PhotographerTipsModalProps) => (
           letterSpacing: -0.5,
         }}
       >
-        Before you upload
+        Before you Upload
       </h2>
       <p
         style={{
@@ -981,8 +985,8 @@ const PhotographerTipsModal = ({ onDismiss }: PhotographerTipsModalProps) => (
           lineHeight: 1.5,
         }}
       >
-        A few fundamentals from Kristi — twenty years behind the lens — that'll meaningfully
-        improve the photos the AI gives you back.
+        A few tips from the photographer/creator that will drastically
+        improve the generated shots.
       </p>
 
       <ol style={{ paddingLeft: 0, listStyle: "none", margin: 0 }}>
