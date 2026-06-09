@@ -451,7 +451,16 @@ function buildMedicalAttireVariant(
     return `STRICT GARMENT TYPE: DOCTOR'S WHITE COAT (NOT a suit jacket, NOT a blazer, NOT a sport coat). A DOCTOR'S WHITE COAT (physician's white coat / medical lab coat) worn open over freshly pressed, wrinkle-free medical SCRUBS visible at the V-neck. The white coat must be pure white and dominate the upper torso. Beneath the coat, only the V-neck of the scrubs is visible — scrubs color: ${colorDesc}. ${STETHOSCOPE_ANATOMY_DESCRIPTION} The look reads as a physician mid-shift. FAILURE DETECTOR: white coat must be the dominant garment; if a ${scrubColor} blazer dominates instead, you have FAILED.`;
   }
   if (i === 2) {
-    return `STRICT GARMENT TYPE: DOCTOR'S WHITE COAT (NOT a suit jacket, NOT a blazer). A DOCTOR'S WHITE COAT (physician's white coat / medical lab coat) worn open over freshly pressed, wrinkle-free medical SCRUBS visible at the V-neck. The white coat is pure white, simple notched collar, dominates the upper torso. Beneath the coat, only the V-neck of the scrubs is visible — scrubs color: ${colorDesc}. Subject's hands either rest naturally at the sides or one hand is tucked casually into the coat pocket. The look reads as a confident physician on rounds. FAILURE DETECTOR: white coat must dominate the image; do NOT render as a suit jacket.`;
+    // 2026-06-05 v3 — rewritten after slot-2 of navy generation kept
+    // drifting to a navy blazer. Removed "hand tucked into pocket"
+    // (corporate-coded pose that bleeds into business-portrait priors)
+    // AND "confident physician on rounds" (the word "confident" also
+    // pulls toward executive-headshot territory). Replaced with
+    // medical-neutral framing — subject simply standing with arms
+    // relaxed, lab coat open, scrub V-neck visible. STRICT GARMENT TYPE
+    // banner now matches the verbosity of variant 0 (the only lab-coat
+    // variant that hasn't drifted in testing).
+    return `STRICT GARMENT TYPE: The customer is wearing a DOCTOR'S WHITE COAT (physician's white coat / medical lab coat) over a hospital scrub top. The output IS NOT a business suit, IS NOT a tailored blazer, IS NOT a sport coat — even if other style cues might tempt that rendering. A DOCTOR'S WHITE COAT (physician's white coat / medical lab coat) worn open over freshly pressed, wrinkle-free medical SCRUBS visible at the V-neck. The white coat must be pure white, simple notched collar (no formal suit lapels), and dominate the upper torso. Beneath the coat, only the V-neck of the scrubs is visible — scrubs color: ${colorDesc}. The subject is standing naturally with arms relaxed at the sides — no posed hand-in-pocket framing, no formal executive stance. The look reads as a working physician, not a corporate executive. FAILURE DETECTOR: if the rendered torso is a tailored ${scrubColor} blazer or business jacket with NO visible white coat, you have FAILED this variant — the white coat MUST be the dominant garment.`;
   }
 
   // Variants 3-5: scrubs only (no white coat). Each variant adds a
