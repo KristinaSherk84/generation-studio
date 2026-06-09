@@ -448,7 +448,7 @@ function buildMedicalAttireVariant(
     return `STRICT GARMENT TYPE: The customer is wearing a DOCTOR'S WHITE COAT (physician's white coat / medical lab coat) over a hospital scrub top. The output IS NOT a business suit, IS NOT a tailored blazer, IS NOT a sport coat — even if other style cues might tempt that rendering. A DOCTOR'S WHITE COAT (physician's white coat / medical lab coat) worn open over freshly pressed, wrinkle-free medical SCRUBS visible at the V-neck. The white coat must be pure white, simple notched collar (no formal suit lapels), and dominate the upper torso. Beneath the coat, only the V-neck of the scrubs is visible — scrubs color: ${colorDesc}. The look reads as a physician mid-shift wearing a white coat over ${scrubColor} scrubs. FAILURE DETECTOR: if the rendered torso is a tailored ${scrubColor} blazer or business jacket with NO visible white coat, you have FAILED this variant — the white coat MUST be the dominant garment.`;
   }
   if (i === 1) {
-    return `STRICT GARMENT TYPE: DOCTOR'S WHITE COAT (NOT a suit jacket, NOT a blazer, NOT a sport coat). A DOCTOR'S WHITE COAT (physician's white coat / medical lab coat) worn open over freshly pressed, wrinkle-free medical SCRUBS visible at the V-neck. The white coat must be pure white and dominate the upper torso. Beneath the coat, only the V-neck of the scrubs is visible — scrubs color: ${colorDesc}. A classic medical stethoscope draped around the subject's neck and hanging over the white coat — black tubing, silver-tone chestpiece, plain (no engraved text). The look reads as a physician mid-shift. FAILURE DETECTOR: white coat must be the dominant garment; if a ${scrubColor} blazer dominates instead, you have FAILED.`;
+    return `STRICT GARMENT TYPE: DOCTOR'S WHITE COAT (NOT a suit jacket, NOT a blazer, NOT a sport coat). A DOCTOR'S WHITE COAT (physician's white coat / medical lab coat) worn open over freshly pressed, wrinkle-free medical SCRUBS visible at the V-neck. The white coat must be pure white and dominate the upper torso. Beneath the coat, only the V-neck of the scrubs is visible — scrubs color: ${colorDesc}. ${STETHOSCOPE_ANATOMY_DESCRIPTION} The look reads as a physician mid-shift. FAILURE DETECTOR: white coat must be the dominant garment; if a ${scrubColor} blazer dominates instead, you have FAILED.`;
   }
   if (i === 2) {
     return `STRICT GARMENT TYPE: DOCTOR'S WHITE COAT (NOT a suit jacket, NOT a blazer). A DOCTOR'S WHITE COAT (physician's white coat / medical lab coat) worn open over freshly pressed, wrinkle-free medical SCRUBS visible at the V-neck. The white coat is pure white, simple notched collar, dominates the upper torso. Beneath the coat, only the V-neck of the scrubs is visible — scrubs color: ${colorDesc}. Subject's hands either rest naturally at the sides or one hand is tucked casually into the coat pocket. The look reads as a confident physician on rounds. FAILURE DETECTOR: white coat must dominate the image; do NOT render as a suit jacket.`;
@@ -467,11 +467,29 @@ function buildMedicalAttireVariant(
     return `STRICT GARMENT TYPE: short-sleeve V-neck medical SCRUB TOP. NOT a suit jacket, NOT a blazer, NOT a sport coat, NOT a t-shirt, NOT a polo, NOT a sweater, NOT athletic wear. Freshly pressed, wrinkle-free medical SCRUBS only (no white coat) in ${colorDesc}. The garment must clearly read as hospital scrubs: loose drape, V-neck collar, short sleeves, unstructured pullover construction. The ${scrubColor} of the scrubs must dominate the upper torso of the image. FAILURE DETECTOR: if the rendered torso is a tailored ${scrubColor} blazer/jacket instead of a V-neck scrub top, you have FAILED this variant.`;
   }
   if (i === 4) {
-    return `STRICT GARMENT TYPE: short-sleeve V-neck medical SCRUB TOP. NOT a suit jacket, NOT a blazer, NOT a sport coat, NOT a polo. Freshly pressed, wrinkle-free medical SCRUBS only (no white coat) in ${colorDesc}. Loose drape, V-neck collar, short sleeves, unstructured pullover. A classic medical stethoscope draped around the subject's neck — black tubing, silver-tone chestpiece, plain (no engraved text). The ${scrubColor} of the scrubs must dominate. FAILURE DETECTOR: if the rendered torso is a tailored ${scrubColor} blazer instead of a V-neck scrub top, you have FAILED this variant.`;
+    return `STRICT GARMENT TYPE: short-sleeve V-neck medical SCRUB TOP. NOT a suit jacket, NOT a blazer, NOT a sport coat, NOT a polo. Freshly pressed, wrinkle-free medical SCRUBS only (no white coat) in ${colorDesc}. Loose drape, V-neck collar, short sleeves, unstructured pullover. ${STETHOSCOPE_ANATOMY_DESCRIPTION} The ${scrubColor} of the scrubs must dominate. FAILURE DETECTOR: if the rendered torso is a tailored ${scrubColor} blazer instead of a V-neck scrub top, you have FAILED this variant.`;
   }
   // i === 5
   return `STRICT GARMENT TYPE: short-sleeve V-neck medical SCRUB TOP. NOT a suit jacket, NOT a blazer, NOT a sport coat, NOT a sweater, NOT athletic wear. Freshly pressed, wrinkle-free medical SCRUBS only (no white coat) in ${colorDesc}. Loose drape, V-neck collar, short sleeves, unstructured pullover construction. The sleeves may show a subtle natural fold from being worn (not perfectly crisp) so the look reads as authentic mid-shift attire rather than studio styling. The ${scrubColor} of the scrubs must dominate the image. FAILURE DETECTOR: if the rendered torso is a tailored ${scrubColor} blazer or sweater instead of a V-neck scrub top, you have FAILED this variant.`;
 }
+
+// Stethoscope anatomy description (added 2026-06-05 after Kristi noted
+// the model was rendering BOTH ends of the draped stethoscope as
+// identical chestpieces — a stethoscope's two ends are visually
+// different, never twins).
+//
+// Real anatomy: a stethoscope is Y-shaped. The single-tube end
+// terminates in a SILVER CHESTPIECE (a flat ~2-inch metal disc with a
+// thin black rubber rim — used for auscultation). The other end SPLITS
+// into a Y-fork of TWO short metal binaural tubes ending in small soft
+// black EAR TIPS. When draped around the neck, one end (chestpiece)
+// hangs down one side; the other end (ear-tip fork) hangs down the
+// other side.
+//
+// "Littmann-style" gives Gemini a concrete brand anchor — Littmann
+// Cardiology III is the most commonly photographed clinical
+// stethoscope and has reliable training-data coverage.
+const STETHOSCOPE_ANATOMY_DESCRIPTION = `A classic Littmann-style binaural medical stethoscope draped around the subject's neck so one end hangs over each shoulder/chest. ANATOMY (CRITICAL): the two ends of the stethoscope are VISUALLY ASYMMETRIC and MUST render as different shapes — they are NEVER twins. One end terminates in the CHESTPIECE: a flat round silver-tone metal disc roughly 2 inches across with a thin black rubber diaphragm rim (this is the part doctors press against a patient's chest). The OTHER end splits into a Y-FORK of TWO short curved metal binaural tubes, each ending in a small black soft ear tip (these are the parts that would plug into the wearer's ears). FAILURE DETECTOR: if both ends render as identical chestpieces, or both ends render as identical ear-tip forks, you have FAILED — the two ends MUST be different shapes. Tubing is black, plain (no engraved text or brand names on the chestpiece).`;
 
 const MEDICAL_GUARDRAILS_RULE = `CRITICAL MEDICAL ATTIRE GUARDRAILS — these override any default rendering tendencies:
 
