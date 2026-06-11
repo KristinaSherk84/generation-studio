@@ -3,6 +3,70 @@ import { Upload, Check, X, ArrowLeft, RefreshCw, Loader2, Download, Maximize2, C
 import { upload } from "@vercel/blob/client";
 import exifr from "exifr";
 
+// GA4 / Google Ads conversion tracking helper (2026-06-11).
+// Fires once per Stripe payment_intent.id so refreshing the success page
+// (or repeated polls of /api/verify-checkout) don't double-count.
+// Per the conversion-tracking handoff: GA4 is already installed via gtag.js
+// in index.html (measurement ID G-4ZHCF8TYLX); the only missing piece was
+// the actual purchase event firing on completed payments.
+//
+// Wrapping the call in try/catch + a defensive window/gtag check means a
+// missing/blocked tag (ad-blocker, private mode, dev environment) silently
+// no-ops instead of breaking the post-checkout flow.
+declare global {
+  interface Window {
+    gtag?: (...args: unknown[]) => void;
+    dataLayer?: unknown[];
+  }
+}
+
+function firePurchaseEvent(params: {
+  transactionId: string;
+  // valueInCents — Stripe always returns amounts in the smallest currency
+  // unit. We divide here so GA4 stores dollars (its expected unit).
+  valueInCents: number;
+  currency: string;
+}): void {
+  if (typeof window === "undefined") return;
+  const { transactionId, valueInCents, currency } = params;
+  if (!transactionId) return;
+  // Dedup guard. localStorage (not sessionStorage) so refreshes AND
+  // separate tab reopens both stay silent.
+  const firedKey = `ga4_purchase_fired:${transactionId}`;
+  try {
+    if (window.localStorage.getItem(firedKey)) return;
+  } catch {
+    // localStorage unavailable (Safari private mode etc.) — proceed
+    // without dedup rather than skip the event entirely.
+  }
+  try {
+    if (typeof window.gtag !== "function") return;
+    const valueDollars = Math.round((valueInCents / 100) * 100) / 100;
+    const normalizedCurrency = (currency || "USD").toUpperCase();
+    window.gtag("event", "purchase", {
+      transaction_id: transactionId,
+      value: valueDollars,
+      currency: normalizedCurrency,
+      items: [
+        {
+          item_id: "ai-headshot",
+          item_name: "AI Headshot",
+          price: valueDollars,
+          quantity: 1,
+        },
+      ],
+    });
+    try {
+      window.localStorage.setItem(firedKey, "1");
+    } catch {
+      // localStorage unavailable — best-effort; on a refresh we'd
+      // re-fire, which is still better than no conversion data.
+    }
+  } catch (err) {
+    console.warn("firePurchaseEvent failed:", err);
+  }
+}
+
 // A photo the user has picked on the Upload screen. Lives in App-level state
 // so the Blob URLs survive navigating forward into Style / Grid / etc.
 export type UploadedPhoto = {
@@ -11047,11 +11111,33 @@ export default function App() {
             // session can include sessionId on every /api/generate.
             sessionId?: string;
             unlockExpiresAt?: number;
+            // New 2026-06-11: GA4 conversion-tracking fields. Server
+            // returns these when paid:true so the frontend can fire
+            // gtag('event','purchase',...) once per payment_intent.
+            paymentIntentId?: string;
+            amountTotal?: number;
+            currency?: string;
           };
 
           if (data.customerEmail) lastEmail = data.customerEmail;
 
           if (data.paid) {
+            // GA4 / Google Ads conversion tracking (2026-06-11). Fires
+            // the purchase event for the $2.99 entry payment. Dedup'd
+            // by paymentIntentId — the polling loop runs every few
+            // seconds during async settlement, so this guards against
+            // duplicate fires across the same poll loop AND across page
+            // refreshes after settlement.
+            if (
+              data.paymentIntentId &&
+              typeof data.amountTotal === "number"
+            ) {
+              firePurchaseEvent({
+                transactionId: data.paymentIntentId,
+                valueInCents: data.amountTotal,
+                currency: data.currency ?? "USD",
+              });
+            }
             if (data.sessionId && data.unlockExpiresAt) {
               markStripeUnlocked(data.sessionId, data.unlockExpiresAt);
               // Show the welcome popup with countdown timer.
@@ -11165,13 +11251,32 @@ export default function App() {
           body: JSON.stringify({ session_id: sessionId }),
         });
         if (!verifyResp.ok) throw new Error(`HTTP ${verifyResp.status}`);
-        const verifyData = (await verifyResp.json()) as { paid?: boolean };
+        const verifyData = (await verifyResp.json()) as {
+          paid?: boolean;
+          paymentIntentId?: string;
+          amountTotal?: number;
+          currency?: string;
+        };
         if (!verifyData.paid) {
           console.warn("Photo Stripe session not marked as paid");
           // Reset to landing so the customer isn't stuck on "delivering"
           // forever after we put them there a few lines up. (2026-05-27)
           setScreen("landing");
           return;
+        }
+        // GA4 / Google Ads conversion tracking (2026-06-11). Fires the
+        // purchase event for the photo-checkout payment. Dedup'd by
+        // paymentIntentId via localStorage so repeated /api/verify-checkout
+        // polls AND post-payment refreshes don't double-count.
+        if (
+          verifyData.paymentIntentId &&
+          typeof verifyData.amountTotal === "number"
+        ) {
+          firePurchaseEvent({
+            transactionId: verifyData.paymentIntentId,
+            valueInCents: verifyData.amountTotal,
+            currency: verifyData.currency ?? "USD",
+          });
         }
       } catch (err) {
         console.error("verify-checkout (photo) failed:", err);

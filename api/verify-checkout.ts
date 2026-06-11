@@ -61,6 +61,13 @@ type VerifyResponse = {
   // paid is true, pending is irrelevant and omitted.
   pending?: boolean;
   customerEmail?: string;
+  // GA4 / Google Ads conversion tracking fields (added 2026-06-11 per the
+  // conversion-tracking handoff). Returned only when paid:true. Frontend
+  // fires gtag('event','purchase',{ transaction_id, value, currency })
+  // exactly once per session_id using these values + a localStorage guard.
+  paymentIntentId?: string;
+  amountTotal?: number; // STRIPE NATIVE UNITS — cents. Frontend divides by 100.
+  currency?: string; // lowercase ISO 4217 from Stripe (e.g. "usd"); frontend uppercases.
   // Returned only when paid:true. The Stripe session ID is what the
   // frontend stores and forwards on every /api/generate call so the
   // server can re-verify the unlock.
@@ -129,7 +136,14 @@ export default async function handler(
       payment_status?: string;
       customer_details?: { email?: string } | null;
       customer_email?: string | null;
-      payment_intent?: { status?: string } | string | null;
+      payment_intent?:
+        | { id?: string; status?: string }
+        | string
+        | null;
+      // GA4 conversion-tracking fields (read 2026-06-11). Stripe always
+      // returns amount_total in the smallest currency unit (cents for USD).
+      amount_total?: number | null;
+      currency?: string | null;
       // Our own unlock-state fields written by this endpoint on first
       // confirmation and read on every subsequent /api/generate call.
       metadata?: Record<string, string> | null;
@@ -138,6 +152,10 @@ export default async function handler(
     const piStatus =
       session.payment_intent && typeof session.payment_intent === "object"
         ? session.payment_intent.status
+        : undefined;
+    const paymentIntentId =
+      session.payment_intent && typeof session.payment_intent === "object"
+        ? session.payment_intent.id
         : undefined;
 
     let paid = false;
@@ -221,6 +239,13 @@ export default async function handler(
       ...(email ? { customerEmail: email } : {}),
       ...(paid ? { sessionId } : {}),
       ...(paid && unlockExpiresAt ? { unlockExpiresAt } : {}),
+      // GA4 conversion-tracking fields (2026-06-11). Only included when
+      // paid so the frontend can fire gtag('event','purchase',...) once.
+      ...(paid && paymentIntentId ? { paymentIntentId } : {}),
+      ...(paid && typeof session.amount_total === "number"
+        ? { amountTotal: session.amount_total }
+        : {}),
+      ...(paid && session.currency ? { currency: session.currency } : {}),
     };
     return res.status(200).json(payload);
   } catch (error) {
