@@ -473,13 +473,18 @@ function buildMedicalAttireVariant(
   // exclusions inside the color description (see SCRUB_COLOR_DESCRIPTIONS
   // above) reinforce this.
   if (i === 3) {
-    return `STRICT GARMENT TYPE: short-sleeve V-neck medical SCRUB TOP. NOT a suit jacket, NOT a blazer, NOT a sport coat, NOT a t-shirt, NOT a polo, NOT a sweater, NOT athletic wear. Freshly pressed, wrinkle-free medical SCRUBS only (no white coat) in ${colorDesc}. The garment must clearly read as hospital scrubs: loose drape, V-neck collar, short sleeves, unstructured pullover construction. The ${scrubColor} of the scrubs must dominate the upper torso of the image. FAILURE DETECTOR: if the rendered torso is a tailored ${scrubColor} blazer/jacket instead of a V-neck scrub top, you have FAILED this variant.`;
+    // 2026-06-12 — tightened after crew-neck t-shirt drift on slot 4.
+    // "DEEP V-NECK" + FIGS/Cherokee brand anchor for garment type +
+    // explicit crew/scoop exclusion fixed the slip-through in testing.
+    return `Medical SCRUB TOP only (no white coat) in ${colorDesc}. DEEP V-NECK collar like a FIGS, Cherokee, or Healing Hands scrub top — the V cut is visible at the chest. Loose drape, short sleeves, unstructured pullover. NOT a t-shirt, NOT a crew-neck, NOT a scoop-neck, NOT a polo, NOT a sweater, NOT a blazer. The ${scrubColor} dominates the upper torso. FAILURE: if rendered as a t-shirt or blazer, you have FAILED.`;
   }
   if (i === 4) {
     return `STRICT GARMENT TYPE: short-sleeve V-neck medical SCRUB TOP. NOT a suit jacket, NOT a blazer, NOT a sport coat, NOT a polo. Freshly pressed, wrinkle-free medical SCRUBS only (no white coat) in ${colorDesc}. Loose drape, V-neck collar, short sleeves, unstructured pullover. ${STETHOSCOPE_ANATOMY_DESCRIPTION} The ${scrubColor} of the scrubs must dominate. FAILURE DETECTOR: if the rendered torso is a tailored ${scrubColor} blazer instead of a V-neck scrub top, you have FAILED this variant.`;
   }
   // i === 5
-  return `STRICT GARMENT TYPE: short-sleeve V-neck medical SCRUB TOP. NOT a suit jacket, NOT a blazer, NOT a sport coat, NOT a sweater, NOT athletic wear. Freshly pressed, wrinkle-free medical SCRUBS only (no white coat) in ${colorDesc}. Loose drape, V-neck collar, short sleeves, unstructured pullover construction. The sleeves may show a subtle natural fold from being worn (not perfectly crisp) so the look reads as authentic mid-shift attire rather than studio styling. The ${scrubColor} of the scrubs must dominate the image. FAILURE DETECTOR: if the rendered torso is a tailored ${scrubColor} blazer or sweater instead of a V-neck scrub top, you have FAILED this variant.`;
+  // 2026-06-12 — tightened after crew-neck drift on slot 6. Same pattern
+  // as variant 3 (DEEP V-NECK + brand anchor + crew-neck exclusion).
+  return `Medical SCRUB TOP only (no white coat) in ${colorDesc}. DEEP V-NECK collar like a FIGS, Cherokee, or Healing Hands scrub top — V cut visible at the chest. Loose drape, short sleeves, unstructured pullover. Sleeves may show a subtle natural fold from being worn. NOT a t-shirt, NOT a crew-neck, NOT a scoop-neck, NOT a polo, NOT a sweater, NOT a blazer. The ${scrubColor} dominates. FAILURE: if rendered as a t-shirt or blazer, you have FAILED.`;
 }
 
 // Stethoscope anatomy description (added 2026-06-05 after Kristi noted
