@@ -1106,59 +1106,26 @@ export default async function handler(
     //      BCC'd to kristi@kristinasherk.com per roadmap #9. ----
     await sendCustomerDeliveryEmail({ manifest });
 
-    // ---- Burn the $2.99 unlock token (2026-05-15) ----
+    // ---- Unlock burn DEFERRED (2026-06-12) ----
     //
-    // The unlock model: $2.99 buys 2 hours of /api/generate access OR
-    // until the customer downloads their first photo (whichever first).
-    // This is the "until they download" half: flip metadata.unlock_consumed
-    // to "true" on the Stripe Checkout Session so the unlock token can't
-    // be reused for a second batch of generations. Customers who want
-    // another try pay $2.99 again.
+    // The unlock burn used to happen here, immediately after delivery
+    // succeeded. That killed the bonus "regenerate in another style"
+    // teaser on the Download screen — it fires its own /api/generate
+    // request to show a watermarked preview in a different style, but
+    // the sessionId it passes was already burned by this very endpoint
+    // so the call returned 402. Bug had been live for months.
     //
-    // Only applies when the client passed stripeSessionId — promo-unlock
-    // customers (Tiffany etc.) don't have one, and we intentionally leave
-    // their unlock alone so they can come back and use the promo again.
+    // Fix: defer the burn to the customer's first download click on the
+    // Download screen. The frontend fires POST /api/burn-unlock with the
+    // sessionId on the first photo download. This matches the original
+    // unlock-model intent ("$2.99 buys access until first download or
+    // 4h, whichever first") and lets the bonus teaser slip through
+    // naturally because it fires on mount, BEFORE any download click.
     //
-    // Failure mode is non-blocking: if the Stripe metadata write fails
-    // for any reason, we still return success to the user — they paid,
-    // they got their photo, we'll just have a slightly leaky unlock
-    // that the 4h TTL will eventually clean up.
-    if (body.stripeSessionId && body.stripeSessionId.startsWith("cs_")) {
-      const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
-      if (stripeSecretKey) {
-        try {
-          const formBody = new URLSearchParams();
-          formBody.append("metadata[unlock_consumed]", "true");
-          const burnResp = await fetch(
-            `https://api.stripe.com/v1/checkout/sessions/${encodeURIComponent(body.stripeSessionId)}`,
-            {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${stripeSecretKey}`,
-                "Content-Type": "application/x-www-form-urlencoded",
-              },
-              body: formBody.toString(),
-            },
-          );
-          if (!burnResp.ok) {
-            const errText = await burnResp.text().catch(() => "");
-            console.warn(
-              JSON.stringify({
-                type: "unlock_burn_failed",
-                status: burnResp.status,
-                sessionId: body.stripeSessionId,
-                body: errText.slice(0, 300),
-              }),
-            );
-          }
-        } catch (err) {
-          console.warn(
-            "unlock burn threw:",
-            err instanceof Error ? err.message : String(err),
-          );
-        }
-      }
-    }
+    // Edge case: a customer who downloads NOTHING never burns the
+    // unlock. Acceptable — the 4h TTL is the backstop, and the
+    // population of "customers who paid but never downloaded" is
+    // basically zero in practice.
 
     return res.status(200).json({
       deliveryId,

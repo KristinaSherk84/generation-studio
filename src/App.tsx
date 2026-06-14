@@ -9109,6 +9109,11 @@ const DownloadScreen = ({
   // tiny "Preparing…" state on its button. Separate from `downloaded` so a
   // user re-downloading doesn't lose their completed ✓ state.
   const [inFlight, setInFlight] = useState<Set<number>>(new Set());
+  // Whether we've already fired the /api/burn-unlock request on this
+  // screen instance. Once true, subsequent download clicks skip the
+  // network call. The endpoint is idempotent server-side anyway, this
+  // is just to avoid extra round trips. (2026-06-12)
+  const unlockBurned = useRef(false);
   // Show the instructions modal automatically on every mount — UNLESS the
   // user has previously ticked "Don't show again" (persisted in localStorage
   // so it survives page reloads and future sessions).
@@ -9168,6 +9173,41 @@ const DownloadScreen = ({
   //   so the file actually saves to the Downloads folder in one click.
   const handleDownload = async (url: string, index: number) => {
     if (inFlight.has(index)) return;
+
+    // Burn the $2.99 unlock on the FIRST download click (2026-06-12).
+    // Moved here from /api/deliver so the bonus "regenerate in another
+    // style" teaser, which fires on Download-screen mount BEFORE any
+    // click, can still hit /api/generate successfully. unlockBurned ref
+    // dedups: only the first click in this screen instance fires the
+    // network request. The endpoint is idempotent server-side too, so
+    // a double-fire is harmless — this guard is just to avoid the round
+    // trip on every click after the first.
+    if (!unlockBurned.current) {
+      unlockBurned.current = true;
+      try {
+        const sid =
+          typeof window !== "undefined"
+            ? window.localStorage.getItem("stripe_session_id")
+            : null;
+        if (sid && sid.startsWith("cs_")) {
+          // Fire-and-forget. If it fails we'll silently leak the unlock
+          // for 4h until the TTL clears it — acceptable.
+          void fetch("/api/burn-unlock", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ session_id: sid }),
+          }).catch((err) => {
+            console.warn(
+              "burn-unlock failed:",
+              err instanceof Error ? err.message : String(err),
+            );
+          });
+        }
+      } catch {
+        // localStorage unavailable (private mode etc.) — no-op. The
+        // session-id read failure means we can't burn anyway.
+      }
+    }
 
     // --- Mobile path: open the IN-APP photo viewer, not a new tab ---
     //
