@@ -131,6 +131,68 @@ export async function listCodes(): Promise<PromoRecord[]> {
 }
 
 /**
+ * Check if a single-use KV code is currently active for /api/generate
+ * calls. Returns true iff the code:
+ *   - exists in KV
+ *   - is NOT revoked
+ *   - was consumed (i.e. /api/verify-promo accepted it on entry)
+ *   - was consumed within the last 4 hours (matches the Stripe unlock TTL)
+ *
+ * Why a 4h window: when a customer enters a single-use code, we want
+ * them to be able to generate multiple batches over a reasonable session
+ * (same as the $2.99 Stripe unlock window). Without this window,
+ * /api/verify-promo would consume the code and /api/generate would have
+ * no way to know the code was valid — every subsequent generate call
+ * would 402. Bug found 2026-06-21.
+ *
+ * Idempotent and read-only. Does NOT consume or modify the record.
+ */
+const PROMO_GENERATE_WINDOW_MS = 4 * 60 * 60 * 1000; // 4 hours
+
+export async function isCodeActiveForGenerate(
+  code: string,
+): Promise<boolean> {
+  if (!code) return false;
+  try {
+    const existing = await redis.get<PromoRecord>(recordKey(code));
+    if (!existing) return false;
+    if (existing.revoked) return false;
+    if (!existing.consumed) return false; // not yet activated
+    if (!existing.consumedAt) return false;
+    const consumedAtMs = Date.parse(existing.consumedAt);
+    if (!Number.isFinite(consumedAtMs)) return false;
+    return Date.now() - consumedAtMs <= PROMO_GENERATE_WINDOW_MS;
+  } catch {
+    // KV unavailable — fail closed (return false). The caller falls
+    // through to other unlock paths (Stripe session), and a real customer
+    // with a valid Stripe session can still generate. Only KV-promo users
+    // see the impact.
+    return false;
+  }
+}
+
+/**
+ * Permanently delete a code from Redis. Removes both the record at
+ * `promo:{code}` AND the index-set membership at `promo:_index`. Unlike
+ * revokeCode this is destructive — the audit trail is gone. Use for
+ * test codes, typos, or codes that no longer need to be tracked.
+ *
+ * Returns true if the code existed and was deleted; false if no record
+ * was found (idempotent).
+ */
+export async function deleteCode(code: string): Promise<boolean> {
+  const key = recordKey(code);
+  const existing = await redis.get<PromoRecord>(key);
+  if (!existing) return false;
+  // Two-step delete: remove from index first, then drop the record.
+  // If the record drop fails for some reason, the index entry is
+  // already gone, so listCodes will filter it out as an orphan.
+  await redis.srem(INDEX_KEY, code.toLowerCase());
+  await redis.del(key);
+  return true;
+}
+
+/**
  * Revoke a code so it can no longer be redeemed. Doesn't delete — keeps
  * the record around for audit. Idempotent.
  */

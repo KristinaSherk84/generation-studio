@@ -27,6 +27,7 @@
 
 import { GoogleGenAI } from "@google/genai";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { isCodeActiveForGenerate } from "./lib/promoStore.js";
 
 // Vercel function-level config. Allow up to 5 minutes for the full 6-image run.
 export const maxDuration = 300;
@@ -1248,24 +1249,35 @@ async function verifyUnlock(
   promoCode: string | undefined,
   stripeSecretKey: string,
 ): Promise<UnlockCheck> {
-  // Promo path takes precedence — cheaper (no network call) and the promo
-  // code is a power-user bypass that Kristi gates by sharing manually.
+  // Promo path takes precedence — cheaper (no network call beyond an
+  // optional KV lookup) and the promo code is a power-user bypass.
+  //
+  // Two acceptance paths:
+  //   1. Legacy env-var code (kristi-vip-abc): case-insensitive match
+  //      against process.env.PROMO_CODE.
+  //   2. KV-backed single-use codes (gh-xxxxxx): code was consumed within
+  //      the last 4 hours via /api/verify-promo. The 4h window matches
+  //      the Stripe unlock TTL — the customer can generate multiple
+  //      batches in one session without re-entering the code.
   //
   // Case-insensitive compare (lowercased both sides) — matches the behavior
   // of /api/verify-promo. The landing-page input force-uppercases the user's
-  // typed code before submission, while PROMO_CODE in Vercel env is likely
-  // stored lowercase. Without lowercasing here, verify-promo accepts the
-  // code at the landing screen but /api/generate then 402's every call.
-  // Bug found 2026-05-18.
+  // typed code before submission, while PROMO_CODE in Vercel env and the
+  // KV records are lowercase. Without lowercasing here, verify-promo would
+  // accept the code at the landing screen but /api/generate would 402 on
+  // every call. Bug found 2026-05-18 (env path), 2026-06-21 (KV path).
   if (promoCode && typeof promoCode === "string") {
+    const normalizedCode = promoCode.trim().toLowerCase();
+    // Path 1: legacy env-var code.
     const envCode = process.env.PROMO_CODE;
     if (
       envCode &&
-      constantTimeEquals(
-        promoCode.trim().toLowerCase(),
-        envCode.trim().toLowerCase(),
-      )
+      constantTimeEquals(normalizedCode, envCode.trim().toLowerCase())
     ) {
+      return { ok: true, via: "promo" };
+    }
+    // Path 2: KV-backed single-use code, consumed within 4h.
+    if (await isCodeActiveForGenerate(normalizedCode)) {
       return { ok: true, via: "promo" };
     }
     // Fall through to stripe check if a promo was sent but didn't match —
