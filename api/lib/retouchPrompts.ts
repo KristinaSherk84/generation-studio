@@ -134,25 +134,22 @@ Under-eye direction: Render the skin around the eyes rested, bright, and color c
 
 Pore micro-texture preservation — applies to every tier below. Preserve the 3D micro-texture of the skin surface (the raised/recessed terrain of pores at close magnification). Pore micro-texture stays at 100% on the face, neck, and visible décolletage. The smoothing operates on surface evenness only — the pore texture itself remains visible at normal viewing distance.`;
 
-// Glam — all ages. v8 2026-05-22: full rewrite by Kristi. Now SELF-CONTAINED
-// (no IDENTITY_ANCHOR prepend, no PORE_ANCHOR append — own identity and pore
-// preservation language inline). Key changes from v7:
+// Glam (female) — all ages. v9 2026-06-21: small rewrite by Kristi.
+// Only change from v8: dropped the TEETH bullet entirely. The mouth-
+// and-smile lock already prevents teeth changes, and the explicit
+// whitening + alignment directive was producing unnaturally bright /
+// re-arranged teeth on real customer outputs.
+//
+// v8 history (2026-05-22 — kept for reference):
 //   - Tightened identity preservation paragraph (kept the locks, dropped
 //     the verbose explanation)
-//   - Added SHINE bullet (remove hot spots from highlights)
-//   - Added EYES bullet (brighten iris bottoms, intensify native eye
-//     color, slight saturation, add catchlights at iris bottom)
-//   - Added HAIR bullet (preserve color/texture, add shine, fill
-//     background gaps, remove flyaways, make slightly fuller)
+//   - Added SHINE bullet, EYES bullet, HAIR bullet
 //   - SURFACE EVENNESS gained explicit "remove all wrinkles and 11
 //     lines from forehead and area between brows"
 //   - PORE STRUCTURE allows "wrinkles can be completely removed"
-//     (was "almost completely")
 //   - ADD CONTOUR jawline shadow now sweeps "temples area down to
-//     the chin" (was "ear to chin"); slightly unsaturated bronzer
-//     specified
-//   - ANTI-PLASTIC tightened — dropped "plastic" callout (redundant
-//     with doll-like/filter-smoothed)
+//     the chin"; slightly unsaturated bronzer specified
+//   - ANTI-PLASTIC tightened
 export const RETOUCH_GLAM = `Identity preservation — non-negotiable, overrides every other directive below. Preserve the subject's facial features and expression with 100% precision. The retouched face must remain UNMISTAKABLY the same person. Match EXACTLY all facial features and distinguishing mark. DO NOT change facial feature shapes. Retouching operates ONLY on the skin SURFACE — never on facial structure. Act as a high end beauty retoucher.
 
 Background: generate identical background to the input reference photo, do not change anything in the background. Regenerate an identical background.
@@ -177,7 +174,6 @@ Master directive: Editorial, significant, beauty retouching, equivalent to beaut
 - ANTI-PLASTIC GUARDRAIL: Glam should NEVER produce doll-like, or filter-smoothed skin. The pore preservation is the safeguard against that.
 - MAKEUP: Add SUBTLE eye accent — enhancement of natural lash definition. Apply soft, thin, powder eye liner. Exaggerate or amplify whatever eye makeup level was already present in the input — only refine and lift, do not transform. Slightly darken and fill in eye brows. LIPS: do NOT alter, darken, deepen, outline, or punch lip color. Render the lips EXACTLY as they appear in the input photo — same color, same shape, same edges, same saturation.
 - HAIR: Do not change color, texture or placement of hair. Add shine to hair highlights, fill in any gaps where the background is showing through. Remove distracting fly aways. Make hair slightly fuller.
-- TEETH: Only if teeth are visible, moderately neutralize yellow color of teeth by adding blue if teeth are off color. Moderately fix alignment if teeth are showing in the image. Do not over-whiten or generate teeth that do not look like the original. Slightly fix alignment of teeth as if Invisalign was used to help straighten teeth.
 
 Pore micro-texture preservation - Preserve the 3D micro-texture of the skin surface (the raised/recessed terrain of pores at close magnification). Pore micro-texture stays at 100% on the face, neck, and visible décolletage. The smoothing operates on surface evenness only — the pore texture itself remains visible at normal viewing distance.`;
 

@@ -8290,12 +8290,11 @@ const RetouchScreen = ({
           letterSpacing: -0.3,
         }}
       >
-        Pick a retouch level for each headshot:
+        Your retouch level for each headshot:
       </h1>
-      {/* Compact 2-line explainer (2026-06-03 v2). Replaces both the
-          inline per-row descriptions AND the longer cream card so the
-          mobile layout stays dense — customer reads this once at the top
-          and from then on the rows are pure label + price + radio. */}
+      {/* Compact 3-line explainer (2026-06-21). Re-framed after default
+          flipped from Basic → Glow Up Bundle. The new framing positions
+          Glow Up as what they're getting unless they remove it. */}
       <div
         style={{
           marginBottom: 20,
@@ -8304,13 +8303,21 @@ const RetouchScreen = ({
           lineHeight: 1.55,
         }}
       >
-        <div>
-          <span style={{ fontWeight: 700 }}>Basic:</span> Realistic version only{" "}
-          <span style={{ color: C.mediumGrey }}>$9.99</span>
+        <div style={{ marginBottom: 4 }}>
+          You're getting the{" "}
+          <span style={{ fontWeight: 700 }}>Glow Up Bundle</span> on each
+          photo — three retouched versions for $14.99. Downshift to Basic
+          if you'd rather just the realistic version.
         </div>
         <div>
-          <span style={{ fontWeight: 700 }}>Glow Up Bundle:</span> Smoother
-          skin + magazine polish — $5 more for 3 versions.
+          <span style={{ fontWeight: 700 }}>Glow Up Bundle:</span> Realistic
+          + Polished + Glam — three retouching levels of each photo.{" "}
+          <span style={{ color: C.mediumGrey }}>$14.99</span>
+        </div>
+        <div>
+          <span style={{ fontWeight: 700 }}>Basic:</span> Realistic version
+          only.{" "}
+          <span style={{ color: C.mediumGrey }}>$9.99</span>
         </div>
       </div>
 
@@ -11563,7 +11570,12 @@ export default function App() {
     setRetouchTiers((prev) => {
       const next = { ...prev };
       for (const url of selections) {
-        if (!(url in next)) next[url] = "basic";
+        // 2026-06-21: default flipped from "basic" → "deluxe" per Kristi.
+        // Few customers were upgrading to Glow Up Bundle on their own;
+        // loss-aversion framing (defaulting to the better tier, letting
+        // them downshift) should lift Glam attach rate without raising
+        // prices. The Default-to-Glow-Up roadmap item.
+        if (!(url in next)) next[url] = "deluxe";
       }
       return next;
     });
