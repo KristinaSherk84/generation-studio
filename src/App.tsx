@@ -1388,8 +1388,9 @@ const Pill = ({
 type GalleryScreenProps = {
   onBack: () => void;
   onStart: () => void;
+  entryFeeEnabled: boolean;
 };
-const GalleryScreen = ({ onBack, onStart }: GalleryScreenProps) => (
+const GalleryScreen = ({ onBack, onStart, entryFeeEnabled }: GalleryScreenProps) => (
   <div
     style={{
       background: BRAND.white,
@@ -1573,19 +1574,23 @@ const GalleryScreen = ({ onBack, onStart }: GalleryScreenProps) => (
       >
         Yours could be next.
       </h2>
-      <Pill onClick={onStart} size="lg">
-        Generate 6 Headshots $2.99
-      </Pill>
-      <div
-        style={{
-          marginTop: 14,
-          fontSize: 13,
-          color: BRAND.subText,
-        }}
-      >
-        Starts at <strong style={{ color: BRAND.charcoal }}>$2.99</strong> ·
-        Money-back guarantee · 5 minutes
-      </div>
+      <StartCTAWithSubtitle
+        entryFeeEnabled={entryFeeEnabled}
+        onStart={onStart}
+        size="lg"
+        classicSubtitle={
+          <div
+            style={{
+              marginTop: 14,
+              fontSize: 13,
+              color: BRAND.subText,
+            }}
+          >
+            Starts at <strong style={{ color: BRAND.charcoal }}>$2.99</strong> ·
+            Money-back guarantee · 5 minutes
+          </div>
+        }
+      />
     </section>
   </div>
 );
@@ -1917,6 +1922,59 @@ const HowItWorks = ({ isMobile }: HowItWorksProps) => {
   );
 };
 
+// ---- Free-tier CTA helper (2026-07-03) ----
+// Renders the primary "Generate" button + a subtitle line. Copy changes
+// based on ENTRY_FEE_ENABLED:
+//   Classic mode: "Generate 6 Headshots $2.99" + optional classic subtitle
+//   Free-tier:    "Generate your first 6 free" + pricing subtitle
+// Every CTA on the landing/how-it-works/healthcare/faq pages goes through
+// this so flipping the flag re-labels everything in one shot.
+type StartCTAWithSubtitleProps = {
+  entryFeeEnabled: boolean;
+  onStart: () => void;
+  variant?: React.ComponentProps<typeof Pill>["variant"];
+  size?: React.ComponentProps<typeof Pill>["size"];
+  // Optional subtitle shown BELOW the button in classic mode only. Pass
+  // nothing to hide the classic subtitle. In free-tier mode this prop is
+  // ignored and the pricing subtitle is shown.
+  classicSubtitle?: React.ReactNode;
+};
+
+const StartCTAWithSubtitle = ({
+  entryFeeEnabled,
+  onStart,
+  variant,
+  size = "lg",
+  classicSubtitle,
+}: StartCTAWithSubtitleProps) => (
+  <>
+    <Pill onClick={onStart} variant={variant} size={size}>
+      {entryFeeEnabled
+        ? "Generate 6 Headshots $2.99"
+        : "Generate your first 6 free"}
+    </Pill>
+    {entryFeeEnabled ? (
+      classicSubtitle
+    ) : (
+      <div
+        style={{
+          marginTop: 12,
+          fontSize: 13,
+          color: BRAND.subText,
+          letterSpacing: 0.3,
+          textAlign: "center",
+          maxWidth: 480,
+          marginLeft: "auto",
+          marginRight: "auto",
+          lineHeight: 1.5,
+        }}
+      >
+        Then $2.99 to unlock unlimited regens · $9.99–$14.99 per headshot
+      </div>
+    )}
+  </>
+);
+
 type LandingV2Props = LandingProps & {
   // Navigate the customer to the /healthcare vertical landing page.
   // Wired into App.tsx, which sets the URL + screen state + clears any
@@ -1931,6 +1989,10 @@ type LandingV2Props = LandingProps & {
   // Navigate to the /faq spoke page. Added 2026-06-05 alongside the
   // dedicated FAQScreen build.
   onNavigateFAQ: () => void;
+  // Free-tier feature flag (2026-07-03). Swaps CTA copy between
+  // "Generate 6 Headshots $2.99" (classic) and "Generate your first 6
+  // free" (+ pricing subtitle) at every button site on this page.
+  entryFeeEnabled: boolean;
 };
 
 const LandingV2 = ({
@@ -1940,6 +2002,7 @@ const LandingV2 = ({
   onNavigateHealthcare,
   onNavigateHowItWorks,
   onNavigateFAQ,
+  entryFeeEnabled,
 }: LandingV2Props) => {
   // Mobile detection drives the hero photo's aspect-ratio crop. On phones
   // (<= 640px) we use a tighter aspect (1.2 vs desktop's 1.86) so the dark
@@ -2655,19 +2718,23 @@ const LandingV2 = ({
           padding: isMobile ? "8px 16px 56px" : "8px clamp(20px, 4vw, 56px) 72px",
         }}
       >
-        <Pill onClick={onStart} size="lg">
-          Generate 6 Headshots $2.99
-        </Pill>
-        <div
-          style={{
-            marginTop: 10,
-            fontSize: 13,
-            color: BRAND.subText,
-            letterSpacing: 0.3,
-          }}
-        >
-          Money-back guarantee · 5 minutes
-        </div>
+        <StartCTAWithSubtitle
+          entryFeeEnabled={entryFeeEnabled}
+          onStart={onStart}
+          size="lg"
+          classicSubtitle={
+            <div
+              style={{
+                marginTop: 10,
+                fontSize: 13,
+                color: BRAND.subText,
+                letterSpacing: 0.3,
+              }}
+            >
+              Money-back guarantee · 5 minutes
+            </div>
+          }
+        />
       </section>
 
       {/* ========== FOUNDER (photo + personal note) ==========
@@ -3582,11 +3649,14 @@ type HealthcareScreenProps = {
   // Lets a healthcare-vertical visitor enter a promo code without having
   // to detour through the home page. Added 2026-05-27.
   onPromoUnlock: (code: string) => void;
+  // Free-tier CTA copy flag (2026-07-03).
+  entryFeeEnabled: boolean;
 };
 const HealthcareScreen = ({
   onStart,
   onBackToHome,
   onPromoUnlock,
+  entryFeeEnabled,
 }: HealthcareScreenProps) => {
   const [openPair, setOpenPair] = useState<typeof HEALTHCARE_PAIRS[number] | null>(null);
 
@@ -3714,25 +3784,32 @@ const HealthcareScreen = ({
           Three lab coats, three colored scrubs, all of you. Ready in under five minutes
           — for about 1% the cost of an in-person session.
         </p>
-        <Pill onClick={onStart} variant="primary" size="lg">
-          Generate 6 Headshots $2.99
-        </Pill>
         {/* Price clarification under the hero CTA. Customers don't "get" the
             6 previews — they pay $2.99 to try, then $9.99 per keeper they
             actually want to download. This line prevents an over-promise
-            that would damage trust at the checkout screen. */}
-        <p
-          style={{
-            marginTop: 16,
-            fontSize: 14,
-            lineHeight: 1.5,
-            color: BRAND.subText,
-            maxWidth: 480,
-            margin: "16px auto 0",
-          }}
-        >
-          Only buy what looks like you. Downloads starting at $9.99.
-        </p>
+            that would damage trust at the checkout screen. Free-tier flag
+            swaps the button text + subtitle to the free-tier pricing line
+            (2026-07-03). */}
+        <StartCTAWithSubtitle
+          entryFeeEnabled={entryFeeEnabled}
+          onStart={onStart}
+          variant="primary"
+          size="lg"
+          classicSubtitle={
+            <p
+              style={{
+                marginTop: 16,
+                fontSize: 14,
+                lineHeight: 1.5,
+                color: BRAND.subText,
+                maxWidth: 480,
+                margin: "16px auto 0",
+              }}
+            >
+              Only buy what looks like you. Downloads starting at $9.99.
+            </p>
+          }
+        />
       </section>
 
       {/* MEDICAL FILMSTRIP — 7 composited pairs, infinite scroll, click to enlarge */}
@@ -4155,9 +4232,12 @@ const HealthcareScreen = ({
         >
           Ready when you are.
         </h2>
-        <Pill onClick={onStart} variant="primary" size="lg">
-          Generate 6 Headshots $2.99
-        </Pill>
+        <StartCTAWithSubtitle
+          entryFeeEnabled={entryFeeEnabled}
+          onStart={onStart}
+          variant="primary"
+          size="lg"
+        />
       </section>
 
       {/* FOOTER — charcoal block matching home page */}
@@ -4304,6 +4384,8 @@ const HealthcareScreen = ({
 type HowItWorksScreenProps = {
   onStart: () => void;
   onBackToHome: () => void;
+  // Free-tier CTA copy flag (2026-07-03).
+  entryFeeEnabled: boolean;
 };
 
 // FAQ content — generic placeholders Kristi will edit. Kept in a const
@@ -4347,6 +4429,7 @@ const HOW_IT_WORKS_FAQ: { q: string; a: string }[] = [
 const HowItWorksScreen = ({
   onStart,
   onBackToHome,
+  entryFeeEnabled,
 }: HowItWorksScreenProps) => {
   const [isMobile, setIsMobile] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
@@ -4514,19 +4597,24 @@ const HowItWorksScreen = ({
         >
           Ready to see what your headshot could look like?
         </h2>
-        <Pill onClick={onStart} variant="primary" size="lg">
-          Generate 6 Headshots $2.99
-        </Pill>
-        <div
-          style={{
-            marginTop: 12,
-            fontSize: 13,
-            color: BRAND.subText,
-            letterSpacing: 0.3,
-          }}
-        >
-          Money-back guarantee · 5 minutes
-        </div>
+        <StartCTAWithSubtitle
+          entryFeeEnabled={entryFeeEnabled}
+          onStart={onStart}
+          variant="primary"
+          size="lg"
+          classicSubtitle={
+            <div
+              style={{
+                marginTop: 12,
+                fontSize: 13,
+                color: BRAND.subText,
+                letterSpacing: 0.3,
+              }}
+            >
+              Money-back guarantee · 5 minutes
+            </div>
+          }
+        />
       </section>
 
       {/* ========== FOOTER ========== */}
@@ -4668,9 +4756,11 @@ const FAQ_QUESTIONS: { q: string; a: string }[] = [
 type FAQScreenProps = {
   onStart: () => void;
   onBackToHome: () => void;
+  // Free-tier CTA copy flag (2026-07-03).
+  entryFeeEnabled: boolean;
 };
 
-const FAQScreen = ({ onStart, onBackToHome }: FAQScreenProps) => {
+const FAQScreen = ({ onStart, onBackToHome, entryFeeEnabled }: FAQScreenProps) => {
   const [isMobile, setIsMobile] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     return window.matchMedia("(max-width: 640px)").matches;
@@ -4868,19 +4958,24 @@ const FAQScreen = ({ onStart, onBackToHome }: FAQScreenProps) => {
           and I'll get back to you personally — or just try a session, it's
           backed by a full money-back guarantee.
         </p>
-        <Pill onClick={onStart} variant="primary" size="lg">
-          Generate 6 Headshots $2.99
-        </Pill>
-        <div
-          style={{
-            marginTop: 12,
-            fontSize: 13,
-            color: BRAND.subText,
-            letterSpacing: 0.3,
-          }}
-        >
-          Money-back guarantee · 5 minutes
-        </div>
+        <StartCTAWithSubtitle
+          entryFeeEnabled={entryFeeEnabled}
+          onStart={onStart}
+          variant="primary"
+          size="lg"
+          classicSubtitle={
+            <div
+              style={{
+                marginTop: 12,
+                fontSize: 13,
+                color: BRAND.subText,
+                letterSpacing: 0.3,
+              }}
+            >
+              Money-back guarantee · 5 minutes
+            </div>
+          }
+        />
       </section>
     </div>
   );
@@ -12281,6 +12376,7 @@ export default function App() {
 
       {screen === "landing" && (
         <LandingV2
+          entryFeeEnabled={entryFeeEnabled}
           onStart={handleStart}
           onPromoUnlock={handlePromoUnlock}
           onShowGallery={() => setScreen("gallery")}
@@ -12313,6 +12409,7 @@ export default function App() {
       )}
       {screen === "how-it-works" && (
         <HowItWorksScreen
+          entryFeeEnabled={entryFeeEnabled}
           onStart={handleStart}
           onBackToHome={() => {
             setScreen("landing");
@@ -12324,6 +12421,7 @@ export default function App() {
       )}
       {screen === "faq" && (
         <FAQScreen
+          entryFeeEnabled={entryFeeEnabled}
           onStart={handleStart}
           onBackToHome={() => {
             setScreen("landing");
@@ -12336,6 +12434,7 @@ export default function App() {
       {screen === "admin" && <AdminScreen />}
       {screen === "healthcare" && (
         <HealthcareScreen
+          entryFeeEnabled={entryFeeEnabled}
           onPromoUnlock={handlePromoUnlock}
           onStart={() => {
             // CTA on /healthcare drops the visitor into the same upload flow
@@ -12365,6 +12464,7 @@ export default function App() {
       )}
       {screen === "gallery" && (
         <GalleryScreen
+          entryFeeEnabled={entryFeeEnabled}
           onBack={() => setScreen("landing")}
           onStart={handleStart}
         />
