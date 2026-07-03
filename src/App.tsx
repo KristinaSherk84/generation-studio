@@ -10218,6 +10218,97 @@ const PaywallModal = ({ onClose }: PaywallModalProps) => (
   </div>
 );
 
+// -------------------- Free-tier "1 more free regen" warning modal --------------------
+// (2026-07-03) — Fires after the customer's 1st single-photo regen when they're
+// in free-tier mode. Just a nudge to prepare them for the paywall on the 3rd try.
+
+type FreeRegenWarningModalProps = {
+  onClose: () => void;
+};
+
+const FreeRegenWarningModal = ({ onClose }: FreeRegenWarningModalProps) => (
+  <div
+    style={{
+      position: "fixed",
+      inset: 0,
+      background: "rgba(44, 44, 42, 0.4)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      zIndex: 100,
+      padding: 24,
+      ...font,
+    }}
+  >
+    <div style={{ background: C.white, borderRadius: 8, padding: 32, maxWidth: 440 }}>
+      <div style={{ fontSize: 18, fontWeight: 500, color: C.dark }}>
+        You're reaching your free regenerate limit
+      </div>
+      <div style={{ fontSize: 14, color: C.mediumGrey, marginTop: 12, lineHeight: 1.6 }}>
+        After one more single regenerate, you'll need to unlock unlimited regens for $2.99 to keep going.
+      </div>
+      <div style={{ marginTop: 24 }}>
+        <Button onClick={onClose} full>
+          Got it
+        </Button>
+      </div>
+    </div>
+  </div>
+);
+
+// -------------------- Free-tier $2.99 mid-session paywall modal --------------------
+// (2026-07-03) — Fires when the customer tries their 3rd single regen OR clicks
+// Back-to-full-regen while in free-tier mode. Offers the $2.99 unlock.
+
+type FreeTierPaywallModalProps = {
+  onClose: () => void;
+  onPay: () => void;
+};
+
+const FreeTierPaywallModal = ({ onClose, onPay }: FreeTierPaywallModalProps) => (
+  <div
+    style={{
+      position: "fixed",
+      inset: 0,
+      background: "rgba(44, 44, 42, 0.4)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      zIndex: 100,
+      padding: 24,
+      ...font,
+    }}
+  >
+    <div style={{ background: C.white, borderRadius: 8, padding: 32, maxWidth: 440 }}>
+      <div style={{ fontSize: 18, fontWeight: 500, color: C.dark }}>
+        Unlock unlimited regens
+      </div>
+      <div style={{ fontSize: 14, color: C.mediumGrey, marginTop: 12, lineHeight: 1.6 }}>
+        You've used your free regenerates. Unlock unlimited regens for the rest of this session for just $2.99. Your generated headshots stay saved while you check out.
+      </div>
+      <div style={{ marginTop: 24, display: "flex", gap: 8, flexDirection: "column" }}>
+        <Button onClick={onPay} full>
+          Unlock for $2.99
+        </Button>
+        <button
+          onClick={onClose}
+          style={{
+            background: "transparent",
+            border: "none",
+            color: C.mediumGrey,
+            fontSize: 13,
+            padding: 8,
+            cursor: "pointer",
+            fontFamily: "inherit",
+          }}
+        >
+          Not right now
+        </button>
+      </div>
+    </div>
+  </div>
+);
+
 // -------------------- Back-button warning --------------------
 //
 // Added 2026-05-27 after the 2026-05-26 night Stripe audit showed
@@ -10805,6 +10896,21 @@ export default function App() {
   const MAX_FULL_BATCHES = 6;
   const [batchesUsed, setBatchesUsed] = useState(0);
   const [showRegenLimitModal, setShowRegenLimitModal] = useState(false);
+  // ---- Free-tier feature flag (2026-07-03) ----
+  // When ENTRY_FEE_ENABLED=false in Vercel env, the $2.99 paywall moves from
+  // the landing page to AFTER the customer's free 6-photo batch + 2 free
+  // single-photo regens. entryFeeEnabled is fetched from /api/config on
+  // mount; the fallback of `true` matches classic behavior if config fails.
+  const [entryFeeEnabled, setEntryFeeEnabled] = useState(true);
+  // Cap for free-tier single-photo regens before the paywall. 2 keeps max
+  // free session cost at (6 + 2) × $0.101 ≈ $0.81 baseline, ≈$0.97 with
+  // typical 20% retry multiplier.
+  const MAX_FREE_REGENS = 2;
+  // "You have 1 more free regen" nudge modal — fires after regenCount = 1.
+  const [showFreeRegenWarning, setShowFreeRegenWarning] = useState(false);
+  // Post-generation $2.99 paywall (free-tier only) — fires when the customer
+  // tries their 3rd single regen OR Back-to-full-regen without paying.
+  const [showFreeTierPaywall, setShowFreeTierPaywall] = useState(false);
   // CART (Phase 1, 2026-06-03 — revised). Image URLs the user has added to
   // their cart. Stored as an ordered string[] (most-recently-added last so
   // we can render an "order of selection" feel later).
@@ -10982,6 +11088,90 @@ export default function App() {
   const [isUnlocked, setIsUnlocked] = useState<boolean>(() =>
     readUnlockFromStorage(),
   );
+
+  // ---- Free-tier feature flag: fetch on mount (2026-07-03) ----
+  // /api/config returns { entryFeeEnabled: boolean } read from Vercel env.
+  // Fallback silently to `true` if the endpoint is unreachable so the
+  // classic entry-fee flow is preserved when things break.
+  useEffect(() => {
+    fetch("/api/config")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data && typeof data.entryFeeEnabled === "boolean") {
+          setEntryFeeEnabled(data.entryFeeEnabled);
+        }
+      })
+      .catch(() => {
+        /* silent fail — keep default entryFeeEnabled=true */
+      });
+  }, []);
+
+  // ---- Free-tier: show "1 more free regen" warning after regenCount = 1 ----
+  // Fires exactly when regenCount transitions to 1 while in free-tier +
+  // unpaid state. Dismissed by the user clicking OK on the modal.
+  useEffect(() => {
+    if (
+      !entryFeeEnabled &&
+      !isUnlocked &&
+      regenCount === 1
+    ) {
+      setShowFreeRegenWarning(true);
+    }
+  }, [regenCount, entryFeeEnabled, isUnlocked]);
+
+  // ---- Free-tier: restore mid-session grid state after $2.99 unlock ----
+  // When the customer pays the $2.99 mid-session paywall, Stripe redirects
+  // back to /?paid=1&session_id=... which would normally reset the app.
+  // Before firing the checkout we stash generatedImages, selections, cart,
+  // and counters to localStorage. On mount, if we detect a return + a
+  // recent stash, restore the grid state and jump straight to the grid
+  // screen. Timestamp guard prevents restoring stale data (>30 min old).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    const paid = url.searchParams.get("paid") === "1";
+    if (!paid) return;
+    try {
+      const raw = window.localStorage.getItem("free_tier_pending_return");
+      if (!raw) return;
+      const stash = JSON.parse(raw) as {
+        generatedImages?: string[];
+        lastSelections?: StyleSelections | null;
+        lastPhotoUrls?: string[];
+        lastHasWideAngle?: boolean;
+        regenCount?: number;
+        batchesUsed?: number;
+        cart?: string[];
+        photos?: UploadedPhoto[];
+        timestamp?: number;
+      };
+      const stashAgeMs = Date.now() - (stash.timestamp ?? 0);
+      if (stashAgeMs > 30 * 60 * 1000) {
+        // Stash is >30 min old — user probably paid then walked away.
+        // Don't force-restore; let the normal flow handle it.
+        window.localStorage.removeItem("free_tier_pending_return");
+        return;
+      }
+      if (stash.generatedImages) setGeneratedImages(stash.generatedImages);
+      if (stash.lastSelections) setLastSelections(stash.lastSelections);
+      if (stash.lastPhotoUrls) setLastPhotoUrls(stash.lastPhotoUrls);
+      if (typeof stash.lastHasWideAngle === "boolean")
+        setLastHasWideAngle(stash.lastHasWideAngle);
+      if (typeof stash.regenCount === "number")
+        setRegenCount(stash.regenCount);
+      if (typeof stash.batchesUsed === "number")
+        setBatchesUsed(stash.batchesUsed);
+      if (stash.cart) setCart(stash.cart);
+      if (stash.photos) setPhotos(stash.photos);
+      // Jump straight to grid so they see their photos immediately.
+      setScreen("grid");
+      window.localStorage.removeItem("free_tier_pending_return");
+    } catch {
+      window.localStorage.removeItem("free_tier_pending_return");
+    }
+    // Only run at mount — no deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Live ticker for the welcome-popup countdown. Reads the expires_at
   // from localStorage at mount so the popup countdown is accurate even
@@ -11490,6 +11680,15 @@ export default function App() {
       else if (!hasSeenTips) setShowTipsModal(true);
       return;
     }
+    // Free-tier (2026-07-03): skip Stripe checkout, go straight to upload.
+    // The customer will hit the $2.99 paywall AFTER generating (via
+    // handleRegenerateSlot 3rd attempt, or handleGenerate 2nd batch).
+    if (!entryFeeEnabled) {
+      setScreen("upload");
+      if (!hasSeenIntro) setShowIntroModal(true);
+      else if (!hasSeenTips) setShowTipsModal(true);
+      return;
+    }
     // Kick off Stripe Checkout.
     try {
       const resp = await fetch("/api/create-checkout-session", {
@@ -11507,6 +11706,55 @@ export default function App() {
       throw new Error(data.error || "Stripe returned no URL");
     } catch (err) {
       console.error("create-checkout-session failed:", err);
+      alert(
+        "Couldn't start checkout — please refresh and try again. If the problem continues, contact kristi@kristinasherk.com.",
+      );
+    }
+  };
+
+  // Free-tier mid-session unlock (2026-07-03). Called when the customer
+  // clicks "Unlock for $2.99" in the FreeTierPaywallModal. Stashes the
+  // current grid state to localStorage under `free_tier_pending_return`
+  // so the mount-time restore effect (see above) can rehydrate everything
+  // when Stripe redirects back to /?paid=1. Then fires the normal Stripe
+  // Checkout flow.
+  const handleFreeTierUnlockPay = async () => {
+    if (typeof window === "undefined") return;
+    try {
+      const stash = {
+        generatedImages,
+        lastSelections,
+        lastPhotoUrls,
+        lastHasWideAngle,
+        regenCount,
+        batchesUsed,
+        cart,
+        photos,
+        timestamp: Date.now(),
+      };
+      window.localStorage.setItem(
+        "free_tier_pending_return",
+        JSON.stringify(stash),
+      );
+    } catch {
+      // localStorage full or blocked. The Stripe flow still works but
+      // the user's grid will reset on return. Not fatal — they still
+      // paid and can regen normally with their unlock.
+    }
+    try {
+      const resp = await fetch("/api/create-checkout-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = (await resp.json()) as { url?: string; error?: string };
+      if (data.url) {
+        window.location.href = data.url;
+        return;
+      }
+      throw new Error(data.error || "Stripe returned no URL");
+    } catch (err) {
+      console.error("free-tier-unlock create-checkout-session failed:", err);
       alert(
         "Couldn't start checkout — please refresh and try again. If the problem continues, contact kristi@kristinasherk.com.",
       );
@@ -11592,7 +11840,16 @@ export default function App() {
   // with the slot's variationIndex, and on success overwrites that slot only —
   // the other 5 thumbnails are untouched.
   const handleRegenerateSlot = async (index: number) => {
-    if (regenCount >= MAX_SINGLE_REGENS) {
+    // Free-tier gate (2026-07-03). When entry fee is off AND the customer
+    // hasn't paid the mid-session $2.99 yet, cap single regens at
+    // MAX_FREE_REGENS = 2. The 3rd attempt fires the free-tier paywall
+    // instead of running the generation.
+    if (!entryFeeEnabled && !isUnlocked) {
+      if (regenCount >= MAX_FREE_REGENS) {
+        setShowFreeTierPaywall(true);
+        return;
+      }
+    } else if (regenCount >= MAX_SINGLE_REGENS) {
       setShowPaywall(true);
       return;
     }
@@ -11678,6 +11935,14 @@ export default function App() {
   //   2. Timeout safety on Vercel Hobby: each call only needs to fit inside
   //      its own 60s ceiling, rather than all 6 squeezing into one window.
   const handleGenerate = async (selections: StyleSelections) => {
+    // Free-tier gate (2026-07-03). When entry fee is off AND unpaid, ANY
+    // batch after the initial one hits the paywall. batchesUsed === 0
+    // means the initial batch hasn't fired yet (allow). batchesUsed >= 1
+    // is a Back-to-style → Generate loop (block, show paywall).
+    if (!entryFeeEnabled && !isUnlocked && batchesUsed >= 1) {
+      setShowFreeTierPaywall(true);
+      return;
+    }
     // Phase 4 cap (2026-06-03). Refuse to start a new batch if the
     // customer has already hit MAX_FULL_BATCHES. The modal explains
     // the cap and surfaces the cart so they understand they can still
@@ -12237,6 +12502,24 @@ export default function App() {
       )}
 
       {showPaywall && <PaywallModal onClose={() => setShowPaywall(false)} />}
+
+      {/* Free-tier "1 more free regen left" nudge (2026-07-03). Fires once,
+          after the customer's 1st regen in free-tier mode. Set via useEffect
+          watching regenCount === 1. */}
+      {showFreeRegenWarning && (
+        <FreeRegenWarningModal onClose={() => setShowFreeRegenWarning(false)} />
+      )}
+
+      {/* Free-tier $2.99 mid-session paywall (2026-07-03). Fires when the
+          customer tries their 3rd single regen OR Back-to-full-regen while
+          in free-tier mode + unpaid. onPay stashes grid state to localStorage
+          then redirects to Stripe Checkout. On return, mount effect restores. */}
+      {showFreeTierPaywall && (
+        <FreeTierPaywallModal
+          onClose={() => setShowFreeTierPaywall(false)}
+          onPay={handleFreeTierUnlockPay}
+        />
+      )}
 
       {/* Phase 4 (2026-06-03). Regen-limit modal fires when handleGenerate
           refuses to start a new batch because batchesUsed >= MAX_FULL_BATCHES.

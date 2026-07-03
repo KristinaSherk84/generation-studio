@@ -1233,6 +1233,7 @@ async function generateOneHeadshotWithRetry(
 type UnlockCheck =
   | { ok: true; via: "stripe"; sessionId: string }
   | { ok: true; via: "promo" }
+  | { ok: true; via: "free-tier" }
   | { ok: false; reason: "missing" | "expired" | "consumed" | "invalid" };
 
 function constantTimeEquals(a: string, b: string): boolean {
@@ -1249,6 +1250,26 @@ async function verifyUnlock(
   promoCode: string | undefined,
   stripeSecretKey: string,
 ): Promise<UnlockCheck> {
+  // Feature flag — free-tier mode (added 2026-07-03).
+  // When ENTRY_FEE_ENABLED === "false", the $2.99 entry paywall moves from
+  // BEFORE the initial generation to AFTER the customer's free 6-photo batch
+  // + 2 free single-photo regens. This endpoint becomes permissive — the
+  // frontend enforces the 2-regen cap client-side (localStorage counter)
+  // and triggers the paywall UI at the appropriate moment. When the customer
+  // pays the $2.99 post-generation, the resulting Stripe checkout goes
+  // through the normal stripe path below so `via: "stripe"` is used.
+  //
+  // Instant revert: set ENTRY_FEE_ENABLED = "true" (or delete the var) in
+  // Vercel dashboard → redeploy (~60s). Or use Instant Rollback.
+  //
+  // Trust model: this trusts the frontend for regen counting. A
+  // technically-inclined user can bypass the cap by clearing localStorage
+  // or hitting /api/generate directly. Server-side per-IP rate limiting
+  // will be added if the feature ships to production long-term.
+  if (process.env.ENTRY_FEE_ENABLED === "false") {
+    return { ok: true, via: "free-tier" };
+  }
+
   // Promo path takes precedence — cheaper (no network call beyond an
   // optional KV lookup) and the promo code is a power-user bypass.
   //
