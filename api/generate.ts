@@ -488,23 +488,12 @@ function buildMedicalAttireVariant(
   return `Medical SCRUB TOP only (no white coat) in ${colorDesc}. DEEP V-NECK collar like a FIGS, Cherokee, or Healing Hands scrub top — V cut visible at the chest. Loose drape, short sleeves, unstructured pullover. Sleeves may show a subtle natural fold from being worn. NOT a t-shirt, NOT a crew-neck, NOT a scoop-neck, NOT a polo, NOT a sweater, NOT a blazer. The ${scrubColor} dominates. FAILURE: if rendered as a t-shirt or blazer, you have FAILED.`;
 }
 
-// Stethoscope anatomy description (added 2026-06-05 after Kristi noted
-// the model was rendering BOTH ends of the draped stethoscope as
-// identical chestpieces — a stethoscope's two ends are visually
-// different, never twins).
-//
-// Real anatomy: a stethoscope is Y-shaped. The single-tube end
-// terminates in a SILVER CHESTPIECE (a flat ~2-inch metal disc with a
-// thin black rubber rim — used for auscultation). The other end SPLITS
-// into a Y-fork of TWO short metal binaural tubes ending in small soft
-// black EAR TIPS. When draped around the neck, one end (chestpiece)
-// hangs down one side; the other end (ear-tip fork) hangs down the
-// other side.
-//
-// "Littmann-style" gives Gemini a concrete brand anchor — Littmann
-// Cardiology III is the most commonly photographed clinical
-// stethoscope and has reliable training-data coverage.
-const STETHOSCOPE_ANATOMY_DESCRIPTION = `A classic Littmann-style binaural medical stethoscope draped around the subject's neck so one end hangs over each shoulder/chest. ANATOMY (CRITICAL): the two ends of the stethoscope are VISUALLY ASYMMETRIC and MUST render as different shapes — they are NEVER twins. One end terminates in the CHESTPIECE: a flat round silver-tone metal disc roughly 2 inches across with a thin black rubber diaphragm rim (this is the part doctors press against a patient's chest). The OTHER end splits into a Y-FORK of TWO short curved metal binaural tubes, each ending in a small black soft ear tip (these are the parts that would plug into the wearer's ears). FAILURE DETECTOR: if both ends render as identical chestpieces, or both ends render as identical ear-tip forks, you have FAILED — the two ends MUST be different shapes. Tubing is black, plain (no engraved text or brand names on the chestpiece).`;
+// Stethoscope anatomy description.
+// 2026-07-03: shortened from ~180 words to ~29 after Kristi observed slot 1
+// was dropping the white coat + scrub color — the long stethoscope block was
+// dominating Gemini's attention. Shorter constant, real Littmann model names
+// as brand anchors, minimal but explicit two-different-ends description.
+const STETHOSCOPE_ANATOMY_DESCRIPTION = `A Littmann Cardiology IV or Classic III stethoscope draped around the neck — one end is the silver metal chestpiece disc, the other is a Y-fork of black ear tips.`;
 
 const MEDICAL_GUARDRAILS_RULE = `CRITICAL MEDICAL ATTIRE GUARDRAILS — these override any default rendering tendencies:
 
