@@ -2563,20 +2563,30 @@ const LandingV2 = ({
             previously-most-clicked CTA. After-chart CTA keeps the
             price-anchored variant for the decision moment. */}
         <div style={{ marginBottom: isMobile ? 18 : 24 }}>
-          <Pill onClick={onStart} size="lg">
-            Create my headshots
-          </Pill>
-          <div
-            style={{
-              marginTop: 10,
-              fontSize: isMobile ? 12 : 13,
-              color: BRAND.subText,
-              letterSpacing: 0.3,
-            }}
-          >
-            Starts at <strong style={{ color: BRAND.charcoal }}>$2.99</strong> ·
-            {isMobile ? " 5 min · Money-back" : " Money-back guarantee · 5 minutes"}
-          </div>
+          {entryFeeEnabled ? (
+            <>
+              <Pill onClick={onStart} size="lg">
+                Create my headshots
+              </Pill>
+              <div
+                style={{
+                  marginTop: 10,
+                  fontSize: isMobile ? 12 : 13,
+                  color: BRAND.subText,
+                  letterSpacing: 0.3,
+                }}
+              >
+                Starts at <strong style={{ color: BRAND.charcoal }}>$2.99</strong> ·
+                {isMobile ? " 5 min · Money-back" : " Money-back guarantee · 5 minutes"}
+              </div>
+            </>
+          ) : (
+            <StartCTAWithSubtitle
+              entryFeeEnabled={entryFeeEnabled}
+              onStart={onStart}
+              size="lg"
+            />
+          )}
         </div>
 
         {/* Hero photo of Kristi MOVED OUT of the hero section (2026-05-13).
@@ -3320,11 +3330,20 @@ const LandingV2 = ({
         </p>
         {/* Promise-band CTA uses the short action variant per 2026-06-02
             CTA-variation pass. After-chart CTA above this section is the
-            price-anchored one. */}
+            price-anchored one. Free-tier mode swaps to the standard
+            free-tier CTA + subtitle (2026-07-03). */}
         <div style={{ marginTop: 36 }}>
-          <Pill onClick={onStart} size="lg">
-            Create my headshots
-          </Pill>
+          {entryFeeEnabled ? (
+            <Pill onClick={onStart} size="lg">
+              Create my headshots
+            </Pill>
+          ) : (
+            <StartCTAWithSubtitle
+              entryFeeEnabled={entryFeeEnabled}
+              onStart={onStart}
+              size="lg"
+            />
+          )}
         </div>
       </section>
 
