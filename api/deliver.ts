@@ -61,6 +61,7 @@ type Background =
   | "lightgrey"
   | "midgrey"
   | "dark"
+  | "black"
   | "blue"
   | "green"
   | "rainbow";
@@ -988,7 +989,7 @@ export default async function handler(
   }
   if (
     body.background &&
-    !["white", "lightgrey", "midgrey", "dark", "blue", "green", "rainbow"].includes(
+    !["white", "lightgrey", "midgrey", "dark", "black", "blue", "green", "rainbow"].includes(
       body.background,
     )
   ) {

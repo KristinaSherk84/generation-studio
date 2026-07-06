@@ -6063,6 +6063,7 @@ const STUDIO_BGS = [
   { id: "lightgrey", color: "#D3D1C7", label: "Light grey" },
   { id: "midgrey", color: "#888780", label: "Mid grey" },
   { id: "dark", color: "#444441", label: "Dark" },
+  { id: "black", color: "#0A0A0A", label: "Black" },
   { id: "blue", color: "#B5D4F4", label: "Soft blue" },
   { id: "green", color: "#C0DD97", label: "Soft green" },
   // Rainbow generates 6 different backgrounds instead of the same color six
@@ -6156,7 +6157,7 @@ export type StyleSelections = {
   style: "corporate" | "creative" | "executive" | "urban" | "healthcare";
   attire: "formal" | "casual" | "keep" | "medical";
   lighting: "studio" | "natural" | "dramatic" | "golden";
-  background?: "white" | "lightgrey" | "midgrey" | "dark" | "blue" | "green" | "rainbow";
+  background?: "white" | "lightgrey" | "midgrey" | "dark" | "black" | "blue" | "green" | "rainbow";
   // Skin treatment toggle (added 2026-04-26, expanded 2026-05-01 to add glam).
   // - "realistic" (default) — current behavior, no extra block.
   // - "polished" — BLOCK_SKIN_POLISHED smooths color inconsistencies while

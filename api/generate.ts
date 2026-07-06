@@ -104,6 +104,7 @@ type Background =
   | "lightgrey"
   | "midgrey"
   | "dark"
+  | "black"
   | "blue"
   | "green"
   | "rainbow"; // rainbow = generate each of 6 variations with a different color
@@ -326,7 +327,7 @@ const BLOCK_2_COMPOSITION = `Frame as a professional business headshot. The spec
 //     location feel with city or modern interior backgrounds. Combines the
 //     old industrial-office bokeh with a new urban-street one.
 const BLOCK_3_STYLE_BASE: Record<Style, string> = {
-  corporate: `Style: Clean, neutral, trustworthy. Modern corporate LinkedIn aesthetic. Subtle confidence, approachable but professional — senior individual contributor at a Fortune 500, director-level energy. Background matches the color specified below at approximately 80% fidelity with subtle spot-and-gradient variation within the single image (no hard edges, soft vignette). Absolutely zero expressionless eyes. The eyes must be realistic, active, engaged, and smiling.`,
+  corporate: `Style: Clean, neutral, trustworthy. Modern corporate LinkedIn aesthetic. Subtle confidence, approachable but professional — senior individual contributor at a Fortune 500, director-level energy. Photography background matches the color specified below at 90% fidelity with subtle spot-and-gradient variation within the single image. Absolutely zero expressionless eyes. The eyes must be realistic, active, engaged, and smiling.`,
   creative: `Style: Warm, approachable, personable, with a clear outdoor or natural-environment feel. Softer edges than corporate. Hints of personality — a senior creative, a consultant, or a thought leader who does keynote talks. Less "Wall Street," more "TED stage outdoors." The lighting reads as natural daylight even when shot in a studio — never artificial-fluorescent or harsh-direct. Absolutely zero expressionless eyes. The expression must be realistic, active, engaged, and smiling.`,
   executive: `Style: Bold, authoritative, commanding. Strong presence — reads as "in charge." Darker tones, higher contrast, more gravitas — C-suite or board member energy. Background is deep and moody: near-black charcoal, deep gradient to black at the edges, or dark architectural backdrop softly blurred. Hair rim light is essential for separation. Directional lighting is welcome (see lighting rule below), but the downward-facing planes of the face must never fall into deep shadow — the eye sockets, under the nose, the nasolabial folds, and under the chin all stay well-filled so the subject's eyes are clearly visible and expressive. The realistic expression leans fierce and captivating rather than warm-and-smiling: "ready to take on the world," the knowing look that says "I have a secret I'm not telling you," a confident realistic half-smile that pulls the viewer in.`,
   urban: `Style: Modern, on-location, lifestyle. Reads as a polished professional photographed in a real city environment — a downtown senior tech leader, a designer, a content creator with executive presence. The "I just walked out for coffee" professional vibe — unstuffy but elevated. Background is always a real urban setting (city street, modern office interior) rendered with extreme bokeh so no specific location is identifiable. Absolutely zero expressionless eyes. The expression must be realistic, active, engaged.`,
@@ -527,13 +528,19 @@ Include a subtle fill from below the subject to soften — not eliminate — the
 
 // Block 6 is only used for Corporate. Creative and Executive get background
 // direction from Block 3 (self-contained).
+// Block 6 color prompts — rewritten by Kristi 2026-07-03 to be tighter and
+// more photography-specific. "255 clipped" (on white) is a photographer's
+// term for pure-white highlights at RGB 255. "Paper seamless" language
+// on multiple entries makes the backdrop explicit as photography paper,
+// not a room/environment.
 const BLOCK_6_BACKGROUND: Record<Exclude<Background, "rainbow">, string> = {
-  white: `Background: Seamless white, clean, slight gradient to avoid pure flat. Subject clearly separated from background.`,
-  lightgrey: `Background: Neutral light grey seamless, gentle vignette, hint of texture (not solid color), subtle spot-and-gradient variation within the single image.`,
-  midgrey: `Background: Medium grey seamless, classic editorial portrait feel, subtle gradient within the single image. Hair light to separate from the background.`,
-  dark: `Background: Near-black charcoal with slight gradient to deeper black at edges. Hair rim light essential for separation. Subtle spot-and-gradient variation within the single image.`,
-  blue: `Background: Muted dusty blue, tranquil but professional. Not saturated. Subtle spot-and-gradient variation within the single image. Subject must always pop from the background.`,
-  green: `Background: Muted sage / moss green, natural and warm without tipping into "outdoor" feel. Subtle spot-and-gradient variation within the single image. Subject must always pop from the background.`,
+  white: `Background: Seamless bright white, clean, no gradients. Generate 255 clipped bright white seamless paper backgrounds with no edges.`,
+  lightgrey: `Background: Neutral light grey paper seamless, gentle vignette.`,
+  midgrey: `Background: Medium grey paper seamless, classic editorial portrait feel. add subtle vignettes.`,
+  dark: `Background: Near-black charcoal with slight gradient to deeper black at edges.`,
+  black: `Background: deep-black photo background with rim lights on both sides and edges of the person.`,
+  blue: `Background: Muted medium dark blue, tranquil but professional.`,
+  green: `Background: Muted green paper seamless photography background, natural and warm.`,
 };
 
 // Three accent colors used ONLY by Rainbow — they aren't offered as standalone
@@ -1426,7 +1433,7 @@ export default async function handler(
   if (
     body.style === "corporate" &&
     body.background &&
-    !["white", "lightgrey", "midgrey", "dark", "blue", "green", "rainbow"].includes(body.background)
+    !["white", "lightgrey", "midgrey", "dark", "black", "blue", "green", "rainbow"].includes(body.background)
   ) {
     return res.status(400).json({ error: "Invalid background" });
   }
