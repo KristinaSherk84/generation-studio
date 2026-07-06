@@ -767,7 +767,7 @@ const FLAVORS: Flavor[] = [
     expression: "natural easy realistic smile, relaxed and personable",
     bodyPose: "body turned approximately 10 degrees to the subject's left",
     crop: "medium crop — from just above the top of the head to the upper chest",
-    attireHint: "a subtly textured option within the category (pinstripe, herringbone, or fine knit)",
+    attireHint: "a subtly textured dark colored blazer or cardigan.",
   },
 ];
 
