@@ -6035,11 +6035,14 @@ type StyleEntry = {
   visual: StyleVisual;
   comingSoon?: boolean;
 };
+// Order updated 2026-07-03 per Kristi: Urban Industrial promoted to first slot,
+// Corporate moves to second. Creative Natural, Executive, Healthcare, Realtor
+// keep their prior positions relative to each other.
 const STYLES: readonly StyleEntry[] = [
+  { id: "urban",      name: "Urban Industrial",  swatch: "#6F614F", silhouette: "#3D362A", visual: "urban" },
   { id: "corporate",  name: "Corporate",         swatch: "#D3D1C7", silhouette: "#6C6B66", visual: "corporate" },
   { id: "creative",   name: "Creative Natural",  swatch: "#7A8A5C", silhouette: "#3D452E", visual: "creative" },
   { id: "executive",  name: "Executive",         swatch: "#2A2A28", silhouette: "#6C6B66", visual: "executive" },
-  { id: "urban",      name: "Urban Industrial",  swatch: "#6F614F", silhouette: "#3D362A", visual: "urban" },
   { id: "healthcare", name: "Healthcare",        swatch: "#BCCDCB", silhouette: "#4A6868", visual: "healthcare" },
   { id: "realtor",    name: "Realtor",           swatch: "#C8B68E", silhouette: "#7A6A4A", visual: "realtor", comingSoon: true },
 ] as const;
