@@ -1969,7 +1969,7 @@ const StartCTAWithSubtitle = ({
           lineHeight: 1.5,
         }}
       >
-        Then $2.99 to unlock unlimited regens · $9.99–$14.99 per headshot
+        No credit card — Only pay for the ones you like.
       </div>
     )}
   </>
