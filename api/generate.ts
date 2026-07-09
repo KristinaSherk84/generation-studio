@@ -49,9 +49,12 @@ type Lighting = "studio" | "natural" | "dramatic" | "golden";
 // 3 scrubs-only) so the customer's healthcare deliverable looks like a
 // matched set. Defaults to "lightblue" on the server if the request
 // omits the field (preserves the old "soft pale clinical" look).
+// 2026-07-07: Replaced "royal" (royal blue) with "cherryred" per Kristi.
+// The palette had 3 blues (lightblue/navy/royal) and 0 true reds — swapping
+// royal for cherry red gives customers a real red option.
 type ScrubColor =
   | "navy"
-  | "royal"
+  | "cherryred"
   | "huntergreen"
   | "lightblue"
   | "black"
@@ -60,7 +63,7 @@ type ScrubColor =
 
 const SCRUB_COLOR_VALUES: ScrubColor[] = [
   "navy",
-  "royal",
+  "cherryred",
   "huntergreen",
   "lightblue",
   "black",
@@ -86,8 +89,8 @@ const SCRUB_COLOR_VALUES: ScrubColor[] = [
 //   - Navy explicitly excludes grey/charcoal (slot-4 picked grey).
 const SCRUB_COLOR_DESCRIPTIONS: Record<ScrubColor, string> = {
   navy: "NAVY BLUE — soft cotton/poly medical scrub FABRIC in deep classic navy. NOT a wool suit jacket fabric, NOT a blazer, NOT a sport coat. NOT royal blue, NOT baby blue, NOT black, NOT grey, NOT charcoal. The garment is a hospital scrub top — V-neck pullover construction — never a tailored business jacket. Think Cherokee, FIGS, or Healing Hands scrub-brand fabric in their classic 'navy' colorway.",
-  royal:
-    "ROYAL BLUE — soft medical scrub FABRIC in vivid medium-saturation blue. NOT navy, NOT baby blue, NOT teal, NOT turquoise, NOT a wool suit jacket.",
+  cherryred:
+    "CHERRY RED — soft medical scrub FABRIC in bright, vivid, highly saturated cherry red. NOT burgundy, NOT wine, NOT maroon, NOT pink, NOT salmon, NOT orange-red. The garment is a hospital scrub top — V-neck pullover construction — never a tailored jacket.",
   huntergreen:
     "HUNTER GREEN — soft cotton/poly medical scrub FABRIC in deep saturated forest/surgical green (sometimes called 'scrub green'). NOT a wool suit jacket fabric, NOT a sport coat. NOT olive, NOT sage, NOT mint, NOT bright kelly green. The garment is a hospital scrub top — V-neck pullover construction — never a tailored hunting blazer or military jacket.",
   lightblue:

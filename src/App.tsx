@@ -6182,7 +6182,7 @@ export type StyleSelections = {
 // picker UI below; the order is the on-screen left-to-right order.
 export type ScrubColor =
   | "navy"
-  | "royal"
+  | "cherryred"
   | "huntergreen"
   | "lightblue"
   | "black"
@@ -6200,7 +6200,7 @@ const SCRUB_COLOR_SWATCHES: {
 }[] = [
   { value: "lightblue", label: "Light blue", hex: "#A8C3D9" },
   { value: "navy", label: "Navy", hex: "#1B2D4F" },
-  { value: "royal", label: "Royal blue", hex: "#1E5BC6" },
+  { value: "cherryred", label: "Cherry red", hex: "#D82C2C" },
   { value: "huntergreen", label: "Hunter green", hex: "#1F4F30" },
   { value: "black", label: "Black", hex: "#1A1A1A" },
   { value: "burgundy", label: "Burgundy", hex: "#5C1F2A" },
