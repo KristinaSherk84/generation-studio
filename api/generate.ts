@@ -805,7 +805,18 @@ function buildBlock8(
   const outfitLine =
     attire === "keep"
       ? `- Outfit: Preserve the exact clothing from the reference photos — do not change the garment type, color, neckline, or style.`
-      : `- Outfit detail: ${flavor.attireHint}. This must stay firmly within the attire category specified above.`;
+      : attire === "medical"
+        ? // 2026-07-13 BUGFIX: medical attire is fully specified by
+          // buildBlock4Attire above (garment type + the customer's scrub
+          // color). Do NOT inject flavor.attireHint here — the per-slot hints
+          // for slots 5 & 6 ("charcoal or deep navy", "a dark blazer or
+          // cardigan") are CORPORATE variations, and because Block 8 sits
+          // closer to the model's "what to render" reasoning, they were
+          // overriding the scrub color/garment (slot 5 → grey scrubs, slot 6 →
+          // a dark jacket over the scrubs). Reassert the medical attire
+          // positively instead.
+          `- Outfit: the medical attire described above is the complete outfit for this image — worn exactly as specified, in the specified color, as the outer layer.`
+        : `- Outfit detail: ${flavor.attireHint}. This must stay firmly within the attire category specified above.`;
 
   // For women on Polished or Glam tiers, add a final-position reference-
   // fidelity anchor right before the output constraint. This is the single
