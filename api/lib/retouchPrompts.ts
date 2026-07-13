@@ -211,13 +211,19 @@ export function buildRetouchPrompt(
 ): string {
   if (subTier === "polished") {
     // Gender routing (added 2026-07-13). The app never captures the customer's
-    // gender — it lets Gemini read apparent gender from the photo, the same
-    // convention the generation prompts use. So we hand the model BOTH the
-    // men's and women's Polished prompts under an explicit "pick the one
-    // matching section" instruction. Men get RETOUCH_POLISHED_MALE; women get
-    // the age-appropriate YOUNG / MATURE prompt unchanged.
-    const femalePrompt =
-      ageBand === "young" ? RETOUCH_POLISHED_YOUNG : RETOUCH_POLISHED_MATURE;
+    // gender — Gemini reads apparent gender from the photo, the same convention
+    // the generation prompts use. So we hand the model BOTH the men's and
+    // women's Polished prompts under an explicit "pick the one matching
+    // section" instruction. Men get RETOUCH_POLISHED_MALE; women get the single
+    // women's Polished prompt.
+    //
+    // Age no longer splits the women's prompt: Kristi dropped the young/mature
+    // division on 2026-07-13 (it was too hard to tell which variant was
+    // actually running). All women now get ONE Polished prompt regardless of
+    // ageBand — RETOUCH_POLISHED_MATURE, which was already the only one in use
+    // (api/deliver.ts always passed "mature"). RETOUCH_POLISHED_YOUNG is kept
+    // exported for reference but is no longer selected here.
+    const womensPolished = RETOUCH_POLISHED_MATURE;
     return `SUBJECT GENDER ROUTING — evaluate this FIRST, before reading any directive below. Look at the input photo and determine the subject's apparent gender. Then follow ONLY the single matching section below and COMPLETELY IGNORE the other section — do not blend them.
 
 ============================================================
@@ -228,7 +234,7 @@ ${RETOUCH_POLISHED_MALE}
 ============================================================
 IF THE SUBJECT APPEARS TO BE A WOMAN — follow ONLY this section, ignore the MAN section entirely:
 ============================================================
-${femalePrompt}`;
+${womensPolished}`;
   }
   if (subTier === "glam") {
     return RETOUCH_GLAM;
