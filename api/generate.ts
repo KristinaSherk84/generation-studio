@@ -1151,6 +1151,21 @@ function isRetryableGeminiError(error: unknown): boolean {
   ) {
     return true;
   }
+  // NOT_FOUND (404) added 2026-07-13 after a single regenerate failed in
+  // production (2026-07-11) with "Requested entity was not found" while 191
+  // of the surrounding 192 requests returned 200 on the SAME model
+  // (gemini-3.1-flash-image-preview). That success rate means the model name
+  // is valid — this was a transient per-worker miss on the Google side, the
+  // same pattern as the 400 case above, and a retry on a fresh worker clears
+  // it. Same accepted tradeoff: if the model were ever GENUINELY removed, a
+  // real 404 would now retry up to 4 times (~12s) before failing instead of
+  // ~3s. Acceptable — the transient case dominates in production.
+  if (
+    msg.includes('"code":404') ||
+    msg.includes("NOT_FOUND")
+  ) {
+    return true;
+  }
   // Transient network hiccups also worth one more try.
   if (msg.includes("ECONNRESET") || msg.includes("ETIMEDOUT")) return true;
   if (msg.includes("fetch failed")) return true;
