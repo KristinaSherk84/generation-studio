@@ -89,8 +89,14 @@ const SCRUB_COLOR_VALUES: ScrubColor[] = [
 //   - Navy explicitly excludes grey/charcoal (slot-4 picked grey).
 const SCRUB_COLOR_DESCRIPTIONS: Record<ScrubColor, string> = {
   navy: "NAVY BLUE — soft cotton/poly medical scrub FABRIC in deep classic navy. NOT a wool suit jacket fabric, NOT a blazer, NOT a sport coat. NOT royal blue, NOT baby blue, NOT black, NOT grey, NOT charcoal. The garment is a hospital scrub top — V-neck pullover construction — never a tailored business jacket. Think Cherokee, FIGS, or Healing Hands scrub-brand fabric in their classic 'navy' colorway.",
+  // 2026-07-13 (v2, positive rewrite per Kristi): dropped the "NOT x, NOT y"
+  // lists — image models tend to fixate on the negated noun, so the negations
+  // can backfire. The red is now described positively and warmly. Garment type
+  // is anchored positively in the slot templates below ("the classic FIGS or
+  // Cherokee scrub-top look", "the only garment worn on top") instead of via
+  // "NOT a blazer" negations.
   cherryred:
-    "CHERRY RED — soft medical scrub FABRIC in bright, vivid, highly saturated cherry red. NOT burgundy, NOT wine, NOT maroon, NOT pink, NOT salmon, NOT orange-red. The garment is a hospital scrub top — V-neck pullover construction — never a tailored jacket.",
+    "a warm, true red — bright, clean, and saturated, with a warm, lively tone like a fresh red poppy or a classic FIGS or Cherokee red scrub top; soft cotton/poly medical scrub fabric",
   huntergreen:
     "HUNTER GREEN — soft cotton/poly medical scrub FABRIC in deep saturated forest/surgical green (sometimes called 'scrub green'). NOT a wool suit jacket fabric, NOT a sport coat. NOT olive, NOT sage, NOT mint, NOT bright kelly green. The garment is a hospital scrub top — V-neck pullover construction — never a tailored hunting blazer or military jacket.",
   lightblue:
@@ -484,12 +490,14 @@ function buildMedicalAttireVariant(
     return `Medical SCRUB TOP only (no white coat) in ${colorDesc}. DEEP V-NECK collar like a FIGS, Cherokee, or Healing Hands scrub top — the V cut is visible at the chest. Loose drape, short sleeves, unstructured pullover. NOT a t-shirt, NOT a crew-neck, NOT a scoop-neck, NOT a polo, NOT a sweater, NOT a blazer. The ${scrubColor} dominates the upper torso. FAILURE: if rendered as a t-shirt or blazer, you have FAILED.`;
   }
   if (i === 4) {
-    return `STRICT GARMENT TYPE: short-sleeve V-neck medical SCRUB TOP. NOT a suit jacket, NOT a blazer, NOT a sport coat, NOT a polo. Freshly pressed, wrinkle-free medical SCRUBS only (no white coat) in ${colorDesc}. Loose drape, V-neck collar, short sleeves, unstructured pullover. ${STETHOSCOPE_ANATOMY_DESCRIPTION} The ${scrubColor} of the scrubs must dominate. FAILURE DETECTOR: if the rendered torso is a tailored ${scrubColor} blazer instead of a V-neck scrub top, you have FAILED this variant.`;
+    // 2026-07-13: positive rewrite (Kristi) — no "NOT" / "FAILURE" language.
+    // Garment type held positively via the scrub-top description + "the only
+    // garment worn on top". ${colorDesc} carries the customer's chosen color.
+    return `A soft, short-sleeve V-neck medical scrub top in ${colorDesc}. It has a loose, relaxed drape, a deep V neckline, and an unstructured pullover fit — the classic FIGS or Cherokee scrub-top look — and it is the only garment worn on top. ${STETHOSCOPE_ANATOMY_DESCRIPTION} The scrub color fills the upper body.`;
   }
   // i === 5
-  // 2026-06-12 — tightened after crew-neck drift on slot 6. Same pattern
-  // as variant 3 (DEEP V-NECK + brand anchor + crew-neck exclusion).
-  return `Medical SCRUB TOP only (no white coat) in ${colorDesc}. DEEP V-NECK collar like a FIGS, Cherokee, or Healing Hands scrub top — V cut visible at the chest. Loose drape, short sleeves, unstructured pullover. Sleeves may show a subtle natural fold from being worn. NOT a t-shirt, NOT a crew-neck, NOT a scoop-neck, NOT a polo, NOT a sweater, NOT a blazer. The ${scrubColor} dominates. FAILURE: if rendered as a t-shirt or blazer, you have FAILED.`;
+  // 2026-07-13: positive rewrite (Kristi) — no "NOT" / "FAILURE" language.
+  return `A soft, short-sleeve V-neck medical scrub top in ${colorDesc}, the classic FIGS or Cherokee scrub-top look. It has a loose, relaxed drape and a deep V neckline, worn on its own as the only top, with sleeves showing a subtle natural fold from being worn. The scrub color fills the upper body and reads fresh and clean.`;
 }
 
 // Stethoscope anatomy description.
