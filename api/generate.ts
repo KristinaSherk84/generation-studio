@@ -89,14 +89,14 @@ const SCRUB_COLOR_VALUES: ScrubColor[] = [
 //   - Navy explicitly excludes grey/charcoal (slot-4 picked grey).
 const SCRUB_COLOR_DESCRIPTIONS: Record<ScrubColor, string> = {
   navy: "NAVY BLUE — soft cotton/poly medical scrub FABRIC in deep classic navy. NOT a wool suit jacket fabric, NOT a blazer, NOT a sport coat. NOT royal blue, NOT baby blue, NOT black, NOT grey, NOT charcoal. The garment is a hospital scrub top — V-neck pullover construction — never a tailored business jacket. Think Cherokee, FIGS, or Healing Hands scrub-brand fabric in their classic 'navy' colorway.",
-  // 2026-07-13 (v2, positive rewrite per Kristi): dropped the "NOT x, NOT y"
-  // lists — image models tend to fixate on the negated noun, so the negations
-  // can backfire. The red is now described positively and warmly. Garment type
-  // is anchored positively in the slot templates below ("the classic FIGS or
-  // Cherokee scrub-top look", "the only garment worn on top") instead of via
-  // "NOT a blazer" negations.
+  // 2026-07-13 (v2 positive rewrite; v3 added saturation + hex anchor per
+  // Kristi): positive phrasing (no "NOT" lists). v3 pushes the red to full
+  // saturation and adds a soft hex anchor (~#E01818) — hex is only a hint to
+  // Gemini, not a precise control, so the vivid saturation wording + brand
+  // reference do the real work. The "same fully-saturated red across every
+  // image" clause tightens the slight slot-to-slot color variation.
   cherryred:
-    "a warm, true red — bright, clean, and saturated, with a warm, lively tone like a fresh red poppy or a classic FIGS or Cherokee red scrub top; soft cotton/poly medical scrub fabric",
+    "a vivid, intensely saturated warm true red — a bold, punchy, high-saturation red (approximately hex #E01818), rich and lively like a brand-new FIGS or Cherokee 'Real Red' scrub top fresh out of the package. Render this same fully-saturated warm red consistently across every image, in soft cotton/poly medical scrub fabric",
   huntergreen:
     "HUNTER GREEN — soft cotton/poly medical scrub FABRIC in deep saturated forest/surgical green (sometimes called 'scrub green'). NOT a wool suit jacket fabric, NOT a sport coat. NOT olive, NOT sage, NOT mint, NOT bright kelly green. The garment is a hospital scrub top — V-neck pullover construction — never a tailored hunting blazer or military jacket.",
   lightblue:
