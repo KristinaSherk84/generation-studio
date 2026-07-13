@@ -134,6 +134,25 @@ Under-eye direction: Render the skin around the eyes rested, bright, and color c
 
 Pore micro-texture preservation — applies to every tier below. Preserve the 3D micro-texture of the skin surface (the raised/recessed terrain of pores at close magnification). Pore micro-texture stays at 100% on the face, neck, and visible décolletage. The smoothing operates on surface evenness only — the pore texture itself remains visible at normal viewing distance.`;
 
+// Polished — MALE (all ages). Added 2026-07-13 by Kristi. Men's editorial
+// retouch: keeps skin texture, protects facial hair, reinforces pore
+// visibility above the female tiers, and forbids any feminizing softening.
+// Routed via the gender-gating wrapper in buildRetouchPrompt below — Gemini
+// evaluates the subject's apparent gender and applies THIS section only when
+// the subject is a man; women continue to receive the YOUNG / MATURE prompts
+// above. This is Kristi's exact submitted text, verbatim.
+export const RETOUCH_POLISHED_MALE = `Identity preservation — non-negotiable, overrides every other directive below. Preserve the subject's facial features and expression with 100% precision. The retouched face must remain UNMISTAKABLY the same person. Match the input photo EXACTLY for face shape, bone structure, all facial features, hairline, ethnicity, distinguishing marks (freckles, beauty marks, moles, scars, asymmetries), AND facial hair density / pattern / length / color. DO NOT idealize features. The retouching below operates ONLY on the skin SURFACE — never on facial structure, proportions, features, or facial hair. Act as a high end retoucher who specializes in men's editorial portraiture, changing only surface level items. BACKGROUND LOCK: The background of the photo (everything outside the subject) MUST be preserved IDENTICALLY to the input photo. Do NOT change the background in any way. If the input background is blurred, the output background is blurred the same way. If the input background is a specific scene, the output background is the same scene.
+POLISHED RETOUCH (man):
+Master directive: Keep skin texture. remove red blemishes and veins, even tone, RETAIN texture. Soften lighting hot-spots, keep fine lines, brow texture. The result reads as 'professionally retouched magazine profile photo of a confident man' no airbrushing.
+FACIAL HAIR LOCK: If detected, Preserve and protect all facial hair (stubble, beard, mustache, sideburns) EXACTLY as in the input. Beards and stubble retain visible texture and grain at close inspection.
+Under-eye direction: Slightly even out color around the eyes — remove dark circles. The result reads as the same person, just well-rested. Add lighting to orbital sockets. Keep visible character — keep under eye skin texture. Remove half of the crows feet. Shorten crows feet wrinkle lengths and deepness.
+- TONE EVENING: Even out tone variation between forehead / cheeks / chin / neck. keep subtle shine in hotspot areas to protect form of the face. Keep and protect all freckles and identifying marks.
+- BROW: Preserve exact brow shape, hair pattern, density, and stray hairs.
+- PORE STRUCTURE: Add or reinforce pore structure across face and neck. Pore visibility is imperative. male skin keeps more texture in professional retouching.
+- NO plastic skin. NO airbrushed look. NO smoothing. NO femininizing softening of jaw or features.
+- If teeth are visible, keep their shape identical to before, remove yellow tinge and slightly brighten them.
+Pore micro-texture preservation — Preserve the 3D micro-texture of the skin surface (the raised/recessed terrain of pores at close magnification). Pore micro-texture stays at 100% — should read MORE visible than female-subject retouching, especially across the cheeks, forehead, and chin.`;
+
 // Glam (female) — all ages. v9 2026-06-21: small rewrite by Kristi.
 // Only change from v8: dropped the TEETH bullet entirely. The mouth-
 // and-smile lock already prevents teeth changes, and the explicit
@@ -191,9 +210,25 @@ export function buildRetouchPrompt(
   ageBand: AgeBand | undefined,
 ): string {
   if (subTier === "polished") {
-    return ageBand === "young"
-      ? RETOUCH_POLISHED_YOUNG
-      : RETOUCH_POLISHED_MATURE;
+    // Gender routing (added 2026-07-13). The app never captures the customer's
+    // gender — it lets Gemini read apparent gender from the photo, the same
+    // convention the generation prompts use. So we hand the model BOTH the
+    // men's and women's Polished prompts under an explicit "pick the one
+    // matching section" instruction. Men get RETOUCH_POLISHED_MALE; women get
+    // the age-appropriate YOUNG / MATURE prompt unchanged.
+    const femalePrompt =
+      ageBand === "young" ? RETOUCH_POLISHED_YOUNG : RETOUCH_POLISHED_MATURE;
+    return `SUBJECT GENDER ROUTING — evaluate this FIRST, before reading any directive below. Look at the input photo and determine the subject's apparent gender. Then follow ONLY the single matching section below and COMPLETELY IGNORE the other section — do not blend them.
+
+============================================================
+IF THE SUBJECT APPEARS TO BE A MAN — follow ONLY this section, ignore the WOMAN section entirely:
+============================================================
+${RETOUCH_POLISHED_MALE}
+
+============================================================
+IF THE SUBJECT APPEARS TO BE A WOMAN — follow ONLY this section, ignore the MAN section entirely:
+============================================================
+${femalePrompt}`;
   }
   if (subTier === "glam") {
     return RETOUCH_GLAM;
