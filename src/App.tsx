@@ -3518,6 +3518,43 @@ const HEALTHCARE_PAIRS: { composite: string; before: string; after: string; alt:
     after: "/marketing/healthcare/web/medical-professional-headshot-ai-1-after.jpg",
     alt: "Medical professional headshot — AI generated",
   },
+  // Added 2026-07-13 — pairs 48-55 (healthcare-themed) from the latest batch.
+  {
+    composite: "/marketing/healthcare/web/ai-headshot-for-nurses-1.jpg",
+    before: "/marketing/healthcare/web/ai-headshot-for-nurses-1-before.jpg",
+    after: "/marketing/healthcare/web/ai-headshot-for-nurses-1-after.jpg",
+    alt: "AI headshot of a young woman in a white medical coat over navy scrubs in a bright hospital hallway",
+  },
+  {
+    composite: "/marketing/healthcare/web/ai-headshot-for-physicians-1.jpg",
+    before: "/marketing/healthcare/web/ai-headshot-for-physicians-1-before.jpg",
+    after: "/marketing/healthcare/web/ai-headshot-for-physicians-1-after.jpg",
+    alt: "AI headshot of a smiling female physician in a white coat and stethoscope over mauve scrubs",
+  },
+  {
+    composite: "/marketing/healthcare/web/ai-doctor-headshot-1.jpg",
+    before: "/marketing/healthcare/web/ai-doctor-headshot-1-before.jpg",
+    after: "/marketing/healthcare/web/ai-doctor-headshot-1-after.jpg",
+    alt: "AI headshot of a female doctor with long curly hair in a white coat and stethoscope over blue scrubs",
+  },
+  {
+    composite: "/marketing/healthcare/web/nurse-headshot-ai-1.jpg",
+    before: "/marketing/healthcare/web/nurse-headshot-ai-1-before.jpg",
+    after: "/marketing/healthcare/web/nurse-headshot-ai-1-after.jpg",
+    alt: "AI headshot of a nurse in royal blue scrubs in a bright clinic",
+  },
+  {
+    composite: "/marketing/healthcare/web/medical-headshot-generator-1.jpg",
+    before: "/marketing/healthcare/web/medical-headshot-generator-1-before.jpg",
+    after: "/marketing/healthcare/web/medical-headshot-generator-1-after.jpg",
+    alt: "AI headshot of a healthcare professional in light blue scrubs in a medical office",
+  },
+  {
+    composite: "/marketing/healthcare/web/ai-headshot-for-healthcare-workers-1.jpg",
+    before: "/marketing/healthcare/web/ai-headshot-for-healthcare-workers-1-before.jpg",
+    after: "/marketing/healthcare/web/ai-headshot-for-healthcare-workers-1-after.jpg",
+    alt: "AI headshot of a female medical professional in a white coat and stethoscope over green scrubs",
+  },
 ];
 
 // Strip displays 7 pairs × 2 copies for the seamless infinite loop. Slightly
