@@ -505,7 +505,7 @@ function buildMedicalAttireVariant(
 // was dropping the white coat + scrub color — the long stethoscope block was
 // dominating Gemini's attention. Shorter constant, real Littmann model names
 // as brand anchors, minimal but explicit two-different-ends description.
-const STETHOSCOPE_ANATOMY_DESCRIPTION = `A Littmann Cardiology IV or Classic III stethoscope draped around the neck — one end is the silver metal chestpiece disc, the other is a Y-fork of black ear tips.`;
+const STETHOSCOPE_ANATOMY_DESCRIPTION = `A single stethoscope draped over the neck, its two black tubes hanging down the front and meeting at one round chestpiece.`;
 
 const MEDICAL_GUARDRAILS_RULE = `CRITICAL MEDICAL ATTIRE GUARDRAILS — these override any default rendering tendencies:
 
