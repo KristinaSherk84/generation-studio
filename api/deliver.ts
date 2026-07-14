@@ -460,11 +460,15 @@ export async function sendCustomerDeliveryEmail(args: {
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; color: #2C2C2A; max-width: 640px; margin: 0 auto; background: #FFFFFF; padding: 32px 24px;">
 
-      <!-- Wordmark header -->
-      <div style="text-align: center; padding-bottom: 28px; border-bottom: 1px solid #EFEAE0;">
-        <span style="font-family: Georgia, 'Times New Roman', serif; font-size: 22px; color: #2A2A2A; letter-spacing: 0.2px;">
-          Gener<span style="color: #C9A961; font-style: italic; font-weight: 600;">AI</span>tion <span style="font-weight: 500;">Headshots</span>
-        </span>
+      <!-- Photo of Kristi at the top (added 2026-07-13), then a caption
+           naming her as the photographer behind the brand. Image hosted on
+           Vercel Blob (brand/kristi-photographer.jpg). -->
+      <div style="text-align: center; padding-bottom: 20px; border-bottom: 1px solid #EFEAE0;">
+        <img src="https://1v7nstnczaqna1ul.public.blob.vercel-storage.com/brand/kristi-photographer.jpg" alt="Kristina Sherk, photographer" width="440" style="width: 100%; max-width: 440px; height: auto; border-radius: 10px; display: inline-block;" />
+        <div style="font-family: Georgia, 'Times New Roman', serif; font-size: 14px; color: #888; margin-top: 12px; letter-spacing: 0.2px;">
+          Kristina Sherk — the photographer behind
+          <span style="color: #2A2A2A;">Gener<span style="color: #C9A961; font-style: italic; font-weight: 600;">AI</span>tion <span style="font-weight: 500;">Headshots</span></span>
+        </div>
       </div>
 
       <!-- Heartstrings card FIRST — sets the tone (gratitude + share ask)
@@ -473,13 +477,16 @@ export async function sendCustomerDeliveryEmail(args: {
            2026-05-04 (was 'A note from Kristi' / 'Let's face it'). -->
       <div style="margin: 32px 0; padding: 28px 24px; background: #FFFFFF; border: 1px solid #E8E5DD; border-top: 3px solid #C9A961; border-radius: 8px;">
         <h2 style="font-family: Georgia, 'Times New Roman', serif; font-size: 24px; font-weight: 400; font-style: italic; color: #C9A961; margin: 0 0 18px; text-align: center;">
-          Help me spread the word!
+          A note from me
         </h2>
-        <p style="font-size: 14px; line-height: 1.7; color: #2A2A2A; margin: 0 0 12px;">
-          Thanks for purchasing your new generated headshots! AI is changing how headshots get made. I built this generator because I'd rather lead the change than be left behind by it. There's no team of engineers behind this — just me, one photographer, leaning into new tools to keep doing this. Your purchase didn't just buy you a headshot — it supported an independent artist and her small business doing what she loves in a changing world.
+        <p style="font-size: 15px; line-height: 1.7; color: #2A2A2A; margin: 0 0 14px;">
+          Thank you — really. I'm a portrait photographer reinventing how I do headshots instead of getting left behind by all this, and you buying these is the whole reason I get to keep going. It means a lot.
         </p>
-        <p style="font-size: 14px; line-height: 1.7; color: #2A2A2A; margin: 0;">
-          If you'd share one of these images on social, you'd help me reach the next person who needs a headshot but doesn't know I exist yet. I see every share. I'm grateful for every one. Enjoy your new, snazzy headshot!
+        <p style="font-size: 15px; line-height: 1.7; color: #2A2A2A; margin: 0 0 14px;">
+          If anything about the experience could be better, I'd love to hear it — just hit reply. It's only me back here, and I read <strong>EVERY</strong> email.
+        </p>
+        <p style="font-size: 15px; line-height: 1.7; color: #2A2A2A; margin: 0;">
+          And one small favor, if you're up for it: tell a friend or two about your new headshots and what it was like making them. No marketing team, no ad budget here — just word of mouth from people like you, up against the big AI headshot companies. If you share, reply with a screenshot and I'll send you a <strong>free code for a few more headshots</strong>, as a thank you.
         </p>
       </div>
 
@@ -552,7 +559,7 @@ export async function sendCustomerDeliveryEmail(args: {
         // reply_to lands customer replies in Kristi's real inbox even
         // though the from-address is the shared Resend sender.
         reply_to: "kristi@kristinasherk.com",
-        subject: "Your sharable headshot graphic",
+        subject: "Your new headshots + a thank-you from me",
         html,
       }),
     });
