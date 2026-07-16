@@ -20,6 +20,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import {
   createCode,
+  deleteCode,
   generateCode,
   listCodes,
   revokeCode,
@@ -41,13 +42,19 @@ function safeEquals(a: string, b: string): boolean {
 type ListReq = { action: "list"; adminPassword: string };
 type CreateReq = { action: "create"; adminPassword: string; notes?: string };
 type RevokeReq = { action: "revoke"; adminPassword: string; code: string };
-type AdminReq = ListReq | CreateReq | RevokeReq;
+type DeleteReq = { action: "delete"; adminPassword: string; code: string };
+type AdminReq = ListReq | CreateReq | RevokeReq | DeleteReq;
 
 function isAdminReq(body: unknown): body is AdminReq {
   if (!body || typeof body !== "object") return false;
   const b = body as Record<string, unknown>;
   if (typeof b.adminPassword !== "string") return false;
-  return b.action === "list" || b.action === "create" || b.action === "revoke";
+  return (
+    b.action === "list" ||
+    b.action === "create" ||
+    b.action === "revoke" ||
+    b.action === "delete"
+  );
 }
 
 export default async function handler(
@@ -109,6 +116,11 @@ export default async function handler(
     if (body.action === "revoke") {
       const result = await revokeCode(body.code);
       return res.status(200).json({ code: result });
+    }
+
+    if (body.action === "delete") {
+      const deleted = await deleteCode(body.code);
+      return res.status(200).json({ deleted });
     }
   } catch (err) {
     console.error("admin/promos error:", err);
