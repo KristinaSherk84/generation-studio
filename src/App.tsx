@@ -322,11 +322,11 @@ type GenerationStepsListProps = {
 const GenerationStepsList = ({ currentStep }: GenerationStepsListProps) => (
   <div
     style={{
-      marginTop: 24,
+      marginTop: 16,
       marginLeft: "auto",
       marginRight: "auto",
       maxWidth: 520,
-      padding: "20px 22px",
+      padding: "12px 16px",
       borderRadius: 8,
       background: C.white,
       border: `1px solid ${C.border}`,
@@ -335,12 +335,12 @@ const GenerationStepsList = ({ currentStep }: GenerationStepsListProps) => (
   >
     <div
       style={{
-        fontSize: 11,
+        fontSize: 10,
         fontWeight: 500,
         letterSpacing: 1.5,
         color: C.mediumGrey,
         textTransform: "uppercase",
-        marginBottom: 14,
+        marginBottom: 6,
       }}
     >
       Where you are
@@ -349,16 +349,20 @@ const GenerationStepsList = ({ currentStep }: GenerationStepsListProps) => (
       const stepNum = i + 1;
       const isPast = stepNum < currentStep;
       const isCurrent = stepNum === currentStep;
+      // Completed steps are condensed to a small, single-line, greyed-out
+      // row (icon 16, truncated with ellipsis) so the loading screen's top
+      // section stays short and the generated thumbnails sit higher up on
+      // mobile. Current + upcoming steps stay full-size and readable.
       return (
         <div
           key={stepNum}
           style={{
             display: "flex",
             alignItems: "center",
-            gap: 12,
-            paddingTop: 8,
-            paddingBottom: 8,
-            opacity: isPast || isCurrent ? 1 : 0.5,
+            gap: 10,
+            paddingTop: isPast ? 3 : 6,
+            paddingBottom: isPast ? 3 : 6,
+            opacity: isPast ? 0.6 : isCurrent ? 1 : 0.5,
           }}
         >
           {/* Status icon — checkmark for done, spinner for current,
@@ -366,8 +370,8 @@ const GenerationStepsList = ({ currentStep }: GenerationStepsListProps) => (
               already declared at the bottom of LoadingScreen. */}
           <div
             style={{
-              width: 22,
-              height: 22,
+              width: isPast ? 16 : 20,
+              height: isPast ? 16 : 20,
               borderRadius: "50%",
               background: isPast ? C.dark : "transparent",
               border: isPast ? "none" : `1.5px solid ${isCurrent ? C.dark : C.lightGrey}`,
@@ -383,13 +387,22 @@ const GenerationStepsList = ({ currentStep }: GenerationStepsListProps) => (
                 : {}),
             }}
           >
-            {isPast && <Check size={12} color={C.white} strokeWidth={3} />}
+            {isPast && <Check size={10} color={C.white} strokeWidth={3} />}
           </div>
           <div
             style={{
-              fontSize: 14,
+              flex: 1,
+              minWidth: 0,
+              fontSize: isPast ? 12.5 : 14,
               fontWeight: isCurrent ? 500 : 400,
-              color: C.dark,
+              color: isPast ? C.mediumGrey : C.dark,
+              ...(isPast
+                ? {
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }
+                : {}),
             }}
           >
             {step.label}
@@ -7043,11 +7056,12 @@ const LoadingScreen = ({
 
       <h1
         style={{
-          fontSize: 32,
+          fontSize: "clamp(22px, 6.5vw, 30px)",
           fontWeight: 500,
           color: C.dark,
           margin: 0,
           letterSpacing: -0.5,
+          lineHeight: 1.2,
         }}
       >
         {errorMessage
@@ -7083,7 +7097,13 @@ const LoadingScreen = ({
           different mental task — recovering — so the journey context
           isn't useful). Step 3 is the current step here because we're
           loading the photos they're about to pick from. */}
-      {!errorMessage && <GenerationStepsList currentStep={3} />}
+      {/* Hide the stepper once the first generated photo arrives so the
+          thumbnail grid rises to just under the progress line (visible
+          without scrolling — matters for watching generations land, incl.
+          in Clarity recordings). Shown only while still waiting. */}
+      {!errorMessage && readyImages.length === 0 && (
+        <GenerationStepsList currentStep={3} />
+      )}
 
       {/* Early-advance button — fires when at least 5 of 6 are ready but the
           last one is still in flight. Slot 6 frequently gets queue-placed
@@ -7113,7 +7133,7 @@ const LoadingScreen = ({
           generation is in-flight. Gives the user something useful to read
           during the 2–3 minute wait instead of a static message. Fades on
           error state and after all 6 finish (tips become irrelevant). */}
-      {!errorMessage && !allDone && activeTip && (
+      {!errorMessage && !allDone && activeTip && readyImages.length === 0 && (
         <div
           style={{
             marginTop: 24,
@@ -8136,13 +8156,38 @@ const LoadingRetouchPreviewModal = ({
   >
     <div
       style={{
+        position: "relative",
         background: C.white,
         borderRadius: 12,
         padding: "28px 24px",
         maxWidth: 460,
         width: "100%",
+        maxHeight: "90vh",
+        overflowY: "auto",
       }}
     >
+      {/* Close X — top-right corner. Same action as the "Got it" button. */}
+      <button
+        onClick={onDismiss}
+        aria-label="Close"
+        style={{
+          position: "absolute",
+          top: 8,
+          right: 12,
+          width: 34,
+          height: 34,
+          border: "none",
+          background: "transparent",
+          color: C.mediumGrey,
+          fontSize: 26,
+          lineHeight: 1,
+          cursor: "pointer",
+          padding: 0,
+          ...font,
+        }}
+      >
+        ×
+      </button>
       {/* Title: 🛑 Don't Self-Judge! 🛑 — stop emojis flank the title to
           interrupt the customer's "am I really this wrinkly?" reaction
           BEFORE they read the body. Per Kristi 2026-05-22 after recurring
@@ -8157,7 +8202,7 @@ const LoadingRetouchPreviewModal = ({
           textAlign: "center",
         }}
       >
-        🛑 Don't Self-Judge! 🛑
+        Realism first, touch-ups next
       </h2>
       <p
         style={{
@@ -8167,23 +8212,24 @@ const LoadingRetouchPreviewModal = ({
           lineHeight: 1.55,
         }}
       >
-        This step intentionally creates headshots with hyper realistic
-        skin and all the wrinkles intact so these headshots actually look
-        like REAL people. By design, this app generates realistic skin
-        texture in this step.
+        These are made with real skin texture, so they look realistic —
+        not like AI slop. Pick the ones that look most like you; the next
+        step is where <strong>we add the glow-up</strong>. 💋
       </p>
-      <p
+      {/* Retouch-versions graphic — shows customers the Realistic/Polished/
+          Glam progression they'll unlock next, so realistic skin now doesn't
+          read as a mistake. */}
+      <img
+        src="/marketing/retouch-versions.jpg"
+        alt="The same AI headshot shown in three retouch versions — Realistic, Polished, and Glam"
         style={{
-          fontSize: 14,
-          color: C.dark,
-          margin: "0 0 22px",
-          lineHeight: 1.55,
+          display: "block",
+          width: "100%",
+          height: "auto",
+          borderRadius: 8,
+          margin: "0 0 20px",
         }}
-      >
-        The NEXT step, is where you get to ADD RETOUCHING. So sit tight
-        and pick the ones that actually look like you now, they will get
-        a glow up in the next step. 💋
-      </p>
+      />
       <button
         onClick={onDismiss}
         style={{
