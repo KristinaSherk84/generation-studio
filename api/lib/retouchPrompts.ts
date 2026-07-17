@@ -189,6 +189,26 @@ Master directive: CRITICAL IDENTITY GUARDRAIL: do not drift toward generic-prett
 Protect Jawline and native shape: Keep and protect face shape and jawline identical to the base photo.
 Pore micro-texture stays at 100% on the face, neck, and visible décolletage. The smoothing operates on surface evenness only — the pore texture itself remains visible at normal viewing distance.`;
 
+// Glam (male) — 2026-07-16. Provisional: female Glam MINUS the ADD CONTOUR
+// bullet (no bronzer/jaw sculpting on men) per Kristi. Pasted verbatim.
+export const RETOUCH_GLAM_MALE = `Identity preservation — non-negotiable, overrides every other directive below. Preserve the subject's facial features and expression with 100% precision. The retouched face must remain UNMISTAKABLY the same person. Match EXACTLY all facial features and distinguishing marks. DO NOT change facial feature shapes. Retouching operates ONLY on the skin SURFACE — never on facial structure. Act as a high end beauty retoucher.
+Background: generate identical background to the input reference photo, do not change anything in the background. Regenerate an identical background.
+Crop and framing: regenerate an identical crop and zoom to the input photo. The output canvas and subject placement must be pixel-equivalent to the input.
+JAW AND CHIN STRUCTURE LOCK: The jaw line, chin shape, face shape MUST must be identical to the input photo, pixel-for-pixel. Any  make-up technique below is a MAKEUP effect ONLY. MOUTH AND SMILE LOCK: Do not change mouth, smile, teeth shape or lips. They MUST be IDENTICAL to the input photo. Do NOT open a closed mouth, do NOT create teeth if not in the input photo. If the input shows teeth, the output shows teeth in the SAME arrangement. match the input photo's mouth and teeth exactly.
+GLAM RETOUCH (editorial luxury beauty):
+Master directive: CRITICAL IDENTITY GUARDRAIL: do not drift toward generic-pretty / AI-default features and lose the subject's actual identity. Editorial, significant, beauty retouching, equivalent to beauty campaign skin. Generate flawless, commercial-beauty-campaign, highly realistic, textured skin. Even skin tonality, fill shadow areas with fill light. Skin retains all pore detail; under-eye skin renders editorial-flawless — luminous with even tone. Filled-in softbox lighting with almost no shadows, professionally retouched by a high-end beauty retoucher. Skin smoothing only applies to surface evenness. Every facial feature, distinguishing mark, eye SHAPE, the nose, the mouth, the bone structure, the asymmetries — all of those remain UNMISTAKABLY the subject's own. Smooth the surface, not the person.
+- TONE EVENING (AGGRESSIVE): Eliminate skin redness, blotchiness, post-acne marks, hyperpigmentation, sunspots, melasma, broken capillaries. Even tones across the facial regions. Render the face, neck, AND visible décolletage as smooth skin — Remove all wrinkles and 11 lines from the forehead and the area between the brows. Apply the same smoothing to neck and décolletage as to the face — remove neck horizontal lines and discoloration.
+- SHINE: remove shine from highlight areas and hot spots.
+- ORBITAL FILL LIGHT: Illuminate the orbital sockets (the bony eye-socket area surrounding and including the under-eye region and eyes) with bright, simulated fill light at near-key intensity. The fill should be eliminating the natural under eye shadow that falls inside the eye socket. The orbital area should render dramatically bright, approaching the brightness of the lit cheek and forehead. Reference: a beauty advertising campaign where the eye area is filled with reflected light from below and the model appears wide-eyed, lifted, and well-rested under near-shadowless lighting.
+- EYES: brighten the bottom portions of the irises. Slightly intensify native eye color and add brightening and slight saturation. Amplify contrast around the eyes. Add small catchlights in the bottoms of the iris. keep native eye shape identical to the base photo.
+- SKIN AROUND THE EYES: SOFTEN fine lines and creases under the eyes. Remove half of current under eye texture, but leave tiny hints of natural under eye skin texture and subtle line texture intact. DO NOT airbrushed or artificially smooth. Zone: the area immediately below the lower lash line, down to the top of the cheekbone, and outward to the outer corner of the eye. Bright and shadow-free, with retained subtle texture. Do NOT alter the eye shape, eyelid shape, or eye position — only the SKIN below the eye is being slightly smoothed and BRIGHTENED. Shorten wrinkles on the outer corners of the eyes by half. Give the illusion of younger eye skin.
+- ANTI-PLASTIC GUARDRAIL: Glam should NEVER produce doll-like, or filter-smoothed skin. The pore preservation is the safeguard against that.
+- MAKEUP: Add SUBTLE eye accent — enhancement of natural lash definition. Apply soft, thin, powder eye liner. Exaggerate or amplify whatever eye makeup level was already present in the input — only amplify native features, do not transform or change facial features. Slightly darken and fill in eye brows. LIPS: do NOT alter or change lips of mouth. Render the lips EXACTLY as they appear in the input photo — same color, same shape, same edges, same saturation.
+- HAIR: Do not change color, texture or placement of hair. Add shine to hair highlights, fill in any gaps where the background is showing through. Remove distracting fly aways. Make hair slightly fuller.
+- TEETH: Only if teeth are visible, neutralize yellow color of teeth by adding blue tinting. Do not change the shape, alignment, or sequence of the teeth in any way. Keep teeth the original shape and identical to the base image.
+Protect Jawline and native shape: Keep and protect face shape and jawline identical to the base photo.
+Pore micro-texture stays at 100% on the face, neck, and visible décolletage. The smoothing operates on surface evenness only — the pore texture itself remains visible at normal viewing distance`;
+
 /**
  * Build the prompt for a single retouching SUB-TIER pass.
  *
@@ -230,7 +250,20 @@ IF THE SUBJECT APPEARS TO BE A WOMAN — follow ONLY this section, ignore the MA
 ${womensPolished}`;
   }
   if (subTier === "glam") {
-    return RETOUCH_GLAM;
+    // Gender routing (added 2026-07-16), mirroring the Polished routing above.
+    // Men get RETOUCH_GLAM_MALE (female Glam minus contouring); women get
+    // RETOUCH_GLAM. Gemini picks the matching section from the photo.
+    return `SUBJECT GENDER ROUTING — evaluate this FIRST, before reading any directive below. Look at the input photo and determine the subject's apparent gender. Then follow ONLY the single matching section below and COMPLETELY IGNORE the other section — do not blend them.
+
+============================================================
+IF THE SUBJECT APPEARS TO BE A MAN — follow ONLY this section, ignore the WOMAN section entirely:
+============================================================
+${RETOUCH_GLAM_MALE}
+
+============================================================
+IF THE SUBJECT APPEARS TO BE A WOMAN — follow ONLY this section, ignore the MAN section entirely:
+============================================================
+${RETOUCH_GLAM}`;
   }
   throw new Error(
     `buildRetouchPrompt called with unexpected sub-tier: ${subTier}`,
