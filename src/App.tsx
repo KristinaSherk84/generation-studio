@@ -3128,8 +3128,8 @@ const LandingV2 = ({
               {([
                 {
                   label: "Starting price",
-                  us: "$12.98",
-                  usSub: "Session + 1 keeper. Pay for what you love.",
+                  us: "$9.99",
+                  usSub: "Per image. Pay only for the ones you love.",
                   values: ["$29", "$44+"],
                   valuesSub: ["40-pack bundle — keep or not.", "100-pack bundle — keep or not."],
                   usWins: true,
@@ -11327,6 +11327,11 @@ export default function App() {
   // and counters to localStorage. On mount, if we detect a return + a
   // recent stash, restore the grid state and jump straight to the grid
   // screen. Timestamp guard prevents restoring stale data (>30 min old).
+  //
+  // freeTierRestoredRef records that this restore ran, so the verify-checkout
+  // effect further below knows NOT to override us with setScreen("upload")
+  // (which would fire the cart-clear effect and wipe the restored picks).
+  const freeTierRestoredRef = useRef(false);
   useEffect(() => {
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
@@ -11366,6 +11371,10 @@ export default function App() {
       if (stash.photos) setPhotos(stash.photos);
       // Jump straight to grid so they see their photos immediately.
       setScreen("grid");
+      // Tell the verify-checkout effect a restore happened, so it does NOT
+      // override us with setScreen("upload") (which would fire the cart-clear
+      // effect and wipe the restored cart picks).
+      freeTierRestoredRef.current = true;
       window.localStorage.removeItem("free_tier_pending_return");
     } catch {
       window.localStorage.removeItem("free_tier_pending_return");
@@ -11603,10 +11612,17 @@ export default function App() {
               setEmail(data.customerEmail);
             }
             setStripeVerifyState("idle");
-            setScreen("upload");
-            // Intro modal first ("Here's the 5 steps"), photographer-tips
-            // modal cascades after the user dismisses it.
-            setShowIntroModal(true);
+            // If the free-tier restore effect already put the user back on
+            // their grid (with their cart picks intact), do NOT bounce them to
+            // the upload screen — that would fire the cart-clear effect and
+            // wipe the very cart they paid to unlock. Only send brand-new /
+            // entry-fee payers to the upload+intro flow.
+            if (!freeTierRestoredRef.current) {
+              setScreen("upload");
+              // Intro modal first ("Here's the 5 steps"), photographer-tips
+              // modal cascades after the user dismisses it.
+              setShowIntroModal(true);
+            }
             return;
           }
 
