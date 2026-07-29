@@ -28,6 +28,24 @@ function csvCell(v: string | number | boolean | null): string {
   return `"${s.replace(/"/g, '""')}"`;
 }
 
+/** Format an ISO-8601 timestamp in US Eastern time (handles EST/EDT and DST
+ *  automatically). Empty string for null/blank so the CSV cell stays empty. */
+function formatET(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(d);
+}
+
 export default async function handler(
   req: VercelRequest,
   res: VercelResponse,
@@ -49,22 +67,22 @@ export default async function handler(
     const leads = await listLeads();
     const header = [
       "email",
-      "createdAt",
-      "lastSeenAt",
+      "createdAt (ET)",
+      "lastSeenAt (ET)",
       "generateCount",
       "purchased",
-      "purchasedAt",
+      "purchasedAt (ET)",
       "followedUp",
       "source",
     ];
     const rows = leads.map((l) =>
       [
         l.email,
-        l.createdAt,
-        l.lastSeenAt,
+        formatET(l.createdAt),
+        formatET(l.lastSeenAt),
         l.generateCount,
         l.purchased,
-        l.purchasedAt,
+        formatET(l.purchasedAt),
         l.followedUp,
         l.source,
       ]

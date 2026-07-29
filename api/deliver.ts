@@ -34,6 +34,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { GoogleGenAI, type Part } from "@google/genai";
 import sharp from "sharp";
 import { buildShareGraphic } from "./lib/compositeBeforeAfter.js";
+import { markLeadPurchased } from "./lib/leadStore.js";
 import {
   buildRetouchPrompt,
   RETOUCH_MODEL,
@@ -1113,6 +1114,16 @@ export default async function handler(
     //      channel for the relationship-building moment.
     //      BCC'd to kristi@kristinasherk.com per roadmap #9. ----
     await sendCustomerDeliveryEmail({ manifest });
+
+    // ---- Mark this email as having purchased so it drops out of the
+    //      abandonment-recovery list (leadStore groundwork). Wrapped so a
+    //      lead-store / Redis blip can never fail the delivery response;
+    //      markLeadPurchased is also a no-op for unknown/invalid emails. ----
+    try {
+      await markLeadPurchased(body.email);
+    } catch (err) {
+      console.error("[deliver] markLeadPurchased failed:", err);
+    }
 
     // ---- Unlock burn DEFERRED (2026-06-12) ----
     //

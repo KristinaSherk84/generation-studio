@@ -12184,6 +12184,21 @@ export default function App() {
         setLastSelections(stash.selections);
         setLastPhotoUrls(stash.referencePhotoUrls);
         setLastHasWideAngle(false);
+        // ---- Buyer perk (2026-07-29): a completed purchase waives the
+        //      free-tier $2.99 paywall and grants another free batch of 6
+        //      generations. We reset the two counters that drive the
+        //      free-tier gates — batchesUsed (the "another full batch"
+        //      gate at the top of handleGenerate) and regenCount (the
+        //      single-photo-regen gate) — so the customer's NEXT Generate
+        //      starts clean instead of tripping the paywall. Because the
+        //      free-tier batch gate re-arms at batchesUsed >= 1, this grants
+        //      exactly ONE more free batch per purchase: the paywall returns
+        //      after that batch fires. We intentionally do NOT call
+        //      markUnlocked here — that flips isUnlocked permanently and
+        //      would give unlimited free batches, not the single perk batch.
+        setBatchesUsed(0);
+        setRegenCount(0);
+        setShowFreeTierPaywall(false);
         setScreen("success");
       } catch (err) {
         console.error("deliver after Stripe payment failed:", err);
@@ -12537,6 +12552,11 @@ export default function App() {
     // batch after the initial one hits the paywall. batchesUsed === 0
     // means the initial batch hasn't fired yet (allow). batchesUsed >= 1
     // is a Back-to-style → Generate loop (block, show paywall).
+    //
+    // Buyer perk (2026-07-29): a completed purchase resets batchesUsed to 0
+    // on the delivery/success screen, so a paying customer lands back here
+    // with batchesUsed === 0 and slips through for exactly one more free
+    // batch before this gate re-arms.
     if (!entryFeeEnabled && !isUnlocked && batchesUsed >= 1) {
       setShowFreeTierPaywall(true);
       return;
