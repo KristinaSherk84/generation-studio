@@ -17,6 +17,10 @@ declare global {
   interface Window {
     gtag?: (...args: unknown[]) => void;
     dataLayer?: unknown[];
+    // Microsoft Clarity global (installed via the tag in index.html).
+    // Used to attach the customer's email as a custom tag so recordings
+    // can be looked up by address in the Clarity dashboard.
+    clarity?: (...args: unknown[]) => void;
   }
 }
 
@@ -12520,6 +12524,18 @@ export default function App() {
       }).catch(() => {});
     } catch {
       /* lead capture must never block generation */
+    }
+    // Tag this Clarity session with the email so recordings can be looked
+    // up by address (Clarity dashboard → Recordings → Filters → Custom
+    // tags → "email"). Guarded: window.clarity may be missing if the tag
+    // is still loading or blocked by an ad blocker, and tagging must never
+    // interrupt the generation flow.
+    try {
+      if (typeof window !== "undefined" && typeof window.clarity === "function") {
+        window.clarity("set", "email", enteredEmail);
+      }
+    } catch {
+      /* Clarity tagging is best-effort — never block generation */
     }
     const pending = pendingGenerateRef.current;
     pendingGenerateRef.current = null;
