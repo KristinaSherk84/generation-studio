@@ -8457,8 +8457,10 @@ const LoadingRetouchPreviewModal = ({
 
 // Email-capture gate (2026-07-29). Shown when the customer clicks Generate
 // for the first time, before any headshots run. Required — captures their
-// email for the lead list + abandonment follow-up, framed as "where do we
-// send your headshots?" so it reads as a save-my-work step, not a wall.
+// email for the lead list + abandonment follow-up, framed as a "save your
+// progress" step so it reads as a save-my-work step, not a wall. Copy
+// deliberately avoids implying headshots are emailed/delivered for free —
+// delivery only happens after purchase (see /api/deliver).
 type EmailCaptureModalProps = {
   onSubmit: (email: string) => void;
   onClose: () => void;
@@ -8539,8 +8541,8 @@ const EmailCaptureModal = ({ onSubmit, onClose }: EmailCaptureModalProps) => {
           }}
         >
           Enter your email to save your progress. If your session gets
-          interrupted, your generated headshots will be here when you come
-          back — no need to start over.
+          interrupted, you can pick up right where you left off — no need to
+          start over.
         </p>
         <input
           type="email"
@@ -8589,7 +8591,7 @@ const EmailCaptureModal = ({ onSubmit, onClose }: EmailCaptureModalProps) => {
             textAlign: "center",
           }}
         >
-          We'll only email you about your headshots.
+          We'll only use your email to save your session — no spam.
         </p>
       </div>
     </div>
