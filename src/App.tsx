@@ -6996,13 +6996,6 @@ const StyleScreen = ({
           to apply per photo. Initial generation always runs with skin =
           "realistic" (the existing Realistic prompt path is unchanged). */}
 
-      {/* Photographer's tip */}
-      <PhotogTip style={{ marginTop: 24 }}>
-        For the most natural results, choose Creative style with natural lighting. The AI will
-        generate 6 varied headshots each with a different organic background. Studio backgrounds
-        work best for corporate or executive looks.
-      </PhotogTip>
-
       {/* CTA */}
       <div style={{ marginTop: 24 }}>
         <Button
@@ -8302,9 +8295,23 @@ type LoadingRetouchPreviewModalProps = {
   onDismiss: () => void;
 };
 
+const RETOUCH_POPUP_LOCK_SECONDS = 15;
 const LoadingRetouchPreviewModal = ({
   onDismiss,
-}: LoadingRetouchPreviewModalProps) => (
+}: LoadingRetouchPreviewModalProps) => {
+  // Hold the popup open for a fixed window so the remaining headshots in the
+  // batch finish generating before the customer can dismiss it. A countdown
+  // badge sits where the close X normally is; the X (and Got it) unlock at 0.
+  const [retouchRemaining, setRetouchRemaining] = useState(
+    RETOUCH_POPUP_LOCK_SECONDS,
+  );
+  useEffect(() => {
+    if (retouchRemaining <= 0) return;
+    const t = setTimeout(() => setRetouchRemaining((r) => r - 1), 1000);
+    return () => clearTimeout(t);
+  }, [retouchRemaining]);
+  const retouchLocked = retouchRemaining > 0;
+  return (
   <div
     role="dialog"
     aria-modal="true"
@@ -8333,28 +8340,55 @@ const LoadingRetouchPreviewModal = ({
         overflowY: "auto",
       }}
     >
-      {/* Close X — top-right corner. Same action as the "Got it" button. */}
-      <button
-        onClick={onDismiss}
-        aria-label="Close"
-        style={{
-          position: "absolute",
-          top: 8,
-          right: 12,
-          width: 34,
-          height: 34,
-          border: "none",
-          background: "transparent",
-          color: C.mediumGrey,
-          fontSize: 26,
-          lineHeight: 1,
-          cursor: "pointer",
-          padding: 0,
-          ...font,
-        }}
-      >
-        ×
-      </button>
+      {/* Top-right corner: a 15s countdown while the rest of the batch
+          finishes generating, then it turns into the close X. Blocks the
+          customer from X-ing out before their headshots have populated. */}
+      {retouchLocked ? (
+        <div
+          aria-label={`You can close this in ${retouchRemaining} seconds`}
+          style={{
+            position: "absolute",
+            top: 8,
+            right: 12,
+            minWidth: 34,
+            height: 34,
+            borderRadius: 17,
+            background: "#F1EEE6",
+            color: C.mediumGrey,
+            fontSize: 14,
+            fontWeight: 600,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "0 10px",
+            ...font,
+          }}
+        >
+          {retouchRemaining}
+        </div>
+      ) : (
+        <button
+          onClick={onDismiss}
+          aria-label="Close"
+          style={{
+            position: "absolute",
+            top: 8,
+            right: 12,
+            width: 34,
+            height: 34,
+            border: "none",
+            background: "transparent",
+            color: C.mediumGrey,
+            fontSize: 26,
+            lineHeight: 1,
+            cursor: "pointer",
+            padding: 0,
+            ...font,
+          }}
+        >
+          ×
+        </button>
+      )}
       {/* Title: 🛑 Don't Self-Judge! 🛑 — stop emojis flank the title to
           interrupt the customer's "am I really this wrinkly?" reaction
           BEFORE they read the body. Per Kristi 2026-05-22 after recurring
@@ -8369,7 +8403,7 @@ const LoadingRetouchPreviewModal = ({
           textAlign: "center",
         }}
       >
-        Realism first, touch-ups next
+        Realism first, retouching next
       </h2>
       <p
         style={{
@@ -8398,7 +8432,8 @@ const LoadingRetouchPreviewModal = ({
         }}
       />
       <button
-        onClick={onDismiss}
+        onClick={retouchLocked ? undefined : onDismiss}
+        disabled={retouchLocked}
         style={{
           width: "100%",
           padding: "13px 22px",
@@ -8408,15 +8443,157 @@ const LoadingRetouchPreviewModal = ({
           borderRadius: 8,
           fontSize: 14,
           fontWeight: 500,
-          cursor: "pointer",
+          cursor: retouchLocked ? "default" : "pointer",
+          opacity: retouchLocked ? 0.55 : 1,
           ...font,
         }}
       >
-        Got it
+        {retouchLocked ? `Please wait… ${retouchRemaining}s` : "Got it"}
       </button>
     </div>
   </div>
-);
+  );
+};
+
+// Email-capture gate (2026-07-29). Shown when the customer clicks Generate
+// for the first time, before any headshots run. Required — captures their
+// email for the lead list + abandonment follow-up, framed as "where do we
+// send your headshots?" so it reads as a save-my-work step, not a wall.
+type EmailCaptureModalProps = {
+  onSubmit: (email: string) => void;
+  onClose: () => void;
+};
+const EmailCaptureModal = ({ onSubmit, onClose }: EmailCaptureModalProps) => {
+  const [value, setValue] = useState("");
+  const valid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value.trim());
+  const submit = () => {
+    if (valid) onSubmit(value.trim());
+  };
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Enter your email to generate your headshots"
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.72)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 20,
+        zIndex: 1000,
+        ...font,
+      }}
+    >
+      <div
+        style={{
+          position: "relative",
+          background: C.white,
+          borderRadius: 12,
+          padding: "28px 24px",
+          maxWidth: 420,
+          width: "100%",
+        }}
+      >
+        <button
+          onClick={onClose}
+          aria-label="Close"
+          style={{
+            position: "absolute",
+            top: 8,
+            right: 12,
+            width: 34,
+            height: 34,
+            border: "none",
+            background: "transparent",
+            color: C.mediumGrey,
+            fontSize: 26,
+            lineHeight: 1,
+            cursor: "pointer",
+            padding: 0,
+            ...font,
+          }}
+        >
+          ×
+        </button>
+        <h2
+          style={{
+            fontSize: 21,
+            fontWeight: 500,
+            color: C.dark,
+            margin: "0 0 10px",
+            lineHeight: 1.3,
+            textAlign: "center",
+          }}
+        >
+          Where should we send your headshots?
+        </h2>
+        <p
+          style={{
+            fontSize: 14,
+            color: C.dark,
+            margin: "0 0 18px",
+            lineHeight: 1.55,
+            textAlign: "center",
+          }}
+        >
+          Enter your email to generate. If your session gets interrupted,
+          this saves your generated headshots.
+        </p>
+        <input
+          type="email"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") submit();
+          }}
+          placeholder="you@email.com"
+          autoFocus
+          style={{
+            width: "100%",
+            padding: "12px 14px",
+            fontSize: 15,
+            border: `1px solid ${C.border}`,
+            borderRadius: 8,
+            marginBottom: 14,
+            boxSizing: "border-box",
+            ...font,
+          }}
+        />
+        <button
+          onClick={submit}
+          disabled={!valid}
+          style={{
+            width: "100%",
+            padding: "13px 22px",
+            background: C.dark,
+            color: C.buttonText,
+            border: "none",
+            borderRadius: 8,
+            fontSize: 14,
+            fontWeight: 500,
+            cursor: valid ? "pointer" : "default",
+            opacity: valid ? 1 : 0.55,
+            ...font,
+          }}
+        >
+          Generate my headshots
+        </button>
+        <p
+          style={{
+            fontSize: 11,
+            color: C.mediumGrey,
+            margin: "12px 0 0",
+            textAlign: "center",
+          }}
+        >
+          We'll only email you about your headshots.
+        </p>
+      </div>
+    </div>
+  );
+};
 
 // IntroRetouchModal REMOVED 2026-06-03 (Kristi).
 // Clarity recordings showed customers tapping the "Realistic" and
@@ -11172,6 +11349,9 @@ export default function App() {
   const [showLoadingRetouchPopup, setShowLoadingRetouchPopup] =
     useState(false);
   const [email, setEmail] = useState("");
+  // Email-capture gate before the first generation (2026-07-29).
+  const [showEmailGate, setShowEmailGate] = useState(false);
+  const pendingGenerateRef = useRef<StyleSelections | null>(null);
   // Public Blob URLs returned by /api/deliver — handed to DownloadScreen so
   // each photo gets its own Download button.
   const [deliveredPhotoUrls, setDeliveredPhotoUrls] = useState<string[]>([]);
@@ -12318,7 +12498,40 @@ export default function App() {
   //      counter so the user sees "Generating headshot 3 of 6" honestly.
   //   2. Timeout safety on Vercel Hobby: each call only needs to fit inside
   //      its own 60s ceiling, rather than all 6 squeezing into one window.
-  const handleGenerate = async (selections: StyleSelections) => {
+  // Email-gate submit: store the email, fire-and-forget the lead capture,
+  // then re-invoke handleGenerate with the same selections (passing the
+  // email through as an override so it doesn't re-trip the gate on the
+  // stale `email` state this same tick).
+  const handleEmailGateSubmit = (enteredEmail: string) => {
+    setEmail(enteredEmail);
+    setShowEmailGate(false);
+    try {
+      void fetch("/api/lead", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: enteredEmail, source: "generate" }),
+      }).catch(() => {});
+    } catch {
+      /* lead capture must never block generation */
+    }
+    const pending = pendingGenerateRef.current;
+    pendingGenerateRef.current = null;
+    if (pending) void handleGenerate(pending, enteredEmail);
+  };
+
+  const handleGenerate = async (
+    selections: StyleSelections,
+    emailOverride?: string,
+  ) => {
+    // Email-capture gate (2026-07-29). Capture the customer's email once,
+    // right before their first generation. If we don't have it yet, stash
+    // the selections + open the popup and bail; the popup's submit handler
+    // re-invokes this with the email filled in.
+    if (!(emailOverride ?? email).trim()) {
+      pendingGenerateRef.current = selections;
+      setShowEmailGate(true);
+      return;
+    }
     // Free-tier gate (2026-07-03). When entry fee is off AND unpaid, ANY
     // batch after the initial one hits the paywall. batchesUsed === 0
     // means the initial batch hasn't fired yet (allow). batchesUsed >= 1
@@ -12966,6 +13179,17 @@ export default function App() {
       {showLoadingRetouchPopup && (
         <LoadingRetouchPreviewModal
           onDismiss={() => setShowLoadingRetouchPopup(false)}
+        />
+      )}
+      {/* Email-capture gate — opens on the first Generate click, before any
+          headshots run. Captures the lead; closing cancels the generation. */}
+      {showEmailGate && (
+        <EmailCaptureModal
+          onSubmit={handleEmailGateSubmit}
+          onClose={() => {
+            setShowEmailGate(false);
+            pendingGenerateRef.current = null;
+          }}
         />
       )}
       {/* Retouch intro popup removed 2026-06-03 — descriptions are now
