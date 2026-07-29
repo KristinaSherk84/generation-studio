@@ -6264,12 +6264,12 @@ const SCRUB_COLOR_SWATCHES: {
 // at /marketing/background-examples/<styleId>/1..4.jpg — swap those files to
 // update the examples; NO code change needed. Watermark captions make clear
 // the backgrounds are illustrative, not exact.
-const BG_EXAMPLES: { id: string; name: string }[] = [
-  { id: "urban", name: "Urban Industrial" },
-  { id: "corporate", name: "Corporate" },
-  { id: "creative", name: "Creative Natural" },
-  { id: "executive", name: "Executive" },
-  { id: "healthcare", name: "Healthcare" },
+const BG_EXAMPLES: { id: string; name: string; slug: string }[] = [
+  { id: "urban", name: "Urban Industrial", slug: "urban-industrial" },
+  { id: "corporate", name: "Corporate", slug: "corporate" },
+  { id: "creative", name: "Creative Natural", slug: "creative-natural" },
+  { id: "executive", name: "Executive", slug: "executive" },
+  { id: "healthcare", name: "Healthcare", slug: "healthcare" },
 ];
 type BackgroundExamplesModalProps = { open: boolean; onClose: () => void };
 const BackgroundExamplesModal = ({ open, onClose }: BackgroundExamplesModalProps) => {
@@ -6366,9 +6366,10 @@ const BackgroundExamplesModal = ({ open, onClose }: BackgroundExamplesModalProps
                     }}
                   >
                     <img
-                      src={`/marketing/background-examples/${st.id}/${n}.jpg`}
-                      alt={`${st.name} background example ${n}`}
+                      src={`/marketing/background-examples/${st.id}/ai-headshot-background-example-${st.slug}-${n}.jpg`}
+                      alt={`AI headshot background example — ${st.name} ${n}`}
                       loading="lazy"
+                      decoding="async"
                       style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
                     />
                   </div>
