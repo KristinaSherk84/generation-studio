@@ -8540,9 +8540,8 @@ const EmailCaptureModal = ({ onSubmit, onClose }: EmailCaptureModalProps) => {
             textAlign: "center",
           }}
         >
-          Enter your email to save your progress. If your session gets
-          interrupted, you can pick up right where you left off — no need to
-          start over.
+          Input your email to see your results and save your session in case
+          anything happens.
         </p>
         <input
           type="email"
@@ -8583,16 +8582,6 @@ const EmailCaptureModal = ({ onSubmit, onClose }: EmailCaptureModalProps) => {
         >
           Generate my headshots
         </button>
-        <p
-          style={{
-            fontSize: 11,
-            color: C.mediumGrey,
-            margin: "12px 0 0",
-            textAlign: "center",
-          }}
-        >
-          We'll only use your email to save your session — no spam.
-        </p>
       </div>
     </div>
   );
