@@ -6257,6 +6257,149 @@ const SCRUB_COLOR_SWATCHES: {
   { value: "pink", label: "Pink", hex: "#DEA7A7" },
 ];
 
+// -------------------- Background examples popup --------------------
+// Opens from the "See example backgrounds" hot text under the Background
+// (style) picker on the Style screen. Shows 4 example backgrounds per style
+// so customers aren't picking blind (customer feedback 2026-07). Images live
+// at /marketing/background-examples/<styleId>/1..4.jpg — swap those files to
+// update the examples; NO code change needed. Watermark captions make clear
+// the backgrounds are illustrative, not exact.
+const BG_EXAMPLES: { id: string; name: string }[] = [
+  { id: "urban", name: "Urban Industrial" },
+  { id: "corporate", name: "Corporate" },
+  { id: "creative", name: "Creative Natural" },
+  { id: "executive", name: "Executive" },
+  { id: "healthcare", name: "Healthcare" },
+];
+type BackgroundExamplesModalProps = { open: boolean; onClose: () => void };
+const BackgroundExamplesModal = ({ open, onClose }: BackgroundExamplesModalProps) => {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [open, onClose]);
+  if (!open) return null;
+  return (
+    <div
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Example backgrounds"
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.6)",
+        zIndex: 1000,
+        display: "flex",
+        alignItems: "flex-start",
+        justifyContent: "center",
+        padding: "clamp(12px,4vw,48px)",
+        overflowY: "auto",
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: "100%",
+          maxWidth: 560,
+          background: BRAND.white,
+          borderRadius: 16,
+          overflow: "hidden",
+          position: "relative",
+          fontFamily: SANS_STACK,
+        }}
+      >
+        <button
+          onClick={onClose}
+          aria-label="Close"
+          style={{
+            position: "absolute",
+            top: 12,
+            right: 14,
+            width: 32,
+            height: 32,
+            borderRadius: "50%",
+            background: "#F1EFE8",
+            border: "none",
+            color: "#555",
+            fontSize: 18,
+            lineHeight: 1,
+            cursor: "pointer",
+            zIndex: 2,
+          }}
+        >
+          ×
+        </button>
+        <div style={{ padding: "24px 24px 6px" }}>
+          <h2 style={{ fontFamily: SERIF_STACK, fontSize: 22, margin: "0 0 4px", color: BRAND.charcoal }}>
+            See what each background looks like
+          </h2>
+          <p style={{ fontSize: 13.5, color: BRAND.subText, margin: 0, lineHeight: 1.5 }}>
+            Real examples of each style. Yours will vary — these aren't the exact backdrops you'll get.
+          </p>
+        </div>
+        <div style={{ padding: "6px 24px 20px", maxHeight: "64vh", overflowY: "auto" }}>
+          {BG_EXAMPLES.map((st) => (
+            <section key={st.id} style={{ padding: "18px 0", borderTop: "1px solid #EEE9DF", textAlign: "center" }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: BRAND.charcoal, marginBottom: 10 }}>
+                {st.name}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 62px)", gap: 6, justifyContent: "center" }}>
+                {[1, 2, 3, 4].map((n) => (
+                  <div
+                    key={n}
+                    style={{
+                      position: "relative",
+                      width: 62,
+                      height: 62,
+                      borderRadius: 6,
+                      overflow: "hidden",
+                      background: "#ECEAE3",
+                    }}
+                  >
+                    <img
+                      src={`/marketing/background-examples/${st.id}/${n}.jpg`}
+                      alt={`${st.name} background example ${n}`}
+                      loading="lazy"
+                      style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                    />
+                  </div>
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+        <div style={{ padding: "12px 24px 20px", borderTop: "1px solid #EEE9DF", textAlign: "center" }}>
+          <button
+            onClick={onClose}
+            style={{
+              background: BRAND.charcoal,
+              color: "#F1EFE8",
+              border: "none",
+              borderRadius: 24,
+              padding: "11px 28px",
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: "pointer",
+              fontFamily: SANS_STACK,
+            }}
+          >
+            Got it
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 type StyleScreenProps = {
   onGenerate: (selections: StyleSelections) => void;
   onBack: () => void;
@@ -6293,6 +6436,8 @@ const StyleScreen = ({
   const [background, setBackground] = useState<string>("lightgrey");
   const [attire, setAttire] = useState<string | null>(defaultAttire ?? null);
   const [lighting, setLighting] = useState<string | null>(null);
+  // "See example backgrounds" popup (opens from hot text under the Background picker)
+  const [showBgExamples, setShowBgExamples] = useState(false);
   // Skin tier is hardcoded to "realistic" for initial generation (Path B
   // 2026-05-15). The UI picker that used to set this on the Style screen
   // was removed — the customer picks their retouch tier AFTER seeing
@@ -6671,6 +6816,27 @@ const StyleScreen = ({
         })}
         </div>
       </div>
+
+      {/* Hot text under the Background cards → opens the example-backgrounds popup */}
+      <button
+        type="button"
+        onClick={() => setShowBgExamples(true)}
+        style={{
+          background: "none",
+          border: "none",
+          padding: 0,
+          margin: "12px 0 0",
+          color: BRAND.gold,
+          fontSize: 13,
+          fontWeight: 600,
+          cursor: "pointer",
+          textDecoration: "underline",
+          fontFamily: SANS_STACK,
+        }}
+      >
+        See example backgrounds →
+      </button>
+      <BackgroundExamplesModal open={showBgExamples} onClose={() => setShowBgExamples(false)} />
 
       {/* Creative style info banner */}
       {style === "creative" && (
