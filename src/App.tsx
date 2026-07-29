@@ -8527,7 +8527,7 @@ const EmailCaptureModal = ({ onSubmit, onClose }: EmailCaptureModalProps) => {
             textAlign: "center",
           }}
         >
-          Where should we send your headshots?
+          Save your session
         </h2>
         <p
           style={{
@@ -8538,8 +8538,9 @@ const EmailCaptureModal = ({ onSubmit, onClose }: EmailCaptureModalProps) => {
             textAlign: "center",
           }}
         >
-          Enter your email to generate. If your session gets interrupted,
-          this saves your generated headshots.
+          Enter your email to save your progress. If your session gets
+          interrupted, your generated headshots will be here when you come
+          back — no need to start over.
         </p>
         <input
           type="email"

@@ -336,7 +336,7 @@ const BLOCK_2_COMPOSITION = `Frame as a professional business headshot. The spec
 //     location feel with city or modern interior backgrounds. Combines the
 //     old industrial-office bokeh with a new urban-street one.
 const BLOCK_3_STYLE_BASE: Record<Style, string> = {
-  corporate: `Style: Clean, neutral, trustworthy. Modern corporate LinkedIn aesthetic. Subtle confidence, approachable but professional — senior individual contributor at a Fortune 500, director-level energy. Photography background matches the color specified below at 90% fidelity with subtle spot-and-gradient variation within the single image. Absolutely zero expressionless eyes. The eyes must be realistic, active, engaged, and smiling.`,
+  corporate: `Style: Clean, neutral, trustworthy. Modern corporate LinkedIn aesthetic. Subtle confidence, approachable but professional. Photography background matches the color specified below at 90% fidelity with subtle spot-and-gradient variation within the single image. Absolutely zero expressionless eyes. The eyes must be realistic, active, engaged, and smiling.`,
   creative: `Style: Warm, approachable, personable, with a clear outdoor or natural-environment feel. Softer edges than corporate. Hints of personality — a senior creative, a consultant, or a thought leader who does keynote talks. Less "Wall Street," more "TED stage outdoors." The lighting reads as natural daylight even when shot in a studio — never artificial-fluorescent or harsh-direct. Absolutely zero expressionless eyes. The expression must be realistic, active, engaged, and smiling.`,
   executive: `Style: Bold, authoritative, commanding. Strong presence — reads as "in charge." Darker tones, higher contrast, more gravitas — C-suite or board member energy. Background is deep and moody: near-black charcoal, deep gradient to black at the edges, or dark architectural backdrop softly blurred. Hair rim light is essential for separation. Directional lighting is welcome (see lighting rule below), but the downward-facing planes of the face must never fall into deep shadow — the eye sockets, under the nose, the nasolabial folds, and under the chin all stay well-filled so the subject's eyes are clearly visible and expressive. The realistic expression leans fierce and captivating rather than warm-and-smiling: "ready to take on the world," the knowing look that says "I have a secret I'm not telling you," a confident realistic half-smile that pulls the viewer in.`,
   urban: `Style: Modern, on-location, lifestyle. Reads as a polished professional photographed in a real city environment — a downtown senior tech leader, a designer, a content creator with executive presence. The "I just walked out for coffee" professional vibe — unstuffy but elevated. Background is always a real urban setting (city street, modern office interior) rendered with extreme bokeh so no specific location is identifiable. Absolutely zero expressionless eyes. The expression must be realistic, active, engaged.`,
@@ -602,11 +602,25 @@ function buildBlock6Background(background: Background, variationIndex: number): 
 //     "3D pore micro-texture only" to remove the same ambiguity. Realistic/
 //     Polished also adds an explicit "redness and broken capillaries can be
 //     color corrected" allowance.
-function buildBlock7Technical(skin: Skin | undefined): string {
+function buildBlock7Technical(
+  skin: Skin | undefined,
+  style: Style,
+): string {
+  // Corporate uses a solid seamless color backdrop, not a scene. The
+  // shallow-DoF "background noticeably blurred" sentence was making the model
+  // invent blurred offices for some Corporate slots, so it is STRIPPED for
+  // Corporate (Kristi 2026-07-29). Removal only — no new language added.
+  const stripDof = (s: string): string =>
+    style === "corporate"
+      ? s.replace(
+          "Very shallow depth of field — subject's face in perfect focus, shoulders softly falling off, background noticeably blurred. ",
+          "",
+        )
+      : s;
   if (skin === "glam") {
-    return `Technical quality: 2048-pixel resolution, sharp focus on the eyes, eyelashes visible. Skin: Apply Block 1's Glam aesthetic (Vogue cover / L'Oréal beauty campaign — flawlessly even and illuminated). The customer paid for an editorial luxury beauty result and expects it. Preserve the 3D pore micro-texture (the raised/recessed surface terrain visible at close magnification) — that is what keeps the skin from reading as plastic or AI-rendered. Do NOT produce: doll-like featurelessness, filter-smoothed featureless skin, AI-default beauty patterns, or mannequin skin. DO produce: editorial luminous skin with visible pore micro-texture beneath the smoothing — high-end magazine cover where the model still has visible pores at close inspection. Very shallow depth of field — subject's face in perfect focus, shoulders softly falling off, background noticeably blurred. Professional color grading: accurate skin tones, no color cast, slight warmth in shadows. No visible artifacts, no uncanny valley. This is a commercial-grade photograph, extremely realistic — not an illustration, render, or composite.`;
+    return stripDof(`Technical quality: 2048-pixel resolution, sharp focus on the eyes, eyelashes visible. Skin: Apply Block 1's Glam aesthetic (Vogue cover / L'Oréal beauty campaign — flawlessly even and illuminated). The customer paid for an editorial luxury beauty result and expects it. Preserve the 3D pore micro-texture (the raised/recessed surface terrain visible at close magnification) — that is what keeps the skin from reading as plastic or AI-rendered. Do NOT produce: doll-like featurelessness, filter-smoothed featureless skin, AI-default beauty patterns, or mannequin skin. DO produce: editorial luminous skin with visible pore micro-texture beneath the smoothing — high-end magazine cover where the model still has visible pores at close inspection. Very shallow depth of field — subject's face in perfect focus, shoulders softly falling off, background noticeably blurred. Professional color grading: accurate skin tones, no color cast, slight warmth in shadows. No visible artifacts, no uncanny valley. This is a commercial-grade photograph, extremely realistic — not an illustration, render, or composite.`);
   }
-  return `Technical quality: 2048-pixel resolution, sharp focus on the eyes, eyelashes visible. Skin: Preserve the 3D pore micro-texture (the raised/recessed surface terrain at close magnification) per Block 1's directive. Apply Block 1's per-tier descriptive aesthetic (Realistic = un-retouched authentic natural-light portrait for men or anyone who chose Realistic; Polished = light Lightroom retouch / senior executive's company website for women who chose Polished) to wrinkles, fine lines, and tone unevenness — those are NOT pores. Do NOT produce plastic, doll-like, filter-smoothed, or AI-tell skin — the pore micro-texture preservation is the safeguard against that. Very shallow depth of field — subject's face in perfect focus, shoulders softly falling off, background noticeably blurred. Professional color grading: accurate skin tones, no color cast, slight warmth in shadows. No visible artifacts, no uncanny valley. This is a commercial-grade photograph, extremely realistic — not an illustration, render, or composite. Skin redness and broken blood vessels can be color corrected to match surrounding skin tone colorations.`;
+  return stripDof(`Technical quality: 2048-pixel resolution, sharp focus on the eyes, eyelashes visible. Skin: Preserve the 3D pore micro-texture (the raised/recessed surface terrain at close magnification) per Block 1's directive. Apply Block 1's per-tier descriptive aesthetic (Realistic = un-retouched authentic natural-light portrait for men or anyone who chose Realistic; Polished = light Lightroom retouch / senior executive's company website for women who chose Polished) to wrinkles, fine lines, and tone unevenness — those are NOT pores. Do NOT produce plastic, doll-like, filter-smoothed, or AI-tell skin — the pore micro-texture preservation is the safeguard against that. Very shallow depth of field — subject's face in perfect focus, shoulders softly falling off, background noticeably blurred. Professional color grading: accurate skin tones, no color cast, slight warmth in shadows. No visible artifacts, no uncanny valley. This is a commercial-grade photograph, extremely realistic — not an illustration, render, or composite. Skin redness and broken blood vessels can be color corrected to match surrounding skin tone colorations.`);
 }
 
 // Block LENS_CORRECTION — fires ONLY when the client's EXIF read found
@@ -909,7 +923,7 @@ function assemblePrompt(req: GenerateRequest): string {
     parts.push(buildBlock6Background(req.background, req.variationIndex));
   }
 
-  parts.push(buildBlock7Technical(req.skin));
+  parts.push(buildBlock7Technical(req.skin, req.style));
   parts.push(buildBlock8(req.attire, req.variationIndex, req.skin));
 
   // Smile-style fidelity rule — INTENTIONALLY LAST IN THE PROMPT
