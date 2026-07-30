@@ -11968,6 +11968,7 @@ export default function App() {
     void (async () => {
       try {
         const stash = await idbGetFreeTierStash<{
+          email?: string;
           generatedImages?: string[];
           lastSelections?: StyleSelections | null;
           lastPhotoUrls?: string[];
@@ -11979,6 +11980,9 @@ export default function App() {
           timestamp?: number;
         }>();
         if (stash) {
+          // Re-link the customer's entered email first so the email-capture
+          // gate doesn't re-fire on the restored session.
+          if (stash.email) setEmail(stash.email);
           if (stash.generatedImages)
             setGeneratedImages(stash.generatedImages);
           if (stash.lastSelections) setLastSelections(stash.lastSelections);
@@ -12234,7 +12238,13 @@ export default function App() {
                 "stripe_customer_email",
                 data.customerEmail,
               );
-              setEmail(data.customerEmail);
+              // On a free-tier restore, keep the email the customer entered
+              // at the capture gate (already re-linked from the saved
+              // session) rather than overwriting it with the Stripe billing
+              // email, which may differ (2026-07-30).
+              if (!freeTierRestoredRef.current) {
+                setEmail(data.customerEmail);
+              }
             }
             setStripeVerifyState("idle");
             // If the free-tier restore effect already put the user back on
@@ -12581,6 +12591,10 @@ export default function App() {
     const stashTimestamp = Date.now();
     try {
       const stash = {
+        // The email the customer entered at the capture gate — saved with
+        // the session so it's preserved (and re-linked) on return, rather
+        // than blank / re-prompted after the $2.99 round-trip (2026-07-30).
+        email,
         generatedImages,
         lastSelections,
         lastPhotoUrls,
