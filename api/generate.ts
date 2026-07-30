@@ -546,9 +546,9 @@ Include a subtle fill from below the subject to soften — not eliminate — the
 // not a room/environment.
 const BLOCK_6_BACKGROUND: Record<Exclude<Background, "rainbow">, string> = {
   white: `Background: Seamless bright white, clean, no gradients. Generate 255 clipped bright white seamless paper backgrounds with no edges.`,
-  lightgrey: `Background: Neutral light grey paper seamless, gentle vignette.`,
-  midgrey: `Background: Medium grey paper seamless, classic editorial portrait feel. add subtle vignettes.`,
-  dark: `Background: Near-black charcoal with slight gradient to deeper black at edges.`,
+  lightgrey: `Background: Neutral light grey paper seamless, gentle vignette. This is a studio seamless paper sweep ONLY — a smooth, continuous photographic backdrop. There must be NO room, office, window, shelf, bookcase, furniture, doorway, plant, cityscape, or environmental scene of any kind behind the subject — not even blurred or out of focus. If any architectural or environmental element appears, the image has failed. The only thing behind the subject is the flat, seamless light grey backdrop described above.`,
+  midgrey: `Background: Medium grey paper seamless, classic editorial portrait feel. add subtle vignettes. This is a studio seamless paper sweep ONLY — a smooth, continuous photographic backdrop. There must be NO room, office, window, shelf, bookcase, furniture, doorway, plant, cityscape, or environmental scene of any kind behind the subject — not even blurred or out of focus. If any architectural or environmental element appears, the image has failed. The only thing behind the subject is the flat, seamless medium grey backdrop described above.`,
+  dark: `Background: Near-black charcoal with slight gradient to deeper black at edges. This is a studio seamless paper sweep ONLY — a smooth, continuous photographic backdrop. There must be NO room, office, window, shelf, bookcase, furniture, doorway, plant, cityscape, or environmental scene of any kind behind the subject — not even blurred or out of focus. If any architectural or environmental element appears, the image has failed. The only thing behind the subject is the flat, seamless dark charcoal-grey backdrop described above.`,
   black: `Background: deep-black photo background with rim lights on both sides and edges of the person.`,
   blue: `Background: Muted medium dark blue, tranquil but professional.`,
   green: `Background: Muted green paper seamless photography background, natural and warm.`,
