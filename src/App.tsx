@@ -2614,6 +2614,112 @@ const LandingV2 = ({
             proof → authority → founder face → trust story. */}
       </section>
 
+      {/* ========== CREATOR REVIEWS EMBLEM (added 2026-07-30) ==========
+          Social-proof strip placed directly above How It Works per Kristi.
+          Truthful framing: these are Kristina Sherk Photography's Google
+          reviews (the studio/founder behind the app), NOT app reviews — the
+          copy credits "our founder" and names the photographer so it never
+          implies the app itself has 400+ reviews. When we later pull real
+          GenerAItion Headshots customer reviews from its Google Business
+          page, those go in a separate testimonials block. */}
+      <div
+        style={{
+          background: BRAND.cream,
+          padding: isMobile ? "8px 16px 24px" : "8px clamp(20px,4vw,56px) 36px",
+          display: "flex",
+          justifyContent: "center",
+        }}
+      >
+        <div
+          style={{
+            fontFamily: SANS_STACK,
+            display: "inline-flex",
+            alignItems: "center",
+            gap: isMobile ? 12 : 16,
+            flexWrap: "wrap",
+            justifyContent: "center",
+            background: BRAND.white,
+            border: "1px solid #ECE6DA",
+            borderRadius: 12,
+            padding: isMobile ? "12px 16px" : "12px 20px",
+            boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+          }}
+        >
+          <span
+            aria-hidden="true"
+            style={{
+              display: "inline-flex",
+              width: 20,
+              height: 20,
+              borderRadius: "50%",
+              alignItems: "center",
+              justifyContent: "center",
+              fontWeight: 700,
+              fontSize: 13,
+              color: BRAND.white,
+              background:
+                "conic-gradient(from -45deg,#4285F4 0 25%,#34A853 0 50%,#FBBC05 0 75%,#EA4335 0 100%)",
+            }}
+          >
+            G
+          </span>
+          <div style={{ textAlign: "center" }}>
+            <div
+              style={{
+                color: BRAND.gold,
+                letterSpacing: 2,
+                fontSize: 16,
+                lineHeight: 1,
+              }}
+            >
+              ★★★★★
+            </div>
+            <div style={{ fontSize: 11, color: BRAND.subText, marginTop: 2 }}>
+              Google reviews
+            </div>
+          </div>
+          <div
+            aria-hidden="true"
+            style={{ width: 1, height: 30, background: "#E7E1D5" }}
+          />
+          <div style={{ textAlign: "center" }}>
+            <div
+              style={{
+                fontSize: 20,
+                fontWeight: 700,
+                color: BRAND.forestGreen,
+                lineHeight: 1.1,
+                whiteSpace: "nowrap",
+              }}
+            >
+              400+ 5-star Reviews
+            </div>
+            <div style={{ fontSize: 11, color: BRAND.subText, marginTop: 2 }}>
+              for our founder
+            </div>
+          </div>
+          <div
+            aria-hidden="true"
+            style={{ width: 1, height: 30, background: "#E7E1D5" }}
+          />
+          <div style={{ textAlign: "center" }}>
+            <div
+              style={{
+                fontWeight: 600,
+                fontSize: 20,
+                color: BRAND.forestGreen,
+                lineHeight: 1,
+              }}
+            >
+              Kristina Sherk
+            </div>
+            <div style={{ fontSize: 11, color: BRAND.subText, marginTop: 2 }}>
+              the photographer who built this
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* ========== HOW IT WORKS (replaces the filmstrip 2026-06-02) ==========
           Replaced the auto-scrolling filmstrip per Clarity scroll-depth data
           showing 30% of desktop visitors bounced exactly at the filmstrip's
