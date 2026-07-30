@@ -166,6 +166,12 @@ async function ensureModelsLoaded(modelDir: string): Promise<void> {
       faceapi.nets.ssdMobilenetv1.loadFromDisk(modelDir),
       faceapi.nets.faceLandmark68Net.loadFromDisk(modelDir),
       faceapi.nets.ageGenderNet.loadFromDisk(modelDir),
+      // Face recognition net (128-D descriptor) — powers the identity-match
+      // score used to auto-regenerate low-likeness headshots (2026-07-30).
+      // Shared cold-start init for both the skin path and computeFaceDescriptor.
+      // If its model files are missing, loadFromDisk rejects and callers fall
+      // back to "no scoring" gracefully.
+      faceapi.nets.faceRecognitionNet.loadFromDisk(modelDir),
     ]);
     modelsLoaded = true;
     console.log("[skin] face-api models loaded successfully");
@@ -280,6 +286,67 @@ export async function detectLandmarks(
   } catch (err) {
     console.warn(
       "[detectLandmarks] failed:",
+      err instanceof Error ? err.message : String(err),
+    );
+    return null;
+  }
+}
+
+/**
+ * Compute a 128-D face-recognition descriptor for the single most prominent
+ * face in `imageBytes`. Used for identity matching between a generated
+ * headshot and the customer's reference photos (2026-07-30).
+ *
+ * Returns null if no face is found, the model files are missing, or the
+ * library throws. ALL callers must treat null as "couldn't score" and skip
+ * the identity check rather than failing generation — this is a best-effort
+ * quality booster, never a gate.
+ */
+export async function computeFaceDescriptor(
+  imageBytes: Buffer,
+): Promise<number[] | null> {
+  try {
+    if (!cachedModelDir) {
+      cachedModelDir = await resolveModelDir();
+      if (!cachedModelDir) return null;
+    }
+    await ensureModelsLoaded(cachedModelDir);
+
+    const FACE_API_INPUT_MAX = 640;
+    const decoded = await sharp(imageBytes)
+      .rotate()
+      .resize(FACE_API_INPUT_MAX, FACE_API_INPUT_MAX, {
+        fit: "inside",
+        withoutEnlargement: true,
+      })
+      .removeAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+
+    const { data: pixels, info } = decoded;
+    const tensor = tf.tensor3d(
+      new Uint8Array(pixels),
+      [info.height, info.width, 3],
+      "int32",
+    );
+
+    const result = await faceapi
+      .detectSingleFace(
+        tensor as unknown,
+        new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 }),
+      )
+      .withFaceLandmarks()
+      .withFaceDescriptor();
+
+    tensor.dispose();
+
+    if (!result?.descriptor) {
+      return null;
+    }
+    return Array.from(result.descriptor as Float32Array);
+  } catch (err) {
+    console.warn(
+      "[identity] computeFaceDescriptor failed:",
       err instanceof Error ? err.message : String(err),
     );
     return null;

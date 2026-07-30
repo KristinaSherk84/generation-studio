@@ -35,11 +35,18 @@ export default function handler(
 
   const entryFeeEnabled = process.env.ENTRY_FEE_ENABLED !== "false";
 
+  // Identity auto-regeneration (2026-07-30). Default ON. Kill switch: set
+  // IDENTITY_CHECK_ENABLED = "false" in Vercel to disable the likeness scoring
+  // + auto-regeneration instantly (no code deploy) if it ever misbehaves.
+  const identityCheckEnabled =
+    process.env.IDENTITY_CHECK_ENABLED !== "false";
+
   // Short-cache: 60s at the CDN, 60s in browser. The flag changes rarely;
   // when Kristi flips it in Vercel, the redeploy invalidates the CDN cache
   // automatically, so a stale minute-old cache is fine.
   res.setHeader("Cache-Control", "public, max-age=60, s-maxage=60");
   return res.status(200).json({
     entryFeeEnabled,
+    identityCheckEnabled,
   });
 }

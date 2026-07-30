@@ -132,6 +132,11 @@ type GenerateRequest = {
   // Customer-picked scrub color (2026-06-05). Only used when attire === "medical".
   // Defaults to "lightblue" server-side when omitted to keep old clients working.
   scrubColor?: ScrubColor;
+  // Identity scoring (2026-07-30). When true, after generating the headshot we
+  // also compute its 128-D face descriptor and return it, so the frontend can
+  // measure likeness against the reference photos and auto-regenerate weak
+  // matches. Best-effort — if scoring fails, the image is still returned.
+  wantIdentityScore?: boolean;
   // ---- Paywall enforcement (added 2026-05-15) ----
   // Exactly one of these two must be present and valid for the request to
   // be processed:
@@ -1534,7 +1539,35 @@ export default async function handler(
     const ai = new GoogleGenAI({ apiKey });
     const image = await generateOneHeadshotWithRetry(ai, prompt, photos);
 
-    return res.status(200).json({ image });
+    // ---- Identity score (2026-07-30) ----
+    // When the client asks for it, compute the generated headshot's 128-D
+    // face descriptor so the frontend can compare it to the reference photos
+    // and auto-regenerate low-likeness shots. Dynamic import keeps face-api
+    // out of the hot path for calls that don't request scoring. Fully
+    // best-effort: any failure returns a null score and never blocks delivery
+    // of the image the customer already paid compute for.
+    let faceDescriptor: number[] | null = null;
+    if (body.wantIdentityScore) {
+      try {
+        const base64 = image.includes(",") ? image.split(",")[1] : "";
+        if (base64) {
+          const { computeFaceDescriptor } = await import(
+            "./lib/skin/detectLandmarks.js"
+          );
+          faceDescriptor = await computeFaceDescriptor(
+            Buffer.from(base64, "base64"),
+          );
+        }
+      } catch (scoreErr) {
+        console.warn(
+          "[identity] generated-image scoring skipped:",
+          scoreErr instanceof Error ? scoreErr.message : String(scoreErr),
+        );
+        faceDescriptor = null;
+      }
+    }
+
+    return res.status(200).json({ image, faceDescriptor });
   } catch (error) {
     // Log full error details to Vercel Runtime Logs so we can see exactly what
     // Google returned (status, message, body). The status-only view in the

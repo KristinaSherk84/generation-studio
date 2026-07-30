@@ -10,6 +10,11 @@
       "memory": 3009,
       "maxDuration": 300,
       "includeFiles": "{api/lib/skin/models/**,node_modules/@vladmandic/face-api/dist/face-api.esm.mjs,node_modules/@vladmandic/face-api/dist/face-api.esm.js,node_modules/@vladmandic/face-api/package.json}"
+    },
+    "api/face-descriptor.ts": {
+      "memory": 3009,
+      "maxDuration": 60,
+      "includeFiles": "{api/lib/skin/models/**,node_modules/@vladmandic/face-api/dist/face-api.esm.mjs,node_modules/@vladmandic/face-api/dist/face-api.esm.js,node_modules/@vladmandic/face-api/package.json}"
     }
   },
   "rewrites": [

@@ -128,6 +128,10 @@ const FILES = [
   // Age + gender classifier
   "age_gender_model-weights_manifest.json",
   "age_gender_model.bin",
+  // Face recognition (128-D descriptor) — powers the identity-match score
+  // that drives auto-regeneration of low-likeness headshots (2026-07-30).
+  "face_recognition_model-weights_manifest.json",
+  "face_recognition_model.bin",
 ];
 
 mkdirSync(MODEL_DIR, { recursive: true });
