@@ -2633,88 +2633,132 @@ const LandingV2 = ({
         <div
           style={{
             fontFamily: SANS_STACK,
-            display: "inline-flex",
+            display: "flex",
+            // Desktop: single row of three. Mobile (2026-07-30 per Kristi):
+            // stack into TWO rows — Google+stars on top, then the review
+            // count and founder name side-by-side below.
+            flexDirection: isMobile ? "column" : "row",
             alignItems: "center",
-            gap: isMobile ? 12 : 16,
-            flexWrap: "wrap",
-            justifyContent: "center",
+            gap: isMobile ? 10 : 16,
             background: BRAND.white,
             border: "1px solid #ECE6DA",
             borderRadius: 12,
-            padding: isMobile ? "12px 16px" : "12px 20px",
+            padding: isMobile ? "12px 14px" : "12px 20px",
             boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
           }}
         >
-          <span
-            aria-hidden="true"
+          {/* Group 1 — Google icon + stars (its own row on mobile) */}
+          <div
             style={{
-              display: "inline-flex",
-              width: 20,
-              height: 20,
-              borderRadius: "50%",
+              display: "flex",
               alignItems: "center",
-              justifyContent: "center",
-              fontWeight: 700,
-              fontSize: 13,
-              color: BRAND.white,
-              background:
-                "conic-gradient(from -45deg,#4285F4 0 25%,#34A853 0 50%,#FBBC05 0 75%,#EA4335 0 100%)",
+              gap: isMobile ? 12 : 16,
             }}
           >
-            G
-          </span>
-          <div style={{ textAlign: "center" }}>
-            <div
+            <span
+              aria-hidden="true"
               style={{
-                color: BRAND.gold,
-                letterSpacing: 2,
-                fontSize: 16,
-                lineHeight: 1,
-              }}
-            >
-              ★★★★★
-            </div>
-            <div style={{ fontSize: 11, color: BRAND.subText, marginTop: 2 }}>
-              Google reviews
-            </div>
-          </div>
-          <div
-            aria-hidden="true"
-            style={{ width: 1, height: 30, background: "#E7E1D5" }}
-          />
-          <div style={{ textAlign: "center" }}>
-            <div
-              style={{
-                fontSize: 20,
+                display: "inline-flex",
+                width: 20,
+                height: 20,
+                borderRadius: "50%",
+                alignItems: "center",
+                justifyContent: "center",
                 fontWeight: 700,
-                color: BRAND.forestGreen,
-                lineHeight: 1.1,
-                whiteSpace: "nowrap",
+                fontSize: 13,
+                color: BRAND.white,
+                background:
+                  "conic-gradient(from -45deg,#4285F4 0 25%,#34A853 0 50%,#FBBC05 0 75%,#EA4335 0 100%)",
               }}
             >
-              400+ 5-star Reviews
-            </div>
-            <div style={{ fontSize: 11, color: BRAND.subText, marginTop: 2 }}>
-              for our founder
+              G
+            </span>
+            <div style={{ textAlign: "center" }}>
+              <div
+                style={{
+                  color: BRAND.gold,
+                  letterSpacing: 2,
+                  fontSize: 16,
+                  lineHeight: 1,
+                }}
+              >
+                ★★★★★
+              </div>
+              <div
+                style={{
+                  fontSize: isMobile ? 10.5 : 11,
+                  color: BRAND.subText,
+                  marginTop: 2,
+                }}
+              >
+                Google reviews
+              </div>
             </div>
           </div>
-          <div
-            aria-hidden="true"
-            style={{ width: 1, height: 30, background: "#E7E1D5" }}
-          />
-          <div style={{ textAlign: "center" }}>
+
+          {/* Divider between the two groups — desktop only (on mobile the
+              second group drops to its own row, so no divider here). */}
+          {!isMobile && (
             <div
-              style={{
-                fontWeight: 600,
-                fontSize: 20,
-                color: BRAND.forestGreen,
-                lineHeight: 1,
-              }}
-            >
-              Kristina Sherk
+              aria-hidden="true"
+              style={{ width: 1, height: 30, background: "#E7E1D5" }}
+            />
+          )}
+
+          {/* Group 2 — review count + founder name (share one row on mobile) */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: isMobile ? 12 : 16,
+            }}
+          >
+            <div style={{ textAlign: "center" }}>
+              <div
+                style={{
+                  fontSize: isMobile ? 16 : 20,
+                  fontWeight: 700,
+                  color: BRAND.forestGreen,
+                  lineHeight: 1.1,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                400+ 5-star Reviews
+              </div>
+              <div
+                style={{
+                  fontSize: isMobile ? 10.5 : 11,
+                  color: BRAND.subText,
+                  marginTop: 2,
+                }}
+              >
+                for our founder
+              </div>
             </div>
-            <div style={{ fontSize: 11, color: BRAND.subText, marginTop: 2 }}>
-              the photographer who built this
+            <div
+              aria-hidden="true"
+              style={{ width: 1, height: 30, background: "#E7E1D5" }}
+            />
+            <div style={{ textAlign: "center" }}>
+              <div
+                style={{
+                  fontSize: isMobile ? 16 : 20,
+                  fontWeight: 600,
+                  color: BRAND.forestGreen,
+                  lineHeight: 1,
+                }}
+              >
+                Kristina Sherk
+              </div>
+              <div
+                style={{
+                  fontSize: isMobile ? 10.5 : 11,
+                  color: BRAND.subText,
+                  marginTop: 2,
+                }}
+              >
+                the photographer who built this
+              </div>
             </div>
           </div>
         </div>
