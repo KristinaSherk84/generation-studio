@@ -121,6 +121,81 @@ const font: CSSProperties = {
   fontFamily: "Inter, system-ui, -apple-system, sans-serif",
 };
 
+// ---- Free-tier mid-session return storage (IndexedDB) ----
+// When a free-tier customer pays the $2.99 mid-session, we stash their whole
+// session (6 base64 generated images + cart picks + uploaded selfies) so we
+// can drop them straight back onto their grid after Stripe. That payload is
+// several MB — it blows past localStorage's ~5MB quota, so the old
+// localStorage.setItem silently threw and NOTHING was saved, which is why the
+// customer came back to an empty grid + empty cart and had to re-upload
+// (bug fixed 2026-07-30). IndexedDB holds it comfortably. A tiny timestamp
+// MARKER still lives in localStorage so the mount-time restore can decide
+// synchronously whether to restore (and beat the verify-checkout effect that
+// would otherwise bounce the user to the upload screen); the heavy data is
+// then loaded from IndexedDB asynchronously.
+const FREE_TIER_IDB_DB = "gs_free_tier";
+const FREE_TIER_IDB_STORE = "pending_return";
+const FREE_TIER_IDB_KEY = "stash";
+const FREE_TIER_MARKER_KEY = "free_tier_pending_marker";
+
+function openFreeTierIdb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(FREE_TIER_IDB_DB, 1);
+    req.onupgradeneeded = () => {
+      req.result.createObjectStore(FREE_TIER_IDB_STORE);
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbSetFreeTierStash(value: unknown): Promise<void> {
+  const db = await openFreeTierIdb();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(FREE_TIER_IDB_STORE, "readwrite");
+      tx.objectStore(FREE_TIER_IDB_STORE).put(value, FREE_TIER_IDB_KEY);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+  } finally {
+    db.close();
+  }
+}
+
+async function idbGetFreeTierStash<T = unknown>(): Promise<T | null> {
+  const db = await openFreeTierIdb();
+  try {
+    return await new Promise<T | null>((resolve, reject) => {
+      const tx = db.transaction(FREE_TIER_IDB_STORE, "readonly");
+      const req = tx.objectStore(FREE_TIER_IDB_STORE).get(FREE_TIER_IDB_KEY);
+      req.onsuccess = () => resolve((req.result as T) ?? null);
+      req.onerror = () => reject(req.error);
+    });
+  } finally {
+    db.close();
+  }
+}
+
+async function idbClearFreeTierStash(): Promise<void> {
+  try {
+    const db = await openFreeTierIdb();
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(FREE_TIER_IDB_STORE, "readwrite");
+        tx.objectStore(FREE_TIER_IDB_STORE).delete(FREE_TIER_IDB_KEY);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      });
+    } finally {
+      db.close();
+    }
+  } catch {
+    /* best-effort cleanup — safe to ignore */
+  }
+}
+
 // Module-scope helper so all /api/generate callers (DownloadScreen's
 // cross-style fetches included) can read the current unlock identifier
 // off localStorage at request time. Returns the body fragment to merge
@@ -2630,29 +2705,92 @@ const LandingV2 = ({
           justifyContent: "center",
         }}
       >
-        <div
-          style={{
-            fontFamily: SANS_STACK,
-            display: "flex",
-            // Desktop: single row of three. Mobile (2026-07-30 per Kristi):
-            // stack into TWO rows — Google+stars on top, then the review
-            // count and founder name side-by-side below.
-            flexDirection: isMobile ? "column" : "row",
-            alignItems: "center",
-            gap: isMobile ? 10 : 16,
-            background: BRAND.white,
-            border: "1px solid #ECE6DA",
-            borderRadius: 12,
-            padding: isMobile ? "12px 14px" : "12px 20px",
-            boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-          }}
-        >
-          {/* Group 1 — Google icon + stars (its own row on mobile) */}
+        {isMobile ? (
+          /* Mobile — Option C (2026-07-30, Kristi-approved): a compact Google
+             pill (icon + stars + count) with a caption crediting the founder.
+             Replaces the multi-column layouts, which read lopsided on narrow
+             screens because the columns had uneven heights. */
           <div
             style={{
+              fontFamily: SANS_STACK,
+              maxWidth: 460,
+              background: BRAND.white,
+              border: "1px solid #ECE6DA",
+              borderRadius: 12,
+              padding: "16px 18px",
+              boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+              textAlign: "center",
+            }}
+          >
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                background: "#FBF9F4",
+                border: "1px solid #E7E1D5",
+                borderRadius: 999,
+                padding: "7px 14px",
+                marginBottom: 9,
+              }}
+            >
+              <span
+                aria-hidden="true"
+                style={{
+                  display: "inline-flex",
+                  width: 18,
+                  height: 18,
+                  borderRadius: "50%",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontWeight: 700,
+                  fontSize: 11,
+                  color: BRAND.white,
+                  background:
+                    "conic-gradient(from -45deg,#4285F4 0 25%,#34A853 0 50%,#FBBC05 0 75%,#EA4335 0 100%)",
+                }}
+              >
+                G
+              </span>
+              <span
+                style={{ color: BRAND.gold, letterSpacing: 2, fontSize: 14 }}
+              >
+                ★★★★★
+              </span>
+              <span
+                style={{
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: BRAND.forestGreen,
+                }}
+              >
+                400+ reviews
+              </span>
+            </div>
+            <div
+              style={{ fontSize: 12, color: BRAND.subText, lineHeight: 1.45 }}
+            >
+              5-star reviews for our founder{" "}
+              <span style={{ color: BRAND.forestGreen, fontWeight: 600 }}>
+                Kristina Sherk
+              </span>{" "}
+              — the photographer who built this
+            </div>
+          </div>
+        ) : (
+          /* Desktop — single row of three sections (unchanged, Kristi-approved). */
+          <div
+            style={{
+              fontFamily: SANS_STACK,
               display: "flex",
+              flexDirection: "row",
               alignItems: "center",
-              gap: isMobile ? 12 : 16,
+              gap: 16,
+              background: BRAND.white,
+              border: "1px solid #ECE6DA",
+              borderRadius: 12,
+              padding: "12px 20px",
+              boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
             }}
           >
             <span
@@ -2684,39 +2822,18 @@ const LandingV2 = ({
               >
                 ★★★★★
               </div>
-              <div
-                style={{
-                  fontSize: isMobile ? 10.5 : 11,
-                  color: BRAND.subText,
-                  marginTop: 2,
-                }}
-              >
+              <div style={{ fontSize: 11, color: BRAND.subText, marginTop: 2 }}>
                 Google reviews
               </div>
             </div>
-          </div>
-
-          {/* Divider between the two groups — desktop only (on mobile the
-              second group drops to its own row, so no divider here). */}
-          {!isMobile && (
             <div
               aria-hidden="true"
               style={{ width: 1, height: 30, background: "#E7E1D5" }}
             />
-          )}
-
-          {/* Group 2 — review count + founder name (share one row on mobile) */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: isMobile ? 12 : 16,
-            }}
-          >
             <div style={{ textAlign: "center" }}>
               <div
                 style={{
-                  fontSize: isMobile ? 16 : 20,
+                  fontSize: 20,
                   fontWeight: 700,
                   color: BRAND.forestGreen,
                   lineHeight: 1.1,
@@ -2725,13 +2842,7 @@ const LandingV2 = ({
               >
                 400+ 5-star Reviews
               </div>
-              <div
-                style={{
-                  fontSize: isMobile ? 10.5 : 11,
-                  color: BRAND.subText,
-                  marginTop: 2,
-                }}
-              >
+              <div style={{ fontSize: 11, color: BRAND.subText, marginTop: 2 }}>
                 for our founder
               </div>
             </div>
@@ -2742,7 +2853,7 @@ const LandingV2 = ({
             <div style={{ textAlign: "center" }}>
               <div
                 style={{
-                  fontSize: isMobile ? 16 : 20,
+                  fontSize: 20,
                   fontWeight: 600,
                   color: BRAND.forestGreen,
                   lineHeight: 1,
@@ -2750,18 +2861,12 @@ const LandingV2 = ({
               >
                 Kristina Sherk
               </div>
-              <div
-                style={{
-                  fontSize: isMobile ? 10.5 : 11,
-                  color: BRAND.subText,
-                  marginTop: 2,
-                }}
-              >
+              <div style={{ fontSize: 11, color: BRAND.subText, marginTop: 2 }}>
                 the photographer who built this
               </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* ========== HOW IT WORKS (replaces the filmstrip 2026-06-02) ==========
@@ -8449,7 +8554,7 @@ type LoadingRetouchPreviewModalProps = {
   onDismiss: () => void;
 };
 
-const RETOUCH_POPUP_LOCK_SECONDS = 15;
+const RETOUCH_POPUP_LOCK_SECONDS = 10;
 const LoadingRetouchPreviewModal = ({
   onDismiss,
 }: LoadingRetouchPreviewModalProps) => {
@@ -11830,48 +11935,69 @@ export default function App() {
     const url = new URL(window.location.href);
     const paid = url.searchParams.get("paid") === "1";
     if (!paid) return;
+    // Read the tiny freshness MARKER synchronously. The heavy session data
+    // lives in IndexedDB, but we must claim the restore (and jump to the
+    // grid) synchronously here so the verify-checkout effect below — which
+    // decides whether to bounce the user to the upload screen after its own
+    // network round-trip — sees freeTierRestoredRef already set.
+    let markerRaw: string | null = null;
     try {
-      const raw = window.localStorage.getItem("free_tier_pending_return");
-      if (!raw) return;
-      const stash = JSON.parse(raw) as {
-        generatedImages?: string[];
-        lastSelections?: StyleSelections | null;
-        lastPhotoUrls?: string[];
-        lastHasWideAngle?: boolean;
-        regenCount?: number;
-        batchesUsed?: number;
-        cart?: string[];
-        photos?: UploadedPhoto[];
-        timestamp?: number;
-      };
-      const stashAgeMs = Date.now() - (stash.timestamp ?? 0);
-      if (stashAgeMs > 30 * 60 * 1000) {
-        // Stash is >30 min old — user probably paid then walked away.
-        // Don't force-restore; let the normal flow handle it.
-        window.localStorage.removeItem("free_tier_pending_return");
-        return;
-      }
-      if (stash.generatedImages) setGeneratedImages(stash.generatedImages);
-      if (stash.lastSelections) setLastSelections(stash.lastSelections);
-      if (stash.lastPhotoUrls) setLastPhotoUrls(stash.lastPhotoUrls);
-      if (typeof stash.lastHasWideAngle === "boolean")
-        setLastHasWideAngle(stash.lastHasWideAngle);
-      if (typeof stash.regenCount === "number")
-        setRegenCount(stash.regenCount);
-      if (typeof stash.batchesUsed === "number")
-        setBatchesUsed(stash.batchesUsed);
-      if (stash.cart) setCart(stash.cart);
-      if (stash.photos) setPhotos(stash.photos);
-      // Jump straight to grid so they see their photos immediately.
-      setScreen("grid");
-      // Tell the verify-checkout effect a restore happened, so it does NOT
-      // override us with setScreen("upload") (which would fire the cart-clear
-      // effect and wipe the restored cart picks).
-      freeTierRestoredRef.current = true;
-      window.localStorage.removeItem("free_tier_pending_return");
+      markerRaw = window.localStorage.getItem(FREE_TIER_MARKER_KEY);
     } catch {
-      window.localStorage.removeItem("free_tier_pending_return");
+      markerRaw = null;
     }
+    if (!markerRaw) return;
+    try {
+      window.localStorage.removeItem(FREE_TIER_MARKER_KEY);
+    } catch {
+      /* ignore */
+    }
+    const stamp = Number(markerRaw);
+    const stale =
+      !Number.isFinite(stamp) || Date.now() - stamp > 30 * 60 * 1000;
+    if (stale) {
+      // Paid then walked away (>30 min) — let the normal flow handle it.
+      void idbClearFreeTierStash();
+      return;
+    }
+
+    // Fresh return: claim the restore + jump to grid NOW, then hydrate the
+    // heavy state (images, cart, selections) from IndexedDB asynchronously.
+    freeTierRestoredRef.current = true;
+    setScreen("grid");
+    void (async () => {
+      try {
+        const stash = await idbGetFreeTierStash<{
+          generatedImages?: string[];
+          lastSelections?: StyleSelections | null;
+          lastPhotoUrls?: string[];
+          lastHasWideAngle?: boolean;
+          regenCount?: number;
+          batchesUsed?: number;
+          cart?: string[];
+          photos?: UploadedPhoto[];
+          timestamp?: number;
+        }>();
+        if (stash) {
+          if (stash.generatedImages)
+            setGeneratedImages(stash.generatedImages);
+          if (stash.lastSelections) setLastSelections(stash.lastSelections);
+          if (stash.lastPhotoUrls) setLastPhotoUrls(stash.lastPhotoUrls);
+          if (typeof stash.lastHasWideAngle === "boolean")
+            setLastHasWideAngle(stash.lastHasWideAngle);
+          if (typeof stash.regenCount === "number")
+            setRegenCount(stash.regenCount);
+          if (typeof stash.batchesUsed === "number")
+            setBatchesUsed(stash.batchesUsed);
+          if (stash.cart) setCart(stash.cart);
+          if (stash.photos) setPhotos(stash.photos);
+        }
+      } catch {
+        /* IDB read failed — user stays on the grid; images may be blank */
+      } finally {
+        void idbClearFreeTierStash();
+      }
+    })();
     // Only run at mount — no deps.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -12080,8 +12206,14 @@ export default function App() {
             }
             if (data.sessionId && data.unlockExpiresAt) {
               markStripeUnlocked(data.sessionId, data.unlockExpiresAt);
-              // Show the welcome popup with countdown timer.
-              setShowWelcomePopup(true);
+              // Show the welcome popup with countdown timer — but NOT on a
+              // free-tier mid-session restore, where the customer is being
+              // dropped straight back onto their grid + cart (2026-07-30).
+              // An interstitial countdown there would interrupt exactly the
+              // "take me right back to my photos" experience we're fixing.
+              if (!freeTierRestoredRef.current) {
+                setShowWelcomePopup(true);
+              }
             } else {
               // Server didn't return the new fields (deploy lag or
               // metadata write failed). Fall back to the legacy flag —
@@ -12437,14 +12569,16 @@ export default function App() {
     }
   };
 
-  // Free-tier mid-session unlock (2026-07-03). Called when the customer
-  // clicks "Unlock for $2.99" in the FreeTierPaywallModal. Stashes the
-  // current grid state to localStorage under `free_tier_pending_return`
-  // so the mount-time restore effect (see above) can rehydrate everything
-  // when Stripe redirects back to /?paid=1. Then fires the normal Stripe
-  // Checkout flow.
+  // Free-tier mid-session unlock (2026-07-03; storage reworked 2026-07-30).
+  // Called when the customer clicks "Unlock for $2.99" in the
+  // FreeTierPaywallModal. Stashes the current grid state (heavy base64
+  // images) into IndexedDB + a tiny timestamp marker in localStorage, so the
+  // mount-time restore effect (see above) can rehydrate everything when
+  // Stripe redirects back to /?paid=1. Then fires the normal Stripe Checkout
+  // flow.
   const handleFreeTierUnlockPay = async () => {
     if (typeof window === "undefined") return;
+    const stashTimestamp = Date.now();
     try {
       const stash = {
         generatedImages,
@@ -12455,16 +12589,26 @@ export default function App() {
         batchesUsed,
         cart,
         photos,
-        timestamp: Date.now(),
+        timestamp: stashTimestamp,
       };
+      // Heavy payload → IndexedDB (localStorage's ~5MB quota can't hold the
+      // base64 images, which is what silently broke the restore before).
+      // Only after the IDB write COMMITS do we set the tiny localStorage
+      // marker the mount-time restore reads synchronously on return.
+      await idbSetFreeTierStash(stash);
       window.localStorage.setItem(
-        "free_tier_pending_return",
-        JSON.stringify(stash),
+        FREE_TIER_MARKER_KEY,
+        String(stashTimestamp),
       );
     } catch {
-      // localStorage full or blocked. The Stripe flow still works but
-      // the user's grid will reset on return. Not fatal — they still
-      // paid and can regen normally with their unlock.
+      // IndexedDB blocked/full (rare — e.g. private browsing). The Stripe
+      // flow still works but the grid resets on return (old behavior). Make
+      // sure we don't leave a marker pointing at data that isn't there.
+      try {
+        window.localStorage.removeItem(FREE_TIER_MARKER_KEY);
+      } catch {
+        /* ignore */
+      }
     }
     try {
       const resp = await fetch("/api/create-checkout-session", {
