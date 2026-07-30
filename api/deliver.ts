@@ -266,7 +266,8 @@ async function sendUsageAlertEmail(args: {
         // the customer email below) so deliverability is consistent and
         // these don't trip spam on Kristi's own inbox.
         from: "AI Generator Alerts <kristi@kristinasherk.com>",
-        to: ["kristi@kristinasherk.com"],
+        // Both Kristi and Nic get every usage alert (2026-07-30).
+        to: ["kristi@kristinasherk.com", "Nic@KristinaSherk.com"],
         // Subject includes the customer name so Kristi can see at a glance
         // in her Gmail list who used the generator without opening the
         // email. Kept the "$$$" prefix so existing filter rules still match.
@@ -555,8 +556,9 @@ export async function sendCustomerDeliveryEmail(args: {
         from: "Kristi at GenerAItion Headshots <kristi@kristinasherk.com>",
         to: [manifest.email],
         // BCC Kristi per roadmap item #9 — gives her a zero-effort audit
-        // log of every delivery she can pull marketing content from.
-        bcc: ["kristi@kristinasherk.com"],
+        // log of every delivery she can pull marketing content from. Nic
+        // added 2026-07-30 (BCC so the customer never sees the address).
+        bcc: ["kristi@kristinasherk.com", "Nic@KristinaSherk.com"],
         // reply_to lands customer replies in Kristi's real inbox even
         // though the from-address is the shared Resend sender.
         reply_to: "kristi@kristinasherk.com",
