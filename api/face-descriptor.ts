@@ -13,8 +13,11 @@
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
-// Face detection on several reference photos is CPU work; give it headroom.
-export const maxDuration = 60;
+// Face detection on reference photos is CPU work on the (slow) tfjs CPU
+// backend + a cold-start model load, so give it real headroom — 60s was
+// tight enough to time out (2026-07-31). Runs in parallel with generation,
+// so a longer ceiling doesn't slow the customer down.
+export const maxDuration = 300;
 
 async function fetchBuffer(url: string): Promise<Buffer | null> {
   try {
@@ -48,9 +51,10 @@ export default async function handler(
       "./lib/skin/detectLandmarks.js"
     );
 
-    // Cap how many references we score — the first few anchor identity well
-    // and this bounds CPU time.
-    const MAX_REFS = 5;
+    // Cap how many references we score. On the CPU tfjs backend each
+    // detection is slow, and scoring 5 was timing out — 2 is plenty to
+    // anchor identity and keeps this well under the ceiling (2026-07-31).
+    const MAX_REFS = 2;
     const urls = photoUrls.slice(0, MAX_REFS);
     const buffers = await Promise.all(urls.map(fetchBuffer));
 
