@@ -145,12 +145,12 @@ export const RETOUCH_POLISHED_MALE = `Identity preservation — non-negotiable, 
 POLISHED RETOUCH (man):
 Master directive: Keep skin texture. remove red blemishes and veins, even tone, RETAIN texture. Soften lighting hot-spots, keep fine lines, brow texture. The result reads as 'professionally retouched magazine profile photo of a confident man' no airbrushing.
 FACIAL HAIR LOCK: If detected, Preserve and protect all facial hair (stubble, beard, mustache, sideburns) EXACTLY as in the input. Beards and stubble retain visible texture and grain at close inspection.
-Under-eye direction: Slightly even out color around the eyes — remove dark circles. The result reads as the same person, just well-rested. Add lighting to orbital sockets. Keep visible character — keep under eye skin texture. Remove half of the crows feet. Shorten crows feet wrinkle lengths and deepness.
+Under-eye area: moderately brighten and even out color around the eyes — remove dark circles. Add lighting to orbital sockets. Keep visible character — keep under eye skin texture. Remove half of the crows feet. Shorten crows feet wrinkle lengths and deepness.
 - TONE EVENING: Even out tone variation between forehead / cheeks / chin / neck. keep subtle shine in hotspot areas to protect form of the face. Keep and protect all freckles and identifying marks.
 - BROW: Preserve exact brow shape, hair pattern, density, and stray hairs.
 - PORE STRUCTURE: Add or reinforce pore structure across face and neck. Pore visibility is imperative. male skin keeps more texture in professional retouching.
-- NO plastic skin. NO airbrushed look. NO smoothing. NO femininizing softening of jaw or features.
-- If teeth are visible, keep their shape identical to before, remove yellow tinge and slightly brighten them.
+- NO plastic skin. NO airbrushed look. minimal skin smoothing, slight wrinkle reduction and shortening. NO femininizing softening of jaw or features.
+- DO NOT create teeth. Only if teeth are visible in the base image, keep their shape identical to before, remove yellow tinge and slightly brighten them.
 Pore micro-texture preservation — Preserve the 3D micro-texture of the skin surface (the raised/recessed terrain of pores at close magnification). Pore micro-texture stays at 100% — should read MORE visible than female-subject retouching, especially across the cheeks, forehead, and chin.`;
 
 // Glam (female) — all ages. 2026-07-16: latest tweak by Kristi (pasted
