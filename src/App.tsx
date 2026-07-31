@@ -7098,45 +7098,9 @@ const StyleScreen = ({
       </button>
       <BackgroundExamplesModal open={showBgExamples} onClose={() => setShowBgExamples(false)} />
 
-      {/* Creative style info banner */}
-      {style === "creative" && (
-        <div
-          style={{
-            display: "flex",
-            gap: 10,
-            alignItems: "flex-start",
-            padding: "12px 14px",
-            background: C.white,
-            border: `1px solid ${C.border}`,
-            borderRadius: 8,
-            marginTop: 16,
-          }}
-        >
-          <div
-            style={{
-              width: 14,
-              height: 14,
-              borderRadius: "50%",
-              border: `1.5px solid ${C.mediumGrey}`,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 10,
-              color: C.mediumGrey,
-              fontWeight: 500,
-              flexShrink: 0,
-              marginTop: 2,
-            }}
-          >
-            i
-          </div>
-          <p style={{ fontSize: 12, color: C.mediumGrey, margin: 0, lineHeight: 1.5 }}>
-            Renders with an extremely shallow depth of field — the kind of silky, creamy bokeh you
-            get shooting at f/1.4 with a prime lens. Each of your 6 results will have a different
-            background.
-          </p>
-        </div>
-      )}
+      {/* Creative-style info banner removed 2026-07-31 — the "See example
+          backgrounds" link now covers this, so the bokeh explainer box was
+          redundant. */}
 
       {/* Corporate style background picker */}
       {style === "corporate" && (
