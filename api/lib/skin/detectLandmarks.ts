@@ -160,6 +160,39 @@ async function ensureModelsLoaded(modelDir: string): Promise<void> {
     console.log("[skin] initializing TFJS CPU backend...");
     await tf.setBackend("cpu");
     await tf.ready();
+
+    // ---- TextEncoder platform patch (2026-07-31) ----
+    // The bundled face-api ESM's tfjs selects a Node platform whose `util`
+    // namespace is empty (the browser bundle never wires it up), so weight
+    // decoding throws "this.util.TextEncoder is not a constructor" and EVERY
+    // model load silently fails — which disabled BOTH the identity descriptor
+    // scoring (visible in logs 2026-07-31) AND, quietly, the Glam/Polished
+    // skin pre-filter. Point the platform's util at Node's real `util`
+    // module (which has TextEncoder/TextDecoder). Best-effort: wrapped so a
+    // patch failure never makes things worse than the current broken state.
+    try {
+      const nodeUtil = await import("node:util");
+      const platform = tf.env?.().platform;
+      if (
+        platform &&
+        (!platform.util || typeof platform.util.TextEncoder !== "function")
+      ) {
+        platform.util = nodeUtil;
+      }
+      const g = globalThis as unknown as {
+        TextEncoder?: unknown;
+        TextDecoder?: unknown;
+      };
+      if (typeof g.TextEncoder !== "function") g.TextEncoder = nodeUtil.TextEncoder;
+      if (typeof g.TextDecoder !== "function") g.TextDecoder = nodeUtil.TextDecoder;
+      console.log("[skin] TextEncoder platform patch applied");
+    } catch (patchErr) {
+      console.warn(
+        "[skin] TextEncoder platform patch failed (continuing):",
+        patchErr instanceof Error ? patchErr.message : String(patchErr),
+      );
+    }
+
     console.log(`[skin] TFJS ready (backend: ${tf.getBackend()}); loading face-api models from ${modelDir}`);
 
     await Promise.all([

@@ -965,6 +965,16 @@ type PreFilterFn = (bytes: Buffer, skin?: Skin) => Promise<Buffer>;
 let _preFilterCache: PreFilterFn | null = null;
 let _preFilterAttempted = false;
 
+// ---- Skin pre-filter kill switch (2026-07-31) ----
+// The Glam/Polished frequency-separation skin pre-filter was retired long ago
+// (skin is now controlled by prompt language, not this pixel pass). It stayed
+// in the code but silently no-op'd because face-api failed to load. The
+// 2026-07-31 TextEncoder loader fix — added so the IDENTITY descriptor scoring
+// works — makes face-api load successfully again, which would inadvertently
+// REVIVE this pre-filter. Kristi wants it to stay OFF, so gate it explicitly.
+// Flip to true only if the pixel-based skin smoothing is ever wanted back.
+const SKIN_PREFILTER_ENABLED = false;
+
 async function loadPreFilterOnce(): Promise<PreFilterFn | null> {
   if (_preFilterAttempted) return _preFilterCache;
   _preFilterAttempted = true;
@@ -1014,8 +1024,9 @@ async function fetchPhotoAsInlineData(
   let buffer: Buffer = Buffer.from(arrayBuffer);
   let preFilterApplied = false;
 
-  // Only attempt pre-filter for the tiers that need it.
-  if (skin === "polished" || skin === "glam") {
+  // Only attempt pre-filter for the tiers that need it — AND only if the
+  // pre-filter is explicitly enabled (it's retired; see SKIN_PREFILTER_ENABLED).
+  if (SKIN_PREFILTER_ENABLED && (skin === "polished" || skin === "glam")) {
     const preFilter = await loadPreFilterOnce();
     if (preFilter) {
       const originalSize = buffer.length;
