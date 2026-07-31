@@ -12055,7 +12055,40 @@ export default function App() {
           if (typeof stash.batchesUsed === "number")
             setBatchesUsed(stash.batchesUsed);
           if (stash.cart) setCart(stash.cart);
-          if (stash.photos) setPhotos(stash.photos);
+          // Rebuild the uploaded-photos list so the reference-photo area still
+          // renders after the Stripe page reload, AND so a "generate in a
+          // different style" second batch has usable photos (2026-07-31 fix).
+          // The original `localPreview` values are `blob:` object URLs that die
+          // on navigation, so we point previews at the persistent Blob URL.
+          // Prefer the stashed photo objects (they carry per-photo wide-angle /
+          // HEIC flags); if those didn't survive, reconstruct minimal usable
+          // entries straight from the persistent reference URLs (lastPhotoUrls).
+          let restoredPhotos: UploadedPhoto[] = [];
+          if (stash.photos && stash.photos.length > 0) {
+            restoredPhotos = stash.photos
+              .filter((p) => !!p.blobUrl)
+              .map((p) => ({
+                ...p,
+                localPreview: p.blobUrl as string,
+                status: "done" as const,
+              }));
+          }
+          if (
+            restoredPhotos.length === 0 &&
+            stash.lastPhotoUrls &&
+            stash.lastPhotoUrls.length > 0
+          ) {
+            restoredPhotos = stash.lastPhotoUrls.map((url, i) => ({
+              id: `restored-${i}`,
+              localPreview: url,
+              blobUrl: url,
+              status: "done" as const,
+              errorMessage: null,
+              isWideAngle: stash.lastHasWideAngle ?? null,
+              isHeic: false,
+            }));
+          }
+          if (restoredPhotos.length > 0) setPhotos(restoredPhotos);
         }
       } catch {
         /* IDB read failed — user stays on the grid; images may be blank */
@@ -12952,12 +12985,22 @@ export default function App() {
     const usablePhotos = photos.filter(
       (p) => p.status === "done" && p.blobUrl,
     );
-    const photoUrls = usablePhotos.map((p) => p.blobUrl as string);
+    let photoUrls = usablePhotos.map((p) => p.blobUrl as string);
     // Wide-angle flag: true if ANY usable reference photo was detected as
     // wide via EXIF. `null` (EXIF unreadable) and `false` (confirmed ≥40mm)
     // both count as "not wide" — the server will fall back to Block 1's
     // generic "if it appears wide-angle..." wording in those cases.
-    const hasWideAngle = usablePhotos.some((p) => p.isWideAngle === true);
+    let hasWideAngle = usablePhotos.some((p) => p.isWideAngle === true);
+
+    // Fallback (2026-07-31): a "generate in a different style" batch reuses the
+    // SAME reference photos, which already live in Blob as lastPhotoUrls. If
+    // the in-memory `photos` list is short (e.g. after the $2.99 restore, where
+    // the original File-backed previews don't survive the page reload), fall
+    // back to those persistent URLs so the second generation still fires.
+    if (photoUrls.length < 5 && lastPhotoUrls.length >= 5) {
+      photoUrls = lastPhotoUrls;
+      hasWideAngle = lastHasWideAngle;
+    }
 
     if (photoUrls.length < 5) {
       setGenerationError(

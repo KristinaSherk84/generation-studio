@@ -64,23 +64,67 @@
 //      Renamed to .mjs via postinstall because face-api's package.json
 //      doesn't declare type:module. tf instance accessed at faceapi.tf.
 
-// @ts-ignore — face-api's dist files don't ship .d.ts beside each
-// variant; runtime resolution finds the .mjs renamed from .esm.js by
-// postinstall.
-import * as faceapiModule from "@vladmandic/face-api/dist/face-api.esm.mjs";
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const faceapi: any = faceapiModule;
-// The bundled ESM variant inlines tfjs-core and exposes the tf
-// instance under `tf` on the module namespace. Callers use this for
-// backend management + tensor ops, identical to a direct tfjs import.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const tf: any = (faceapiModule as any).tf;
-
 import path from "node:path";
 import { promises as fs } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 import sharp from "sharp";
+
+// ---- Force face-api onto its WORKING (browser) tfjs platform in Node ----
+// (2026-07-31 — reproduced and validated against the exact bundle in a
+// sandbox before shipping.)
+//
+// The bundled `@vladmandic/face-api` ESM registers a Node tfjs platform whose
+// `util` is an empty stub, so `new this.util.TextEncoder` throws the instant
+// face-api is imported ("this.util.TextEncoder is not a constructor"). That
+// failed import silently disabled BOTH the skin pre-filter AND the identity
+// descriptor scoring on Vercel.
+//
+// Fix: define a minimal `window`/`document` BEFORE importing face-api so tfjs
+// registers its BROWSER platform instead — that one encodes via the global
+// `TextEncoder`, which exists in Node 18+. Also expose a `require()` shim so
+// face-api's internal `require("fs")` (used by loadFromDisk) resolves under
+// ESM. Because a static top-level import would run before any of this, face-
+// api is imported LAZILY (see loadFaceApi below), after the globals are set.
+{
+  const g = globalThis as unknown as {
+    require?: unknown;
+    window?: unknown;
+    document?: unknown;
+  };
+  if (!g.require) {
+    try {
+      g.require = createRequire(import.meta.url);
+    } catch {
+      /* ignore — Vercel usually provides require already */
+    }
+  }
+  if (typeof g.window === "undefined") g.window = { document: {} };
+  if (typeof g.document === "undefined") g.document = {};
+}
+
+// face-api + its inlined tfjs, populated on first use by loadFaceApi().
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let faceapi: any = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let tf: any = null;
+let faceApiLoadPromise: Promise<void> | null = null;
+
+/** Import face-api lazily (AFTER the browser-platform globals above are set)
+ *  and cache the module + its inlined tf instance. */
+async function loadFaceApi(): Promise<void> {
+  if (faceapi) return;
+  if (faceApiLoadPromise) return faceApiLoadPromise;
+  faceApiLoadPromise = (async () => {
+    // @ts-ignore — no .d.ts beside the .mjs variant (renamed by postinstall).
+    const mod = await import("@vladmandic/face-api/dist/face-api.esm.mjs");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    faceapi = mod as any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    tf = (mod as any).tf;
+  })();
+  return faceApiLoadPromise;
+}
 
 export type Point = { x: number; y: number };
 
@@ -157,41 +201,15 @@ async function ensureModelsLoaded(modelDir: string): Promise<void> {
     // @tensorflow/tfjs (the browser bundle, which also works in Node)
     // to keep the function bundle small — tfjs-node would pull ~30MB
     // of native bindings we don't need for our throughput.
+    // Load face-api lazily now — its browser-platform globals were set at
+    // module load (above the lazy import), so this import no longer throws the
+    // TextEncoder error. Then wire the TFJS CPU backend before loading models
+    // (the browser tfjs bundle works in Node and keeps the function small vs.
+    // tfjs-node's ~30MB native bindings).
+    await loadFaceApi();
     console.log("[skin] initializing TFJS CPU backend...");
     await tf.setBackend("cpu");
     await tf.ready();
-
-    // ---- TextEncoder platform patch (2026-07-31) ----
-    // The bundled face-api ESM's tfjs selects a Node platform whose `util`
-    // namespace is empty (the browser bundle never wires it up), so weight
-    // decoding throws "this.util.TextEncoder is not a constructor" and EVERY
-    // model load silently fails — which disabled BOTH the identity descriptor
-    // scoring (visible in logs 2026-07-31) AND, quietly, the Glam/Polished
-    // skin pre-filter. Point the platform's util at Node's real `util`
-    // module (which has TextEncoder/TextDecoder). Best-effort: wrapped so a
-    // patch failure never makes things worse than the current broken state.
-    try {
-      const nodeUtil = await import("node:util");
-      const platform = tf.env?.().platform;
-      if (
-        platform &&
-        (!platform.util || typeof platform.util.TextEncoder !== "function")
-      ) {
-        platform.util = nodeUtil;
-      }
-      const g = globalThis as unknown as {
-        TextEncoder?: unknown;
-        TextDecoder?: unknown;
-      };
-      if (typeof g.TextEncoder !== "function") g.TextEncoder = nodeUtil.TextEncoder;
-      if (typeof g.TextDecoder !== "function") g.TextDecoder = nodeUtil.TextDecoder;
-      console.log("[skin] TextEncoder platform patch applied");
-    } catch (patchErr) {
-      console.warn(
-        "[skin] TextEncoder platform patch failed (continuing):",
-        patchErr instanceof Error ? patchErr.message : String(patchErr),
-      );
-    }
 
     console.log(`[skin] TFJS ready (backend: ${tf.getBackend()}); loading face-api models from ${modelDir}`);
 
