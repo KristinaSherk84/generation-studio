@@ -2092,6 +2092,10 @@ const LandingV2 = ({
   // the bottom of the page rather than a prominent input. We don't want to
   // distract from the primary CTA on the new editorial layout.
   const [showPromoInput, setShowPromoInput] = useState(false);
+  // Second, prominent promo entry point directly under the hero CTA
+  // (2026-08-01) — same validation/apply logic as the footer link, its own
+  // open/closed toggle so the two placements don't fight over one boolean.
+  const [showHeroPromo, setShowHeroPromo] = useState(false);
   const [promoCode, setPromoCode] = useState("");
   const [promoStatus, setPromoStatus] =
     useState<"idle" | "submitting" | "success" | "error">("idle");
@@ -2600,6 +2604,97 @@ const LandingV2 = ({
               size="lg"
             />
           )}
+
+          {/* "Have a promo code?" directly under the hero CTA (2026-08-01).
+              Same verify/apply logic as the footer link; used for the
+              apology / glitch codes Kristi sends customers so they can
+              redeem right where they land instead of hunting in the footer. */}
+          <div style={{ marginTop: 14, textAlign: "center" }}>
+            {promoStatus === "success" ? (
+              <div
+                style={{
+                  fontSize: 13,
+                  color: BRAND.charcoal,
+                  fontFamily: SANS_STACK,
+                  fontWeight: 600,
+                }}
+              >
+                ✓ Promo code applied — your generations are on us.
+              </div>
+            ) : !showHeroPromo ? (
+              <button
+                onClick={() => setShowHeroPromo(true)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: BRAND.subText,
+                  fontSize: 13,
+                  cursor: "pointer",
+                  textDecoration: "underline",
+                  fontFamily: SANS_STACK,
+                  padding: 0,
+                }}
+              >
+                Have a promo code?
+              </button>
+            ) : (
+              <div
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <input
+                  type="text"
+                  value={promoCode}
+                  onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+                  placeholder="Enter code"
+                  autoFocus
+                  style={{
+                    fontSize: 13,
+                    padding: "6px 10px",
+                    border: `1px solid ${BRAND.subText}`,
+                    borderRadius: 6,
+                    fontFamily: SANS_STACK,
+                    width: 140,
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") submitPromo();
+                  }}
+                />
+                <button
+                  onClick={submitPromo}
+                  disabled={promoStatus === "submitting" || !promoCode.trim()}
+                  style={{
+                    fontSize: 13,
+                    padding: "6px 14px",
+                    background: BRAND.charcoal,
+                    color: BRAND.white,
+                    border: "none",
+                    borderRadius: 6,
+                    cursor: "pointer",
+                    fontFamily: SANS_STACK,
+                  }}
+                >
+                  {promoStatus === "submitting" ? "..." : "Apply"}
+                </button>
+              </div>
+            )}
+            {promoStatus === "error" && (
+              <div
+                style={{
+                  marginTop: 8,
+                  fontSize: 12,
+                  color: "#B23A2E",
+                  fontFamily: SANS_STACK,
+                }}
+              >
+                {promoErrMsg}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Hero photo of Kristi MOVED OUT of the hero section (2026-05-13).
@@ -12661,7 +12756,15 @@ export default function App() {
     // customer has already hit MAX_FULL_BATCHES. The modal explains
     // the cap and surfaces the cart so they understand they can still
     // check out. Cart is preserved either way.
-    if (batchesUsed >= MAX_FULL_BATCHES) {
+    //
+    // Promo unlocks are UNLIMITED (2026-08-01): an apology / glitch code lets
+    // the recipient keep generating past MAX_FULL_BATCHES. The server still
+    // re-verifies the promo code on every /api/generate call, so this bypass
+    // can't be spoofed into free generations without a valid, un-revoked code.
+    const promoUnlimited =
+      typeof window !== "undefined" &&
+      window.localStorage.getItem("unlock_source") === "promo";
+    if (!promoUnlimited && batchesUsed >= MAX_FULL_BATCHES) {
       setShowRegenLimitModal(true);
       return;
     }

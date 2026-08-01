@@ -131,24 +131,23 @@ export async function listCodes(): Promise<PromoRecord[]> {
 }
 
 /**
- * Check if a single-use KV code is currently active for /api/generate
- * calls. Returns true iff the code:
+ * Check if a KV code is currently active for /api/generate calls.
+ * Returns true iff the code:
  *   - exists in KV
  *   - is NOT revoked
- *   - was consumed (i.e. /api/verify-promo accepted it on entry)
- *   - was consumed within the last 4 hours (matches the Stripe unlock TTL)
+ *   - was redeemed (i.e. /api/verify-promo accepted it on entry)
  *
- * Why a 4h window: when a customer enters a single-use code, we want
- * them to be able to generate multiple batches over a reasonable session
- * (same as the $2.99 Stripe unlock window). Without this window,
- * /api/verify-promo would consume the code and /api/generate would have
- * no way to know the code was valid — every subsequent generate call
- * would 402. Bug found 2026-06-21.
+ * Unlimited free generations (2026-08-01): once a customer redeems a code
+ * it stays active with NO time cap, so apology / glitch codes let the
+ * recipient keep generating for free until Kristi manually revokes the code
+ * in /admin. (Previously this expired 4 hours after redemption, matching the
+ * Stripe unlock TTL; that window was removed at Kristi's request so promo
+ * codes mean unlimited free.) Single-use REDEMPTION is unchanged — only the
+ * first person to enter a code claims it (see redeemCode); this function
+ * governs how long that claim stays usable, which is now forever-until-revoked.
  *
  * Idempotent and read-only. Does NOT consume or modify the record.
  */
-const PROMO_GENERATE_WINDOW_MS = 4 * 60 * 60 * 1000; // 4 hours
-
 export async function isCodeActiveForGenerate(
   code: string,
 ): Promise<boolean> {
@@ -158,10 +157,7 @@ export async function isCodeActiveForGenerate(
     if (!existing) return false;
     if (existing.revoked) return false;
     if (!existing.consumed) return false; // not yet activated
-    if (!existing.consumedAt) return false;
-    const consumedAtMs = Date.parse(existing.consumedAt);
-    if (!Number.isFinite(consumedAtMs)) return false;
-    return Date.now() - consumedAtMs <= PROMO_GENERATE_WINDOW_MS;
+    return true;
   } catch {
     // KV unavailable — fail closed (return false). The caller falls
     // through to other unlock paths (Stripe session), and a real customer
