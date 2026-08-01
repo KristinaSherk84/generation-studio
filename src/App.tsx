@@ -2715,6 +2715,188 @@ const LandingV2 = ({
             proof → authority → founder face → trust story. */}
       </section>
 
+      {/* ========== CREATOR REVIEWS EMBLEM (added 2026-07-30) ==========
+          Social-proof strip placed directly above How It Works per Kristi.
+          Truthful framing: these are Kristina Sherk Photography's Google
+          reviews (the studio/founder behind the app), NOT app reviews — the
+          copy credits "our founder" and names the photographer so it never
+          implies the app itself has 400+ reviews. When we later pull real
+          GenerAItion Headshots customer reviews from its Google Business
+          page, those go in a separate testimonials block.
+          (Restored 2026-08-01 — was accidentally dropped from the working
+          tree during the connection-interrupted-popup change.) */}
+      <div
+        style={{
+          background: BRAND.cream,
+          padding: isMobile ? "8px 16px 24px" : "8px clamp(20px,4vw,56px) 36px",
+          display: "flex",
+          justifyContent: "center",
+        }}
+      >
+        {isMobile ? (
+          /* Mobile — Option C (2026-07-30, Kristi-approved): a compact Google
+             pill (icon + stars + count) with a caption crediting the founder.
+             Replaces the multi-column layouts, which read lopsided on narrow
+             screens because the columns had uneven heights. */
+          <div
+            style={{
+              fontFamily: SANS_STACK,
+              maxWidth: 460,
+              background: BRAND.white,
+              border: "1px solid #ECE6DA",
+              borderRadius: 12,
+              padding: "16px 18px",
+              boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+              textAlign: "center",
+            }}
+          >
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                background: "#FBF9F4",
+                border: "1px solid #E7E1D5",
+                borderRadius: 999,
+                padding: "7px 14px",
+                marginBottom: 9,
+              }}
+            >
+              <span
+                aria-hidden="true"
+                style={{
+                  display: "inline-flex",
+                  width: 18,
+                  height: 18,
+                  borderRadius: "50%",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontWeight: 700,
+                  fontSize: 11,
+                  color: BRAND.white,
+                  background:
+                    "conic-gradient(from -45deg,#4285F4 0 25%,#34A853 0 50%,#FBBC05 0 75%,#EA4335 0 100%)",
+                }}
+              >
+                G
+              </span>
+              <span
+                style={{ color: BRAND.gold, letterSpacing: 2, fontSize: 14 }}
+              >
+                ★★★★★
+              </span>
+              <span
+                style={{
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: BRAND.forestGreen,
+                }}
+              >
+                400+ reviews
+              </span>
+            </div>
+            <div
+              style={{ fontSize: 12, color: BRAND.subText, lineHeight: 1.45 }}
+            >
+              5-star reviews for our founder{" "}
+              <span style={{ color: BRAND.forestGreen, fontWeight: 600 }}>
+                Kristina Sherk
+              </span>{" "}
+              — the photographer who built this
+            </div>
+          </div>
+        ) : (
+          /* Desktop — single row of three sections (unchanged, Kristi-approved). */
+          <div
+            style={{
+              fontFamily: SANS_STACK,
+              display: "flex",
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 16,
+              background: BRAND.white,
+              border: "1px solid #ECE6DA",
+              borderRadius: 12,
+              padding: "12px 20px",
+              boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+            }}
+          >
+            <span
+              aria-hidden="true"
+              style={{
+                display: "inline-flex",
+                width: 20,
+                height: 20,
+                borderRadius: "50%",
+                alignItems: "center",
+                justifyContent: "center",
+                fontWeight: 700,
+                fontSize: 13,
+                color: BRAND.white,
+                background:
+                  "conic-gradient(from -45deg,#4285F4 0 25%,#34A853 0 50%,#FBBC05 0 75%,#EA4335 0 100%)",
+              }}
+            >
+              G
+            </span>
+            <div style={{ textAlign: "center" }}>
+              <div
+                style={{
+                  color: BRAND.gold,
+                  letterSpacing: 2,
+                  fontSize: 16,
+                  lineHeight: 1,
+                }}
+              >
+                ★★★★★
+              </div>
+              <div style={{ fontSize: 11, color: BRAND.subText, marginTop: 2 }}>
+                Google reviews
+              </div>
+            </div>
+            <div
+              aria-hidden="true"
+              style={{ width: 1, height: 30, background: "#E7E1D5" }}
+            />
+            <div style={{ textAlign: "center" }}>
+              <div
+                style={{
+                  fontSize: 20,
+                  fontWeight: 700,
+                  color: BRAND.forestGreen,
+                  lineHeight: 1.1,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                400+ 5-star Reviews
+              </div>
+              <div style={{ fontSize: 11, color: BRAND.subText, marginTop: 2 }}>
+                for our founder
+              </div>
+            </div>
+            <div
+              aria-hidden="true"
+              style={{ width: 1, height: 30, background: "#E7E1D5" }}
+            />
+            <div style={{ textAlign: "center" }}>
+              <div
+                style={{
+                  fontSize: 20,
+                  fontWeight: 600,
+                  color: BRAND.forestGreen,
+                  lineHeight: 1,
+                }}
+              >
+                Kristina Sherk
+              </div>
+              <div style={{ fontSize: 11, color: BRAND.subText, marginTop: 2 }}>
+                the photographer who built this
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* ========== HOW IT WORKS (replaces the filmstrip 2026-06-02) ==========
           Replaced the auto-scrolling filmstrip per Clarity scroll-depth data
           showing 30% of desktop visitors bounced exactly at the filmstrip's
