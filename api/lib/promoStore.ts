@@ -29,10 +29,24 @@ const redis = new Redis({
   token: process.env.KV_REST_API_TOKEN ?? "",
 });
 
+// The two flavors of promo code (2026-08-01):
+//   - "full":       unlimited free generations AND free download / checkout —
+//                   the whole product, on the house. (The original behavior;
+//                   any code created before this field existed is treated as
+//                   "full" for backward-compatibility.)
+//   - "generation": unlimited free generations only. The customer still pays
+//                   to download the ones they like. Used for the 12h win-back
+//                   email ("try again on me").
+export type PromoKind = "full" | "generation";
+
 // A single promo code record. `code` is the human-readable string the
 // customer enters; the index field uses it as the unique identifier.
 export type PromoRecord = {
   code: string;
+  // Which flavor of comp this code grants. Optional on the type for
+  // backward-compat with records minted before this field existed; readers
+  // MUST treat a missing/undefined value as "full" (see promoKindOf).
+  kind?: PromoKind;
   // ISO-8601 timestamp string. Created by admin endpoint.
   createdAt: string;
   // Admin email that minted this code (whoever logged into /admin).
@@ -63,6 +77,11 @@ function recordKey(code: string): string {
   return `${KEY_PREFIX}${code.toLowerCase()}`;
 }
 
+/** Backward-compat reader: a record with no `kind` is a legacy "full" code. */
+export function promoKindOf(rec: Pick<PromoRecord, "kind">): PromoKind {
+  return rec.kind === "generation" ? "generation" : "full";
+}
+
 /**
  * Generate a fresh random code in the shape `gh-{6 chars}`. Avoids easily
  * confused glyphs (0/O, 1/l/I). 6 chars × 30-char alphabet = ~7.3e8
@@ -89,6 +108,8 @@ export async function createCode(params: {
   code: string;
   createdBy: string;
   notes: string;
+  // Defaults to "full" so existing callers keep minting whole-product codes.
+  kind?: PromoKind;
 }): Promise<PromoRecord> {
   const code = params.code.toLowerCase().trim();
   if (!code) throw new Error("Empty code");
@@ -97,6 +118,7 @@ export async function createCode(params: {
 
   const record: PromoRecord = {
     code,
+    kind: params.kind === "generation" ? "generation" : "full",
     createdAt: new Date().toISOString(),
     createdBy: params.createdBy,
     notes: params.notes,
@@ -222,8 +244,8 @@ export async function revokeCode(code: string): Promise<PromoRecord | null> {
 // the strict discriminated form across early-return boundaries; this
 // shape is friendlier to its inference.
 export type RedeemResult =
-  | { valid: true; reason?: undefined }
-  | { valid: false; reason: "unknown" | "revoked" | "consumed" };
+  | { valid: true; kind: PromoKind; reason?: undefined }
+  | { valid: false; kind?: undefined; reason: "unknown" | "revoked" | "consumed" };
 
 export async function redeemCode(params: {
   code: string;
@@ -251,5 +273,7 @@ export async function redeemCode(params: {
   if (!verify || verify.version !== next.version) {
     return { valid: false, reason: "consumed" };
   }
-  return { valid: true };
+  // Return the code's kind so the client knows whether this unlock also
+  // comps the download ("full") or only free generations ("generation").
+  return { valid: true, kind: promoKindOf(existing) };
 }

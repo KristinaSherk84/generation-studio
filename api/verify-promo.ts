@@ -74,7 +74,9 @@ export default async function handler(
       fingerprint,
     });
     if (result.valid) {
-      return res.status(200).json({ valid: true, source: "kv" });
+      // Forward the code's kind so the client knows whether this unlock also
+      // comps downloads ("full") or is generations-only ("generation").
+      return res.status(200).json({ valid: true, kind: result.kind, source: "kv" });
     }
     // Result is the failure variant ({ valid: false; reason: string }).
     // Structured this way (vs. checking `result.reason` after the early
@@ -125,5 +127,10 @@ export default async function handler(
     submitted.toLowerCase(),
     expected.trim().toLowerCase(),
   );
-  return res.status(200).json({ valid, source: valid ? "env" : undefined });
+  // The legacy env-var master code is a whole-product ("full") comp.
+  return res.status(200).json({
+    valid,
+    kind: valid ? "full" : undefined,
+    source: valid ? "env" : undefined,
+  });
 }

@@ -25,6 +25,7 @@ import {
   listCodes,
   revokeCode,
   type PromoRecord,
+  type PromoKind,
 } from "../lib/promoStore.js";
 
 export const maxDuration = 10;
@@ -40,7 +41,13 @@ function safeEquals(a: string, b: string): boolean {
 }
 
 type ListReq = { action: "list"; adminPassword: string };
-type CreateReq = { action: "create"; adminPassword: string; notes?: string };
+type CreateReq = {
+  action: "create";
+  adminPassword: string;
+  notes?: string;
+  // "full" (default) = free everything; "generation" = free generations only.
+  kind?: PromoKind;
+};
 type RevokeReq = { action: "revoke"; adminPassword: string; code: string };
 type DeleteReq = { action: "delete"; adminPassword: string; code: string };
 type AdminReq = ListReq | CreateReq | RevokeReq | DeleteReq;
@@ -97,6 +104,8 @@ export default async function handler(
       // 30^6 alphabet a collision is effectively impossible; this loop is
       // belt-and-suspenders for the case where the index somehow gets
       // very dense.
+      const kind: PromoKind =
+        body.kind === "generation" ? "generation" : "full";
       let attempt: PromoRecord | null = null;
       for (let i = 0; i < 5 && !attempt; i++) {
         try {
@@ -104,6 +113,7 @@ export default async function handler(
             code: generateCode(),
             createdBy: "admin", // could split when we have separate logins
             notes: typeof body.notes === "string" ? body.notes : "",
+            kind,
           });
         } catch (e) {
           // Code already exists — retry with a different one

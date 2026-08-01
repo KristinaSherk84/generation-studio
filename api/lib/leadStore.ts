@@ -37,8 +37,13 @@ export type LeadRecord = {
   // ISO-8601 when they purchased, or null.
   purchasedAt: string | null;
   // Whether we've already sent an abandonment follow-up (so we don't
-  // double-send later). Groundwork; unused until the automation ships.
+  // double-send later). Set true by the follow-up cron after a successful send.
   followedUp: boolean;
+  // ISO-8601 when the win-back follow-up email went out, or null. (2026-08-01)
+  followedUpAt?: string | null;
+  // The unique unlimited promo code we minted and emailed this lead, so Kristi
+  // can trace a redemption back to the win-back campaign / revoke it. (2026-08-01)
+  followupCode?: string | null;
   // Loose context for debugging / segmentation (style picked, etc.).
   source: string;
 };
@@ -106,6 +111,28 @@ export async function markLeadPurchased(email: string): Promise<void> {
     ...existing,
     purchased: true,
     purchasedAt: new Date().toISOString(),
+  });
+}
+
+/**
+ * Mark a lead as having received the win-back follow-up email, recording the
+ * unique promo code we minted for them. Called by the follow-up cron ONLY
+ * after Resend accepts the send, so a failed send is retried next run rather
+ * than silently skipped. Idempotent and safe on a missing record. (2026-08-01)
+ */
+export async function markLeadFollowedUp(
+  email: string,
+  code: string,
+): Promise<void> {
+  if (!looksLikeEmail(email)) return;
+  const key = recordKey(email);
+  const existing = (await redis.get<LeadRecord>(key)) ?? null;
+  if (!existing) return;
+  await redis.set(key, {
+    ...existing,
+    followedUp: true,
+    followedUpAt: new Date().toISOString(),
+    followupCode: code,
   });
 }
 

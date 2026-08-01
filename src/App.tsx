@@ -1203,7 +1203,7 @@ type LandingProps = {
   // the paywall as unlocked in sessionStorage and advances to Upload.
   // Fires after a valid promo code is verified server-side. Receives the
   // validated code so the App can persist it for /api/generate re-verification.
-  onPromoUnlock: (code: string) => void;
+  onPromoUnlock: (code: string, kind: "full" | "generation") => void;
 };
 
 
@@ -2113,13 +2113,23 @@ const LandingV2 = ({
         body: JSON.stringify({ code: trimmed }),
       });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const data = (await resp.json()) as { valid?: boolean };
+      const data = (await resp.json()) as {
+        valid?: boolean;
+        kind?: "full" | "generation";
+      };
       if (data.valid) {
         setPromoStatus("success");
         // Pass the validated code up so App stores it for /api/generate
         // to re-verify on every call (server-side check is what actually
         // gates access — localStorage is just for survival across refresh).
-        setTimeout(() => onPromoUnlock(trimmed), 700);
+        setTimeout(
+          () =>
+            onPromoUnlock(
+              trimmed,
+              data.kind === "generation" ? "generation" : "full",
+            ),
+          700,
+        );
       } else {
         setPromoStatus("error");
         setPromoErrMsg("That code isn't recognized.");
@@ -3812,7 +3822,7 @@ type HealthcareScreenProps = {
   // Wired to App.tsx's handlePromoUnlock — same handler LandingV2 uses.
   // Lets a healthcare-vertical visitor enter a promo code without having
   // to detour through the home page. Added 2026-05-27.
-  onPromoUnlock: (code: string) => void;
+  onPromoUnlock: (code: string, kind: "full" | "generation") => void;
   // Free-tier CTA copy flag (2026-07-03).
   entryFeeEnabled: boolean;
 };
@@ -3845,12 +3855,22 @@ const HealthcareScreen = ({
         body: JSON.stringify({ code: trimmed }),
       });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const data = (await resp.json()) as { valid?: boolean };
+      const data = (await resp.json()) as {
+        valid?: boolean;
+        kind?: "full" | "generation";
+      };
       if (data.valid) {
         setPromoStatus("success");
         // Brief checkmark pause before transitioning so the visitor sees
         // the success state, then App routes them straight to Upload.
-        setTimeout(() => onPromoUnlock(trimmed), 700);
+        setTimeout(
+          () =>
+            onPromoUnlock(
+              trimmed,
+              data.kind === "generation" ? "generation" : "full",
+            ),
+          700,
+        );
       } else {
         setPromoStatus("error");
         setPromoErrMsg("That code isn't recognized.");
@@ -5165,6 +5185,9 @@ const FAQScreen = ({ onStart, onBackToHome, entryFeeEnabled }: FAQScreenProps) =
 // build-config gymnastics — keep them in sync manually.
 type PromoRecordClient = {
   code: string;
+  // "full" = free everything; "generation" = free generations only (pay to
+  // download). Optional/absent on legacy codes → treat as "full".
+  kind?: "full" | "generation";
   createdAt: string;
   createdBy: string;
   notes: string;
@@ -5190,6 +5213,8 @@ const AdminScreen = () => {
   const [loading, setLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [createNotes, setCreateNotes] = useState("");
+  // Which kind of code the "Mint a new code" button generates (2026-08-01).
+  const [createKind, setCreateKind] = useState<"full" | "generation">("full");
   const [recentlyCreatedCode, setRecentlyCreatedCode] = useState<string | null>(null);
   // Live search query (2026-06-05). Filters the codes table by code text
   // OR notes. Case-insensitive substring match. No submit needed — filter
@@ -5270,6 +5295,7 @@ const AdminScreen = () => {
           action: "create",
           adminPassword,
           notes: createNotes.trim(),
+          kind: createKind,
         }),
       });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -5507,6 +5533,57 @@ const AdminScreen = () => {
         >
           Mint a new code
         </div>
+
+        {/* Code-type picker (2026-08-01). "Full" comps the whole product;
+            "Generation only" lets them generate free but still pay to
+            download. */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+          {([
+            {
+              value: "full" as const,
+              label: "Full — free downloads too",
+              sub: "Whole product on the house",
+            },
+            {
+              value: "generation" as const,
+              label: "Generation only",
+              sub: "Free to generate; pays to download",
+            },
+          ]).map((opt) => {
+            const active = createKind === opt.value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setCreateKind(opt.value)}
+                style={{
+                  flex: "1 1 200px",
+                  textAlign: "left",
+                  padding: "10px 12px",
+                  borderRadius: 8,
+                  border: `1.5px solid ${active ? C.dark : C.border}`,
+                  background: active ? "#F1FAEC" : C.white,
+                  cursor: "pointer",
+                  ...font,
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: C.dark,
+                    marginBottom: 2,
+                  }}
+                >
+                  {active ? "● " : "○ "}
+                  {opt.label}
+                </div>
+                <div style={{ fontSize: 11.5, color: C.mediumGrey }}>{opt.sub}</div>
+              </button>
+            );
+          })}
+        </div>
+
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <input
             type="text"
@@ -5559,7 +5636,11 @@ const AdminScreen = () => {
             <span style={{ fontFamily: "monospace", fontWeight: 600 }}>
               {recentlyCreatedCode}
             </span>{" "}
-            — share this with one person.
+            —{" "}
+            {createKind === "generation"
+              ? "free generations only (they pay to download)"
+              : "free everything, incl. downloads"}
+            . Share with one person.
           </div>
         )}
       </div>
@@ -5708,6 +5789,26 @@ const AdminScreen = () => {
                     title="Click to copy"
                   >
                     {c.code}
+                  </span>
+                  <span
+                    style={{
+                      marginLeft: 8,
+                      fontSize: 10.5,
+                      fontWeight: 700,
+                      padding: "1px 7px",
+                      borderRadius: 20,
+                      textTransform: "uppercase",
+                      letterSpacing: ".04em",
+                      background: c.kind === "generation" ? "#FBF3E2" : "#EAF5EE",
+                      color: c.kind === "generation" ? "#8A6D1B" : "#1B7A44",
+                    }}
+                    title={
+                      c.kind === "generation"
+                        ? "Free generations only — customer pays to download"
+                        : "Full — free generations and free downloads"
+                    }
+                  >
+                    {c.kind === "generation" ? "Gen only" : "Full"}
                   </span>
                 </div>
                 <div style={{ color: c.notes ? C.dark : C.mediumGrey }}>
@@ -9407,7 +9508,21 @@ const CheckoutScreen = ({
           }
         })()
       : null;
-  const isPromoUnlock = unlockSource === "promo";
+  // Only a "full" promo comps the download (skip Stripe). A "generation"
+  // code unlocks free generating but the customer still pays here. Legacy
+  // promo unlocks with no stored kind default to "full" so in-flight
+  // sessions from before this change don't suddenly get charged. (2026-08-01)
+  const promoKind =
+    typeof window !== "undefined"
+      ? (() => {
+          try {
+            return window.localStorage.getItem("promo_kind");
+          } catch {
+            return null;
+          }
+        })()
+      : null;
+  const isPromoUnlock = unlockSource === "promo" && promoKind !== "generation";
 
   // Glow Up Deluxe pricing (2026-05-18). Mixed totals supported per
   // photo — see retouchTiers prop.
@@ -12008,12 +12123,19 @@ export default function App() {
 
   // Mark unlocked via promo. Saves the code so /api/generate can verify
   // it on every call (server enforces; client doesn't trust the flag).
-  const markPromoUnlocked = (code: string) => {
+  const markPromoUnlocked = (
+    code: string,
+    kind: "full" | "generation" = "full",
+  ) => {
     if (typeof window !== "undefined") {
       try {
         window.localStorage.setItem("paywall_unlocked", "true");
         window.localStorage.setItem("unlock_source", "promo");
         window.localStorage.setItem("promo_code", code);
+        // Which flavor of comp (2026-08-01). "full" comps downloads too;
+        // "generation" only unlocks free generating — the download flow
+        // reads this so generation-only users still pay to download.
+        window.localStorage.setItem("promo_kind", kind);
       } catch {}
     }
     setIsUnlocked(true);
@@ -12052,6 +12174,7 @@ export default function App() {
         window.localStorage.removeItem("stripe_session_id");
         window.localStorage.removeItem("unlock_expires_at");
         window.localStorage.removeItem("promo_code");
+        window.localStorage.removeItem("promo_kind");
       } catch {}
     }
     setUnlockExpiresAt(null);
@@ -12537,14 +12660,18 @@ export default function App() {
     }
   };
 
-  // Promo code success path. Marks the paywall unlocked with source="promo"
-  // so the Phase 2 per-photo checkout can skip Stripe entirely (promo users
-  // get free everything). Friends skip both fees.
-  const handlePromoUnlock = (code: string) => {
+  // Promo code success path. Marks the paywall unlocked with source="promo".
+  // A "full" code lets the per-photo checkout skip Stripe entirely (free
+  // everything); a "generation" code unlocks unlimited free generating but
+  // the customer still pays to download (2026-08-01).
+  const handlePromoUnlock = (
+    code: string,
+    kind: "full" | "generation" = "full",
+  ) => {
     // Persist the validated promo code so /api/generate can re-verify it
     // server-side on every call. The server is the actual gate; this
     // storage just lets us survive page refreshes without re-prompting.
-    markPromoUnlocked(code);
+    markPromoUnlocked(code, kind);
     setScreen("upload");
     if (!hasSeenIntro) setShowIntroModal(true);
     else if (!hasSeenTips) setShowTipsModal(true);
