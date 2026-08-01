@@ -6574,6 +6574,9 @@ const STUDIO_BGS = [
   { id: "black", color: "#0A0A0A", label: "Black" },
   { id: "blue", color: "#B5D4F4", label: "Soft blue" },
   { id: "green", color: "#C0DD97", label: "Soft green" },
+  // Graduated goldenrod→firetruck-red→dark-red paper sweep (2026-08-01). The
+  // dot shows a medium fire-truck red as its representative color.
+  { id: "red", color: "#CE2029", label: "Red" },
   // Rainbow generates 6 different backgrounds instead of the same color six
   // times — 3 from the above swatches (light grey, dark, blue) plus 3 new
   // accent colors (warm beige, burgundy, deep teal). Shown as a conic
@@ -6665,7 +6668,7 @@ export type StyleSelections = {
   style: "corporate" | "creative" | "executive" | "urban" | "healthcare";
   attire: "formal" | "casual" | "keep" | "medical";
   lighting: "studio" | "natural" | "dramatic" | "golden";
-  background?: "white" | "lightgrey" | "midgrey" | "dark" | "black" | "blue" | "green" | "rainbow";
+  background?: "white" | "lightgrey" | "midgrey" | "dark" | "black" | "blue" | "green" | "red" | "rainbow";
   // Skin treatment toggle (added 2026-04-26, expanded 2026-05-01 to add glam).
   // - "realistic" (default) — current behavior, no extra block.
   // - "polished" — BLOCK_SKIN_POLISHED smooths color inconsistencies while
