@@ -79,14 +79,20 @@ function buildEmail(code: string): { subject: string; html: string; text: string
       <div style="font-size:26px;font-weight:700;letter-spacing:.05em;color:#1B4332;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">${shown}</div>
     </div>
     <p style="font-size:14px;line-height:1.6;margin:0 0 4px;">
-      Enter it under &ldquo;Have a promo code?&rdquo; on
-      <a href="https://generationheadshots.com" style="color:#1B4332;font-weight:600;">generationheadshots.com</a>
-      and generate as many as you like &mdash; it&rsquo;s on me.
+      Enter it under &ldquo;Have a promo code?&rdquo; on the home page and
+      generate as many as you like &mdash; it&rsquo;s on me.
     </p>
+    <div style="text-align:center;margin:22px 0 6px;">
+      <a href="https://generationheadshots.com"
+         style="display:inline-block;background:#1B4332;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:13px 26px;border-radius:999px;">
+        Generate my headshots &rarr;
+      </a>
+    </div>
     <p style="font-size:15px;line-height:1.65;margin:22px 0 0;">Thanks!<br>Kristina</p>
   </div>
-  <p style="max-width:540px;margin:14px auto 0;font-size:11px;color:#9A968D;text-align:center;line-height:1.5;">
-    You&rsquo;re getting this because you generated headshots at generationheadshots.com. Just reply to this email with your thoughts &mdash; it comes straight to me.
+  <p style="max-width:540px;margin:14px auto 0;font-size:12px;color:#9A968D;text-align:center;line-height:1.5;">
+    <a href="https://generationheadshots.com" style="color:#6E6E6A;font-weight:600;">generationheadshots.com</a><br>
+    You&rsquo;re getting this because you generated headshots at GenerAItion Headshots. Just reply to this email with your thoughts &mdash; it comes straight to me.
   </p>
 </body></html>`;
 
@@ -205,6 +211,10 @@ export default async function handler(
         body: JSON.stringify({
           from: "Kristi at GenerAItion Headshots <kristi@kristinasherk.com>",
           to: [lead.email],
+          // BCC Kristi on every abandonment / win-back email so she has a
+          // running record of who was contacted and with which code, without
+          // the customer seeing it (2026-08-01).
+          bcc: ["kristi@kristinasherk.com"],
           reply_to: "kristi@kristinasherk.com",
           subject,
           html,
