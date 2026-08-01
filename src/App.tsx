@@ -11404,7 +11404,11 @@ const FreeTierPaywallModal = ({ onClose, onPay }: FreeTierPaywallModalProps) => 
         Unlock unlimited regens
       </div>
       <div style={{ fontSize: 14, color: C.mediumGrey, marginTop: 12, lineHeight: 1.6 }}>
-        You've used your free regenerates. Unlock unlimited regens for the rest of this session for just $2.99. Your generated headshots stay saved while you check out.
+        Thanks for trying out my app! I paid for your first round of generations
+        to get you started. If you'd like to keep perfecting your look, the $2.99
+        covers the generation costs — it unlocks unlimited regenerates for the
+        rest of your session, and your saved headshots stay right where they are
+        while you check out.
       </div>
       <div style={{ marginTop: 24, display: "flex", gap: 8, flexDirection: "column" }}>
         <Button onClick={onPay} full>
