@@ -17,10 +17,6 @@ declare global {
   interface Window {
     gtag?: (...args: unknown[]) => void;
     dataLayer?: unknown[];
-    // Microsoft Clarity global (installed via the tag in index.html).
-    // Used to attach the customer's email as a custom tag so recordings
-    // can be looked up by address in the Clarity dashboard.
-    clarity?: (...args: unknown[]) => void;
   }
 }
 
@@ -120,81 +116,6 @@ const C = {
 const font: CSSProperties = {
   fontFamily: "Inter, system-ui, -apple-system, sans-serif",
 };
-
-// ---- Free-tier mid-session return storage (IndexedDB) ----
-// When a free-tier customer pays the $2.99 mid-session, we stash their whole
-// session (6 base64 generated images + cart picks + uploaded selfies) so we
-// can drop them straight back onto their grid after Stripe. That payload is
-// several MB — it blows past localStorage's ~5MB quota, so the old
-// localStorage.setItem silently threw and NOTHING was saved, which is why the
-// customer came back to an empty grid + empty cart and had to re-upload
-// (bug fixed 2026-07-30). IndexedDB holds it comfortably. A tiny timestamp
-// MARKER still lives in localStorage so the mount-time restore can decide
-// synchronously whether to restore (and beat the verify-checkout effect that
-// would otherwise bounce the user to the upload screen); the heavy data is
-// then loaded from IndexedDB asynchronously.
-const FREE_TIER_IDB_DB = "gs_free_tier";
-const FREE_TIER_IDB_STORE = "pending_return";
-const FREE_TIER_IDB_KEY = "stash";
-const FREE_TIER_MARKER_KEY = "free_tier_pending_marker";
-
-function openFreeTierIdb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(FREE_TIER_IDB_DB, 1);
-    req.onupgradeneeded = () => {
-      req.result.createObjectStore(FREE_TIER_IDB_STORE);
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-async function idbSetFreeTierStash(value: unknown): Promise<void> {
-  const db = await openFreeTierIdb();
-  try {
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(FREE_TIER_IDB_STORE, "readwrite");
-      tx.objectStore(FREE_TIER_IDB_STORE).put(value, FREE_TIER_IDB_KEY);
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-      tx.onabort = () => reject(tx.error);
-    });
-  } finally {
-    db.close();
-  }
-}
-
-async function idbGetFreeTierStash<T = unknown>(): Promise<T | null> {
-  const db = await openFreeTierIdb();
-  try {
-    return await new Promise<T | null>((resolve, reject) => {
-      const tx = db.transaction(FREE_TIER_IDB_STORE, "readonly");
-      const req = tx.objectStore(FREE_TIER_IDB_STORE).get(FREE_TIER_IDB_KEY);
-      req.onsuccess = () => resolve((req.result as T) ?? null);
-      req.onerror = () => reject(req.error);
-    });
-  } finally {
-    db.close();
-  }
-}
-
-async function idbClearFreeTierStash(): Promise<void> {
-  try {
-    const db = await openFreeTierIdb();
-    try {
-      await new Promise<void>((resolve, reject) => {
-        const tx = db.transaction(FREE_TIER_IDB_STORE, "readwrite");
-        tx.objectStore(FREE_TIER_IDB_STORE).delete(FREE_TIER_IDB_KEY);
-        tx.oncomplete = () => resolve();
-        tx.onerror = () => reject(tx.error);
-      });
-    } finally {
-      db.close();
-    }
-  } catch {
-    /* best-effort cleanup — safe to ignore */
-  }
-}
 
 // Module-scope helper so all /api/generate callers (DownloadScreen's
 // cross-style fetches included) can read the current unlock identifier
@@ -2688,186 +2609,6 @@ const LandingV2 = ({
             the trust strip — the page flow goes hook → action → social
             proof → authority → founder face → trust story. */}
       </section>
-
-      {/* ========== CREATOR REVIEWS EMBLEM (added 2026-07-30) ==========
-          Social-proof strip placed directly above How It Works per Kristi.
-          Truthful framing: these are Kristina Sherk Photography's Google
-          reviews (the studio/founder behind the app), NOT app reviews — the
-          copy credits "our founder" and names the photographer so it never
-          implies the app itself has 400+ reviews. When we later pull real
-          GenerAItion Headshots customer reviews from its Google Business
-          page, those go in a separate testimonials block. */}
-      <div
-        style={{
-          background: BRAND.cream,
-          padding: isMobile ? "8px 16px 24px" : "8px clamp(20px,4vw,56px) 36px",
-          display: "flex",
-          justifyContent: "center",
-        }}
-      >
-        {isMobile ? (
-          /* Mobile — Option C (2026-07-30, Kristi-approved): a compact Google
-             pill (icon + stars + count) with a caption crediting the founder.
-             Replaces the multi-column layouts, which read lopsided on narrow
-             screens because the columns had uneven heights. */
-          <div
-            style={{
-              fontFamily: SANS_STACK,
-              maxWidth: 460,
-              background: BRAND.white,
-              border: "1px solid #ECE6DA",
-              borderRadius: 12,
-              padding: "16px 18px",
-              boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-              textAlign: "center",
-            }}
-          >
-            <div
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 8,
-                background: "#FBF9F4",
-                border: "1px solid #E7E1D5",
-                borderRadius: 999,
-                padding: "7px 14px",
-                marginBottom: 9,
-              }}
-            >
-              <span
-                aria-hidden="true"
-                style={{
-                  display: "inline-flex",
-                  width: 18,
-                  height: 18,
-                  borderRadius: "50%",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontWeight: 700,
-                  fontSize: 11,
-                  color: BRAND.white,
-                  background:
-                    "conic-gradient(from -45deg,#4285F4 0 25%,#34A853 0 50%,#FBBC05 0 75%,#EA4335 0 100%)",
-                }}
-              >
-                G
-              </span>
-              <span
-                style={{ color: BRAND.gold, letterSpacing: 2, fontSize: 14 }}
-              >
-                ★★★★★
-              </span>
-              <span
-                style={{
-                  fontSize: 13,
-                  fontWeight: 700,
-                  color: BRAND.forestGreen,
-                }}
-              >
-                400+ reviews
-              </span>
-            </div>
-            <div
-              style={{ fontSize: 12, color: BRAND.subText, lineHeight: 1.45 }}
-            >
-              5-star reviews for our founder{" "}
-              <span style={{ color: BRAND.forestGreen, fontWeight: 600 }}>
-                Kristina Sherk
-              </span>{" "}
-              — the photographer who built this
-            </div>
-          </div>
-        ) : (
-          /* Desktop — single row of three sections (unchanged, Kristi-approved). */
-          <div
-            style={{
-              fontFamily: SANS_STACK,
-              display: "flex",
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 16,
-              background: BRAND.white,
-              border: "1px solid #ECE6DA",
-              borderRadius: 12,
-              padding: "12px 20px",
-              boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-            }}
-          >
-            <span
-              aria-hidden="true"
-              style={{
-                display: "inline-flex",
-                width: 20,
-                height: 20,
-                borderRadius: "50%",
-                alignItems: "center",
-                justifyContent: "center",
-                fontWeight: 700,
-                fontSize: 13,
-                color: BRAND.white,
-                background:
-                  "conic-gradient(from -45deg,#4285F4 0 25%,#34A853 0 50%,#FBBC05 0 75%,#EA4335 0 100%)",
-              }}
-            >
-              G
-            </span>
-            <div style={{ textAlign: "center" }}>
-              <div
-                style={{
-                  color: BRAND.gold,
-                  letterSpacing: 2,
-                  fontSize: 16,
-                  lineHeight: 1,
-                }}
-              >
-                ★★★★★
-              </div>
-              <div style={{ fontSize: 11, color: BRAND.subText, marginTop: 2 }}>
-                Google reviews
-              </div>
-            </div>
-            <div
-              aria-hidden="true"
-              style={{ width: 1, height: 30, background: "#E7E1D5" }}
-            />
-            <div style={{ textAlign: "center" }}>
-              <div
-                style={{
-                  fontSize: 20,
-                  fontWeight: 700,
-                  color: BRAND.forestGreen,
-                  lineHeight: 1.1,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                400+ 5-star Reviews
-              </div>
-              <div style={{ fontSize: 11, color: BRAND.subText, marginTop: 2 }}>
-                for our founder
-              </div>
-            </div>
-            <div
-              aria-hidden="true"
-              style={{ width: 1, height: 30, background: "#E7E1D5" }}
-            />
-            <div style={{ textAlign: "center" }}>
-              <div
-                style={{
-                  fontSize: 20,
-                  fontWeight: 600,
-                  color: BRAND.forestGreen,
-                  lineHeight: 1,
-                }}
-              >
-                Kristina Sherk
-              </div>
-              <div style={{ fontSize: 11, color: BRAND.subText, marginTop: 2 }}>
-                the photographer who built this
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
 
       {/* ========== HOW IT WORKS (replaces the filmstrip 2026-06-02) ==========
           Replaced the auto-scrolling filmstrip per Clarity scroll-depth data
@@ -7098,9 +6839,45 @@ const StyleScreen = ({
       </button>
       <BackgroundExamplesModal open={showBgExamples} onClose={() => setShowBgExamples(false)} />
 
-      {/* Creative-style info banner removed 2026-07-31 — the "See example
-          backgrounds" link now covers this, so the bokeh explainer box was
-          redundant. */}
+      {/* Creative style info banner */}
+      {style === "creative" && (
+        <div
+          style={{
+            display: "flex",
+            gap: 10,
+            alignItems: "flex-start",
+            padding: "12px 14px",
+            background: C.white,
+            border: `1px solid ${C.border}`,
+            borderRadius: 8,
+            marginTop: 16,
+          }}
+        >
+          <div
+            style={{
+              width: 14,
+              height: 14,
+              borderRadius: "50%",
+              border: `1.5px solid ${C.mediumGrey}`,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 10,
+              color: C.mediumGrey,
+              fontWeight: 500,
+              flexShrink: 0,
+              marginTop: 2,
+            }}
+          >
+            i
+          </div>
+          <p style={{ fontSize: 12, color: C.mediumGrey, margin: 0, lineHeight: 1.5 }}>
+            Renders with an extremely shallow depth of field — the kind of silky, creamy bokeh you
+            get shooting at f/1.4 with a prime lens. Each of your 6 results will have a different
+            background.
+          </p>
+        </div>
+      )}
 
       {/* Corporate style background picker */}
       {style === "corporate" && (
@@ -7299,6 +7076,9 @@ type LoadingScreenProps = {
   // for nothing. The 6th call keeps firing in the background and populates
   // its slot when it returns.
   onContinueWithReady: () => void;
+  // Re-fire the same batch from the "Connection interrupted" popup without
+  // sending the user back to the style screen (2026-08-01).
+  onRetry: () => void;
 };
 
 const LoadingScreen = ({
@@ -7308,6 +7088,7 @@ const LoadingScreen = ({
   errorMessage,
   onBack,
   onContinueWithReady,
+  onRetry,
 }: LoadingScreenProps) => {
   // The counter message says "Generating headshot N of 6" where N = the
   // image currently being worked on. With parallel requests all 6 are
@@ -7805,6 +7586,96 @@ const LoadingScreen = ({
         </div>
       )}
 
+      {/* "Connection interrupted" popup (2026-08-01). A zero-success batch is
+          almost always the client losing its connection mid-generation (tab
+          closed / backgrounded / navigated away) — the server logs show the
+          images generating fine in these cases. So instead of the old
+          photo-blaming copy we surface an honest modal that tells the user to
+          stay on the page and offers a one-tap retry. Keyed on the message
+          prefix so other (pre-generation) errors keep the plain inline
+          treatment above. */}
+      {errorMessage && errorMessage.startsWith("Connection interrupted") && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(20,20,20,0.55)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 20,
+            zIndex: 1000,
+          }}
+        >
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: 16,
+              maxWidth: 420,
+              width: "100%",
+              padding: "28px 24px",
+              boxShadow: "0 20px 60px rgba(0,0,0,0.25)",
+              textAlign: "center",
+            }}
+          >
+            <div
+              style={{
+                fontSize: 34,
+                lineHeight: 1,
+                marginBottom: 14,
+              }}
+              aria-hidden="true"
+            >
+              ⚠️
+            </div>
+            <h2
+              style={{
+                fontSize: 22,
+                fontWeight: 600,
+                color: C.dark,
+                margin: "0 0 10px",
+                letterSpacing: -0.4,
+              }}
+            >
+              Connection interrupted
+            </h2>
+            <p
+              style={{
+                fontSize: 15,
+                lineHeight: 1.6,
+                color: C.mediumGrey,
+                margin: "0 0 22px",
+              }}
+            >
+              The connection to this page dropped while your headshots were
+              being created. This usually happens when the tab is closed, put
+              in the background, or you navigate away during the 2–3 minutes it
+              takes. Your uploaded photos are fine — please stay on this page
+              and we&rsquo;ll try again.
+            </p>
+            <Button onClick={onRetry} full>
+              Try again
+            </Button>
+            <button
+              onClick={onBack}
+              style={{
+                marginTop: 12,
+                background: "none",
+                border: "none",
+                color: C.mediumGrey,
+                fontSize: 14,
+                textDecoration: "underline",
+                cursor: "pointer",
+              }}
+            >
+              Back to style selection
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Spinner keyframes — scoped here so the component is self-contained */}
       <style>{`
         @keyframes spin {
@@ -7830,11 +7701,6 @@ type GridScreenProps = {
   regenCount: number;
   maxRegens: number;
   regeneratingSlots: Set<number>;
-  // Slots currently being AUTO-regenerated by the identity-match check
-  // (2026-07-30). These show a "Perfecting identity preservation" overlay
-  // instead of the normal "Regenerating…" one, and don't count against the
-  // customer's regen budget. Separate from regeneratingSlots (user clicks).
-  perfectingSlots: Set<number>;
   // One-line error banner shown above the grid when a per-slot regen
   // call fails on the server. App owns the state; GridScreen just renders.
   regenError: string | null;
@@ -7864,7 +7730,6 @@ const GridScreen = ({
   regenCount,
   maxRegens,
   regeneratingSlots,
-  perfectingSlots,
   regenError,
   initialBatchInFlight,
   cart,
@@ -8134,7 +7999,6 @@ const GridScreen = ({
           const src = images[i]; // may be undefined if this slot failed to generate
           const picked = !!src && cartSet.has(src);
           const regenerating = regeneratingSlots.has(i);
-          const perfecting = perfectingSlots.has(i);
           // True only for slots whose ORIGINAL /api/generate call hasn't come
           // back yet — i.e., the user advanced via "Continue with what's ready"
           // on the loading screen and one (or more) calls are still in flight.
@@ -8166,13 +8030,13 @@ const GridScreen = ({
           return (
             <div
               key={i}
-              onClick={() => src && !regenerating && !perfecting && toggle(i)}
+              onClick={() => src && !regenerating && toggle(i)}
               style={{
                 position: "relative",
                 aspectRatio: "4/5",
                 background: C.lightGrey,
                 borderRadius: 8,
-                cursor: src && !regenerating && !perfecting ? "pointer" : "default",
+                cursor: src && !regenerating ? "pointer" : "default",
                 overflow: "hidden",
                 border: `2px solid ${picked ? C.dark : "transparent"}`,
                 transition: "border-color 0.15s",
@@ -8338,7 +8202,7 @@ const GridScreen = ({
                   failed" with no action affordance. Hidden on slots still
                   in flight from the initial batch so the user doesn't burn
                   a regen on a slot that's about to populate naturally. */}
-              {regenCount < maxRegens && !regenerating && !perfecting && !stillLoadingFromInitial && (
+              {regenCount < maxRegens && !regenerating && !stillLoadingFromInitial && (
                 <button
                   onClick={handleRegenClick}
                   title="Regenerate this photo"
@@ -8398,55 +8262,6 @@ const GridScreen = ({
                   />
                   <div style={{ fontSize: 11, letterSpacing: 1, textTransform: "uppercase" }}>
                     Regenerating…
-                  </div>
-                </div>
-              )}
-              {/* Identity-perfecting overlay (2026-07-30). Shown while the
-                  likeness check auto-regenerates a shot that didn't match the
-                  customer's reference photos closely enough. The copy signals
-                  our higher standard vs. other AI tools. */}
-              {perfecting && (
-                <div
-                  style={{
-                    position: "absolute",
-                    inset: 0,
-                    background: "rgba(0, 0, 0, 0.62)",
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 10,
-                    color: C.white,
-                    pointerEvents: "none",
-                    zIndex: 6,
-                    padding: 14,
-                    textAlign: "center",
-                  }}
-                >
-                  <Loader2
-                    size={30}
-                    style={{ animation: "spin 1s linear infinite" }}
-                  />
-                  <div
-                    style={{
-                      fontSize: 11,
-                      letterSpacing: 1,
-                      textTransform: "uppercase",
-                      fontWeight: 600,
-                      lineHeight: 1.4,
-                    }}
-                  >
-                    Perfecting identity preservation
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 10,
-                      color: "rgba(255,255,255,0.82)",
-                      lineHeight: 1.45,
-                      maxWidth: 190,
-                    }}
-                  >
-                    We don't keep a single headshot that isn't exactly you.
                   </div>
                 </div>
               )}
@@ -8574,7 +8389,7 @@ type LoadingRetouchPreviewModalProps = {
   onDismiss: () => void;
 };
 
-const RETOUCH_POPUP_LOCK_SECONDS = 13;
+const RETOUCH_POPUP_LOCK_SECONDS = 15;
 const LoadingRetouchPreviewModal = ({
   onDismiss,
 }: LoadingRetouchPreviewModalProps) => {
@@ -8736,10 +8551,8 @@ const LoadingRetouchPreviewModal = ({
 
 // Email-capture gate (2026-07-29). Shown when the customer clicks Generate
 // for the first time, before any headshots run. Required — captures their
-// email for the lead list + abandonment follow-up, framed as a "save your
-// progress" step so it reads as a save-my-work step, not a wall. Copy
-// deliberately avoids implying headshots are emailed/delivered for free —
-// delivery only happens after purchase (see /api/deliver).
+// email for the lead list + abandonment follow-up, framed as "where do we
+// send your headshots?" so it reads as a save-my-work step, not a wall.
 type EmailCaptureModalProps = {
   onSubmit: (email: string) => void;
   onClose: () => void;
@@ -8819,8 +8632,9 @@ const EmailCaptureModal = ({ onSubmit, onClose }: EmailCaptureModalProps) => {
             textAlign: "center",
           }}
         >
-          Input your email to see your results and save your session in case
-          anything happens.
+          Enter your email to save your progress. If your session gets
+          interrupted, your generated headshots will be here when you come
+          back — no need to start over.
         </p>
         <input
           type="email"
@@ -8861,6 +8675,16 @@ const EmailCaptureModal = ({ onSubmit, onClose }: EmailCaptureModalProps) => {
         >
           Generate my headshots
         </button>
+        <p
+          style={{
+            fontSize: 11,
+            color: C.mediumGrey,
+            margin: "12px 0 0",
+            textAlign: "center",
+          }}
+        >
+          We'll only email you about your headshots.
+        </p>
       </div>
     </div>
   );
@@ -11448,32 +11272,6 @@ type Screen =
 
 const TOTAL_HEADSHOTS = 6;
 
-// ---- Identity auto-regeneration tuning (2026-07-30) ----
-// After each batch, every headshot's face is matched against the customer's
-// reference photos. Shots that match too weakly get automatically regenerated
-// (once each) so the customer never sees a headshot that doesn't look like
-// them. These knobs are the ones to tune after watching real results:
-//   - IDENTITY_DISTANCE_THRESHOLD: face-api euclidean distance between the
-//     128-D descriptors. 0 = identical, ~0.6 is the classic "same person"
-//     cutoff. LOWER = stricter (more redos, better likeness, more cost);
-//     HIGHER = looser. Start moderately strict and adjust from live data.
-//   - IDENTITY_MAX_REDOS: hard cap on how many of the 6 shots we auto-redo
-//     per batch (bounds cost). Kristi: 3 photos, 1 regen each.
-const IDENTITY_DISTANCE_THRESHOLD = 0.5;
-const IDENTITY_MAX_REDOS = 3;
-
-// Standard Euclidean distance between two equal-length numeric vectors
-// (face descriptors). Lower = more similar faces.
-function euclideanDistance(a: number[], b: number[]): number {
-  let sum = 0;
-  const n = Math.min(a.length, b.length);
-  for (let i = 0; i < n; i++) {
-    const d = a[i] - b[i];
-    sum += d * d;
-  }
-  return Math.sqrt(sum);
-}
-
 export default function App() {
   const [screen, setScreen] = useState<Screen>("landing");
 
@@ -11712,18 +11510,6 @@ export default function App() {
   // The GridScreen overlays a loading spinner on these so the rest of the grid
   // stays interactive.
   const [regeneratingSlots, setRegeneratingSlots] = useState<Set<number>>(new Set());
-  // ---- Identity auto-regeneration (2026-07-30) ----
-  // Slots currently being auto-regenerated because they didn't match the
-  // customer's reference photos closely enough. Drives the "Perfecting
-  // identity preservation" overlay; separate from user-initiated regens.
-  const [perfectingSlots, setPerfectingSlots] = useState<Set<number>>(new Set());
-  // Runtime kill-switch from /api/config (env IDENTITY_CHECK_ENABLED).
-  const [identityCheckEnabled, setIdentityCheckEnabled] = useState(false);
-  // The batch's averaged reference face descriptor + each slot's descriptor.
-  // Refs, not state: the identity pass reads the latest values directly and
-  // we don't want a re-render every time a descriptor lands.
-  const referenceDescriptorRef = useRef<number[] | null>(null);
-  const slotDescriptorsRef = useRef<(number[] | null)[]>([]);
   // Which slots from the INITIAL 6-image batch are still in flight. Distinct
   // from regeneratingSlots (which tracks per-slot regen clicks from the grid).
   // Used so the user can advance to the grid early — once 5 of 6 are ready,
@@ -11753,6 +11539,28 @@ export default function App() {
   const MAX_FULL_BATCHES = 6;
   const [batchesUsed, setBatchesUsed] = useState(0);
   const [showRegenLimitModal, setShowRegenLimitModal] = useState(false);
+
+  // Guard against the #1 cause of "all generations failed": the customer
+  // closing, reloading, or navigating away from the tab while the initial
+  // 6-image batch is still generating. Each headshot is a long (2–3 min)
+  // request held open on the client; leaving mid-flight aborts all six and
+  // they see nothing even though the server generated the images. A native
+  // beforeunload prompt is the only thing that reliably interrupts an
+  // accidental close/reload/back. Scoped tightly to the active generation
+  // window so it never nags outside it. (2026-08-01)
+  useEffect(() => {
+    const generating =
+      screen === "loading" &&
+      !generationError &&
+      readyCount < TOTAL_HEADSHOTS;
+    if (!generating) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [screen, generationError, readyCount]);
   // ---- Free-tier feature flag (2026-07-03) ----
   // When ENTRY_FEE_ENABLED=false in Vercel env, the $2.99 paywall moves from
   // the landing page to AFTER the customer's free 6-photo batch + 2 free
@@ -11957,12 +11765,9 @@ export default function App() {
         if (data && typeof data.entryFeeEnabled === "boolean") {
           setEntryFeeEnabled(data.entryFeeEnabled);
         }
-        if (data && typeof data.identityCheckEnabled === "boolean") {
-          setIdentityCheckEnabled(data.identityCheckEnabled);
-        }
       })
       .catch(() => {
-        /* silent fail — keep defaults */
+        /* silent fail — keep default entryFeeEnabled=true */
       });
   }, []);
 
@@ -11996,106 +11801,48 @@ export default function App() {
     const url = new URL(window.location.href);
     const paid = url.searchParams.get("paid") === "1";
     if (!paid) return;
-    // Read the tiny freshness MARKER synchronously. The heavy session data
-    // lives in IndexedDB, but we must claim the restore (and jump to the
-    // grid) synchronously here so the verify-checkout effect below — which
-    // decides whether to bounce the user to the upload screen after its own
-    // network round-trip — sees freeTierRestoredRef already set.
-    let markerRaw: string | null = null;
     try {
-      markerRaw = window.localStorage.getItem(FREE_TIER_MARKER_KEY);
-    } catch {
-      markerRaw = null;
-    }
-    if (!markerRaw) return;
-    try {
-      window.localStorage.removeItem(FREE_TIER_MARKER_KEY);
-    } catch {
-      /* ignore */
-    }
-    const stamp = Number(markerRaw);
-    const stale =
-      !Number.isFinite(stamp) || Date.now() - stamp > 30 * 60 * 1000;
-    if (stale) {
-      // Paid then walked away (>30 min) — let the normal flow handle it.
-      void idbClearFreeTierStash();
-      return;
-    }
-
-    // Fresh return: claim the restore + jump to grid NOW, then hydrate the
-    // heavy state (images, cart, selections) from IndexedDB asynchronously.
-    freeTierRestoredRef.current = true;
-    setScreen("grid");
-    void (async () => {
-      try {
-        const stash = await idbGetFreeTierStash<{
-          email?: string;
-          generatedImages?: string[];
-          lastSelections?: StyleSelections | null;
-          lastPhotoUrls?: string[];
-          lastHasWideAngle?: boolean;
-          regenCount?: number;
-          batchesUsed?: number;
-          cart?: string[];
-          photos?: UploadedPhoto[];
-          timestamp?: number;
-        }>();
-        if (stash) {
-          // Re-link the customer's entered email first so the email-capture
-          // gate doesn't re-fire on the restored session.
-          if (stash.email) setEmail(stash.email);
-          if (stash.generatedImages)
-            setGeneratedImages(stash.generatedImages);
-          if (stash.lastSelections) setLastSelections(stash.lastSelections);
-          if (stash.lastPhotoUrls) setLastPhotoUrls(stash.lastPhotoUrls);
-          if (typeof stash.lastHasWideAngle === "boolean")
-            setLastHasWideAngle(stash.lastHasWideAngle);
-          if (typeof stash.regenCount === "number")
-            setRegenCount(stash.regenCount);
-          if (typeof stash.batchesUsed === "number")
-            setBatchesUsed(stash.batchesUsed);
-          if (stash.cart) setCart(stash.cart);
-          // Rebuild the uploaded-photos list so the reference-photo area still
-          // renders after the Stripe page reload, AND so a "generate in a
-          // different style" second batch has usable photos (2026-07-31 fix).
-          // The original `localPreview` values are `blob:` object URLs that die
-          // on navigation, so we point previews at the persistent Blob URL.
-          // Prefer the stashed photo objects (they carry per-photo wide-angle /
-          // HEIC flags); if those didn't survive, reconstruct minimal usable
-          // entries straight from the persistent reference URLs (lastPhotoUrls).
-          let restoredPhotos: UploadedPhoto[] = [];
-          if (stash.photos && stash.photos.length > 0) {
-            restoredPhotos = stash.photos
-              .filter((p) => !!p.blobUrl)
-              .map((p) => ({
-                ...p,
-                localPreview: p.blobUrl as string,
-                status: "done" as const,
-              }));
-          }
-          if (
-            restoredPhotos.length === 0 &&
-            stash.lastPhotoUrls &&
-            stash.lastPhotoUrls.length > 0
-          ) {
-            restoredPhotos = stash.lastPhotoUrls.map((url, i) => ({
-              id: `restored-${i}`,
-              localPreview: url,
-              blobUrl: url,
-              status: "done" as const,
-              errorMessage: null,
-              isWideAngle: stash.lastHasWideAngle ?? null,
-              isHeic: false,
-            }));
-          }
-          if (restoredPhotos.length > 0) setPhotos(restoredPhotos);
-        }
-      } catch {
-        /* IDB read failed — user stays on the grid; images may be blank */
-      } finally {
-        void idbClearFreeTierStash();
+      const raw = window.localStorage.getItem("free_tier_pending_return");
+      if (!raw) return;
+      const stash = JSON.parse(raw) as {
+        generatedImages?: string[];
+        lastSelections?: StyleSelections | null;
+        lastPhotoUrls?: string[];
+        lastHasWideAngle?: boolean;
+        regenCount?: number;
+        batchesUsed?: number;
+        cart?: string[];
+        photos?: UploadedPhoto[];
+        timestamp?: number;
+      };
+      const stashAgeMs = Date.now() - (stash.timestamp ?? 0);
+      if (stashAgeMs > 30 * 60 * 1000) {
+        // Stash is >30 min old — user probably paid then walked away.
+        // Don't force-restore; let the normal flow handle it.
+        window.localStorage.removeItem("free_tier_pending_return");
+        return;
       }
-    })();
+      if (stash.generatedImages) setGeneratedImages(stash.generatedImages);
+      if (stash.lastSelections) setLastSelections(stash.lastSelections);
+      if (stash.lastPhotoUrls) setLastPhotoUrls(stash.lastPhotoUrls);
+      if (typeof stash.lastHasWideAngle === "boolean")
+        setLastHasWideAngle(stash.lastHasWideAngle);
+      if (typeof stash.regenCount === "number")
+        setRegenCount(stash.regenCount);
+      if (typeof stash.batchesUsed === "number")
+        setBatchesUsed(stash.batchesUsed);
+      if (stash.cart) setCart(stash.cart);
+      if (stash.photos) setPhotos(stash.photos);
+      // Jump straight to grid so they see their photos immediately.
+      setScreen("grid");
+      // Tell the verify-checkout effect a restore happened, so it does NOT
+      // override us with setScreen("upload") (which would fire the cart-clear
+      // effect and wipe the restored cart picks).
+      freeTierRestoredRef.current = true;
+      window.localStorage.removeItem("free_tier_pending_return");
+    } catch {
+      window.localStorage.removeItem("free_tier_pending_return");
+    }
     // Only run at mount — no deps.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -12304,14 +12051,8 @@ export default function App() {
             }
             if (data.sessionId && data.unlockExpiresAt) {
               markStripeUnlocked(data.sessionId, data.unlockExpiresAt);
-              // Show the welcome popup with countdown timer — but NOT on a
-              // free-tier mid-session restore, where the customer is being
-              // dropped straight back onto their grid + cart (2026-07-30).
-              // An interstitial countdown there would interrupt exactly the
-              // "take me right back to my photos" experience we're fixing.
-              if (!freeTierRestoredRef.current) {
-                setShowWelcomePopup(true);
-              }
+              // Show the welcome popup with countdown timer.
+              setShowWelcomePopup(true);
             } else {
               // Server didn't return the new fields (deploy lag or
               // metadata write failed). Fall back to the legacy flag —
@@ -12332,13 +12073,7 @@ export default function App() {
                 "stripe_customer_email",
                 data.customerEmail,
               );
-              // On a free-tier restore, keep the email the customer entered
-              // at the capture gate (already re-linked from the saved
-              // session) rather than overwriting it with the Stripe billing
-              // email, which may differ (2026-07-30).
-              if (!freeTierRestoredRef.current) {
-                setEmail(data.customerEmail);
-              }
+              setEmail(data.customerEmail);
             }
             setStripeVerifyState("idle");
             // If the free-tier restore effect already put the user back on
@@ -12565,21 +12300,6 @@ export default function App() {
         setLastSelections(stash.selections);
         setLastPhotoUrls(stash.referencePhotoUrls);
         setLastHasWideAngle(false);
-        // ---- Buyer perk (2026-07-29): a completed purchase waives the
-        //      free-tier $2.99 paywall and grants another free batch of 6
-        //      generations. We reset the two counters that drive the
-        //      free-tier gates — batchesUsed (the "another full batch"
-        //      gate at the top of handleGenerate) and regenCount (the
-        //      single-photo-regen gate) — so the customer's NEXT Generate
-        //      starts clean instead of tripping the paywall. Because the
-        //      free-tier batch gate re-arms at batchesUsed >= 1, this grants
-        //      exactly ONE more free batch per purchase: the paywall returns
-        //      after that batch fires. We intentionally do NOT call
-        //      markUnlocked here — that flips isUnlocked permanently and
-        //      would give unlimited free batches, not the single perk batch.
-        setBatchesUsed(0);
-        setRegenCount(0);
-        setShowFreeTierPaywall(false);
         setScreen("success");
       } catch (err) {
         console.error("deliver after Stripe payment failed:", err);
@@ -12673,22 +12393,16 @@ export default function App() {
     }
   };
 
-  // Free-tier mid-session unlock (2026-07-03; storage reworked 2026-07-30).
-  // Called when the customer clicks "Unlock for $2.99" in the
-  // FreeTierPaywallModal. Stashes the current grid state (heavy base64
-  // images) into IndexedDB + a tiny timestamp marker in localStorage, so the
-  // mount-time restore effect (see above) can rehydrate everything when
-  // Stripe redirects back to /?paid=1. Then fires the normal Stripe Checkout
-  // flow.
+  // Free-tier mid-session unlock (2026-07-03). Called when the customer
+  // clicks "Unlock for $2.99" in the FreeTierPaywallModal. Stashes the
+  // current grid state to localStorage under `free_tier_pending_return`
+  // so the mount-time restore effect (see above) can rehydrate everything
+  // when Stripe redirects back to /?paid=1. Then fires the normal Stripe
+  // Checkout flow.
   const handleFreeTierUnlockPay = async () => {
     if (typeof window === "undefined") return;
-    const stashTimestamp = Date.now();
     try {
       const stash = {
-        // The email the customer entered at the capture gate — saved with
-        // the session so it's preserved (and re-linked) on return, rather
-        // than blank / re-prompted after the $2.99 round-trip (2026-07-30).
-        email,
         generatedImages,
         lastSelections,
         lastPhotoUrls,
@@ -12697,26 +12411,16 @@ export default function App() {
         batchesUsed,
         cart,
         photos,
-        timestamp: stashTimestamp,
+        timestamp: Date.now(),
       };
-      // Heavy payload → IndexedDB (localStorage's ~5MB quota can't hold the
-      // base64 images, which is what silently broke the restore before).
-      // Only after the IDB write COMMITS do we set the tiny localStorage
-      // marker the mount-time restore reads synchronously on return.
-      await idbSetFreeTierStash(stash);
       window.localStorage.setItem(
-        FREE_TIER_MARKER_KEY,
-        String(stashTimestamp),
+        "free_tier_pending_return",
+        JSON.stringify(stash),
       );
     } catch {
-      // IndexedDB blocked/full (rare — e.g. private browsing). The Stripe
-      // flow still works but the grid resets on return (old behavior). Make
-      // sure we don't leave a marker pointing at data that isn't there.
-      try {
-        window.localStorage.removeItem(FREE_TIER_MARKER_KEY);
-      } catch {
-        /* ignore */
-      }
+      // localStorage full or blocked. The Stripe flow still works but
+      // the user's grid will reset on return. Not fatal — they still
+      // paid and can regen normally with their unlock.
     }
     try {
       const resp = await fetch("/api/create-checkout-session", {
@@ -12927,18 +12631,6 @@ export default function App() {
     } catch {
       /* lead capture must never block generation */
     }
-    // Tag this Clarity session with the email so recordings can be looked
-    // up by address (Clarity dashboard → Recordings → Filters → Custom
-    // tags → "email"). Guarded: window.clarity may be missing if the tag
-    // is still loading or blocked by an ad blocker, and tagging must never
-    // interrupt the generation flow.
-    try {
-      if (typeof window !== "undefined" && typeof window.clarity === "function") {
-        window.clarity("set", "email", enteredEmail);
-      }
-    } catch {
-      /* Clarity tagging is best-effort — never block generation */
-    }
     const pending = pendingGenerateRef.current;
     pendingGenerateRef.current = null;
     if (pending) void handleGenerate(pending, enteredEmail);
@@ -12961,11 +12653,6 @@ export default function App() {
     // batch after the initial one hits the paywall. batchesUsed === 0
     // means the initial batch hasn't fired yet (allow). batchesUsed >= 1
     // is a Back-to-style → Generate loop (block, show paywall).
-    //
-    // Buyer perk (2026-07-29): a completed purchase resets batchesUsed to 0
-    // on the delivery/success screen, so a paying customer lands back here
-    // with batchesUsed === 0 and slips through for exactly one more free
-    // batch before this gate re-arms.
     if (!entryFeeEnabled && !isUnlocked && batchesUsed >= 1) {
       setShowFreeTierPaywall(true);
       return;
@@ -12985,22 +12672,12 @@ export default function App() {
     const usablePhotos = photos.filter(
       (p) => p.status === "done" && p.blobUrl,
     );
-    let photoUrls = usablePhotos.map((p) => p.blobUrl as string);
+    const photoUrls = usablePhotos.map((p) => p.blobUrl as string);
     // Wide-angle flag: true if ANY usable reference photo was detected as
     // wide via EXIF. `null` (EXIF unreadable) and `false` (confirmed ≥40mm)
     // both count as "not wide" — the server will fall back to Block 1's
     // generic "if it appears wide-angle..." wording in those cases.
-    let hasWideAngle = usablePhotos.some((p) => p.isWideAngle === true);
-
-    // Fallback (2026-07-31): a "generate in a different style" batch reuses the
-    // SAME reference photos, which already live in Blob as lastPhotoUrls. If
-    // the in-memory `photos` list is short (e.g. after the $2.99 restore, where
-    // the original File-backed previews don't survive the page reload), fall
-    // back to those persistent URLs so the second generation still fires.
-    if (photoUrls.length < 5 && lastPhotoUrls.length >= 5) {
-      photoUrls = lastPhotoUrls;
-      hasWideAngle = lastHasWideAngle;
-    }
+    const hasWideAngle = usablePhotos.some((p) => p.isWideAngle === true);
 
     if (photoUrls.length < 5) {
       setGenerationError(
@@ -13035,33 +12712,6 @@ export default function App() {
     setLastPhotoUrls(photoUrls);
     setLastHasWideAngle(hasWideAngle);
     setScreen("loading");
-
-    // ---- Identity check setup (2026-07-30) ----
-    // Reset this batch's identity state and, if the feature is on, kick off
-    // the one-time reference-descriptor computation in parallel with the 6
-    // generate calls (so its face-detection time hides behind the wait).
-    // Best-effort throughout: if any of this fails, referenceDescriptorRef
-    // stays null and the identity pass simply does nothing.
-    setPerfectingSlots(new Set());
-    referenceDescriptorRef.current = null;
-    slotDescriptorsRef.current = [];
-    let refDescPromise: Promise<void> | null = null;
-    if (identityCheckEnabled) {
-      refDescPromise = fetch("/api/face-descriptor", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ photoUrls }),
-      })
-        .then((r) => (r.ok ? r.json() : null))
-        .then((d) => {
-          if (d && Array.isArray(d.descriptor)) {
-            referenceDescriptorRef.current = d.descriptor as number[];
-          }
-        })
-        .catch(() => {
-          /* scoring is best-effort — never blocks generation */
-        });
-    }
 
     // Fire 6 staggered calls. Each gets a unique variationIndex (0-5) so
     // the backend picks a different "flavor" per photo. Staggering matters
@@ -13113,10 +12763,6 @@ export default function App() {
             // parallel calls send the same value so the grid renders
             // 6 matched-color healthcare headshots.
             scrubColor: selections.scrubColor,
-            // Ask the server to also return this shot's face descriptor so we
-            // can score its likeness and auto-regenerate weak matches (best-
-            // effort; server returns null if scoring fails). (2026-07-30)
-            wantIdentityScore: identityCheckEnabled,
             // Paywall enforcement (2026-05-15): server requires either a
             // valid Stripe session ID or the promo code on every call.
             ...readUnlockRequestFields(),
@@ -13134,12 +12780,7 @@ export default function App() {
           const err = (await response.json().catch(() => ({}))) as { error?: string };
           throw new Error(err.error || `HTTP ${response.status}`);
         }
-        const data = (await response.json()) as {
-          image: string;
-          faceDescriptor?: number[] | null;
-        };
-        // Stash this slot's descriptor for the identity pass below.
-        slotDescriptorsRef.current[index] = data.faceDescriptor ?? null;
+        const data = (await response.json()) as { image: string };
         // Write this image into its fixed slot AND bump the counter. Using
         // functional setState so the six overlapping callbacks compose cleanly.
         setGeneratedImages((prev) => {
@@ -13174,8 +12815,18 @@ export default function App() {
       // screen anymore. setGenerationError() is a no-op for the grid
       // (regenError handles per-slot grid errors instead). We still set
       // it here so a user who's still on /loading sees the message.
+      // A zero-success batch is almost always a dropped client connection
+      // (tab closed / backgrounded / navigated away mid-generation), NOT a
+      // server or photo problem — the runtime logs show images generating
+      // fine even when the customer sees this. So (a) refund the batch we
+      // optimistically counted at the top of handleGenerate, so a dropped
+      // connection never burns one of the customer's free generations and a
+      // retry isn't wrongly paywalled, and (b) surface honest, non-blaming
+      // "Connection interrupted" copy (the LoadingScreen turns this specific
+      // message into a popup). (2026-08-01)
+      setBatchesUsed((n) => Math.max(0, n - 1));
       setGenerationError(
-        "All 6 generations failed. Please try again — if it keeps happening, check your uploaded photos are clear headshots.",
+        "Connection interrupted — your headshots didn't reach this page. Please stay on this page and don't close, refresh, or navigate away while they generate. Your photos are fine; tap Try again.",
       );
       return;
     }
@@ -13185,123 +12836,6 @@ export default function App() {
     // setScreen lets us check the latest screen value without a stale
     // closure on the captured `screen` from when handleGenerate fired.
     setScreen((s) => (s === "loading" ? "grid" : s));
-
-    // ---- Identity pass (2026-07-30) ----
-    // The grid is up. Score each shot against the customer's reference face
-    // and auto-regenerate the weakest matches (capped). Runs in the
-    // background: good shots are already interactive, and only the weak ones
-    // show the "Perfecting identity preservation" overlay while they refresh.
-    if (identityCheckEnabled) {
-      if (refDescPromise) {
-        try {
-          await refDescPromise;
-        } catch {
-          /* no reference descriptor → pass will simply no-op */
-        }
-      }
-      void runIdentityPass(selections, photoUrls, hasWideAngle);
-    }
-  };
-
-  // Score every generated slot against the reference face; auto-regenerate
-  // the worst matches over the threshold, capped at IDENTITY_MAX_REDOS. All
-  // best-effort — no reference descriptor, or no weak shots, means no-op.
-  const runIdentityPass = async (
-    selections: StyleSelections,
-    photoUrls: string[],
-    hasWideAngle: boolean,
-  ) => {
-    const ref = referenceDescriptorRef.current;
-    if (!ref || ref.length !== 128) return;
-
-    const descs = slotDescriptorsRef.current;
-    const candidates: { index: number; dist: number }[] = [];
-    for (let i = 0; i < TOTAL_HEADSHOTS; i++) {
-      const d = descs[i];
-      if (d && d.length === 128) {
-        const dist = euclideanDistance(ref, d);
-        if (dist > IDENTITY_DISTANCE_THRESHOLD) {
-          candidates.push({ index: i, dist });
-        }
-      }
-    }
-    if (candidates.length === 0) return;
-
-    // Redo the worst matches first, capped so cost stays bounded.
-    candidates.sort((a, b) => b.dist - a.dist);
-    const toRedo = candidates.slice(0, IDENTITY_MAX_REDOS);
-    await Promise.all(
-      toRedo.map(({ index }) =>
-        perfectSlotIdentity(index, ref, selections, photoUrls, hasWideAngle),
-      ),
-    );
-  };
-
-  // Regenerate ONE slot for identity reasons (not user-initiated, so it does
-  // NOT touch regenCount / batchesUsed / paywall). Keeps the new shot only if
-  // it actually matches the reference face better than the one it replaces.
-  const perfectSlotIdentity = async (
-    index: number,
-    ref: number[],
-    selections: StyleSelections,
-    photoUrls: string[],
-    hasWideAngle: boolean,
-  ) => {
-    setPerfectingSlots((prev) => {
-      const next = new Set(prev);
-      next.add(index);
-      return next;
-    });
-    try {
-      const oldDesc = slotDescriptorsRef.current[index];
-      const oldDist = oldDesc ? euclideanDistance(ref, oldDesc) : Infinity;
-      const response = await fetch("/api/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          photoUrls,
-          style: selections.style,
-          attire: selections.attire,
-          lighting: selections.lighting,
-          background: selections.background,
-          variationIndex: index,
-          hasWideAngle,
-          skin: selections.skin,
-          scrubColor: selections.scrubColor,
-          wantIdentityScore: true,
-          ...readUnlockRequestFields(),
-        }),
-      });
-      if (!response.ok) return;
-      const data = (await response.json()) as {
-        image?: string;
-        faceDescriptor?: number[] | null;
-      };
-      if (!data.image) return;
-      const newDist =
-        data.faceDescriptor && data.faceDescriptor.length === 128
-          ? euclideanDistance(ref, data.faceDescriptor)
-          : Infinity;
-      // Only swap if the redo is genuinely a better match — never make a
-      // slot worse. If scoring the redo failed (newDist Infinity), keep the
-      // original.
-      if (newDist < oldDist) {
-        setGeneratedImages((prev) => {
-          const next = [...prev];
-          next[index] = data.image as string;
-          return next;
-        });
-        slotDescriptorsRef.current[index] = data.faceDescriptor ?? oldDesc;
-      }
-    } catch {
-      /* best-effort — leave the original shot in place on any error */
-    } finally {
-      setPerfectingSlots((prev) => {
-        const next = new Set(prev);
-        next.delete(index);
-        return next;
-      });
-    }
   };
 
   return (
@@ -13600,6 +13134,20 @@ export default function App() {
             setScreen("style");
           }}
           onContinueWithReady={() => setScreen("grid")}
+          onRetry={() => {
+            // Re-fire the same batch in place after a connection drop. The
+            // batch was refunded on all-fail, so this isn't paywalled, and
+            // reference photos + selections are still in state. Fall back to
+            // the style screen only if we somehow lost the last selections.
+            setGenerationError(null);
+            setReadyCount(0);
+            setGeneratedImages([]);
+            if (lastSelections) {
+              void handleGenerate(lastSelections);
+            } else {
+              setScreen("style");
+            }
+          }}
         />
       )}
       {screen === "grid" && (
@@ -13612,7 +13160,6 @@ export default function App() {
           regenCount={regenCount}
           maxRegens={MAX_SINGLE_REGENS}
           regeneratingSlots={regeneratingSlots}
-          perfectingSlots={perfectingSlots}
           initialBatchInFlight={initialBatchInFlight}
           cart={cart}
           onAddToCart={addToCart}
