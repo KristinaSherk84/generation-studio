@@ -13,7 +13,7 @@
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { listLeads } from "../lib/leadStore.js";
+import { listLeads, markLeadPurchased } from "../lib/leadStore.js";
 
 export const maxDuration = 10;
 
@@ -64,6 +64,37 @@ export default async function handler(
   req: VercelRequest,
   res: VercelResponse,
 ) {
+  // ---- POST: manually mark a lead as purchased (2026-08-02). Auto-marking
+  // keys off the email the customer types at checkout; if that differs from
+  // the email they generated with, the lead is never flipped and they'd get a
+  // win-back email despite having bought. This lets Kristi correct it in one
+  // click from the leads page. Same ADMIN_PASSWORD auth. ----
+  if (req.method === "POST") {
+    const body = (req.body ?? {}) as {
+      pw?: unknown;
+      email?: unknown;
+      action?: unknown;
+    };
+    const bpw = typeof body.pw === "string" ? body.pw : "";
+    const expectedPw = process.env.ADMIN_PASSWORD ?? "";
+    if (!expectedPw || !safeEquals(bpw, expectedPw)) {
+      res.status(401).json({ ok: false, error: "Unauthorized" });
+      return;
+    }
+    if (body.action === "markPurchased" && typeof body.email === "string") {
+      try {
+        await markLeadPurchased(body.email);
+        res.status(200).json({ ok: true });
+      } catch (err) {
+        console.error("[admin/leads] markPurchased failed:", err);
+        res.status(500).json({ ok: false, error: "Failed to mark" });
+      }
+      return;
+    }
+    res.status(400).json({ ok: false, error: "Bad request" });
+    return;
+  }
+
   const pw =
     typeof req.query.pw === "string"
       ? req.query.pw
@@ -130,7 +161,11 @@ export default async function handler(
         <td>${esc(formatET(l.createdAt))}</td>
         <td>${esc(formatET(l.lastSeenAt))}</td>
         <td class="num">${esc(l.generateCount)}</td>
-        <td class="status">${l.purchased ? "✅ Purchased" : "—"}</td>
+        <td class="status">${
+          l.purchased
+            ? "✅ Purchased"
+            : `<button class="mkbtn" data-email="${esc(l.email)}">Mark purchased</button>`
+        }</td>
         <td>${esc(formatET(l.purchasedAt))}</td>
         <td>${esc(l.source)}</td>
       </tr>`,
@@ -172,6 +207,9 @@ export default async function handler(
   summary{cursor:pointer;font-weight:600;font-size:14px;}
   textarea{width:100%;height:90px;margin-top:10px;font-size:12px;padding:8px;border:1px solid var(--line);border-radius:8px;font-family:ui-monospace,monospace;}
   .empty{padding:40px;text-align:center;color:var(--sub);}
+  .mkbtn{background:#fff;color:var(--forest);border:1px solid var(--forest);border-radius:6px;
+    font-size:11px;font-weight:600;padding:4px 9px;cursor:pointer;white-space:nowrap;}
+  .mkbtn:disabled{opacity:.6;cursor:default;}
 </style>
 </head>
 <body>
@@ -214,6 +252,26 @@ export default async function handler(
     }
   </div>
 </div>
+<script>
+  var PW = ${JSON.stringify(pw)};
+  document.querySelectorAll('.mkbtn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      if (!confirm('Mark ' + b.dataset.email + ' as purchased? They will stop receiving win-back emails.')) return;
+      b.disabled = true; b.textContent = 'Saving…';
+      fetch('/api/admin/leads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'markPurchased', pw: PW, email: b.dataset.email }),
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d && d.ok) { location.reload(); }
+          else { b.disabled = false; b.textContent = 'Mark purchased'; alert('Failed: ' + ((d && d.error) || 'unknown')); }
+        })
+        .catch(function () { b.disabled = false; b.textContent = 'Mark purchased'; alert('Network error'); });
+    });
+  });
+</script>
 </body>
 </html>`;
 
