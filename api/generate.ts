@@ -553,7 +553,7 @@ const BLOCK_6_BACKGROUND: Record<Exclude<Background, "rainbow">, string> = {
   black: `Background: deep-black photo background with rim lights on both sides and edges of the person.`,
   blue: `Background: Muted medium dark blue, tranquil but professional.`,
   green: `Background: Muted green paper seamless photography background, natural and warm.`,
-  red: `Background: Seamless graduated photography background paper transitioning smoothly through three colors from bottom to top. Bottom third: bright golden-rod yellow. Middle third: the golden-rod yellow blends gradually into a medium fire-truck red. Top third: the fire-truck red deepens into a VERY DARK RUST at the very top of the frame — a deep, muted burnt-sienna / oxblood rust-brown that is dramatically darker and more brown than the fire-truck red (nearly a dark brown-maroon, NOT a bright red). CRITICAL: the transitions between all three colors must be EXTREMELY smooth, soft, and gradual — long, feathered, seamless blends where each color melts imperceptibly into the next with no visible banding, no stripes, no hard edges, and no abrupt color stops. It should read as one continuous smooth gradient, not three separate bands. No environmental features in the background — only smooth graduated seamless paper transitioning vertically from bottom to top.`,
+  red: `Background: Seamless graduated photography background paper transitioning smoothly through three colors from bottom to top. Bottom third: bright golden-rod yellow. Middle third: the golden-rod yellow blends gradually into a medium fire-truck red. Top third: the fire-truck red deepens into a DEEP, RICHLY SATURATED DARK RUST at the very top of the frame — a dark, vivid burnt-orange / oxblood rust (roughly #7A2409, a dark saturated rust-brown), clearly the darkest AND most saturated part of the entire gradient. The top must NOT be pale, washed-out, muted, desaturated, or a light orange — it is a deep, intensely saturated dark rust, almost approaching a dark brick/maroon. CRITICAL: the transitions between all three colors must be EXTREMELY smooth, soft, and gradual — long, feathered, seamless blends where each color melts imperceptibly into the next with no visible banding, no stripes, no hard edges, and no abrupt color stops. It should read as one continuous smooth gradient, not three separate bands. No environmental features in the background — only smooth graduated seamless paper transitioning vertically from bottom to top.`,
 };
 
 // Three accent colors used ONLY by Rainbow — they aren't offered as standalone
@@ -567,9 +567,17 @@ const BG_TEAL = `Background: Deep muted teal seamless — a cool, refined blue-g
 // of 6 generations returns 6 different backgrounds — three from the standard
 // swatches, three new accent colors. The fixed ordering below makes the grid
 // read predictably: light → dark → cool → warm → bold → refined.
+// Appended to EVERY Corporate background (2026-08-02). Some color prompts
+// (blue, dark, black) never said "seamless paper / no environment," so with a
+// business-formal suit the model would invent a blurred office/room behind the
+// subject instead of the flat studio sweep. This universal guardrail forbids
+// any environment for all Corporate backgrounds, in the strongest terms and in
+// the recency-weighted position at the end of Block 6.
+const CORP_BG_NO_ENVIRONMENT = ` STRICT BACKGROUND RULE (overrides any tendency to add a setting): the area behind the subject is a solid seamless studio photography paper sweep ONLY — a plain colored backdrop, nothing else. Do NOT render an office, room, window, doorway, desk, plants, furniture, shelves, building interior, cityscape, or ANY environment, scene, or location behind the subject — not even a heavily blurred one. Only the specified seamless paper color(s).`;
+
 function buildBlock6Background(background: Background, variationIndex: number): string {
   if (background !== "rainbow") {
-    return BLOCK_6_BACKGROUND[background];
+    return BLOCK_6_BACKGROUND[background] + CORP_BG_NO_ENVIRONMENT;
   }
   const rainbow = [
     BLOCK_6_BACKGROUND.lightgrey, // 0: light neutral
@@ -580,7 +588,7 @@ function buildBlock6Background(background: Background, variationIndex: number): 
     BG_TEAL,                      // 5: cool accent
   ];
   // Safe fallback: if somehow variationIndex is out of range, default to light grey.
-  return rainbow[variationIndex] ?? BLOCK_6_BACKGROUND.lightgrey;
+  return (rainbow[variationIndex] ?? BLOCK_6_BACKGROUND.lightgrey) + CORP_BG_NO_ENVIRONMENT;
 }
 
 // Block 7 TECHNICAL — fires LAST in the prompt, so its language has strong
