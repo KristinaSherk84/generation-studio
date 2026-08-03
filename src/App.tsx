@@ -7833,7 +7833,7 @@ const LoadingScreen = ({
                   onClick={tappable ? () => setPreviewIndex(i) : undefined}
                   style={{
                     position: "relative",
-                    aspectRatio: "4/5",
+                    aspectRatio: "3/4",
                     background: C.lightGrey,
                     borderRadius: 8,
                     overflow: "hidden",
@@ -7843,17 +7843,21 @@ const LoadingScreen = ({
                 >
                   {src ? (
                     <>
-                      <div
-                        role="img"
-                        aria-label={`Headshot ${i + 1}`}
+                      {/* <img> (not background-image) so iOS Safari doesn't
+                          mis-scale it skinny; pointer-events/touch-callout keep
+                          long-press save blocked. */}
+                      <img
+                        src={src}
+                        alt={`Headshot ${i + 1}`}
+                        draggable={false}
                         onContextMenu={(e) => e.preventDefault()}
                         style={{
                           width: "100%",
                           height: "100%",
-                          backgroundImage: `url(${src})`,
-                          backgroundSize: "cover",
-                          backgroundPosition: "center",
-                          backgroundRepeat: "no-repeat",
+                          objectFit: "cover",
+                          objectPosition: "center",
+                          display: "block",
+                          pointerEvents: "none",
                           WebkitTouchCallout: "none",
                           WebkitUserSelect: "none",
                           userSelect: "none",
@@ -7960,24 +7964,25 @@ const LoadingScreen = ({
             style={{
               position: "relative",
               width: "min(90vw, 70vh)",
-              aspectRatio: "4/5",
+              aspectRatio: "3/4",
             }}
           >
-            <div
-              role="img"
-              aria-label={`Headshot ${previewIndex + 1} preview`}
+            <img
+              src={readyImages[previewIndex]}
+              alt={`Headshot ${previewIndex + 1} preview`}
+              draggable={false}
               onContextMenu={(e) => e.preventDefault()}
               style={{
                 width: "100%",
                 height: "100%",
-                backgroundImage: `url(${readyImages[previewIndex]})`,
-                backgroundSize: "contain",
-                backgroundPosition: "center",
-                backgroundRepeat: "no-repeat",
+                objectFit: "contain",
+                objectPosition: "center",
+                display: "block",
                 borderRadius: 12,
                 WebkitTouchCallout: "none",
                 WebkitUserSelect: "none",
                 userSelect: "none",
+                pointerEvents: "none",
                 cursor: "default",
               }}
             />
@@ -8402,19 +8407,34 @@ const GridScreen = ({
                 style={{
                   position: "relative",
                   width: 72,
-                  height: 90,
+                  height: 96,
                   borderRadius: 6,
                   overflow: "hidden",
                   flexShrink: 0,
-                  backgroundImage: `url(${url})`,
-                  backgroundSize: "cover",
-                  backgroundPosition: "center",
                   backgroundColor: C.lightGrey,
                   boxShadow: "0 1px 3px rgba(0,0,0,0.12)",
                 }}
                 aria-label={`Cart item ${i + 1}`}
                 onContextMenu={(e) => e.preventDefault()}
               >
+                {/* <img> not background-image — avoids the iOS skinny-scale
+                    bug; taps/long-press blocked via pointer-events. */}
+                <img
+                  src={url}
+                  alt={`Cart item ${i + 1}`}
+                  draggable={false}
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                    objectPosition: "center",
+                    display: "block",
+                    pointerEvents: "none",
+                    WebkitTouchCallout: "none",
+                  }}
+                />
                 {/* Remove button — small dark circle with × in top-right
                     corner of each thumbnail. Generous tap target despite
                     the small visual size. */}
@@ -8520,25 +8540,30 @@ const GridScreen = ({
             >
               {src ? (
                 <>
-                  {/* ANTI-THEFT (2026-05-14): rendered as <div
-                      background-image> not <img>. On iOS/Android, long-pressing
-                      an <img> opens a "Save Image" sheet that grabs the
-                      underlying full-res data URI — bypassing the DOM watermark
-                      overlay below (which is a separate sibling element, not
-                      baked into the pixels). <div> with background-image does
-                      NOT trigger that save menu. onContextMenu blocks the
-                      desktop right-click "Save image as…" menu too. */}
-                  <div
-                    role="img"
-                    aria-label={`Headshot variation ${i + 1}`}
+                  {/* ANTI-THEFT: rendered as an <img> with
+                      pointer-events:none + -webkit-touch-callout:none, so a
+                      long-press never reaches the image and the iOS "Save
+                      Image" sheet can't open, while taps still fall through to
+                      the parent tile for selection. onContextMenu blocks the
+                      desktop right-click "Save image as…" menu. We switched OFF
+                      a background-image <div> (2026-08-03): iOS Safari
+                      mis-scales background-size:cover on GPU-composited layers
+                      (the watermark overlay's transform triggers it), which
+                      made faces look skinny on phones. An <img> with
+                      object-fit:cover renders the 3:4 shot with no distortion —
+                      same method the bonus tiles already use. */}
+                  <img
+                    src={src}
+                    alt={`Headshot variation ${i + 1}`}
+                    draggable={false}
                     onContextMenu={(e) => e.preventDefault()}
                     style={{
                       width: "100%",
                       height: "100%",
-                      backgroundImage: `url(${src})`,
-                      backgroundSize: "cover",
-                      backgroundPosition: "center",
-                      backgroundRepeat: "no-repeat",
+                      objectFit: "cover",
+                      objectPosition: "center",
+                      display: "block",
+                      pointerEvents: "none",
                       WebkitTouchCallout: "none",
                       WebkitUserSelect: "none",
                       userSelect: "none",
@@ -9626,8 +9651,11 @@ const RetouchScreen = ({
                 alignItems: "center", // vertically center now that rows are short
               }}
             >
-              {/* Thumbnail. Uses background-image div, matching the
-                  anti-save-protection pattern from the grid screen. */}
+              {/* Thumbnail. Uses an <img> (object-fit:cover) to match the grid
+                  screen — a background-image div made iOS Safari render faces
+                  skinny (background-size mis-scale on composited layers).
+                  pointer-events:none + touch-callout:none keep the anti-save
+                  protection. */}
               <div
                 className="retouch-thumb"
                 style={{
@@ -9638,15 +9666,28 @@ const RetouchScreen = ({
                   overflow: "hidden",
                   position: "relative",
                   flexShrink: 0,
-                  backgroundImage: `url(${url})`,
-                  backgroundSize: "cover",
-                  backgroundPosition: "center",
                   backgroundColor: C.lightGrey,
                 }}
                 onContextMenu={(e) => e.preventDefault()}
                 aria-label={`Headshot ${position + 1}`}
                 role="img"
               >
+                <img
+                  src={url}
+                  alt={`Headshot ${position + 1}`}
+                  draggable={false}
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                    objectPosition: "center",
+                    display: "block",
+                    pointerEvents: "none",
+                    WebkitTouchCallout: "none",
+                  }}
+                />
                 {/* Watermark — same diagonal pattern as the grid. */}
                 <div
                   style={{
