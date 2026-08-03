@@ -6931,7 +6931,10 @@ const StyleScreen = ({
   //
   // If an entry-specialty default was passed (e.g. healthcare-vertical user),
   // honor it instead so the customer lands on the right preselection.
-  const [style, setStyle] = useState<string | null>(defaultStyle ?? "corporate");
+  // Default style is Urban Industrial (2026-08-03, Kristi) — falls back to it
+  // for general landing entries; /healthcare entries still pre-pick Healthcare
+  // via the defaultStyle prop.
+  const [style, setStyle] = useState<string | null>(defaultStyle ?? "urban");
   const [background, setBackground] = useState<string>("lightgrey");
   const [attire, setAttire] = useState<string | null>(defaultAttire ?? null);
   const [lighting, setLighting] = useState<string | null>(null);
