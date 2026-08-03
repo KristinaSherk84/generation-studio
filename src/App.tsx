@@ -8962,21 +8962,16 @@ const FOUND_VIA_OPTIONS = [
   "LinkedIn Ad",
   '"Best Generator" Article',
   "Facebook",
+  "Other",
 ] as const;
-const FOUND_VIA_AUTOCLOSE_MS = 4000;
 
 type FoundViaSurveyModalProps = { onDone: (answer?: string) => void };
 
 const FoundViaSurveyModal = ({ onDone }: FoundViaSurveyModalProps) => {
-  // Keep the 4s auto-close stable across parent re-renders (readyCount ticks
-  // up as images arrive) by running the timer once on mount and reading the
-  // latest onDone through a ref.
-  const doneRef = useRef(onDone);
-  doneRef.current = onDone;
-  useEffect(() => {
-    const t = setTimeout(() => doneRef.current(), FOUND_VIA_AUTOCLOSE_MS);
-    return () => clearTimeout(t);
-  }, []);
+  // No auto-close: the survey stays until the customer picks an answer (one of
+  // the options, including "Other"). The old 4s auto-dismiss captured almost
+  // nothing because it fired while the customer was watching their headshots
+  // appear. Per Kristi 2026-08-03.
   return (
     <div
       role="dialog"
@@ -9040,20 +9035,6 @@ const FoundViaSurveyModal = ({ onDone }: FoundViaSurveyModalProps) => {
             </button>
           ))}
         </div>
-        <button
-          onClick={() => onDone()}
-          style={{
-            marginTop: 12,
-            background: "transparent",
-            border: "none",
-            color: C.mediumGrey,
-            fontSize: 13,
-            cursor: "pointer",
-            fontFamily: "inherit",
-          }}
-        >
-          Skip
-        </button>
       </div>
     </div>
   );
@@ -13382,6 +13363,15 @@ export default function App() {
     if (!hasSeenTips) setShowTipsModal(true);
   };
 
+  // Preload the retouch-versions comparison graphic the moment generation
+  // starts, so it's cached and renders instantly inside the "Realism first"
+  // popup instead of popping in several seconds late. Per Kristi 2026-08-03.
+  useEffect(() => {
+    if (screen !== "loading") return;
+    const img = new Image();
+    img.src = "/marketing/retouch-versions.jpg";
+  }, [screen]);
+
   // Fire the "you control the retouching" popup once readyCount hits 3
   // (halfway through the 6 generations). Earlier (2026-05-18) the trigger
   // was a flat 3-second timer, but Kristi found that fired before any
@@ -13412,7 +13402,7 @@ export default function App() {
     }
   }, [screen, hasSeenLoadingRetouchPopup, hasSeenFoundViaSurvey, readyCount]);
 
-  // Close the survey (on answer or 4s timeout), record the answer against the
+  // Close the survey once the customer picks an answer, record it against the
   // customer's email, then chain into the retouch popup.
   const closeFoundViaSurvey = (answer?: string) => {
     setShowFoundViaSurvey(false);
