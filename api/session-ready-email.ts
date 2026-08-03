@@ -113,6 +113,10 @@ export default async function handler(
         from: "Kristi at GenerAItion Headshots <kristi@kristinasherk.com>",
         to: [email],
         reply_to: "kristi@kristinasherk.com",
+        // BCC Kristi on every "headshots are ready to view" email so she
+        // gets a copy of exactly what each customer receives. Per Kristi
+        // 2026-08-03.
+        bcc: ["kristi@kristinasherk.com"],
         subject,
         html,
         text,
