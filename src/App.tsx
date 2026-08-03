@@ -7852,6 +7852,10 @@ const LoadingScreen = ({
                         draggable={false}
                         onContextMenu={(e) => e.preventDefault()}
                         style={{
+                          // absolute+inset:0 so height resolves on iOS (see
+                          // grid-card note) and object-fit:cover fills.
+                          position: "absolute",
+                          inset: 0,
                           width: "100%",
                           height: "100%",
                           objectFit: "cover",
@@ -7973,6 +7977,8 @@ const LoadingScreen = ({
               draggable={false}
               onContextMenu={(e) => e.preventDefault()}
               style={{
+                position: "absolute",
+                inset: 0,
                 width: "100%",
                 height: "100%",
                 objectFit: "contain",
@@ -8558,6 +8564,13 @@ const GridScreen = ({
                     draggable={false}
                     onContextMenu={(e) => e.preventDefault()}
                     style={{
+                      // position:absolute + inset:0 give the img a DEFINITE
+                      // height. Without it, height:100% doesn't resolve inside
+                      // an aspect-ratio box on iOS Safari, so object-fit:cover
+                      // can't fill and any shot wider than 3:4 rendered short
+                      // with grey below it. Per Kristi 2026-08-03.
+                      position: "absolute",
+                      inset: 0,
                       width: "100%",
                       height: "100%",
                       objectFit: "cover",
