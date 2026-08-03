@@ -8,11 +8,13 @@
  * response and proceeds regardless.
  *
  * Body: { email: string, source?: string }
+ *   or: { email: string, foundVia: string }  — the "How did you find us?"
+ *       survey answer, recorded WITHOUT counting as a new generation.
  * Returns: { ok: true } on success, { ok: false, reason } otherwise.
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { recordLead, looksLikeEmail } from "./lib/leadStore.js";
+import { recordLead, setLeadFoundVia, looksLikeEmail } from "./lib/leadStore.js";
 
 export const maxDuration = 10;
 
@@ -25,11 +27,32 @@ export default async function handler(
     return;
   }
 
-  const body = (req.body ?? {}) as { email?: unknown; source?: unknown };
+  const body = (req.body ?? {}) as {
+    email?: unknown;
+    source?: unknown;
+    foundVia?: unknown;
+  };
   const email = typeof body.email === "string" ? body.email.trim() : "";
 
   if (!looksLikeEmail(email)) {
     res.status(400).json({ ok: false, reason: "invalid_email" });
+    return;
+  }
+
+  // "How did you find us?" answer — attribute update only, never counts as a
+  // new generation (so it can't inflate generateCount or reset lastSeenAt).
+  const foundVia =
+    typeof body.foundVia === "string" && body.foundVia.trim()
+      ? body.foundVia.trim()
+      : "";
+  if (foundVia) {
+    try {
+      await setLeadFoundVia(email, foundVia);
+      res.status(200).json({ ok: true });
+    } catch (err) {
+      console.error("[lead] setLeadFoundVia failed:", err);
+      res.status(200).json({ ok: false, reason: "store_error" });
+    }
     return;
   }
 

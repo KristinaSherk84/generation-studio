@@ -2974,6 +2974,46 @@ const LandingV2 = ({
         )}
       </div>
 
+      {/* Woman-owned trust badge (2026-08-02) — sits just under the reviews
+          emblem, above How It Works. */}
+      <div
+        style={{
+          background: BRAND.cream,
+          display: "flex",
+          justifyContent: "center",
+          padding: isMobile ? "0 16px 22px" : "0 24px 28px",
+        }}
+      >
+        <div
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            background: BRAND.white,
+            border: "1px solid #ECE6DA",
+            borderRadius: 999,
+            padding: "7px 16px",
+            fontFamily: SANS_STACK,
+            boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+          }}
+        >
+          <span aria-hidden="true" style={{ fontSize: 15, lineHeight: 1 }}>
+            ♀
+          </span>
+          <span
+            style={{
+              fontSize: 13,
+              fontWeight: 700,
+              color: BRAND.forestGreen,
+              letterSpacing: ".03em",
+              textTransform: "uppercase",
+            }}
+          >
+            Woman Owned
+          </span>
+        </div>
+      </div>
+
       {/* ========== HOW IT WORKS (replaces the filmstrip 2026-06-02) ==========
           Replaced the auto-scrolling filmstrip per Clarity scroll-depth data
           showing 30% of desktop visitors bounced exactly at the filmstrip's
@@ -8863,11 +8903,118 @@ const RETOUCH_TIER_DESCRIPTIONS: {
 //
 // Smaller / lighter-weight than IntroRetouchModal because the customer
 // is mid-wait and we don't want to interrupt the flow heavily.
+// -------- "How did you find us?" one-question survey (2026-08-02) --------
+// Shown after the 3rd headshot populates, before the retouch popup. Auto-closes
+// after 4s or when the customer ticks an answer. The answer is saved against
+// their email so Kristi can see acquisition sources on the leads page.
+const FOUND_VIA_OPTIONS = [
+  "Referral",
+  "Google Ad",
+  "LinkedIn Ad",
+  '"Best Generator" Article',
+  "Facebook",
+] as const;
+const FOUND_VIA_AUTOCLOSE_MS = 4000;
+
+type FoundViaSurveyModalProps = { onDone: (answer?: string) => void };
+
+const FoundViaSurveyModal = ({ onDone }: FoundViaSurveyModalProps) => {
+  // Keep the 4s auto-close stable across parent re-renders (readyCount ticks
+  // up as images arrive) by running the timer once on mount and reading the
+  // latest onDone through a ref.
+  const doneRef = useRef(onDone);
+  doneRef.current = onDone;
+  useEffect(() => {
+    const t = setTimeout(() => doneRef.current(), FOUND_VIA_AUTOCLOSE_MS);
+    return () => clearTimeout(t);
+  }, []);
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="One quick question"
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.55)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 20,
+        zIndex: 1000,
+        ...font,
+      }}
+    >
+      <div
+        style={{
+          background: C.white,
+          borderRadius: 16,
+          maxWidth: 400,
+          width: "100%",
+          padding: "26px 24px",
+          textAlign: "center",
+          boxShadow: "0 20px 60px rgba(0,0,0,0.28)",
+        }}
+      >
+        <div style={{ fontSize: 13, color: C.mediumGrey, marginBottom: 6 }}>
+          One quick question while the magic happens ✨
+        </div>
+        <h2
+          style={{
+            fontSize: 19,
+            fontWeight: 600,
+            color: C.dark,
+            margin: "0 0 16px",
+            lineHeight: 1.3,
+          }}
+        >
+          How did you find GenerAItion Headshots?
+        </h2>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {FOUND_VIA_OPTIONS.map((o) => (
+            <button
+              key={o}
+              onClick={() => onDone(o)}
+              style={{
+                background: C.white,
+                color: C.dark,
+                border: `1px solid ${C.border}`,
+                borderRadius: 10,
+                padding: "11px 14px",
+                fontSize: 14,
+                fontWeight: 500,
+                cursor: "pointer",
+                fontFamily: "inherit",
+              }}
+            >
+              {o}
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={() => onDone()}
+          style={{
+            marginTop: 12,
+            background: "transparent",
+            border: "none",
+            color: C.mediumGrey,
+            fontSize: 13,
+            cursor: "pointer",
+            fontFamily: "inherit",
+          }}
+        >
+          Skip
+        </button>
+      </div>
+    </div>
+  );
+};
+
 type LoadingRetouchPreviewModalProps = {
   onDismiss: () => void;
 };
 
-const RETOUCH_POPUP_LOCK_SECONDS = 13;
+const RETOUCH_POPUP_LOCK_SECONDS = 10;
 const LoadingRetouchPreviewModal = ({
   onDismiss,
 }: LoadingRetouchPreviewModalProps) => {
@@ -11956,6 +12103,21 @@ export default function App() {
     useState(false);
   const [showLoadingRetouchPopup, setShowLoadingRetouchPopup] =
     useState(false);
+  // "How did you find us?" one-question survey (2026-08-02). Shown once per
+  // browser, right after the 3rd headshot populates and BEFORE the retouch
+  // popup; stays 4s or until they tick an answer, which is saved against their
+  // email in the lead store.
+  const [showFoundViaSurvey, setShowFoundViaSurvey] = useState(false);
+  const [hasSeenFoundViaSurvey, setHasSeenFoundViaSurvey] = useState<boolean>(
+    () => {
+      if (typeof window === "undefined") return false;
+      try {
+        return window.localStorage.getItem("gh_foundvia_asked") === "1";
+      } catch {
+        return false;
+      }
+    },
+  );
   const [email, setEmail] = useState("");
   // Email-capture gate before the first generation (2026-07-29).
   const [showEmailGate, setShowEmailGate] = useState(false);
@@ -13121,10 +13283,45 @@ export default function App() {
   useEffect(() => {
     if (screen !== "loading" || hasSeenLoadingRetouchPopup) return;
     if (readyCount >= 3) {
+      // Show the one-question "How did you find us?" survey FIRST (once per
+      // browser); the retouch popup follows when the survey closes (see
+      // closeFoundViaSurvey). If the survey was already asked in a prior
+      // session/batch, go straight to the retouch popup as before.
+      if (!hasSeenFoundViaSurvey) {
+        setShowFoundViaSurvey(true);
+        setHasSeenFoundViaSurvey(true);
+        try {
+          window.localStorage.setItem("gh_foundvia_asked", "1");
+        } catch {
+          /* private mode — just show it this session */
+        }
+      } else {
+        setShowLoadingRetouchPopup(true);
+        setHasSeenLoadingRetouchPopup(true);
+      }
+    }
+  }, [screen, hasSeenLoadingRetouchPopup, hasSeenFoundViaSurvey, readyCount]);
+
+  // Close the survey (on answer or 4s timeout), record the answer against the
+  // customer's email, then chain into the retouch popup.
+  const closeFoundViaSurvey = (answer?: string) => {
+    setShowFoundViaSurvey(false);
+    if (answer && email) {
+      try {
+        void fetch("/api/lead", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, foundVia: answer }),
+        }).catch(() => {});
+      } catch {
+        /* survey capture must never block the flow */
+      }
+    }
+    if (!hasSeenLoadingRetouchPopup) {
       setShowLoadingRetouchPopup(true);
       setHasSeenLoadingRetouchPopup(true);
     }
-  }, [screen, hasSeenLoadingRetouchPopup, readyCount]);
+  };
 
   // Transition handler from Grid → Retouch (replaces the previous
   // Grid → Checkout direct jump). Pre-fills retouchTiers for any newly
@@ -14146,6 +14343,11 @@ export default function App() {
           screen so they see one slot start generating before being
           interrupted. Tells them realistic skin is on purpose and
           retouching choices are coming next. */}
+      {/* "How did you find us?" one-question survey — fires after the 3rd
+          headshot populates, right BEFORE the retouch popup (2026-08-02). */}
+      {showFoundViaSurvey && (
+        <FoundViaSurveyModal onDone={closeFoundViaSurvey} />
+      )}
       {showLoadingRetouchPopup && (
         <LoadingRetouchPreviewModal
           onDismiss={() => setShowLoadingRetouchPopup(false)}

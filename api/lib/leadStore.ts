@@ -44,6 +44,10 @@ export type LeadRecord = {
   // The unique unlimited promo code we minted and emailed this lead, so Kristi
   // can trace a redemption back to the win-back campaign / revoke it. (2026-08-01)
   followupCode?: string | null;
+  // Customer's answer to the "How did you find us?" survey, or null if not
+  // answered. One of the fixed options (Referral, Google Ad, LinkedIn Ad,
+  // "Best Generator" Article, Facebook). (2026-08-02)
+  foundVia?: string | null;
   // Loose context for debugging / segmentation (style picked, etc.).
   source: string;
 };
@@ -134,6 +138,22 @@ export async function markLeadFollowedUp(
     followedUpAt: new Date().toISOString(),
     followupCode: code,
   });
+}
+
+/**
+ * Record the customer's "How did you find us?" answer against their lead,
+ * WITHOUT bumping generateCount / lastSeenAt (this isn't a new generation, just
+ * an attribute update). No-op if the lead doesn't exist yet. (2026-08-02)
+ */
+export async function setLeadFoundVia(
+  email: string,
+  foundVia: string,
+): Promise<void> {
+  if (!looksLikeEmail(email)) return;
+  const key = recordKey(email);
+  const existing = (await redis.get<LeadRecord>(key)) ?? null;
+  if (!existing) return;
+  await redis.set(key, { ...existing, foundVia: foundVia.slice(0, 60) });
 }
 
 /** Return every lead record, newest-first. Used by the admin export. */

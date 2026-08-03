@@ -123,6 +123,7 @@ export default async function handler(
         "purchased",
         "purchasedAt (ET)",
         "followedUp",
+        "foundVia",
         "source",
       ];
       const rows = leads.map((l) =>
@@ -134,6 +135,7 @@ export default async function handler(
           l.purchased,
           formatET(l.purchasedAt),
           l.followedUp,
+          l.foundVia ?? "",
           l.source,
         ]
           .map(csvCell)
@@ -154,6 +156,29 @@ export default async function handler(
     const pwParam = encodeURIComponent(pw);
     const nowET = formatET(new Date().toISOString());
 
+    // "How did you find us?" breakdown (2026-08-02) — counts per answer.
+    const foundViaCounts: Record<string, number> = {};
+    for (const l of leads) {
+      if (l.foundVia) {
+        foundViaCounts[l.foundVia] = (foundViaCounts[l.foundVia] ?? 0) + 1;
+      }
+    }
+    const foundViaEntries = Object.entries(foundViaCounts).sort(
+      (a, b) => b[1] - a[1],
+    );
+    const foundViaAnswered = foundViaEntries.reduce((s, [, n]) => s + n, 0);
+    const foundViaHtml = foundViaEntries.length
+      ? `<div class="fv">
+        <div class="fvh">How they found us <span style="font-weight:400;color:var(--sub)">(${foundViaAnswered} answered)</span></div>
+        <div class="fvpills">${foundViaEntries
+          .map(
+            ([k, n]) =>
+              `<span class="fvpill">${esc(k)} <b>${n}</b></span>`,
+          )
+          .join("")}</div>
+      </div>`
+      : "";
+
     const rowsHtml = leads
       .map(
         (l) => `<tr class="${l.purchased ? "bought" : "aband"}">
@@ -167,6 +192,7 @@ export default async function handler(
             : `<button class="mkbtn" data-email="${esc(l.email)}">Mark purchased</button>`
         }</td>
         <td>${esc(formatET(l.purchasedAt))}</td>
+        <td>${esc(l.foundVia ?? "")}</td>
         <td>${esc(l.source)}</td>
       </tr>`,
       )
@@ -210,6 +236,11 @@ export default async function handler(
   .mkbtn{background:#fff;color:var(--forest);border:1px solid var(--forest);border-radius:6px;
     font-size:11px;font-weight:600;padding:4px 9px;cursor:pointer;white-space:nowrap;}
   .mkbtn:disabled{opacity:.6;cursor:default;}
+  .fv{background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px 16px;margin-bottom:20px;}
+  .fvh{font-size:13px;font-weight:700;color:var(--ink);margin-bottom:8px;}
+  .fvpills{display:flex;flex-wrap:wrap;gap:8px;}
+  .fvpill{background:var(--amber);border:1px solid var(--line);border-radius:20px;padding:5px 12px;font-size:12.5px;color:var(--ink);}
+  .fvpill b{color:var(--forest);margin-left:2px;}
 </style>
 </head>
 <body>
@@ -222,6 +253,8 @@ export default async function handler(
     <div class="card"><div class="n">${abandoned.length}</div><div class="l">Not purchased</div></div>
     <div class="card"><div class="n">${purchasedCount}</div><div class="l">Purchased</div></div>
   </div>
+
+  ${foundViaHtml}
 
   <div class="bar">
     <button class="btn" onclick="location.reload()">↻ Refresh</button>
@@ -244,7 +277,7 @@ export default async function handler(
         ? `<table>
       <thead><tr>
         <th>Email</th><th>First seen (ET)</th><th>Last seen (ET)</th>
-        <th class="num">Gens</th><th>Status</th><th>Purchased (ET)</th><th>Source</th>
+        <th class="num">Gens</th><th>Status</th><th>Purchased (ET)</th><th>Found via</th><th>Source</th>
       </tr></thead>
       <tbody>${rowsHtml}</tbody>
     </table>`
