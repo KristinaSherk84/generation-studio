@@ -13395,12 +13395,24 @@ export default function App() {
         } catch {
           /* private mode — just show it this session */
         }
-      } else {
+      } else if (!showFoundViaSurvey) {
+        // Only jump straight to the retouch/glam popup when the survey was
+        // seen in a PRIOR session. The !showFoundViaSurvey guard fixes a bug
+        // where showing the survey flipped hasSeenFoundViaSurvey → this effect
+        // re-ran → this branch fired the glam popup ON TOP of the still-open
+        // survey, so the customer saw glam first and the survey only after
+        // dismissing it. Per Kristi 2026-08-03.
         setShowLoadingRetouchPopup(true);
         setHasSeenLoadingRetouchPopup(true);
       }
     }
-  }, [screen, hasSeenLoadingRetouchPopup, hasSeenFoundViaSurvey, readyCount]);
+  }, [
+    screen,
+    hasSeenLoadingRetouchPopup,
+    hasSeenFoundViaSurvey,
+    showFoundViaSurvey,
+    readyCount,
+  ]);
 
   // Close the survey once the customer picks an answer, record it against the
   // customer's email, then chain into the retouch popup.
