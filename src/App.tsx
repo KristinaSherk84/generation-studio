@@ -8505,7 +8505,11 @@ const GridScreen = ({
               onClick={() => src && !regenerating && !perfecting && toggle(i)}
               style={{
                 position: "relative",
-                aspectRatio: "4/5",
+                // Must match the generated image's true ratio (api/generate
+                // emits 3:4). A 4/5 box here cropped the shot and made faces
+                // read narrower than the real downloaded image. Per Kristi
+                // 2026-08-03.
+                aspectRatio: "3/4",
                 background: C.lightGrey,
                 borderRadius: 8,
                 cursor: src && !regenerating && !perfecting ? "pointer" : "default",
@@ -9628,7 +9632,8 @@ const RetouchScreen = ({
                 className="retouch-thumb"
                 style={{
                   width: 110,
-                  aspectRatio: "4/5",
+                  // 3:4 to match the generated shot (see grid card note).
+                  aspectRatio: "3/4",
                   borderRadius: 8,
                   overflow: "hidden",
                   position: "relative",
@@ -11048,7 +11053,8 @@ const DownloadScreen = ({
                 >
                   <div
                     style={{
-                      aspectRatio: "4/5",
+                      // 3:4 to match the generated shot (see grid card note).
+                      aspectRatio: "3/4",
                       background: C.dark,
                       overflow: "hidden",
                       position: "relative",

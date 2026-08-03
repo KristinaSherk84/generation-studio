@@ -25,9 +25,9 @@ function buildEmail(resumeUrl: string): {
   html: string;
   text: string;
 } {
-  const subject = "Your 6 headshots are ready 🎉";
+  const subject = "Your 6 headshots are ready to view 🎉";
   const intro =
-    "Your headshots just finished generating! Come back and pick your favorites — you only pay for the ones you actually love, and nothing is charged until you download.";
+    "Your headshots just finished generating and are ready to view! Come back to see them and pick your favorites — you only pay for the ones you actually love, and nothing is charged until you download.";
   const nudge =
     "Sessions don't stay open forever, so it's best to grab the ones you like now while they're fresh.";
 
@@ -36,7 +36,7 @@ function buildEmail(resumeUrl: string): {
 <meta name="viewport" content="width=device-width, initial-scale=1"></head>
 <body style="margin:0;background:#FAF8F4;padding:24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:#2A2A2A;">
   <div style="max-width:540px;margin:0 auto;background:#ffffff;border:1px solid #E8E4DB;border-radius:14px;padding:28px 26px;">
-    <h1 style="font-size:22px;margin:0 0 14px;color:#1B4332;">Your headshots are ready 🎉</h1>
+    <h1 style="font-size:22px;margin:0 0 14px;color:#1B4332;">Your headshots are ready to view 🎉</h1>
     <p style="font-size:15px;line-height:1.65;margin:0 0 16px;">${intro}</p>
     <p style="font-size:15px;line-height:1.65;margin:0 0 4px;">${nudge}</p>
     <div style="text-align:center;margin:22px 0 6px;">
@@ -54,7 +54,7 @@ function buildEmail(resumeUrl: string): {
 </body></html>`;
 
   const text = [
-    "Your headshots are ready!",
+    "Your headshots are ready to view!",
     "",
     intro,
     "",
