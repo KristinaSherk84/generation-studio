@@ -26,19 +26,26 @@ export const maxDuration = 10;
 const GEN_BATCH_COST_USD = 0.6;
 const fmtUsd = (n: number) => `$${n.toFixed(2)}`;
 
-// Total captured revenue (net of refunds) pulled live from Stripe. The app
-// already talks to Stripe via its REST API with STRIPE_SECRET_KEY, so we reuse
-// that here — no SDK. Returns dollars, or null if the key is missing or the
-// call fails (the page still renders, showing "—"). Charges are paginated with
-// a hard page cap so this stays bounded as volume grows. Per Kristi 2026-08-03.
-async function fetchStripeRevenueUsd(): Promise<number | null> {
+// Live Stripe revenue — total AND per-customer, keyed by the email the
+// customer used at checkout. The app already talks to Stripe via its REST API
+// with STRIPE_SECRET_KEY, so we reuse that here — no SDK. We read Checkout
+// Sessions (not raw charges) because each carries the customer's email in
+// customer_details, which is what we match leads against. Amounts are the paid
+// session totals in dollars (gross of any refunds). Returns null if the key is
+// missing or the call fails (the page still renders, showing "—"). Sessions are
+// paginated with a hard page cap so this stays bounded. Per Kristi 2026-08-03.
+async function fetchStripePayments(): Promise<{
+  byEmail: Record<string, number>;
+  total: number;
+} | null> {
   const key = process.env.STRIPE_SECRET_KEY;
   if (!key) return null;
   try {
-    let cents = 0;
+    const centsByEmail: Record<string, number> = {};
+    let totalCents = 0;
     let startingAfter: string | undefined;
     for (let page = 0; page < 10; page++) {
-      const url = new URL("https://api.stripe.com/v1/charges");
+      const url = new URL("https://api.stripe.com/v1/checkout/sessions");
       url.searchParams.set("limit", "100");
       if (startingAfter) url.searchParams.set("starting_after", startingAfter);
       const resp = await fetch(url.toString(), {
@@ -48,22 +55,32 @@ async function fetchStripeRevenueUsd(): Promise<number | null> {
       const data = (await resp.json()) as {
         data?: Array<{
           id: string;
-          status?: string;
-          amount_captured?: number;
-          amount_refunded?: number;
+          payment_status?: string;
+          amount_total?: number | null;
+          customer_details?: { email?: string | null } | null;
+          customer_email?: string | null;
         }>;
         has_more?: boolean;
       };
-      const charges = data.data ?? [];
-      for (const c of charges) {
-        if (c.status === "succeeded") {
-          cents += (c.amount_captured ?? 0) - (c.amount_refunded ?? 0);
-        }
+      const sessions = data.data ?? [];
+      for (const s of sessions) {
+        if (s.payment_status !== "paid") continue;
+        const cents = s.amount_total ?? 0;
+        if (cents <= 0) continue;
+        totalCents += cents;
+        const email = (s.customer_details?.email ?? s.customer_email ?? "")
+          .trim()
+          .toLowerCase();
+        if (email) centsByEmail[email] = (centsByEmail[email] ?? 0) + cents;
       }
-      if (!data.has_more || charges.length === 0) break;
-      startingAfter = charges[charges.length - 1].id;
+      if (!data.has_more || sessions.length === 0) break;
+      startingAfter = sessions[sessions.length - 1].id;
     }
-    return cents / 100;
+    const byEmail: Record<string, number> = {};
+    for (const [email, cents] of Object.entries(centsByEmail)) {
+      byEmail[email] = cents / 100;
+    }
+    return { byEmail, total: totalCents / 100 };
   } catch {
     return null;
   }
@@ -165,7 +182,15 @@ export default async function handler(
   try {
     const leads = await listLeads();
 
-    // ---- CSV download branch (unchanged behavior) ----
+    // Live Stripe payments keyed by checkout email — powers the per-lead
+    // "Paid" column, the CSV amountPaidUsd, and the Total revenue card.
+    const stripePayments = await fetchStripePayments();
+    const paidByEmail = stripePayments ? stripePayments.byEmail : {};
+    const revenueUsd = stripePayments ? stripePayments.total : null;
+    const paidFor = (email: string) =>
+      paidByEmail[email.trim().toLowerCase()] ?? 0;
+
+    // ---- CSV download branch ----
     if (format === "csv") {
       const header = [
         "email",
@@ -173,6 +198,7 @@ export default async function handler(
         "lastSeenAt (ET)",
         "generateCount",
         "estGenCostUsd",
+        "amountPaidUsd",
         "purchased",
         "purchasedAt (ET)",
         "followedUp",
@@ -185,6 +211,7 @@ export default async function handler(
           formatET(l.lastSeenAt),
           l.generateCount,
           ((l.generateCount ?? 0) * GEN_BATCH_COST_USD).toFixed(2),
+          paidFor(l.email).toFixed(2),
           l.purchased,
           formatET(l.purchasedAt),
           l.followedUp,
@@ -213,8 +240,6 @@ export default async function handler(
     const totalEstCost = leads.reduce((s, l) => s + estCost(l), 0);
     const costPerPurchase =
       purchasedCount > 0 ? totalEstCost / purchasedCount : 0;
-    // Real revenue from Stripe (net of refunds). Null if unavailable → "—".
-    const revenueUsd = await fetchStripeRevenueUsd();
     const abandonedEmails = abandoned.map((l) => l.email).join(", ");
     const pwParam = encodeURIComponent(pw);
     const nowET = formatET(new Date().toISOString());
@@ -250,6 +275,9 @@ export default async function handler(
         <td>${esc(formatET(l.lastSeenAt))}</td>
         <td class="num">${esc(l.generateCount)}</td>
         <td class="num">${esc(fmtUsd(estCost(l)))}</td>
+        <td class="num">${
+          paidFor(l.email) > 0 ? esc(fmtUsd(paidFor(l.email))) : "—"
+        }</td>
         <td class="status">${
           l.purchased
             ? "✅ Purchased"
@@ -349,7 +377,7 @@ export default async function handler(
         ? `<table>
       <thead><tr>
         <th>Email</th><th>First seen (ET)</th><th>Last seen (ET)</th>
-        <th class="num">Gens</th><th class="num">Est. $</th><th>Status</th><th>Purchased (ET)</th><th>Found via</th>
+        <th class="num">Gens</th><th class="num">Est. $</th><th class="num">Paid</th><th>Status</th><th>Purchased (ET)</th><th>Found via</th>
       </tr></thead>
       <tbody>${rowsHtml}</tbody>
     </table>`
