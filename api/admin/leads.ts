@@ -152,6 +152,9 @@ export default async function handler(
     const total = leads.length;
     const purchasedCount = leads.filter((l) => l.purchased).length;
     const abandoned = leads.filter((l) => !l.purchased);
+    // Conversion rate = purchasers / everyone who generated (2026-08-03).
+    const conversionPct =
+      total > 0 ? Math.round((purchasedCount / total) * 1000) / 10 : 0;
     const abandonedEmails = abandoned.map((l) => l.email).join(", ");
     const pwParam = encodeURIComponent(pw);
     const nowET = formatET(new Date().toISOString());
@@ -252,6 +255,7 @@ export default async function handler(
     <div class="card"><div class="n">${total}</div><div class="l">Total leads</div></div>
     <div class="card"><div class="n">${abandoned.length}</div><div class="l">Not purchased</div></div>
     <div class="card"><div class="n">${purchasedCount}</div><div class="l">Purchased</div></div>
+    <div class="card"><div class="n">${conversionPct}%</div><div class="l">Conversion</div></div>
   </div>
 
   ${foundViaHtml}
