@@ -337,7 +337,7 @@ const BLOCK_2_COMPOSITION = `Framing: professional business headshot. The specif
 const BLOCK_3_STYLE_BASE: Record<Style, string> = {
   corporate: `Style: Clean studio-style corporate headshot. Subtle confidence, approachable but professional — director-level expression and energy. Photography background matches the color specified below at 95% fidelity. Add extreme confidence through the eyes expressions. The eyes must be realistic, activeated, engaged, and smiling. As if the eyes have a secret they are keeping.`,
   creative: `Style: Warm, approachable, personable, with a clear outdoor background. Softer edges than corporate. Expressions full of competent, confident personality. Add confidence through the eyes expressions. The eyes must be realistic, caring, etherial, and confidently smiling, as if they know all the secrets.`,
-  executive: `Style: Bold, dramatic, authoritative, commanding. Strong presence — reads as "in charge." C-suite or board member energy. Dark, moody background tones, near-black navy elegant walls, deep gradient to black at the edges, or dark architectural backdrop softly blurred. Hair rim light is always essential for separation. The realistic expression leans fierce and captivating: "ready to take on the world," the knowing look that says "I have a secret I'm not telling you," a confident realistic half-smile that pulls the viewer in. Add confidence through the eyes expressions. The eyes must be realistic, active, engaged, and confidently smiling, as if they know all the secrets.`,
+  executive: `Style: Bold, dramatic, authoritative, commanding. Strong presence — reads as "in charge." C-suite or board member energy. Cool toned image with dark, moody background tones, dark navy elegant walls, deep gradient to black at the edges, or dark blue toned architectural backdrop extremely blurred. Hair rim light is always essential for separation. The realistic expression leans fierce and captivating: "ready to take on the world," the knowing look that says "I have a secret I'm not telling you," a confident realistic half-smile that pulls the viewer in. Add confidence through the eyes expressions. The eyes must be realistic, active, engaged, and confidently smiling, as if they know all the secrets.`,
   urban: `Style: Modern, on-location, lifestyle. Reads as a polished professional photographed in a real city environment — a downtown senior tech leader, a tech founder, a content creator with executive presence. City street professional vibe. Background is always a real urban setting (city street, industrial space) rendered with extreme bokeh so no specifics are identifiable. Facial expression must be realistic, spunky, fresh, active, engaged.`,
   // Healthcare — edited by Kristi 2026-05-22. Mirrors the Urban Industrial
   // structural pattern (base style + 2 rotating backgrounds, 3/3 split
@@ -529,7 +529,7 @@ function buildBlock4Attire(
 const BLOCK_5_LIGHTING: Record<Lighting, string> = {
   studio: `Lighting: Broad, super soft key light placed slightly above of the subject. A substantial fill light source from below illuminating the shadows under the brow bones, the nose. Fill is barely darker than the key. Aggressive under-eye / under-nose fill light from a low frontal position — COMPLETELY ELIMINATE shadows in the eye sockets, under the nose, in the smile-line creases. Skin under those features must read as evenly lit as the rest of the face — no shadow at all in those zones, only smooth even illumination. Two or three catchlights in the eyes from the key, fill, and under-eye fill sources. THE ONLY PERMITTED SHADOW on the entire face/neck region is a soft, narrow gradient under the jawline (lower jaw + upper neck) — preserve that to give the subject jaw definition and separation from the body.`,
   natural: `Lighting: Large window light as key, angled at roughly 45 degrees to the subject. Warm 4000K–5000K color temperature. The shadow side of the face still receives significant warm bounced fill light from multiple angles — warm, golden, reflective surfaces bounce light back to the face from many angles, a large bounce below the subject. Organic and slightly directional, but never leaving deep shadows. Warm light is welcome; unfilled shadows are not.`,
-  dramatic: `Lighting: Illuminate a thin sliver of the face from top to bottom with very soft but directional, filled in light. A narrow, feathered key light — diffused, but positioned so the light illuminates a vertical sliver of the face. Light falls off on either side of the face, darkening the sides of the face from temple to jawline on both sides. For THIS image, choose ONE of these two patterns:
+  dramatic: `Lighting: Illuminate a thin sliver of the face from top to bottom with extremely soft, diffused but directional, filled in light. A narrow, feathered key light — diffused, but positioned so the light illuminates a vertical column of the face. Light falls off on either side of the face, darkening the sides of the face from temple to jawline on both sides. Add soft rim lights to separate subject from the background. For THIS image, choose ONE of these two patterns:
 - Side-lit: the key illuminates primarily ONE side of the face; the opposite side falls into gentle shadow. Classic split or short-light pattern. With filled in shadows on the lit side of the face. 
 - Center-lit: the key catches the CENTER of the face, with soft fall-off on both sides toward the ears and jawline. Light starts to fall off where the outer corners of the eyes are. 
 Include a subtle fill from below the subject to soften — not eliminate — the under-eye, under-nose, and under-chin shadows. Keep medium shadows present for a shaped, directional look; no flattened lighting. Hair rim light preserves separation. Background falls to near-black. Both eyes must always carry at least one visible catchlight.`,
@@ -767,20 +767,20 @@ type Flavor = {
 
 const FLAVORS: Flavor[] = [
   {
-    expression: "subtle closed-mouth realistic smile, warm and composed — the mouth stays gentle, but the EYES smile clearly: slight crinkle at the outer corners, upper cheeks lifted, the unmistakable warm-eye Duchenne smile that reads as genuine joy. Under no circumstances flat, neutral, or blank eyes",
+    expression: "subtle closed-mouth realistic smile, confident and composed — the mouth stays gentle, but the EYES smile clearly: slight crinkle at the outer corners, upper cheeks lifted, the unmistakable warm-eye Duchenne smile that reads as genuine joy. Under no circumstances flat, neutral, or blank eyes",
     bodyPose: "body squared to camera, shoulders relaxed",
-    crop: "tighter crop — from just above the top of the head to the collarbone",
+    crop: "tighter crop — from just above the top of the head to the upper chest",
     attireHint: "shirt or top in crisp white",
   },
   {
     expression: "soft realistic open smile, approachable",
     bodyPose: "body turned approximately 10 degrees to the subject's left, head rotated slightly back toward the lens",
     crop: "medium crop — from just above the top of the head to the upper chest",
-    attireHint: "shirt or top in a soft light blue",
+    attireHint: "shirt or top in a soft light or dark blue",
   },
   {
-    expression: "warm realistic teeth-showing smile, genuine and bright",
-    bodyPose: "body turned approximately 15 degrees to the subject's right, head rotated slightly back toward the lens",
+    expression: "warm realistic teeth-showing smile, genuine and bright, the EYES smile clearly: slight crinkle at the outer corners, upper cheeks lifted, warm-eyed jovial smile that reads as genuine joy. Under no circumstances flat, neutral, or blank eyes",
+    bodyPose: "body turned approximately 10 degrees to the subject's right, head rotated slightly back toward the lens",
     crop: "medium crop — from just above the top of the head to the upper chest",
     attireHint: "shirt or top in a soft pastel tone (blush, cream, or pale grey)",
   },
@@ -791,13 +791,13 @@ const FLAVORS: Flavor[] = [
     attireHint: "a subtly different jacket or top in a mid-tone, well-tailored",
   },
   {
-    expression: "confident warm realistic expression with slight smile, engaged eyes",
+    expression: "confident warm realistic expression with professional small smile, engaged and kind confident eyes",
     bodyPose: "body turned approximately 5 degrees to the subject's right",
     crop: "tighter crop — from just above the top of the head to the collarbone",
     attireHint: "a darker-tone option — charcoal or deep navy",
   },
   {
-    expression: "natural easy realistic smile, relaxed and personable",
+    expression: "natural easy realistic smile, relaxed and personable, confident.",
     bodyPose: "body turned approximately 10 degrees to the subject's left",
     crop: "medium crop — from just above the top of the head to the upper chest",
     attireHint: "a subtly textured dark colored blazer or cardigan.",
