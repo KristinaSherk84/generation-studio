@@ -11916,9 +11916,10 @@ const TOTAL_HEADSHOTS = 6;
 //     cutoff. LOWER = stricter (more redos, better likeness, more cost);
 //     HIGHER = looser. Start moderately strict and adjust from live data.
 //   - IDENTITY_MAX_REDOS: hard cap on how many of the 6 shots we auto-redo
-//     per batch (bounds cost). Kristi: 3 photos, 1 regen each.
+//     per batch (bounds cost). Kristi: 2 photos, 1 regen each (lowered from 3
+//     to 2 on 2026-08-03 to cut per-session generation cost).
 const IDENTITY_DISTANCE_THRESHOLD = 0.5;
-const IDENTITY_MAX_REDOS = 3;
+const IDENTITY_MAX_REDOS = 2;
 
 // Standard Euclidean distance between two equal-length numeric vectors
 // (face descriptors). Lower = more similar faces.
@@ -13323,6 +13324,36 @@ export default function App() {
     }
   };
 
+  // "Your headshots are ready" email (2026-08-03). Clarity recordings show
+  // people kick off a batch, wander off during the 2–3 min wait, forget, and
+  // never come back. When all 6 finish, email them a link back to the site.
+  // Sent once per browser+email (localStorage flag) so reloads / new batches
+  // don't re-send.
+  useEffect(() => {
+    if (readyCount < TOTAL_HEADSHOTS) return;
+    const addr = email.trim();
+    if (!addr) return;
+    const flagKey = `gh_ready_emailed_${addr.toLowerCase()}`;
+    try {
+      if (
+        typeof window !== "undefined" &&
+        window.localStorage.getItem(flagKey) === "1"
+      ) {
+        return;
+      }
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(flagKey, "1");
+      }
+    } catch {
+      /* storage blocked — the effect's own deps still prevent re-fire */
+    }
+    void fetch("/api/session-ready-email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: addr }),
+    }).catch(() => {});
+  }, [readyCount, email]);
+
   // Transition handler from Grid → Retouch (replaces the previous
   // Grid → Checkout direct jump). Pre-fills retouchTiers for any newly
   // selected URLs that don't have a tier yet — defaults to "basic"
@@ -13459,15 +13490,9 @@ export default function App() {
   const handleEmailGateSubmit = (enteredEmail: string) => {
     setEmail(enteredEmail);
     setShowEmailGate(false);
-    try {
-      void fetch("/api/lead", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: enteredEmail, source: "generate" }),
-      }).catch(() => {});
-    } catch {
-      /* lead capture must never block generation */
-    }
+    // NOTE: the lead capture / batch count now happens inside handleGenerate
+    // (once per actual batch, after the gates) so generateCount reflects real
+    // generation activity and spend — see the ping there. (2026-08-03)
     // Tag this Clarity session with the email so recordings can be looked
     // up by address (Clarity dashboard → Recordings → Filters → Custom
     // tags → "email"). Guarded: window.clarity may be missing if the tag
@@ -13636,6 +13661,25 @@ export default function App() {
     // starts later) but slot 6 actually completes instead of timing out.
     // Net user-visible latency is similar or better because we no longer
     // wait through 2-3 minutes of failed retries.
+    // Count this batch against the customer's lead (drives the est. generation
+    // cost on the admin leads page) and refresh lastSeenAt. Fires once per
+    // actual 6-image batch, AFTER all the gates above, so generateCount tracks
+    // real generation activity (and real spend). Fire-and-forget. (2026-08-03)
+    {
+      const leadEmail = (emailOverride ?? email).trim();
+      if (leadEmail) {
+        try {
+          void fetch("/api/lead", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: leadEmail, source: "generate" }),
+          }).catch(() => {});
+        } catch {
+          /* lead capture must never block generation */
+        }
+      }
+    }
+
     const STAGGER_MS = 5000;
     const calls = Array.from({ length: TOTAL_HEADSHOTS }, async (_, index) => {
       // Each call waits its turn before firing. Promise.all below still
