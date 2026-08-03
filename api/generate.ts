@@ -111,7 +111,6 @@ const SCRUB_COLOR_DESCRIPTIONS: Record<ScrubColor, string> = {
 type Background =
   | "white"
   | "lightgrey"
-  | "midgrey"
   | "dark"
   | "black"
   | "blue"
@@ -546,7 +545,6 @@ Include a subtle fill from below the subject to soften — not eliminate — the
 const BLOCK_6_BACKGROUND: Record<Exclude<Background, "rainbow">, string> = {
   white: `Background: Seamless bright white, clean, no gradients. Generate 255 clipped bright white seamless paper backgrounds with no edges.`,
   lightgrey: `Background: Neutral light grey paper seamless, gentle vignette.`,
-  midgrey: `Background: Medium grey paper seamless, classic editorial portrait feel. add subtle vignettes.`,
   dark: `Background: Near-black charcoal with slight gradient to deeper black at edges. Place a spot light on the background illuminating the background directly behind the subject's lower neck and upper shoulders. The brightest part of the spot light should be medium grey with a very gradual gradient transitioning outward to a dark grey almost black.`,
   black: `Background: deep-black, dark photo background with rim lights on both sides and edges of the person. Separate the subject from the background on both sides with soft subtle rim lights.`,
   blue: `Background: Muted medium dark blue, tranquil but professional.`,
@@ -1492,7 +1490,7 @@ export default async function handler(
   if (
     body.style === "corporate" &&
     body.background &&
-    !["white", "lightgrey", "midgrey", "dark", "black", "blue", "green", "red", "rainbow"].includes(body.background)
+    !["white", "lightgrey", "dark", "black", "blue", "green", "red", "rainbow"].includes(body.background)
   ) {
     return res.status(400).json({ error: "Invalid background" });
   }

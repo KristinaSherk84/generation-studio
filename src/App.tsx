@@ -6613,7 +6613,6 @@ const CREATIVE_BOKEH = [
 const STUDIO_BGS = [
   { id: "white", color: "#FFFFFF", label: "White" },
   { id: "lightgrey", color: "#D3D1C7", label: "Light grey" },
-  { id: "midgrey", color: "#888780", label: "Mid grey" },
   { id: "dark", color: "#444441", label: "Dark" },
   { id: "black", color: "#0A0A0A", label: "Black" },
   { id: "blue", color: "#B5D4F4", label: "Soft blue" },
@@ -6712,7 +6711,7 @@ export type StyleSelections = {
   style: "corporate" | "creative" | "executive" | "urban" | "healthcare";
   attire: "formal" | "casual" | "keep" | "medical";
   lighting: "studio" | "natural" | "dramatic" | "golden";
-  background?: "white" | "lightgrey" | "midgrey" | "dark" | "black" | "blue" | "green" | "red" | "rainbow";
+  background?: "white" | "lightgrey" | "dark" | "black" | "blue" | "green" | "red" | "rainbow";
   // Skin treatment toggle (added 2026-04-26, expanded 2026-05-01 to add glam).
   // - "realistic" (default) — current behavior, no extra block.
   // - "polished" — BLOCK_SKIN_POLISHED smooths color inconsistencies while
@@ -7362,7 +7361,13 @@ const StyleScreen = ({
                   width: 28,
                   height: 28,
                   borderRadius: "50%",
-                  background: bg.color,
+                  // The Dark swatch previews its spotlight backdrop: a small
+                  // lighter-grey center fading out to near-black, mirroring the
+                  // "Background: dark" prompt. Per Kristi 2026-08-03.
+                  background:
+                    bg.id === "dark"
+                      ? "radial-gradient(circle, #9A9A94 0%, #2A2A26 55%, #171712 100%)"
+                      : bg.color,
                   border:
                     background === bg.id
                       ? `2px solid ${C.dark}`
