@@ -12487,6 +12487,48 @@ export default function App() {
   // effect further below knows NOT to override us with setScreen("upload")
   // (which would fire the cart-clear effect and wipe the restored picks).
   const freeTierRestoredRef = useRef(false);
+
+  // "Resume my session" from the ready-email link (2026-08-03). If the URL
+  // carries ?resume=<token>, fetch the saved grid and drop the customer
+  // straight back onto their ACTUAL finished shots — on any device — instead
+  // of an empty landing page. Because it lands on the grid (not the loading
+  // screen), the survey/retouch popups and the ready-email effect don't
+  // re-fire (they gate on screen==="loading" / a set email).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    const token = url.searchParams.get("resume");
+    if (!token) return;
+    // Strip the param so a refresh doesn't re-trigger the restore.
+    url.searchParams.delete("resume");
+    window.history.replaceState({}, "", url.toString());
+    void (async () => {
+      try {
+        const r = await fetch(
+          `/api/get-session?token=${encodeURIComponent(token)}`,
+        );
+        if (!r.ok) return;
+        const d = (await r.json()) as {
+          generatedUrls?: string[];
+          referencePhotoUrls?: string[];
+          selections?: StyleSelections | null;
+          hasWideAngle?: boolean;
+        };
+        if (!d.generatedUrls || d.generatedUrls.length === 0) return;
+        setGeneratedImages(d.generatedUrls);
+        setReadyCount(d.generatedUrls.length);
+        if (d.referencePhotoUrls) setLastPhotoUrls(d.referencePhotoUrls);
+        if (d.selections) setLastSelections(d.selections);
+        setLastHasWideAngle(!!d.hasWideAngle);
+        setScreen("grid");
+      } catch {
+        /* best-effort — on failure they simply see the landing page */
+      }
+    })();
+    // Mount-only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
@@ -13326,9 +13368,12 @@ export default function App() {
 
   // "Your headshots are ready" email (2026-08-03). Clarity recordings show
   // people kick off a batch, wander off during the 2–3 min wait, forget, and
-  // never come back. When all 6 finish, email them a link back to the site.
+  // never come back. When all 6 finish, we (1) upload the finished shots to
+  // Blob and save the grid server-side under a token, then (2) email them a
+  // link that restores their ACTUAL shots on any device (?resume=token).
   // Sent once per browser+email (localStorage flag) so reloads / new batches
-  // don't re-send.
+  // don't re-send. Every step is best-effort: if the upload/save fails, the
+  // email still goes out linking to the site rather than a restored grid.
   useEffect(() => {
     if (readyCount < TOTAL_HEADSHOTS) return;
     const addr = email.trim();
@@ -13347,11 +13392,59 @@ export default function App() {
     } catch {
       /* storage blocked — the effect's own deps still prevent re-fire */
     }
-    void fetch("/api/session-ready-email", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: addr }),
-    }).catch(() => {});
+    // Snapshot the finished grid at fire time.
+    const shots = generatedImages.filter((s) => !!s);
+    const refUrls = lastPhotoUrls;
+    const sels = lastSelections;
+    const wide = lastHasWideAngle;
+    void (async () => {
+      let resumeToken: string | undefined;
+      try {
+        // Upload each finished (base64) preview to Blob so it can be restored
+        // later; already-URL shots (a restored session) are kept as-is.
+        const urls: string[] = [];
+        for (let i = 0; i < shots.length; i++) {
+          const img = shots[i];
+          if (!img) continue;
+          if (/^https?:\/\//.test(img)) {
+            urls.push(img);
+            continue;
+          }
+          const file = dataUrlToFile(img, `ready-${i + 1}.jpg`);
+          if (!file) continue;
+          const result = await upload(
+            `session/${Date.now()}-${i}-${file.name}`,
+            file,
+            { access: "public", handleUploadUrl: "/api/upload" },
+          );
+          urls.push(result.url);
+        }
+        if (urls.length > 0) {
+          const resp = await fetch("/api/save-session", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              email: addr,
+              generatedUrls: urls,
+              referencePhotoUrls: refUrls,
+              selections: sels,
+              hasWideAngle: wide,
+            }),
+          });
+          if (resp.ok) {
+            const d = (await resp.json()) as { token?: string };
+            if (d.token) resumeToken = d.token;
+          }
+        }
+      } catch {
+        /* fall through — email will just link to the site */
+      }
+      void fetch("/api/session-ready-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: addr, resumeToken }),
+      }).catch(() => {});
+    })();
   }, [readyCount, email]);
 
   // Transition handler from Grid → Retouch (replaces the previous

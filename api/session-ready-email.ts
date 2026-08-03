@@ -20,7 +20,11 @@ export const maxDuration = 10;
 
 const SITE_URL = "https://generationheadshots.com";
 
-function buildEmail(): { subject: string; html: string; text: string } {
+function buildEmail(resumeUrl: string): {
+  subject: string;
+  html: string;
+  text: string;
+} {
   const subject = "Your 6 headshots are ready 🎉";
   const intro =
     "Your headshots just finished generating! Come back and pick your favorites — you only pay for the ones you actually love, and nothing is charged until you download.";
@@ -36,7 +40,7 @@ function buildEmail(): { subject: string; html: string; text: string } {
     <p style="font-size:15px;line-height:1.65;margin:0 0 16px;">${intro}</p>
     <p style="font-size:15px;line-height:1.65;margin:0 0 4px;">${nudge}</p>
     <div style="text-align:center;margin:22px 0 6px;">
-      <a href="${SITE_URL}"
+      <a href="${resumeUrl}"
          style="display:inline-block;background:#1B4332;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:13px 26px;border-radius:999px;">
         Pick my headshots &rarr;
       </a>
@@ -56,7 +60,7 @@ function buildEmail(): { subject: string; html: string; text: string } {
     "",
     nudge,
     "",
-    `Pick your headshots: ${SITE_URL}`,
+    `Pick your headshots: ${resumeUrl}`,
     "",
     "Thanks!",
     "Kristina",
@@ -74,12 +78,22 @@ export default async function handler(
     return;
   }
 
-  const body = (req.body ?? {}) as { email?: unknown };
+  const body = (req.body ?? {}) as { email?: unknown; resumeToken?: unknown };
   const email = typeof body.email === "string" ? body.email.trim() : "";
   if (!looksLikeEmail(email)) {
     res.status(400).json({ ok: false, reason: "invalid_email" });
     return;
   }
+  // If the client saved the finished grid, link straight back to it; otherwise
+  // fall back to the site so the email still works.
+  const resumeToken =
+    typeof body.resumeToken === "string" &&
+    /^[A-Za-z0-9]{16,48}$/.test(body.resumeToken)
+      ? body.resumeToken
+      : "";
+  const resumeUrl = resumeToken
+    ? `${SITE_URL}/?resume=${resumeToken}`
+    : SITE_URL;
 
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
@@ -88,7 +102,7 @@ export default async function handler(
   }
 
   try {
-    const { subject, html, text } = buildEmail();
+    const { subject, html, text } = buildEmail(resumeUrl);
     const resp = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
