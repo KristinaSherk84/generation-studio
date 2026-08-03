@@ -1933,8 +1933,12 @@ const HowItWorks = ({ isMobile }: HowItWorksProps) => {
     <section
       id="how-it-works"
       style={{
+        // Reduced top padding (was 48/64) to tighten the gap under the
+        // "Woman Owned" badge; bottom padding unchanged. Per Kristi 2026-08-03.
         background: BRAND.cream,
-        padding: isMobile ? "48px 20px" : "64px clamp(20px, 4vw, 56px)",
+        padding: isMobile
+          ? "26px 20px 48px"
+          : "34px clamp(20px, 4vw, 56px) 64px",
       }}
     >
       <div style={{ textAlign: "center", marginBottom: isMobile ? 28 : 36 }}>
@@ -2981,7 +2985,7 @@ const LandingV2 = ({
           background: BRAND.cream,
           display: "flex",
           justifyContent: "center",
-          padding: isMobile ? "0 16px 22px" : "0 24px 28px",
+          padding: isMobile ? "0 16px 8px" : "0 24px 10px",
         }}
       >
         <div
