@@ -13364,12 +13364,20 @@ export default function App() {
   };
 
   // Preload the retouch-versions comparison graphic the moment generation
-  // starts, so it's cached and renders instantly inside the "Realism first"
-  // popup instead of popping in several seconds late. Per Kristi 2026-08-03.
+  // starts AND track when it has fully loaded, so the "Realism first" popup
+  // only appears once the image is ready — text and image together, never the
+  // image popping in several seconds late. During generation the browser is
+  // busy with uploads + 6 parallel calls, which can stall a plain preload, so
+  // we gate the popup on the actual load event below. Per Kristi 2026-08-03.
+  const [retouchImgReady, setRetouchImgReady] = useState(false);
   useEffect(() => {
     if (screen !== "loading") return;
     const img = new Image();
+    const done = () => setRetouchImgReady(true);
+    img.onload = done;
+    img.onerror = done; // a failed/slow image must never block the popup
     img.src = "/marketing/retouch-versions.jpg";
+    if (img.complete) done(); // already cached (e.g. a second batch)
   }, [screen]);
 
   // Fire the "you control the retouching" popup once readyCount hits 3
@@ -14554,7 +14562,7 @@ export default function App() {
       {showFoundViaSurvey && (
         <FoundViaSurveyModal onDone={closeFoundViaSurvey} />
       )}
-      {showLoadingRetouchPopup && (
+      {showLoadingRetouchPopup && retouchImgReady && (
         <LoadingRetouchPreviewModal
           onDismiss={() => setShowLoadingRetouchPopup(false)}
         />
