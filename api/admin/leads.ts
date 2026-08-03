@@ -17,6 +17,15 @@ import { listLeads, markLeadPurchased } from "../lib/leadStore.js";
 
 export const maxDuration = 10;
 
+// Estimated generation cost of one 6-image batch (2026-08-03). Gemini 3.1
+// Flash Image at the app's 2048px output is ~$0.10/image → ~$0.60 per batch of
+// 6. generateCount tracks batches, so cost ≈ generateCount × this. NOTE: this
+// is an ESTIMATE of the initial-batch generation spend only — it does not
+// include per-slot regenerations, the identity auto-regen, or the post-purchase
+// retouch pass (Gemini 3 Pro Image), so true spend runs somewhat higher.
+const GEN_BATCH_COST_USD = 0.6;
+const fmtUsd = (n: number) => `$${n.toFixed(2)}`;
+
 function safeEquals(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   let diff = 0;
@@ -120,6 +129,7 @@ export default async function handler(
         "createdAt (ET)",
         "lastSeenAt (ET)",
         "generateCount",
+        "estGenCostUsd",
         "purchased",
         "purchasedAt (ET)",
         "followedUp",
@@ -132,6 +142,7 @@ export default async function handler(
           formatET(l.createdAt),
           formatET(l.lastSeenAt),
           l.generateCount,
+          ((l.generateCount ?? 0) * GEN_BATCH_COST_USD).toFixed(2),
           l.purchased,
           formatET(l.purchasedAt),
           l.followedUp,
@@ -155,6 +166,12 @@ export default async function handler(
     // Conversion rate = purchasers / everyone who generated (2026-08-03).
     const conversionPct =
       total > 0 ? Math.round((purchasedCount / total) * 1000) / 10 : 0;
+    // Estimated generation spend (see GEN_BATCH_COST_USD note).
+    const estCost = (l: (typeof leads)[number]) =>
+      (l.generateCount ?? 0) * GEN_BATCH_COST_USD;
+    const totalEstCost = leads.reduce((s, l) => s + estCost(l), 0);
+    const costPerPurchase =
+      purchasedCount > 0 ? totalEstCost / purchasedCount : 0;
     const abandonedEmails = abandoned.map((l) => l.email).join(", ");
     const pwParam = encodeURIComponent(pw);
     const nowET = formatET(new Date().toISOString());
@@ -189,6 +206,7 @@ export default async function handler(
         <td>${esc(formatET(l.createdAt))}</td>
         <td>${esc(formatET(l.lastSeenAt))}</td>
         <td class="num">${esc(l.generateCount)}</td>
+        <td class="num">${esc(fmtUsd(estCost(l)))}</td>
         <td class="status">${
           l.purchased
             ? "✅ Purchased"
@@ -256,7 +274,12 @@ export default async function handler(
     <div class="card"><div class="n">${abandoned.length}</div><div class="l">Not purchased</div></div>
     <div class="card"><div class="n">${purchasedCount}</div><div class="l">Purchased</div></div>
     <div class="card"><div class="n">${conversionPct}%</div><div class="l">Conversion</div></div>
+    <div class="card"><div class="n">${fmtUsd(totalEstCost)}</div><div class="l">Est. gen spend</div></div>
+    <div class="card"><div class="n">${
+      costPerPurchase > 0 ? fmtUsd(costPerPurchase) : "—"
+    }</div><div class="l">Est. cost / purchase</div></div>
   </div>
+  <p class="meta" style="margin:-10px 0 18px">Est. spend = batches × ~$0.60 (6 images at 2K). Rough — excludes per-slot regens, identity auto-regen, and the post-purchase retouch pass, so real spend runs higher.</p>
 
   ${foundViaHtml}
 
@@ -281,7 +304,7 @@ export default async function handler(
         ? `<table>
       <thead><tr>
         <th>Email</th><th>First seen (ET)</th><th>Last seen (ET)</th>
-        <th class="num">Gens</th><th>Status</th><th>Purchased (ET)</th><th>Found via</th><th>Source</th>
+        <th class="num">Gens</th><th class="num">Est. $</th><th>Status</th><th>Purchased (ET)</th><th>Found via</th><th>Source</th>
       </tr></thead>
       <tbody>${rowsHtml}</tbody>
     </table>`
