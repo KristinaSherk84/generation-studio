@@ -217,13 +217,11 @@ Preserve the subject's facial features with 100% precision. The generated face m
 - Skin tone and ethnicity
 - All distinguishing marks: freckles, beauty marks, moles, scars, dimples, asymmetries
 
-DO NOT idealize features. DO NOT blend toward generic 'attractive' proportions, no AI-default beauty. DO NOT alter unique asymmetries. NO identity drift. Maintain eye asymmetry, unique nose and chin characteristics. Protect uneven smiles. Keep all asymmetrical BONE/STRUCTURE.
+DO NOT idealize features. DO NOT blend toward generic 'attractive' proportions. DO NOT alter asymmetries. NO identity drift. Maintain eye asymmetry. Protect uneven smiles, unique noses and chins. Keep all asymmetrical BONE/STRUCTURE.
 
 SKIN RENDERING: Render extremely realistic skin texture, exactly as it appears in the reference photos. Remove blemishes only. Keep pores, freckles, moles, and texture EXACTLY as visible in the references. Render authentically real skin — no airbrushed look. 
 
-PROTECT and PRESERVE unique skin marks: do not add additional Freckles, moles, beauty marks, scars, age spots, dimples, and any distinguishing marks are PART OF THE SUBJECT'S IDENTITY. Only render the ones that are clearly visible in the reference photos.
-
-If the reference photos show smooth skin with no visible micro-texture (filtered selfies, low-resolution phone photos, render with generic pore micro-texture — fine pore terrain to avoid plastic skin, NEVER freckles or moles or marks that weren't in the references.
+PROTECT and PRESERVE unique skin marks: Render ALL skin marks visible in reference photos. DO NOT CREATE or ADD ADDITIONAL freckles, moles, beauty marks, scars, age spots that are not seem in reference photos.
 
 Wide Angle Lens Distortion Adjustment: For wide angle selfies uploaded, correct the lens distortion in the generated image so the face appears as if photographed with a prime 85mm or 135mm portrait lens — slight compression of features, no bulging nose.`;
 
@@ -324,7 +322,7 @@ function buildBlockPet(variationIndex: number): string {
 const BLOCK_2_COMPOSITION = `Framing: professional business headshot. The specific body angle and crop are specified in the variation block at the end of this prompt.
 - Extremely minimal headroom above the top of the head. Only add 2–3% of the total frame height above the top of the head. The top of the head should nearly touch the top of the frame. No empty space above the head.
 - The subject's face should occupy the top third of the frame.
-- Strong posture, proud posture with shoulders back, puffed ches. Classic subject-to-lens relationship (head rotated slightly back toward the lens).`;
+- Strong posture, proud posture with shoulders back, puffed chest. Body angled, head rotated slightly back toward the lens).`;
 
 // Block 3 Style base text (no background) per style.
 //
@@ -337,9 +335,9 @@ const BLOCK_2_COMPOSITION = `Framing: professional business headshot. The specif
 //     location feel with city or modern interior backgrounds. Combines the
 //     old industrial-office bokeh with a new urban-street one.
 const BLOCK_3_STYLE_BASE: Record<Style, string> = {
-  corporate: `Style: Clean, neutral, trustworthy. Modern corporate LinkedIn aesthetic. Subtle confidence, approachable but professional — director-level expression and energy. Photography background matches the color specified below at 95% fidelity with subtle spot-and-gradient variation within the single image. add confidence through the eyes expressions. The eyes must be realistic, active, engaged, and smiling. As if the eyes have a secret they are keeping.`,
-  creative: `Style: Warm, approachable, personable, with a clear outdoor or natural-environment feel. Softer edges than corporate. Hints of personality — a senior creative, a consultant. Less "Wall Street," more "TED stage outdoors." The lighting reads as natural daylight with very filled in shadows. never artificial-fluorescent or harsh-direct. Add confidence through the eyes expressions. The eyes must be realistic, caring, etherial, and confidently smiling, as if they know all the secrets.`,
-  executive: `Style: Bold, authoritative, commanding. Strong presence — reads as "in charge." Darker tones, higher contrast, more gravitas — C-suite or board member energy. Background is deep and moody: near-black charcoal, deep gradient to black at the edges, or dark architectural backdrop softly blurred. Hair rim light is always essential for separation. Directional lighting is welcome (see lighting rule below), but the downward-facing planes of the face must never fall into deep shadow — the eye sockets, under the nose, the nasolabial folds all stay well-filled with light so the subject's eyes are clearly visible and expressive. The realistic expression leans fierce and captivating: "ready to take on the world," the knowing look that says "I have a secret I'm not telling you," a confident realistic half-smile that pulls the viewer in. Add confidence through the eyes expressions. The eyes must be realistic, active, engaged, and confidently smiling, as if they know all the secrets.`,
+  corporate: `Style: Clean studio-style corporate headshot. Subtle confidence, approachable but professional — director-level expression and energy. Photography background matches the color specified below at 95% fidelity. Add extreme confidence through the eyes expressions. The eyes must be realistic, activeated, engaged, and smiling. As if the eyes have a secret they are keeping.`,
+  creative: `Style: Warm, approachable, personable, with a clear outdoor background. Softer edges than corporate. Expressions full of competent, confident personality. Add confidence through the eyes expressions. The eyes must be realistic, caring, etherial, and confidently smiling, as if they know all the secrets.`,
+  executive: `Style: Bold, dramatic, authoritative, commanding. Strong presence — reads as "in charge." C-suite or board member energy. Dark, moody background tones, near-black navy elegant walls, deep gradient to black at the edges, or dark architectural backdrop softly blurred. Hair rim light is always essential for separation. The realistic expression leans fierce and captivating: "ready to take on the world," the knowing look that says "I have a secret I'm not telling you," a confident realistic half-smile that pulls the viewer in. Add confidence through the eyes expressions. The eyes must be realistic, active, engaged, and confidently smiling, as if they know all the secrets.`,
   urban: `Style: Modern, on-location, lifestyle. Reads as a polished professional photographed in a real city environment — a downtown senior tech leader, a tech founder, a content creator with executive presence. City street professional vibe. Background is always a real urban setting (city street, industrial space) rendered with extreme bokeh so no specifics are identifiable. Facial expression must be realistic, spunky, fresh, active, engaged.`,
   // Healthcare — edited by Kristi 2026-05-22. Mirrors the Urban Industrial
   // structural pattern (base style + 2 rotating backgrounds, 3/3 split
@@ -418,7 +416,7 @@ const BLOCK_4_ATTIRE_STATIC: Record<Exclude<Attire, "medical">, string> = {
 - If the subject appears to be a MAN: a well-tailored suit jacket in a neutral color (charcoal, navy, or black) over a crisp collared dress shirt. A necktie is optional based on what flatters the subject's face shape and the overall style.
 - If the subject appears to be a WOMAN: a well-tailored slim-fit blazer in a neutral color (charcoal, navy, or black) over a professional blouse, silk top, or fine knit top with a clean, feminine neckline (crew neck, V-neck, open collar, or tasteful scoop). NEVER a necktie. NEVER a men's business shirt with a men's tie. The silhouette should read clearly as women's business attire — softer shoulder, feminine cut, tailored to a woman's frame.
 Well-tailored and intentional in either case — not boxy, not ill-fitting.`,
-  casual: `Attire: Smart professional attire without a full suit. Options: blazer over an open-collar shirt, knit polo, tailored sweater, or structured blouse. Relaxed but intentional. Favor attire that creates vertical lines guiding the viewer's eye toward the face — a suit jacket, a dark cardigan forming a V-shape, or a structured collar.`,
+  casual: `Attire: Casual professional attire. Options: blazer over an open-collar shirt, knit polo, tailored sweater with crisp shirt collar underneath, or structured blouse. Relaxed but intentional. Attire that creates vertical lines guiding the viewer's eye toward the face — a suit jacket, a dark cardigan forming a V-shape, or a structured collar.`,
   keep: `Attire: Preserve the clothing visible in the first reference photo as faithfully as possible. Do not change the garment type, color, neckline, or style.`,
 };
 
@@ -530,12 +528,12 @@ function buildBlock4Attire(
 
 const BLOCK_5_LIGHTING: Record<Lighting, string> = {
   studio: `Lighting: Broad, super soft key light placed slightly above of the subject. A substantial fill light source from below illuminating the shadows under the brow bones, the nose. Fill is barely darker than the key. Aggressive under-eye / under-nose fill light from a low frontal position — COMPLETELY ELIMINATE shadows in the eye sockets, under the nose, in the smile-line creases. Skin under those features must read as evenly lit as the rest of the face — no shadow at all in those zones, only smooth even illumination. Two or three catchlights in the eyes from the key, fill, and under-eye fill sources. THE ONLY PERMITTED SHADOW on the entire face/neck region is a soft, narrow gradient under the jawline (lower jaw + upper neck) — preserve that to give the subject jaw definition and separation from the body.`,
-  natural: `Lighting: Large window light as key, angled at roughly 45 degrees to the subject. Warm 4000K–5000K color temperature. Gentle fall-off to the shadow side, but the shadow side still receives significant warm bounced fill light from multiple angles — reflective surfaces behind the photographer, a large bounce below the subject, and ambient room light. Organic and slightly directional, but never leaving deep shadows. Warm light is welcome; unfilled shadows are not.`,
-  dramatic: `Lighting: Illuminate a sliver of the face from top to bottom with Soft but directional, filled in light. A narrow but large, feathered key light — diffused, but positioned so the light illuminates a vertical sliver of the face. For THIS image, choose ONE of these two patterns:
+  natural: `Lighting: Large window light as key, angled at roughly 45 degrees to the subject. Warm 4000K–5000K color temperature. The shadow side of the face still receives significant warm bounced fill light from multiple angles — warm, golden, reflective surfaces bounce light back to the face from many angles, a large bounce below the subject. Organic and slightly directional, but never leaving deep shadows. Warm light is welcome; unfilled shadows are not.`,
+  dramatic: `Lighting: Illuminate a thin sliver of the face from top to bottom with very soft but directional, filled in light. A narrow, feathered key light — diffused, but positioned so the light illuminates a vertical sliver of the face. Light falls off on either side of the face, darkening the sides of the face from temple to jawline on both sides. For THIS image, choose ONE of these two patterns:
 - Side-lit: the key illuminates primarily ONE side of the face; the opposite side falls into gentle shadow. Classic split or short-light pattern. With filled in shadows on the lit side of the face. 
 - Center-lit: the key catches the CENTER of the face, with soft fall-off on both sides toward the ears and jawline. Light starts to fall off where the outer corners of the eyes are. 
 Include a subtle fill from below the subject to soften — not eliminate — the under-eye, under-nose, and under-chin shadows. Keep medium shadows present for a shaped, directional look; no flattened lighting. Hair rim light preserves separation. Background falls to near-black. Both eyes must always carry at least one visible catchlight.`,
-  golden: `Lighting: Warm, low-angled light as if from a late-afternoon sun. Hair rim light from behind. Strong bounced fill on the shadow side — not a subtle lift, but enough fill to keep all downward-facing planes of the face well-lit (under the brow, under the nose, under the chin). Warm color grade, but skin tones stay true — no orange cast.`,
+  golden: `Lighting: Warm, low-angled light as if from a late-afternoon sun. Hair rim light from behind. Strong bounced, warm fill light on the shadow sides from multiple gold reflectors. Illuminate all downward-facing planes of the face (under the brow, under the nose). Warm color grade, but skin tones stay true — no orange cast.`,
 };
 
 // Block 6 is only used for Corporate. Creative and Executive get background
@@ -549,8 +547,8 @@ const BLOCK_6_BACKGROUND: Record<Exclude<Background, "rainbow">, string> = {
   white: `Background: Seamless bright white, clean, no gradients. Generate 255 clipped bright white seamless paper backgrounds with no edges.`,
   lightgrey: `Background: Neutral light grey paper seamless, gentle vignette.`,
   midgrey: `Background: Medium grey paper seamless, classic editorial portrait feel. add subtle vignettes.`,
-  dark: `Background: Near-black charcoal with slight gradient to deeper black at edges.`,
-  black: `Background: deep-black photo background with rim lights on both sides and edges of the person.`,
+  dark: `Background: Near-black charcoal with slight gradient to deeper black at edges. Place a spot light on the background illuminating the background directly behind the subject's lower neck and upper shoulders. The brightest part of the spot light should be medium grey with a very gradual gradient transitioning outward to a dark grey almost black.`,
+  black: `Background: deep-black, dark photo background with rim lights on both sides and edges of the person. Separate the subject from the background on both sides with soft subtle rim lights.`,
   blue: `Background: Muted medium dark blue, tranquil but professional.`,
   green: `Background: Muted green paper seamless photography background, natural and warm.`,
   red: `Background: Seamless graduated photography background paper transitioning smoothly through three colors from bottom to top. Bottom third: bright golden-rod yellow. Middle third: the golden-rod yellow blends gradually into a medium fire-truck red. Top third: the fire-truck red deepens into a DEEP, RICHLY SATURATED DARK RUST at the very top of the frame — a dark, vivid burnt-orange / oxblood rust (roughly #7A2409, a dark saturated rust-brown), clearly the darkest AND most saturated part of the entire gradient. The top must NOT be pale, washed-out, muted, desaturated, or a light orange — it is a deep, intensely saturated dark rust, almost approaching a dark brick/maroon. CRITICAL: the transitions between all three colors must be EXTREMELY smooth, soft, and gradual — long, feathered, seamless blends where each color melts imperceptibly into the next with no visible banding, no stripes, no hard edges, and no abrupt color stops. It should read as one continuous smooth gradient, not three separate bands. No environmental features in the background — only smooth graduated seamless paper transitioning vertically from bottom to top.`,
@@ -676,13 +674,13 @@ const BLOCK_EYEWEAR = `Eyewear: Only if reference photos have glasses, preserve 
 // and half render hair down — so a Glam customer who only uploaded
 // hair-up shots still sees 3 hair-down options in their grid. Realistic
 // and Polished keep the original strict-match rule.
-const BLOCK_HAIR_DEFAULT = `CRITICAL HAIR STYLING RULE: Match hair styles from reference photos.
+const BLOCK_HAIR_DEFAULT = `CRITICAL HAIR STYLING RULE: Match hair styles from reference photos. 
 
 - If ALL reference photos show the same hair style (all hair down OR all hair tied back / up / clipped), match that style exactly.
 
 - If reference photo hairstyles are mixed (some down, some tied back), the generated headshot MUST render hair DOWN — loose, flowing, framing the face. This is non-negotiable when the references are mixed.
 
-Match hair length, color, texture, density, and natural part to the reference photos.`;
+Match hair length, color, texture, and natural part to the reference photos. Moderately increase thickness and density.`;
 
 function buildBlockHair(skin: Skin | undefined, variationIndex: number): string {
   if (skin === "glam") {
@@ -828,7 +826,7 @@ function buildBlock8(
 
   const outfitLine =
     attire === "keep"
-      ? `- Outfit: Preserve the exact clothing from the reference photos — do not change the garment type, color, neckline, or style.`
+      ? `- Outfit: Preserve the exact clothing from the first reference photo — do not change the garment type, color, neckline, or style.`
       : attire === "medical"
         ? // 2026-07-13 BUGFIX: medical attire is fully specified by
           // buildBlock4Attire above (garment type + the customer's scrub
@@ -857,14 +855,14 @@ function buildBlock8(
       : "";
 
   return `Photograph direction for this single image:
-- Expression: ${flavor.expression}. Eyes must look alert, engaged, and realistic — never blank, glazed, doll-like, or expressionless. REFERENCE TEETH CHECK (applies to THIS image regardless of the expression wording above): Inspect every reference photo for visible teeth before deciding what kind of smile to render. If NO reference photo shows any visible teeth, render a CLOSED-MOUTH smile that matches the lip style shown in the references — lips together, no upper teeth, no lower teeth, no gap between the lips — even if the expression wording above said "open smile," "teeth-showing," or "bright." Reference fidelity wins over the expression wording. AI-generated teeth on a subject who shows no teeth in references produce uncanny, "AI-tell" output that fails the headshot.
+- Expression: ${flavor.expression}. Eyes must look alert, engaged, activated, and realistic — never blank, glazed or expressionless. REFERENCE TEETH CHECK (applies to THIS image regardless of the expression wording above): Inspect every reference photo for visible teeth before deciding what kind of smile to render. If NO reference photo shows any visible teeth, render a CLOSED-MOUTH smile that matches the lip style shown in the references — lips together, no upper teeth, no lower teeth, no gap between the lips — even if the expression wording above said "open smile," "teeth-showing," or "bright." Reference fidelity wins over the expression wording. AI-generated teeth on a subject who shows no teeth in references produce uncanny, "AI-tell" output that fails the headshot.
 - Body and head: ${flavor.bodyPose}.
 - Framing: ${flavor.crop}.
 ${outfitLine}
 
 REFERENCE PHOTO USAGE RULE: The uploaded reference photos are provided ONLY so you can learn the subject's facial likeness — face shape, features, hair, skin tone. You MUST NOT copy, sample, or draw inspiration from the reference photos' backgrounds, environments, colors, lighting, or scenes. The new photograph's background and lighting come ENTIRELY from the direction in the prompt above — ignore anything visible behind or around the subject in the reference photos.${womenSkinAnchor}${glamUnderEyeOverride}
 
-FINAL IDENTITY CHECK (most important rule in this entire prompt): Above all else, the face in this output must look UNMISTAKABLY like the person in the reference photos — same face shape, same bone structure, same eye shape and color, same nose, same mouth, same hairline, same ethnicity, same distinguishing marks. If the generated face wouldn't be recognized by a coworker, friend, or family member at first glance, you have failed this image. The style, lighting, and outfit directives above NEVER override identity. Do NOT default to a generic professional-headshot face. Do NOT blend toward stock-photo proportions. This is THIS SPECIFIC PERSON in a new setting, not a generic professional in their general age and ethnic range.
+FINAL IDENTITY CHECK (most important rule in this entire prompt): Above all else, the face in this output must look UNMISTAKABLY like the person in the reference photos — same face shape, same bone structure, same eye shape and color, same nose, same mouth, same hairline, same ethnicity, same distinguishing marks. If the generated face wouldn't be recognized by a friend, or family member, you have failed this image. The style, lighting, and outfit directives above NEVER override identity. Do NOT default to a generic professional-headshot face. Do NOT blend toward stock-photo proportions. This is THIS SPECIFIC PERSON in a new setting, not a generic professional in their general age and ethnic range.
 
 IMPORTANT OUTPUT CONSTRAINT: Return exactly ONE single photograph. Do NOT return a grid, contact sheet, collage, multi-panel image, side-by-side comparison, or any composition containing more than one headshot. One photo only.`;
 }
