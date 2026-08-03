@@ -26,6 +26,49 @@ export const maxDuration = 10;
 const GEN_BATCH_COST_USD = 0.6;
 const fmtUsd = (n: number) => `$${n.toFixed(2)}`;
 
+// Total captured revenue (net of refunds) pulled live from Stripe. The app
+// already talks to Stripe via its REST API with STRIPE_SECRET_KEY, so we reuse
+// that here — no SDK. Returns dollars, or null if the key is missing or the
+// call fails (the page still renders, showing "—"). Charges are paginated with
+// a hard page cap so this stays bounded as volume grows. Per Kristi 2026-08-03.
+async function fetchStripeRevenueUsd(): Promise<number | null> {
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key) return null;
+  try {
+    let cents = 0;
+    let startingAfter: string | undefined;
+    for (let page = 0; page < 10; page++) {
+      const url = new URL("https://api.stripe.com/v1/charges");
+      url.searchParams.set("limit", "100");
+      if (startingAfter) url.searchParams.set("starting_after", startingAfter);
+      const resp = await fetch(url.toString(), {
+        headers: { Authorization: `Bearer ${key}` },
+      });
+      if (!resp.ok) return null;
+      const data = (await resp.json()) as {
+        data?: Array<{
+          id: string;
+          status?: string;
+          amount_captured?: number;
+          amount_refunded?: number;
+        }>;
+        has_more?: boolean;
+      };
+      const charges = data.data ?? [];
+      for (const c of charges) {
+        if (c.status === "succeeded") {
+          cents += (c.amount_captured ?? 0) - (c.amount_refunded ?? 0);
+        }
+      }
+      if (!data.has_more || charges.length === 0) break;
+      startingAfter = charges[charges.length - 1].id;
+    }
+    return cents / 100;
+  } catch {
+    return null;
+  }
+}
+
 function safeEquals(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   let diff = 0;
@@ -134,7 +177,6 @@ export default async function handler(
         "purchasedAt (ET)",
         "followedUp",
         "foundVia",
-        "source",
       ];
       const rows = leads.map((l) =>
         [
@@ -147,7 +189,6 @@ export default async function handler(
           formatET(l.purchasedAt),
           l.followedUp,
           l.foundVia ?? "",
-          l.source,
         ]
           .map(csvCell)
           .join(","),
@@ -172,6 +213,8 @@ export default async function handler(
     const totalEstCost = leads.reduce((s, l) => s + estCost(l), 0);
     const costPerPurchase =
       purchasedCount > 0 ? totalEstCost / purchasedCount : 0;
+    // Real revenue from Stripe (net of refunds). Null if unavailable → "—".
+    const revenueUsd = await fetchStripeRevenueUsd();
     const abandonedEmails = abandoned.map((l) => l.email).join(", ");
     const pwParam = encodeURIComponent(pw);
     const nowET = formatET(new Date().toISOString());
@@ -214,7 +257,6 @@ export default async function handler(
         }</td>
         <td>${esc(formatET(l.purchasedAt))}</td>
         <td>${esc(l.foundVia ?? "")}</td>
-        <td>${esc(l.source)}</td>
       </tr>`,
       )
       .join("");
@@ -274,6 +316,9 @@ export default async function handler(
     <div class="card"><div class="n">${abandoned.length}</div><div class="l">Not purchased</div></div>
     <div class="card"><div class="n">${purchasedCount}</div><div class="l">Purchased</div></div>
     <div class="card"><div class="n">${conversionPct}%</div><div class="l">Conversion</div></div>
+    <div class="card"><div class="n">${
+      revenueUsd != null ? fmtUsd(revenueUsd) : "—"
+    }</div><div class="l">Total revenue</div></div>
     <div class="card"><div class="n">${fmtUsd(totalEstCost)}</div><div class="l">Est. gen spend</div></div>
     <div class="card"><div class="n">${
       costPerPurchase > 0 ? fmtUsd(costPerPurchase) : "—"
@@ -304,7 +349,7 @@ export default async function handler(
         ? `<table>
       <thead><tr>
         <th>Email</th><th>First seen (ET)</th><th>Last seen (ET)</th>
-        <th class="num">Gens</th><th class="num">Est. $</th><th>Status</th><th>Purchased (ET)</th><th>Found via</th><th>Source</th>
+        <th class="num">Gens</th><th class="num">Est. $</th><th>Status</th><th>Purchased (ET)</th><th>Found via</th>
       </tr></thead>
       <tbody>${rowsHtml}</tbody>
     </table>`
