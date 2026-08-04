@@ -12279,6 +12279,10 @@ export default function App() {
   // can still complete a purchase.
   const MAX_FULL_BATCHES = 6;
   const [batchesUsed, setBatchesUsed] = useState(0);
+  // True when the customer arrived via the "ready to view" email resume
+  // link to VIEW a saved grid. Such sessions get only MAX_FREE_REGENS (2)
+  // single regens, never a fresh full budget (Kristi 2026-08-04).
+  const [resumedFromEmail, setResumedFromEmail] = useState(false);
   const [showRegenLimitModal, setShowRegenLimitModal] = useState(false);
 
   // Guard against the #1 cause of "all generations failed": the customer
@@ -12573,6 +12577,7 @@ export default function App() {
         if (d.referencePhotoUrls) setLastPhotoUrls(d.referencePhotoUrls);
         if (d.selections) setLastSelections(d.selections);
         setLastHasWideAngle(!!d.hasWideAngle);
+        setResumedFromEmail(true);
         setScreen("grid");
       } catch {
         /* best-effort — on failure they simply see the landing page */
@@ -13568,6 +13573,14 @@ export default function App() {
     // hasn't paid the mid-session $2.99 yet, cap single regens at
     // MAX_FREE_REGENS = 2. The 3rd attempt fires the free-tier paywall
     // instead of running the generation.
+    // Resumed-from-email sessions (customer clicked the "ready to view" link
+    // to come back and VIEW their saved grid) get only MAX_FREE_REGENS (2)
+    // single regens — never a fresh full budget. Returning to look at finished
+    // shots must not silently hand out 6 more free generations (Kristi 2026-08-04).
+    if (resumedFromEmail && regenCount >= MAX_FREE_REGENS) {
+      setShowFreeTierPaywall(true);
+      return;
+    }
     if (!entryFeeEnabled && !isUnlocked) {
       if (regenCount >= MAX_FREE_REGENS) {
         setShowFreeTierPaywall(true);
@@ -14402,7 +14415,7 @@ export default function App() {
           onRegenerateSlot={handleRegenerateSlot}
           regenError={regenError}
           regenCount={regenCount}
-          maxRegens={MAX_SINGLE_REGENS}
+          maxRegens={resumedFromEmail ? MAX_FREE_REGENS : MAX_SINGLE_REGENS}
           regeneratingSlots={regeneratingSlots}
           perfectingSlots={perfectingSlots}
           initialBatchInFlight={initialBatchInFlight}
