@@ -8210,6 +8210,8 @@ type GridScreenProps = {
   onAddToCart: (url: string) => void;
   onRemoveFromCart: (url: string) => void;
   maxCartSize: number;
+  // Wild Card bonus previews rendered below the main 6 (2026-08-04).
+  wildCards: WildCardShot[];
 };
 
 const GridScreen = ({
@@ -8227,6 +8229,7 @@ const GridScreen = ({
   onAddToCart,
   onRemoveFromCart,
   maxCartSize,
+  wildCards,
 }: GridScreenProps) => {
   // Cart is App-level URLs (Phase 1, 2026-06-03 revised) — lifted out of
   // GridScreen's useState so it survives the user backing out to the Style
@@ -8841,6 +8844,166 @@ const GridScreen = ({
           );
         })}
       </div>
+
+      {/* WILD CARD RESULTS (2026-08-04) — two bonus shots in different styles
+          than the customer picked, shown below the main 6 as a delight. */}
+      {wildCards.length > 0 && (
+        <div style={{ marginTop: 44 }}>
+          <h3
+            style={{
+              fontSize: 20,
+              fontWeight: 600,
+              color: C.dark,
+              margin: 0,
+              letterSpacing: -0.3,
+            }}
+          >
+            Wild Card Results
+          </h3>
+          <p
+            style={{
+              fontSize: 14,
+              color: C.mediumGrey,
+              marginTop: 8,
+              lineHeight: 1.6,
+            }}
+          >
+            Two extra looks we tried for you — different styles than you chose,
+            on us.
+          </p>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(2, 1fr)",
+              gap: 16,
+              marginTop: 16,
+            }}
+          >
+            {wildCards.map((wc, i) => (
+              <div key={i}>
+                <div
+                  style={{
+                    position: "relative",
+                    width: "100%",
+                    aspectRatio: "3 / 4",
+                    borderRadius: 12,
+                    overflow: "hidden",
+                    background: C.lightGrey,
+                  }}
+                >
+                  {wc.image ? (
+                    <>
+                      <img
+                        src={wc.image}
+                        alt={wc.label}
+                        draggable={false}
+                        onContextMenu={(e) => e.preventDefault()}
+                        style={{
+                          position: "absolute",
+                          inset: 0,
+                          width: "100%",
+                          height: "100%",
+                          objectFit: "cover",
+                          objectPosition: "center",
+                          display: "block",
+                          pointerEvents: "none",
+                          WebkitTouchCallout: "none",
+                          WebkitUserSelect: "none",
+                          userSelect: "none",
+                        }}
+                      />
+                      <div
+                        style={{
+                          position: "absolute",
+                          inset: 0,
+                          pointerEvents: "none",
+                          overflow: "hidden",
+                        }}
+                      >
+                        {[33, 67].map((topPercent, row) => (
+                          <div
+                            key={row}
+                            style={{
+                              position: "absolute",
+                              top: `${topPercent}%`,
+                              left: "50%",
+                              transform:
+                                "translate(-50%, -50%) rotate(-30deg)",
+                              fontSize: 11,
+                              color: "rgba(255,255,255,0.55)",
+                              textShadow: "0 1px 2px rgba(0,0,0,0.4)",
+                              letterSpacing: 2,
+                              whiteSpace: "nowrap",
+                              fontWeight: 400,
+                            }}
+                          >
+                            WATERMARK · WATERMARK · WATERMARK
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  ) : wc.failed ? (
+                    <div
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        padding: 16,
+                        textAlign: "center",
+                        fontSize: 12,
+                        color: C.mediumGrey,
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      This wild card didn’t come through — but your 6 are all
+                      here.
+                    </div>
+                  ) : (
+                    <div
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 8,
+                        color: C.mediumGrey,
+                      }}
+                    >
+                      <Loader2
+                        size={28}
+                        style={{ animation: "spin 1s linear infinite" }}
+                      />
+                      <div
+                        style={{
+                          fontSize: 11,
+                          letterSpacing: 1,
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        Conjuring…
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div
+                  style={{
+                    marginTop: 8,
+                    fontSize: 12,
+                    color: C.dark,
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {wc.label}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <PhotogTip style={{ marginTop: 24 }}>
         Look for the eyes first. If the eyes feel like you, the rest of the frame will usually
@@ -11959,6 +12122,22 @@ type Screen =
 
 const TOTAL_HEADSHOTS = 6;
 
+// ---- Wild Card previews (2026-08-04) ----
+// After the main 6 land we fire two BONUS shots in deliberately DIFFERENT
+// styles than the customer picked, shown under a "Wild Card Results" heading
+// below the grid. Gender-aware (via /api/detect-gender): women get a natural-
+// greenery golden-hour look + a dramatic executive look; men (and any
+// detection failure) get an urban-industrial studio look + the same dramatic
+// executive look. Both reuse the customer's own attire. Display-only for now
+// (watermarked preview, not addable to cart).
+type WildCardShot = { image: string | null; label: string; failed: boolean };
+const WILDCARD_ATTIRE_LABELS: Record<string, string> = {
+  formal: "your business formal look",
+  casual: "your casual professional look",
+  keep: "your own outfit",
+  medical: "your medical attire",
+};
+
 // ---- Identity auto-regeneration tuning (2026-07-30) ----
 // After each batch, every headshot's face is matched against the customer's
 // reference photos. Shots that match too weakly get automatically regenerated
@@ -12221,6 +12400,8 @@ export default function App() {
   // particular API call failed — GridScreen renders missing slots as
   // "generation failed" placeholders rather than hiding them.
   const [generatedImages, setGeneratedImages] = useState<string[]>([]);
+  // Wild Card bonus previews shown below the main grid (2026-08-04).
+  const [wildCards, setWildCards] = useState<WildCardShot[]>([]);
   // How many of the 6 parallel requests have returned successfully so far.
   // Drives the "Generating headshot N of 6" copy on the loading screen.
   const [readyCount, setReadyCount] = useState(0);
@@ -13791,6 +13972,7 @@ export default function App() {
     setRegenCount(0);
     setRegeneratingSlots(new Set());
     setInitialBatchInFlight(new Set([0, 1, 2, 3, 4, 5]));
+    setWildCards([]); // clear any prior batch's wild cards
     // Persist selections + URLs so per-slot regeneration can reuse them
     // without asking the user to reselect anything.
     setLastSelections(selections);
@@ -13992,6 +14174,118 @@ export default function App() {
       }
       void runIdentityPass(selections, photoUrls, hasWideAngle);
     }
+
+    // Wild Card bonus previews — fire for EVERY generation, independent of the
+    // identity pass. Best-effort; never blocks or errors the grid. (2026-08-04)
+    void runWildCards(selections, photoUrls, hasWideAngle);
+  };
+
+  // Fire the two Wild Card bonus shots after the main batch lands. Gender-
+  // aware style pairing; both reuse the customer's attire. Best-effort and
+  // fully independent of the main grid — never blocks or errors it, and does
+  // NOT touch regenCount / batchesUsed / the paywall counters. (2026-08-04)
+  const runWildCards = async (
+    selections: StyleSelections,
+    photoUrls: string[],
+    hasWideAngle: boolean,
+  ) => {
+    if (photoUrls.length < 1) return;
+    // 1. Apparent-gender detection (best-effort; null => men's set).
+    let gender: string | null = null;
+    try {
+      const r = await fetch("/api/detect-gender", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ photoUrls }),
+      });
+      if (r.ok) {
+        const d = (await r.json()) as { gender?: string | null };
+        gender = d.gender ?? null;
+      }
+    } catch {
+      /* detection is best-effort — fall through to the men's set */
+    }
+    const attireLabel =
+      WILDCARD_ATTIRE_LABELS[selections.attire] ?? "your outfit";
+    // 2. Two style/lighting pairings. Women get natural + executive; men and
+    //    any detection failure get urban + executive.
+    const configs =
+      gender === "female"
+        ? [
+            {
+              style: "creative",
+              lighting: "golden",
+              variationIndex: 0, // creative idx 0 => natural trees background
+              label: `Natural greenery · Golden-hour light · ${attireLabel}`,
+            },
+            {
+              style: "executive",
+              lighting: "dramatic",
+              variationIndex: 3,
+              label: `Executive · Dramatic light · ${attireLabel}`,
+            },
+          ]
+        : [
+            {
+              style: "urban",
+              lighting: "studio",
+              variationIndex: 0, // urban even idx => industrial background
+              label: `Urban industrial · Studio light · ${attireLabel}`,
+            },
+            {
+              style: "executive",
+              lighting: "dramatic",
+              variationIndex: 3,
+              label: `Executive · Dramatic light · ${attireLabel}`,
+            },
+          ];
+    // 3. Show the section immediately with per-shot loading placeholders.
+    setWildCards(
+      configs.map((c) => ({ image: null, label: c.label, failed: false })),
+    );
+    // 4. Fire the two calls staggered (same Preview-model 503 pressure the
+    //    main batch staggers around). Each updates only its own slot.
+    const WC_STAGGER_MS = 6000;
+    await Promise.all(
+      configs.map(async (c, i) => {
+        if (i > 0) {
+          await new Promise((res) => setTimeout(res, i * WC_STAGGER_MS));
+        }
+        try {
+          const response = await fetch("/api/generate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              photoUrls,
+              style: c.style,
+              attire: selections.attire,
+              lighting: c.lighting,
+              background: selections.background,
+              variationIndex: c.variationIndex,
+              hasWideAngle,
+              skin: selections.skin,
+              scrubColor: selections.scrubColor,
+              ...readUnlockRequestFields(),
+            }),
+          });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const data = (await response.json()) as { image?: string };
+          if (!data.image) throw new Error("no image");
+          const img = data.image;
+          setWildCards((prev) => {
+            const next = [...prev];
+            if (next[i]) next[i] = { ...next[i], image: img };
+            return next;
+          });
+        } catch {
+          setWildCards((prev) => {
+            const next = [...prev];
+            if (next[i]) next[i] = { ...next[i], failed: true };
+            return next;
+          });
+        }
+      }),
+    );
   };
 
   // Score every generated slot against the reference face; auto-regenerate
@@ -14423,6 +14717,7 @@ export default function App() {
           onAddToCart={addToCart}
           onRemoveFromCart={removeFromCart}
           maxCartSize={MAX_CART_SIZE}
+          wildCards={wildCards}
         />
       )}
       {screen === "retouch" && (

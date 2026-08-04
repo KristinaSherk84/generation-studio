@@ -17,13 +17,15 @@ import { listLeads, markLeadPurchased } from "../lib/leadStore.js";
 
 export const maxDuration = 10;
 
-// Estimated generation cost of one 6-image batch (2026-08-03). Gemini 3.1
-// Flash Image at the app's 2048px output is ~$0.10/image → ~$0.60 per batch of
-// 6. generateCount tracks batches, so cost ≈ generateCount × this. NOTE: this
-// is an ESTIMATE of the initial-batch generation spend only — it does not
+// Estimated generation cost of one batch (2026-08-04). Gemini 3.1 Flash Image
+// at the app's 2048px output is ~$0.10/image. Each batch now renders 8 images:
+// the 6 the customer picked PLUS 2 automatic "Wild Card" bonus shots fired
+// after the main grid lands → ~$0.80 per batch. generateCount tracks batches,
+// so cost ≈ generateCount × this. NOTE: this is an ESTIMATE — it does not
 // include per-slot regenerations, the identity auto-regen, or the post-purchase
-// retouch pass (Gemini 3 Pro Image), so true spend runs somewhat higher.
-const GEN_BATCH_COST_USD = 0.6;
+// retouch pass (Gemini 3 Pro Image), so true spend runs somewhat higher. (The
+// wild-card gender-detection call uses Gemini 2.5 Flash and is negligible.)
+const GEN_BATCH_COST_USD = 0.8;
 const fmtUsd = (n: number) => `$${n.toFixed(2)}`;
 
 // Live Stripe revenue — total AND per-customer, keyed by the email the
