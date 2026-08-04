@@ -11971,8 +11971,8 @@ const TOTAL_HEADSHOTS = 6;
 //   - IDENTITY_MAX_REDOS: hard cap on how many of the 6 shots we auto-redo
 //     per batch (bounds cost). Kristi: 2 photos, 1 regen each (lowered from 3
 //     to 2 on 2026-08-03 to cut per-session generation cost).
-const IDENTITY_DISTANCE_THRESHOLD = 0.5;
-const IDENTITY_MAX_REDOS = 2;
+const IDENTITY_DISTANCE_THRESHOLD = 0.45;
+const IDENTITY_MAX_REDOS = 3;
 
 // Standard Euclidean distance between two equal-length numeric vectors
 // (face descriptors). Lower = more similar faces.
