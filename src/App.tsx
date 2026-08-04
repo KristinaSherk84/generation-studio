@@ -8495,6 +8495,207 @@ const GridScreen = ({
           .gen-grid { grid-template-columns: repeat(2, 1fr) !important; }
         }
       `}</style>
+      {/* WILD CARD RESULTS — bonus shots in styles the customer did NOT pick.
+          Positioned ABOVE the main 6 and addable to the cart like any other
+          pick; delivery retouches the picked pixels so the wild-card look is
+          preserved. (2026-08-04) */}
+      {wildCards.length > 0 && (
+        <div style={{ marginTop: 24, marginBottom: 8 }}>
+          <h3
+            style={{
+              fontSize: 20,
+              fontWeight: 600,
+              color: C.dark,
+              margin: 0,
+              letterSpacing: -0.3,
+            }}
+          >
+            Wild Card Results
+          </h3>
+          <p
+            style={{
+              fontSize: 14,
+              color: C.mediumGrey,
+              marginTop: 8,
+              lineHeight: 1.6,
+            }}
+          >
+            Two extra looks we tried for you — different styles than you chose,
+            on us. Tap the + to add them to your cart too.
+          </p>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(2, 1fr)",
+              gap: 16,
+              marginTop: 16,
+            }}
+          >
+            {wildCards.map((wc, i) => {
+              const wcPicked = !!wc.image && cartSet.has(wc.image);
+              return (
+                <div key={i}>
+                  <div
+                    onClick={() => {
+                      if (!wc.image) return;
+                      if (wcPicked) onRemoveFromCart(wc.image);
+                      else if (!cartIsFull) onAddToCart(wc.image);
+                    }}
+                    style={{
+                      position: "relative",
+                      width: "100%",
+                      aspectRatio: "3 / 4",
+                      borderRadius: 12,
+                      overflow: "hidden",
+                      background: C.lightGrey,
+                      cursor: wc.image ? "pointer" : "default",
+                      border: `2px solid ${wcPicked ? C.dark : "transparent"}`,
+                    }}
+                  >
+                    {wc.image ? (
+                      <>
+                        <img
+                          src={wc.image}
+                          alt={wc.label}
+                          draggable={false}
+                          onContextMenu={(e) => e.preventDefault()}
+                          style={{
+                            position: "absolute",
+                            inset: 0,
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "cover",
+                            objectPosition: "center",
+                            display: "block",
+                            pointerEvents: "none",
+                            WebkitTouchCallout: "none",
+                            WebkitUserSelect: "none",
+                            userSelect: "none",
+                          }}
+                        />
+                        <div
+                          style={{
+                            position: "absolute",
+                            inset: 0,
+                            pointerEvents: "none",
+                            overflow: "hidden",
+                          }}
+                        >
+                          {[33, 67].map((topPercent, row) => (
+                            <div
+                              key={row}
+                              style={{
+                                position: "absolute",
+                                top: `${topPercent}%`,
+                                left: "50%",
+                                transform: "translate(-50%, -50%) rotate(-30deg)",
+                                fontSize: 11,
+                                color: "rgba(255,255,255,0.55)",
+                                textShadow: "0 1px 2px rgba(0,0,0,0.4)",
+                                letterSpacing: 2,
+                                whiteSpace: "nowrap",
+                                fontWeight: 400,
+                              }}
+                            >
+                              WATERMARK · WATERMARK · WATERMARK
+                            </div>
+                          ))}
+                        </div>
+                        <div
+                          style={{
+                            position: "absolute",
+                            top: 10,
+                            right: 10,
+                            background: wcPicked
+                              ? C.dark
+                              : cartIsFull
+                              ? "rgba(255, 255, 255, 0.4)"
+                              : "rgba(255, 255, 255, 0.92)",
+                            color: wcPicked ? C.white : C.dark,
+                            border: wcPicked
+                              ? "none"
+                              : "1.5px solid rgba(255, 255, 255, 0.95)",
+                            boxShadow: "0 1px 4px rgba(0,0,0,0.3)",
+                            borderRadius: "50%",
+                            width: 30,
+                            height: 30,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            pointerEvents: "none",
+                          }}
+                        >
+                          {wcPicked ? (
+                            <Check size={17} />
+                          ) : (
+                            <Plus size={17} strokeWidth={2.4} />
+                          )}
+                        </div>
+                      </>
+                    ) : wc.failed ? (
+                      <div
+                        style={{
+                          position: "absolute",
+                          inset: 0,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          padding: 16,
+                          textAlign: "center",
+                          fontSize: 12,
+                          color: C.mediumGrey,
+                          lineHeight: 1.5,
+                        }}
+                      >
+                        This wild card didn’t come through — but your 6 are all
+                        here.
+                      </div>
+                    ) : (
+                      <div
+                        style={{
+                          position: "absolute",
+                          inset: 0,
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: 8,
+                          color: C.mediumGrey,
+                        }}
+                      >
+                        <Loader2
+                          size={28}
+                          style={{ animation: "spin 1s linear infinite" }}
+                        />
+                        <div
+                          style={{
+                            fontSize: 11,
+                            letterSpacing: 1,
+                            textTransform: "uppercase",
+                          }}
+                        >
+                          Conjuring…
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div
+                    style={{
+                      marginTop: 8,
+                      fontSize: 12,
+                      color: C.dark,
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    {wc.label}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div
         className="gen-grid"
         style={{
@@ -8844,166 +9045,6 @@ const GridScreen = ({
           );
         })}
       </div>
-
-      {/* WILD CARD RESULTS (2026-08-04) — two bonus shots in different styles
-          than the customer picked, shown below the main 6 as a delight. */}
-      {wildCards.length > 0 && (
-        <div style={{ marginTop: 44 }}>
-          <h3
-            style={{
-              fontSize: 20,
-              fontWeight: 600,
-              color: C.dark,
-              margin: 0,
-              letterSpacing: -0.3,
-            }}
-          >
-            Wild Card Results
-          </h3>
-          <p
-            style={{
-              fontSize: 14,
-              color: C.mediumGrey,
-              marginTop: 8,
-              lineHeight: 1.6,
-            }}
-          >
-            Two extra looks we tried for you — different styles than you chose,
-            on us.
-          </p>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(2, 1fr)",
-              gap: 16,
-              marginTop: 16,
-            }}
-          >
-            {wildCards.map((wc, i) => (
-              <div key={i}>
-                <div
-                  style={{
-                    position: "relative",
-                    width: "100%",
-                    aspectRatio: "3 / 4",
-                    borderRadius: 12,
-                    overflow: "hidden",
-                    background: C.lightGrey,
-                  }}
-                >
-                  {wc.image ? (
-                    <>
-                      <img
-                        src={wc.image}
-                        alt={wc.label}
-                        draggable={false}
-                        onContextMenu={(e) => e.preventDefault()}
-                        style={{
-                          position: "absolute",
-                          inset: 0,
-                          width: "100%",
-                          height: "100%",
-                          objectFit: "cover",
-                          objectPosition: "center",
-                          display: "block",
-                          pointerEvents: "none",
-                          WebkitTouchCallout: "none",
-                          WebkitUserSelect: "none",
-                          userSelect: "none",
-                        }}
-                      />
-                      <div
-                        style={{
-                          position: "absolute",
-                          inset: 0,
-                          pointerEvents: "none",
-                          overflow: "hidden",
-                        }}
-                      >
-                        {[33, 67].map((topPercent, row) => (
-                          <div
-                            key={row}
-                            style={{
-                              position: "absolute",
-                              top: `${topPercent}%`,
-                              left: "50%",
-                              transform:
-                                "translate(-50%, -50%) rotate(-30deg)",
-                              fontSize: 11,
-                              color: "rgba(255,255,255,0.55)",
-                              textShadow: "0 1px 2px rgba(0,0,0,0.4)",
-                              letterSpacing: 2,
-                              whiteSpace: "nowrap",
-                              fontWeight: 400,
-                            }}
-                          >
-                            WATERMARK · WATERMARK · WATERMARK
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  ) : wc.failed ? (
-                    <div
-                      style={{
-                        position: "absolute",
-                        inset: 0,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        padding: 16,
-                        textAlign: "center",
-                        fontSize: 12,
-                        color: C.mediumGrey,
-                        lineHeight: 1.5,
-                      }}
-                    >
-                      This wild card didn’t come through — but your 6 are all
-                      here.
-                    </div>
-                  ) : (
-                    <div
-                      style={{
-                        position: "absolute",
-                        inset: 0,
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        gap: 8,
-                        color: C.mediumGrey,
-                      }}
-                    >
-                      <Loader2
-                        size={28}
-                        style={{ animation: "spin 1s linear infinite" }}
-                      />
-                      <div
-                        style={{
-                          fontSize: 11,
-                          letterSpacing: 1,
-                          textTransform: "uppercase",
-                        }}
-                      >
-                        Conjuring…
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <div
-                  style={{
-                    marginTop: 8,
-                    fontSize: 12,
-                    color: C.dark,
-                    lineHeight: 1.5,
-                  }}
-                >
-                  {wc.label}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       <PhotogTip style={{ marginTop: 24 }}>
         Look for the eyes first. If the eyes feel like you, the rest of the frame will usually
@@ -14216,7 +14257,7 @@ export default function App() {
               style: "creative",
               lighting: "golden",
               variationIndex: 0, // creative idx 0 => natural trees background
-              label: `Natural greenery · Golden-hour light · ${attireLabel}`,
+              label: `Creative Natural · Golden-hour light · ${attireLabel}`,
             },
             {
               style: "executive",
