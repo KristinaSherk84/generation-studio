@@ -60,11 +60,11 @@ type Lighting = "studio" | "natural" | "dramatic" | "golden";
 type Background =
   | "white"
   | "lightgrey"
-  | "midgrey"
   | "dark"
   | "black"
   | "blue"
   | "green"
+  | "red"
   | "rainbow";
 type Skin = "realistic" | "polished" | "glam";
 
@@ -999,7 +999,7 @@ export default async function handler(
   }
   if (
     body.background &&
-    !["white", "lightgrey", "midgrey", "dark", "black", "blue", "green", "rainbow"].includes(
+    !["white", "lightgrey", "dark", "black", "blue", "green", "red", "rainbow"].includes(
       body.background,
     )
   ) {
