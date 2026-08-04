@@ -7364,10 +7364,16 @@ const StyleScreen = ({
                   // The Dark swatch previews its spotlight backdrop: a small
                   // lighter-grey center fading out to near-black, mirroring the
                   // "Background: dark" prompt. Per Kristi 2026-08-03.
+                  // The Red swatch previews its goldenrod→red→rust paper sweep:
+                  // a small spot of goldenrod yellow at the bottom transitioning
+                  // up through fire-truck red into deep dark rust, mirroring the
+                  // "Background: red" prompt. Per Kristi 2026-08-04.
                   background:
                     bg.id === "dark"
                       ? "radial-gradient(circle, #9A9A94 0%, #2A2A26 55%, #171712 100%)"
-                      : bg.color,
+                      : bg.id === "red"
+                        ? "linear-gradient(to top, #E4A81E 0%, #E4A81E 16%, #CE2029 55%, #7A2409 100%)"
+                        : bg.color,
                   border:
                     background === bg.id
                       ? `2px solid ${C.dark}`
