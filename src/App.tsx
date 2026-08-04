@@ -8530,9 +8530,10 @@ const GridScreen = ({
             on us. Tap the + to add them to your cart too.
           </p>
           <div
+            className="gen-grid"
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(2, 1fr)",
+              gridTemplateColumns: "repeat(3, 1fr)",
               gap: 16,
               marginTop: 16,
             }}
