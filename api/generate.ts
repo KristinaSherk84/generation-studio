@@ -320,7 +320,6 @@ function buildBlockPet(variationIndex: number): string {
 
 const BLOCK_2_COMPOSITION = `Framing: professional business headshot. The specific body angle and crop are specified in the variation block at the end of this prompt.
 - Extremely minimal headroom above the top of the head. Only add 2–3% of the total frame height above the top of the head. The top of the head should nearly touch the top of the frame. No empty space above the head.
-- The subject's face should occupy the top third of the frame.
 - Strong posture, proud posture with shoulders back, puffed chest. Body angled, head rotated slightly back toward the lens).`;
 
 // Block 3 Style base text (no background) per style.
@@ -785,7 +784,7 @@ const FLAVORS: Flavor[] = [
   {
     expression: "knowing realistic half-smile, confident and poised — mouth stays composed with a subtle lift on one side, but the EYES smile clearly: slight crinkle at the outer corners, upper cheeks lifted, warm Duchenne-style smile-eyes that read as engaged and in-on-the-moment. Under no circumstances flat, neutral, or blank eyes",
     bodyPose: "body squared to camera, shoulders relaxed",
-    crop: "wider crop — more shoulder and upper chest visible",
+    crop: "wider crop — from just above the top of the head down to include more shoulder and upper chest",
     attireHint: "a subtly different jacket or top in a mid-tone, well-tailored",
   },
   {
