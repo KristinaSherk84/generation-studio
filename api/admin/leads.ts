@@ -13,7 +13,11 @@
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { listLeads, markLeadPurchased } from "../lib/leadStore.js";
+import {
+  listLeads,
+  markLeadPurchased,
+  setLeadFoundVia,
+} from "../lib/leadStore.js";
 
 export const maxDuration = 10;
 
@@ -27,6 +31,36 @@ export const maxDuration = 10;
 // wild-card gender-detection call uses Gemini 2.5 Flash and is negligible.)
 const GEN_BATCH_COST_USD = 0.8;
 const fmtUsd = (n: number) => `$${n.toFixed(2)}`;
+
+// The same six options the customer sees in the "How did you find us?" survey
+// (mirrors FOUND_VIA_OPTIONS in src/App.tsx). Kept in sync manually — this is
+// a serverless admin endpoint and can't import from the client bundle.
+const FOUND_VIA_OPTIONS = [
+  "Referral",
+  "Google Ad",
+  "LinkedIn Ad",
+  '"Best Generator" Article',
+  "Facebook",
+  "Other",
+];
+
+// Inline editable dropdown for a lead's foundVia. Lets Kristi retag a lead's
+// acquisition source when she learns the real one from Clarity (2026-08-04).
+// Preserves any existing custom value as its own selected option, and offers
+// a "Custom…" choice that prompts for free text client-side.
+function foundViaSelect(email: string, current: string | null | undefined): string {
+  const cur = current ?? "";
+  const inList = FOUND_VIA_OPTIONS.includes(cur);
+  const optionEls = [
+    `<option value=""${cur === "" ? " selected" : ""}>— unset —</option>`,
+    ...FOUND_VIA_OPTIONS.map(
+      (o) => `<option${o === cur ? " selected" : ""}>${esc(o)}</option>`,
+    ),
+    cur !== "" && !inList ? `<option selected>${esc(cur)}</option>` : "",
+    `<option value="__custom__">✏️ Custom…</option>`,
+  ].join("");
+  return `<select class="fvsel" data-email="${esc(email)}" style="font:inherit;max-width:170px;padding:2px 4px;">${optionEls}</select>`;
+}
 
 // Live Stripe revenue — total AND per-customer, keyed by the email the
 // customer used at checkout. The app already talks to Stripe via its REST API
@@ -145,6 +179,7 @@ export default async function handler(
       pw?: unknown;
       email?: unknown;
       action?: unknown;
+      foundVia?: unknown;
     };
     const bpw = typeof body.pw === "string" ? body.pw : "";
     const expectedPw = process.env.ADMIN_PASSWORD ?? "";
@@ -159,6 +194,17 @@ export default async function handler(
       } catch (err) {
         console.error("[admin/leads] markPurchased failed:", err);
         res.status(500).json({ ok: false, error: "Failed to mark" });
+      }
+      return;
+    }
+    if (body.action === "setFoundVia" && typeof body.email === "string") {
+      const fv = typeof body.foundVia === "string" ? body.foundVia : "";
+      try {
+        await setLeadFoundVia(body.email, fv);
+        res.status(200).json({ ok: true });
+      } catch (err) {
+        console.error("[admin/leads] setFoundVia failed:", err);
+        res.status(500).json({ ok: false, error: "Failed to save" });
       }
       return;
     }
@@ -286,7 +332,7 @@ export default async function handler(
             : `<button class="mkbtn" data-email="${esc(l.email)}">Mark purchased</button>`
         }</td>
         <td>${esc(formatET(l.purchasedAt))}</td>
-        <td>${esc(l.foundVia ?? "")}</td>
+        <td>${foundViaSelect(l.email, l.foundVia)}</td>
       </tr>`,
       )
       .join("");
@@ -404,6 +450,28 @@ export default async function handler(
           else { b.disabled = false; b.textContent = 'Mark purchased'; alert('Failed: ' + ((d && d.error) || 'unknown')); }
         })
         .catch(function () { b.disabled = false; b.textContent = 'Mark purchased'; alert('Network error'); });
+    });
+  });
+  document.querySelectorAll('.fvsel').forEach(function (sel) {
+    var prev = sel.value;
+    sel.addEventListener('change', function () {
+      var val = sel.value;
+      if (val === '__custom__') {
+        val = prompt('Enter the source for ' + sel.dataset.email + ' (from Clarity, etc.):', '');
+        if (val === null) { sel.value = prev; return; }
+      }
+      sel.disabled = true;
+      fetch('/api/admin/leads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'setFoundVia', pw: PW, email: sel.dataset.email, foundVia: val }),
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d && d.ok) { location.reload(); }
+          else { sel.disabled = false; sel.value = prev; alert('Failed: ' + ((d && d.error) || 'unknown')); }
+        })
+        .catch(function () { sel.disabled = false; sel.value = prev; alert('Network error'); });
     });
   });
 </script>
