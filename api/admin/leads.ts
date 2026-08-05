@@ -59,7 +59,7 @@ function foundViaSelect(email: string, current: string | null | undefined): stri
     cur !== "" && !inList ? `<option selected>${esc(cur)}</option>` : "",
     `<option value="__custom__">✏️ Custom…</option>`,
   ].join("");
-  return `<select class="fvsel" data-email="${esc(email)}" style="font:inherit;max-width:170px;padding:2px 4px;">${optionEls}</select>`;
+  return `<select class="fvsel" data-email="${esc(email)}" style="font:inherit;width:132px;max-width:132px;padding:2px 4px;">${optionEls}</select>`;
 }
 
 // Live Stripe revenue — total AND per-customer, keyed by the email the
@@ -349,7 +349,7 @@ export default async function handler(
   *{box-sizing:border-box;}
   body{margin:0;background:var(--cream);color:var(--ink);
     font-family:system-ui,-apple-system,'Segoe UI',Inter,sans-serif;padding:24px;}
-  .wrap{max-width:1100px;margin:0 auto;}
+  .wrap{max-width:1360px;margin:0 auto;}
   h1{font-size:22px;margin:0 0 4px;}
   .meta{font-size:13px;color:var(--sub);margin:0 0 18px;}
   .cards{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:20px;}
@@ -361,7 +361,7 @@ export default async function handler(
     font-size:13px;font-weight:600;padding:9px 14px;border:none;border-radius:8px;cursor:pointer;}
   .btn.sec{background:#fff;color:var(--ink);border:1px solid var(--line);}
   table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:10px;overflow:hidden;font-size:13px;}
-  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);white-space:nowrap;}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap;}
   th{background:#F3EEE4;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--sub);position:sticky;top:0;}
   td.email{font-weight:600;white-space:normal;}
   td.num,th.num{text-align:right;}
