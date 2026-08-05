@@ -28,6 +28,7 @@
 import { GoogleGenAI } from "@google/genai";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { isCodeActiveForGenerate } from "./lib/promoStore.js";
+import { checkFreeBatchLimit } from "./lib/freeGenLimit.js";
 
 // Vercel function-level config. Allow up to 5 minutes for the full 6-image run.
 export const maxDuration = 300;
@@ -147,6 +148,10 @@ type GenerateRequest = {
   // free photos indefinitely.
   stripeSessionId?: string;
   promoCode?: string;
+  // Free-tier abuse guard (2026-08-05). Same value across the 6 main shots +
+  // wild cards + regens of one user-initiated batch; new for each brand-new
+  // batch. Used server-side to cap distinct free batches per IP.
+  batchId?: string;
 };
 
 type InlineImage = { mimeType: string; data: string };
@@ -1286,7 +1291,7 @@ type UnlockCheck =
   | { ok: true; via: "stripe"; sessionId: string }
   | { ok: true; via: "promo" }
   | { ok: true; via: "free-tier" }
-  | { ok: false; reason: "missing" | "expired" | "consumed" | "invalid" };
+  | { ok: false; reason: "missing" | "expired" | "consumed" | "invalid" | "free_limit" };
 
 function constantTimeEquals(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
@@ -1301,6 +1306,8 @@ async function verifyUnlock(
   stripeSessionId: string | undefined,
   promoCode: string | undefined,
   stripeSecretKey: string,
+  ip: string,
+  batchId: string | undefined,
 ): Promise<UnlockCheck> {
   // Feature flag — free-tier mode (added 2026-07-03).
   // When ENTRY_FEE_ENABLED === "false", the $2.99 entry paywall moves from
@@ -1319,6 +1326,26 @@ async function verifyUnlock(
   // or hitting /api/generate directly. Server-side per-IP rate limiting
   // will be added if the feature ships to production long-term.
   if (process.env.ENTRY_FEE_ENABLED === "false") {
+    // Server-side per-IP free-batch cap (2026-08-05). Promo holders keep their
+    // UNLIMITED free generations even in free-tier mode, so a valid promo code
+    // skips the cap entirely. Everyone else is capped per IP. The cap helper is
+    // fail-open, so a Redis blip or missing IP/batchId never blocks generation.
+    let hasValidPromo = false;
+    if (promoCode && typeof promoCode === "string") {
+      const nc = promoCode.trim().toLowerCase();
+      const envCode = process.env.PROMO_CODE;
+      if (envCode && constantTimeEquals(nc, envCode.trim().toLowerCase())) {
+        hasValidPromo = true;
+      } else if (await isCodeActiveForGenerate(nc)) {
+        hasValidPromo = true;
+      }
+    }
+    if (!hasValidPromo) {
+      const { allowed } = await checkFreeBatchLimit(ip, batchId);
+      if (!allowed) {
+        return { ok: false, reason: "free_limit" };
+      }
+    }
     return { ok: true, via: "free-tier" };
   }
 
@@ -1451,10 +1478,25 @@ export default async function handler(
       .status(500)
       .json({ error: "Server missing STRIPE_SECRET_KEY" });
   }
+  // Client IP for the free-tier per-IP batch cap. Vercel puts the real
+  // client first in x-forwarded-for; x-real-ip is the fallback.
+  const xff = req.headers["x-forwarded-for"];
+  const clientIp =
+    (typeof xff === "string"
+      ? xff.split(",")[0]?.trim()
+      : Array.isArray(xff)
+        ? xff[0]
+        : "") ||
+    (typeof req.headers["x-real-ip"] === "string"
+      ? (req.headers["x-real-ip"] as string)
+      : "") ||
+    "";
   const unlock = await verifyUnlock(
     body.stripeSessionId,
     body.promoCode,
     stripeSecretKey,
+    clientIp,
+    body.batchId,
   );
   if (!unlock.ok) {
     return res.status(402).json({

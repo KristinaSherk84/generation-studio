@@ -200,24 +200,39 @@ async function idbClearFreeTierStash(): Promise<void> {
 // cross-style fetches included) can read the current unlock identifier
 // off localStorage at request time. Returns the body fragment to merge
 // into the fetch payload. Server is the gate; this is just transport.
+// Module-level free-tier batch id (2026-08-05). Refreshed to a new value each
+// time the user starts a NEW main batch (handleGenerate) and reused by that
+// batch's wild cards + regens, so the server's per-IP free-batch cap counts
+// them as ONE batch. Merged into every /api/generate body below.
+let currentBatchId = "";
+function newBatchId(): string {
+  try {
+    return Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
+  } catch {
+    return "";
+  }
+}
+
 function readUnlockRequestFields(): {
   stripeSessionId?: string;
   promoCode?: string;
+  batchId?: string;
 } {
-  if (typeof window === "undefined") return {};
+  const batch = currentBatchId ? { batchId: currentBatchId } : {};
+  if (typeof window === "undefined") return batch;
   try {
     const source = window.localStorage.getItem("unlock_source");
     if (source === "promo") {
       const code = window.localStorage.getItem("promo_code");
-      return code ? { promoCode: code } : {};
+      return code ? { ...batch, promoCode: code } : batch;
     }
     if (source === "stripe") {
       const sid = window.localStorage.getItem("stripe_session_id");
-      return sid ? { stripeSessionId: sid } : {};
+      return sid ? { ...batch, stripeSessionId: sid } : batch;
     }
-    return {};
+    return batch;
   } catch {
-    return {};
+    return batch;
   }
 }
 
@@ -12482,6 +12497,9 @@ export default function App() {
   // we don't want a re-render every time a descriptor lands.
   const referenceDescriptorRef = useRef<number[] | null>(null);
   const slotDescriptorsRef = useRef<(number[] | null)[]>([]);
+  // True when the last batch was blocked by the server-side free-tier IP cap
+  // (so the zero-success handler shows the paywall, not a connection error).
+  const freeLimitHitRef = useRef(false);
   // Which slots from the INITIAL 6-image batch are still in flight. Distinct
   // from regeneratingSlots (which tracks per-slot regen clicks from the grid).
   // Used so the user can advance to the grid early — once 5 of 6 are ready,
@@ -14023,6 +14041,8 @@ export default function App() {
     setRegeneratingSlots(new Set());
     setInitialBatchInFlight(new Set([0, 1, 2, 3, 4, 5]));
     setWildCards([]); // clear any prior batch's wild cards
+    currentBatchId = newBatchId(); // new free-tier batch id for the per-IP cap
+    freeLimitHitRef.current = false;
     // Persist selections + URLs so per-slot regeneration can reuse them
     // without asking the user to reselect anything.
     setLastSelections(selections);
@@ -14136,10 +14156,20 @@ export default function App() {
           }),
         });
         if (response.status === 402) {
-          // Server rejected the unlock — either the 4h window expired
-          // or the customer already downloaded (consumed). Clear local
-          // unlock state so the UI stops showing them as unlocked, and
-          // surface Kristi's standard friendly message.
+          const reason402 = await response
+            .json()
+            .then((d: { reason?: string }) => d?.reason)
+            .catch(() => undefined);
+          if (reason402 === "free_limit") {
+            // Server-side per-IP free-batch cap hit (2026-08-05): this IP has
+            // already used its free batches. Show the $2.99 paywall (not the
+            // "your 2 hours expired" copy) and leave any unlock state alone.
+            freeLimitHitRef.current = true;
+            setShowFreeTierPaywall(true);
+            throw new Error("free_limit");
+          }
+          // Otherwise the unlock expired or was consumed — clear it and show
+          // Kristi's standard friendly message.
           clearUnlock();
           throw new Error(PAYWALL_EXPIRED_MESSAGE);
         }
@@ -14181,6 +14211,13 @@ export default function App() {
     const successCount = results.filter((r) => r !== null).length;
 
     if (successCount === 0) {
+      if (freeLimitHitRef.current) {
+        // Every call 402'd on the free-tier IP cap — the $2.99 paywall is
+        // already open. Refund the optimistic batch count and stop here
+        // rather than also showing the "connection interrupted" popup.
+        setBatchesUsed((n) => Math.max(0, n - 1));
+        return;
+      }
       // Edge case: if the user has already advanced to the grid via the
       // "Continue with what's ready" button by the time all calls fail,
       // we still want to surface this — but they're not on the loading
