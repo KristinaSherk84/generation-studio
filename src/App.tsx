@@ -9936,10 +9936,15 @@ const FOUND_VIA_OPTIONS = [
 type FoundViaSurveyModalProps = { onDone: (answer?: string) => void };
 
 const FoundViaSurveyModal = ({ onDone }: FoundViaSurveyModalProps) => {
-  // No auto-close: the survey stays until the customer picks an answer (one of
-  // the options, including "Other"). The old 4s auto-dismiss captured almost
-  // nothing because it fired while the customer was watching their headshots
-  // appear. Per Kristi 2026-08-03.
+  // No auto-close: the survey stays until the customer picks an answer. If they
+  // pick "Other" they must type where they heard about us (2026-08-05) — free
+  // text is far more useful to Kristi than a bare "Other".
+  const [otherMode, setOtherMode] = useState(false);
+  const [otherText, setOtherText] = useState("");
+  const submitOther = () => {
+    const t = otherText.trim();
+    if (t) onDone(t);
+  };
   return (
     <div
       role="dialog"
@@ -9982,27 +9987,90 @@ const FoundViaSurveyModal = ({ onDone }: FoundViaSurveyModalProps) => {
         >
           How did you find GenerAItion Headshots?
         </h2>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {FOUND_VIA_OPTIONS.map((o) => (
-            <button
-              key={o}
-              onClick={() => onDone(o)}
+        {otherMode ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <input
+              autoFocus
+              type="text"
+              value={otherText}
+              maxLength={60}
+              onChange={(e) => setOtherText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submitOther();
+              }}
+              placeholder="Where did you hear about us?"
               style={{
-                background: C.white,
-                color: C.dark,
                 border: `1px solid ${C.border}`,
                 borderRadius: 10,
                 padding: "11px 14px",
                 fontSize: 14,
-                fontWeight: 500,
-                cursor: "pointer",
+                fontFamily: "inherit",
+                color: C.dark,
+                width: "100%",
+                boxSizing: "border-box",
+              }}
+            />
+            <button
+              onClick={submitOther}
+              disabled={!otherText.trim()}
+              style={{
+                background: otherText.trim() ? C.dark : C.border,
+                color: C.white,
+                border: "none",
+                borderRadius: 10,
+                padding: "11px 14px",
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: otherText.trim() ? "pointer" : "default",
                 fontFamily: "inherit",
               }}
             >
-              {o}
+              Submit
             </button>
-          ))}
-        </div>
+            <button
+              onClick={() => {
+                setOtherMode(false);
+                setOtherText("");
+              }}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: C.mediumGrey,
+                fontSize: 13,
+                cursor: "pointer",
+                fontFamily: "inherit",
+                padding: 4,
+              }}
+            >
+              ← Back to options
+            </button>
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {FOUND_VIA_OPTIONS.map((o) => (
+              <button
+                key={o}
+                onClick={() => {
+                  if (o === "Other") setOtherMode(true);
+                  else onDone(o);
+                }}
+                style={{
+                  background: C.white,
+                  color: C.dark,
+                  border: `1px solid ${C.border}`,
+                  borderRadius: 10,
+                  padding: "11px 14px",
+                  fontSize: 14,
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
+                {o}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -13178,16 +13246,11 @@ export default function App() {
   // popup; stays 4s or until they tick an answer, which is saved against their
   // email in the lead store.
   const [showFoundViaSurvey, setShowFoundViaSurvey] = useState(false);
-  const [hasSeenFoundViaSurvey, setHasSeenFoundViaSurvey] = useState<boolean>(
-    () => {
-      if (typeof window === "undefined") return false;
-      try {
-        return window.localStorage.getItem("gh_foundvia_asked") === "1";
-      } catch {
-        return false;
-      }
-    },
-  );
+  // In-memory only (2026-08-05): resets each page load so repeat visitors are
+  // asked again. Kristi: collecting attribution matters more than never
+  // re-asking a returning customer. The flag still prevents a double-ask
+  // within one page load (multiple batches).
+  const [hasSeenFoundViaSurvey, setHasSeenFoundViaSurvey] = useState(false);
   const [email, setEmail] = useState("");
   // Email-capture gate before the first generation (2026-07-29).
   const [showEmailGate, setShowEmailGate] = useState(false);
@@ -14429,11 +14492,6 @@ export default function App() {
       if (!hasSeenFoundViaSurvey) {
         setShowFoundViaSurvey(true);
         setHasSeenFoundViaSurvey(true);
-        try {
-          window.localStorage.setItem("gh_foundvia_asked", "1");
-        } catch {
-          /* private mode — just show it this session */
-        }
       } else if (!showFoundViaSurvey) {
         // Only jump straight to the retouch/glam popup when the survey was
         // seen in a PRIOR session. The !showFoundViaSurvey guard fixes a bug
