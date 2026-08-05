@@ -9260,7 +9260,9 @@ type LoadingRetouchPreviewModalProps = {
   onDismiss: () => void;
 };
 
-const RETOUCH_POPUP_LOCK_SECONDS = 10;
+// Shortened 10s -> 8s (2026-08-04): the longer lock was correlating with
+// abandonment on the loading screen. Kristi's call.
+const RETOUCH_POPUP_LOCK_SECONDS = 8;
 const LoadingRetouchPreviewModal = ({
   onDismiss,
 }: LoadingRetouchPreviewModalProps) => {
