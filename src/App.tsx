@@ -7341,7 +7341,7 @@ type StyleEntry = {
 // keep their prior positions relative to each other.
 const STYLES: readonly StyleEntry[] = [
   { id: "urban",      name: "Urban Industrial",  swatch: "#6F614F", silhouette: "#3D362A", visual: "urban" },
-  { id: "corporate",  name: "Corporate",         swatch: "#D3D1C7", silhouette: "#6C6B66", visual: "corporate" },
+  { id: "corporate",  name: "Paper/color",         swatch: "#D3D1C7", silhouette: "#6C6B66", visual: "corporate" },
   { id: "creative",   name: "Creative Natural",  swatch: "#7A8A5C", silhouette: "#3D452E", visual: "creative" },
   { id: "executive",  name: "Executive",         swatch: "#2A2A28", silhouette: "#6C6B66", visual: "executive" },
   { id: "healthcare", name: "Healthcare",        swatch: "#BCCDCB", silhouette: "#4A6868", visual: "healthcare" },
@@ -7519,7 +7519,7 @@ const SCRUB_COLOR_SWATCHES: {
 // the backgrounds are illustrative, not exact.
 const BG_EXAMPLES: { id: string; name: string; slug: string }[] = [
   { id: "urban", name: "Urban Industrial", slug: "urban-industrial" },
-  { id: "corporate", name: "Corporate", slug: "corporate" },
+  { id: "corporate", name: "Paper/color", slug: "corporate" },
   { id: "creative", name: "Creative Natural", slug: "creative-natural" },
   { id: "executive", name: "Executive", slug: "executive" },
   { id: "healthcare", name: "Healthcare", slug: "healthcare" },
