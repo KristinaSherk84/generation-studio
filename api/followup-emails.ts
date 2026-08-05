@@ -1,28 +1,27 @@
 /**
- * GET /api/followup-emails  — win-back automation (2026-08-01)
+ * GET /api/followup-emails  — win-back automation (2026-08-01, rewritten 2026-08-05)
  *
  * Runs on a Vercel Cron (hourly). For every lead who GENERATED but did NOT
- * purchase, ~12 hours after their last generation, sends Kristi's personal
- * feedback-request email with a UNIQUE, single-use, unlimited promo code so
- * they can generate again for free. Marks the lead followedUp so nobody is
- * emailed twice.
+ * purchase, ~12 hours after their last generation, sends Kristi's "your
+ * headshots are about to expire" email with a link back to their SAVED grid
+ * (?resume=token) so they can preview their shots one last time and regenerate
+ * up to 2 more. Marks the lead followedUp so nobody is emailed twice.
  *
  * Eligibility (all must hold):
  *   - not purchased
  *   - not already followed up
- *   - last generated ≥ FOLLOWUP_MIN_AGE_HOURS ago (default 12h) — gives them
- *     time to come back on their own before we nudge
- *   - last generated ≤ FOLLOWUP_MAX_AGE_DAYS ago (default 7d) — a backlog
- *     guard so the first run doesn't blast ancient leads; stale leads are
- *     skipped permanently, not chased
+ *   - last generated >= FOLLOWUP_MIN_AGE_HOURS ago (default 12h)
+ *   - last generated <= FOLLOWUP_MAX_AGE_DAYS ago (default 7d)
+ *   - has a saved-session resume token (so we can link them to their grid)
  *   - not one of our own internal addresses
+ * ...and, per lead at send time, the saved session must still exist (else the
+ * preview link would 404 — those are skipped rather than emailed a dead link).
  *
  * Per run we cap sends at MAX_PER_RUN so a big eligible batch can't blow the
  * function timeout; the remainder are picked up on the next hourly run.
  *
- * Auth: same pattern as /api/quota-report — Vercel Cron sends
- * `Authorization: Bearer ${CRON_SECRET}`; manual runs can pass ?key=SECRET.
- * If CRON_SECRET is unset the endpoint refuses everything (fail closed).
+ * Auth: Vercel Cron sends `Authorization: Bearer ${CRON_SECRET}`; manual runs
+ * can pass ?key=SECRET. If CRON_SECRET is unset the endpoint refuses everything.
  *
  * Idempotency: the lead is marked followedUp ONLY after Resend accepts the
  * send, so a transient email failure retries next hour instead of silently
@@ -35,9 +34,11 @@ import {
   markLeadFollowedUp,
   looksLikeEmail,
 } from "./lib/leadStore.js";
-import { createCode, generateCode } from "./lib/promoStore.js";
+import { getSession } from "./lib/sessionStore.js";
 
 export const maxDuration = 60;
+
+const SITE_URL = "https://generationheadshots.com";
 
 const MIN_AGE_MS =
   Number(process.env.FOLLOWUP_MIN_AGE_HOURS ?? "12") * 60 * 60 * 1000;
@@ -52,16 +53,17 @@ const INTERNAL_EMAILS = new Set(
   ),
 );
 
-/** Kristi's win-back email, with the customer's unique code baked in. */
-function buildEmail(code: string): { subject: string; html: string; text: string } {
-  const shown = code.toUpperCase();
-  const subject = "Can I get your feedback? (+ a code to try again, on me)";
+/** Kristi's win-back email — links the customer back to their saved grid. */
+function buildEmail(resumeUrl: string): { subject: string; html: string; text: string } {
+  const subject = "Your generated headshots are about to expire";
 
   const paragraphs = [
-    "Looks like you tested my headshot generating app, but didn't see any shots that you liked. Because this company is only me, and I am new at this headshot generating pivot, your feedback (even if it's negative) is of the utmost importance to me! All feedback that will help me make my app better is like gold to me at this point.",
-    "Can you please let me know what you didn't like about the experience?",
-    "If you'd like to try again, here is a code you can input to generate more headshots on me! I'll pay for you to try it out once more in hopes you find something you like.",
+    "Hello! Earlier today you tried generating some amazing headshots, but left before purchasing. I wanted to let you know those headshots are about to be deleted from our servers — I don't keep images people don't buy.",
+    "Here's your last link to preview the shots we made earlier. If you feel one doesn't look like you, you can regenerate two more headshots to see if that gives you a better result. And if it was the style itself that didn't feel right, head back and try a completely different look — there are several styles to choose from.",
+    "If you didn't feel like ANY of them looked like you, this is almost always a reference-photo issue — the photos may not have been high enough resolution, weren't cropped in tight enough, or didn't have enough variety.",
   ];
+  const closing =
+    "And even if you don't buy, thank you for trying it! This app is very new, and I'm still learning.";
 
   const html = `<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
@@ -74,34 +76,30 @@ function buildEmail(code: string): { subject: string; html: string; text: string
           `<p style="font-size:15px;line-height:1.65;margin:0 0 16px;">${p}</p>`,
       )
       .join("\n    ")}
-    <div style="margin:24px 0;padding:18px;text-align:center;background:#F3EEE4;border-radius:10px;">
-      <div style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#6E6E6A;margin-bottom:6px;">Your code</div>
-      <div style="font-size:26px;font-weight:700;letter-spacing:.05em;color:#1B4332;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">${shown}</div>
-    </div>
-    <p style="font-size:14px;line-height:1.6;margin:0 0 4px;">
-      Enter it under &ldquo;Have a promo code?&rdquo; on the home page and
-      generate as many as you like &mdash; it&rsquo;s on me.
-    </p>
-    <div style="text-align:center;margin:22px 0 6px;">
-      <a href="https://generationheadshots.com"
-         style="display:inline-block;background:#1B4332;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:13px 26px;border-radius:999px;">
-        Generate my headshots &rarr;
+    <div style="text-align:center;margin:24px 0 8px;">
+      <a href="${resumeUrl}"
+         style="display:inline-block;background:#1B4332;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:13px 28px;border-radius:999px;">
+        Preview my headshots &rarr;
       </a>
     </div>
-    <p style="font-size:15px;line-height:1.65;margin:22px 0 0;">Thanks!<br>Kristina</p>
+    <p style="font-size:13px;line-height:1.6;margin:6px 0 18px;text-align:center;color:#6E6E6A;">
+      Here&rsquo;s the link to access your headshots one last time.
+    </p>
+    <p style="font-size:15px;line-height:1.65;margin:0;">${closing}</p>
+    <p style="font-size:15px;line-height:1.65;margin:18px 0 0;">Thanks!<br>Kristina</p>
   </div>
   <p style="max-width:540px;margin:14px auto 0;font-size:12px;color:#9A968D;text-align:center;line-height:1.5;">
-    <a href="https://generationheadshots.com" style="color:#6E6E6A;font-weight:600;">generationheadshots.com</a><br>
-    You&rsquo;re getting this because you generated headshots at GenerAItion Headshots. Just reply to this email with your thoughts &mdash; it comes straight to me.
+    <a href="${SITE_URL}" style="color:#6E6E6A;font-weight:600;">generationheadshots.com</a><br>
+    You&rsquo;re getting this because you generated headshots at GenerAItion Headshots. Just reply to this email with any questions &mdash; it comes straight to me.
   </p>
 </body></html>`;
 
   const text = [
     ...paragraphs,
     "",
-    `CODE: ${shown}`,
+    "Preview your headshots (last chance): " + resumeUrl,
     "",
-    "Enter it under “Have a promo code?” on https://generationheadshots.com and generate as many as you like — it's on me.",
+    closing,
     "",
     "Thanks!",
     "Kristina",
@@ -134,8 +132,6 @@ export default async function handler(
     return res.status(500).json({ error: "RESEND_API_KEY not configured" });
   }
 
-  // Optional dry run: ?dryRun=1 reports who WOULD be emailed without minting
-  // codes or sending anything. Handy for a safe first look at the backlog.
   const dryRun = req.query.dryRun === "1" || req.query.dryRun === "true";
 
   const now = Date.now();
@@ -152,6 +148,7 @@ export default async function handler(
     if (l.followedUp) return false;
     if (!looksLikeEmail(l.email)) return false;
     if (INTERNAL_EMAILS.has(l.email.trim().toLowerCase())) return false;
+    if (!l.resumeToken) return false;
     const seenMs = Date.parse(l.lastSeenAt || l.createdAt);
     if (!Number.isFinite(seenMs)) return false;
     const age = now - seenMs;
@@ -172,36 +169,25 @@ export default async function handler(
   const batch = eligible.slice(0, MAX_PER_RUN);
   let sent = 0;
   let failed = 0;
+  let skippedExpired = 0;
   const errors: string[] = [];
 
   for (const lead of batch) {
-    // Mint a unique unlimited code for this lead. Retry once on the vanishingly
-    // rare collision; skip the lead (retry next run) if minting fails.
-    let code: string | null = null;
-    for (let attempt = 0; attempt < 2 && !code; attempt++) {
-      const candidate = generateCode();
-      try {
-        await createCode({
-          code: candidate,
-          createdBy: "followup-cron",
-          notes: `win-back followup: ${lead.email}`,
-          // Generation-only: they can generate again free, but still pay to
-          // download the ones they like (Kristi's call, 2026-08-01).
-          kind: "generation",
-        });
-        code = candidate;
-      } catch {
-        // collision or KV hiccup — try once more, else give up this lead
+    const token = lead.resumeToken as string;
+    try {
+      const session = await getSession(token);
+      if (!session) {
+        skippedExpired++;
+        continue;
       }
-    }
-    if (!code) {
-      failed++;
-      errors.push(`${lead.email}: could not mint code`);
+    } catch {
+      skippedExpired++;
       continue;
     }
+    const resumeUrl = `${SITE_URL}/?resume=${token}`;
 
     try {
-      const { subject, html, text } = buildEmail(code);
+      const { subject, html, text } = buildEmail(resumeUrl);
       const resp = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: {
@@ -211,9 +197,6 @@ export default async function handler(
         body: JSON.stringify({
           from: "Kristi at GenerAItion Headshots <kristi@kristinasherk.com>",
           to: [lead.email],
-          // BCC Kristi on every abandonment / win-back email so she has a
-          // running record of who was contacted and with which code, without
-          // the customer seeing it (2026-08-01).
           bcc: ["kristi@kristinasherk.com"],
           reply_to: "kristi@kristinasherk.com",
           subject,
@@ -225,11 +208,9 @@ export default async function handler(
         const body = await resp.text().catch(() => "");
         failed++;
         errors.push(`${lead.email}: resend ${resp.status} ${body.slice(0, 120)}`);
-        // Leave followedUp false so this lead is retried next run.
         continue;
       }
-      // Only now — after a successful send — mark it so we never double-send.
-      await markLeadFollowedUp(lead.email, code);
+      await markLeadFollowedUp(lead.email, "");
       sent++;
     } catch (err) {
       failed++;
@@ -246,6 +227,7 @@ export default async function handler(
       attempted: batch.length,
       sent,
       failed,
+      skippedExpired,
       remaining: Math.max(0, eligible.length - batch.length),
     }),
   );
@@ -255,6 +237,7 @@ export default async function handler(
     attempted: batch.length,
     sent,
     failed,
+    skippedExpired,
     remaining: Math.max(0, eligible.length - batch.length),
     errors: errors.slice(0, 20),
   });

@@ -50,6 +50,11 @@ export type LeadRecord = {
   foundVia?: string | null;
   // Loose context for debugging / segmentation (style picked, etc.).
   source: string;
+  // Most recent saved-session resume token (2026-08-05). Set by
+  // /api/save-session when a finished batch is persisted, so the 12-hour
+  // win-back email can link the customer straight back to their saved grid
+  // (?resume=token). Null/absent for old leads or ones that never saved.
+  resumeToken?: string | null;
 };
 
 const KEY_PREFIX = "lead:";
@@ -145,6 +150,17 @@ export async function markLeadFollowedUp(
  * WITHOUT bumping generateCount / lastSeenAt (this isn't a new generation, just
  * an attribute update). No-op if the lead doesn't exist yet. (2026-08-02)
  */
+export async function setLeadResumeToken(
+  email: string,
+  token: string,
+): Promise<void> {
+  if (!looksLikeEmail(email)) return;
+  const key = recordKey(email);
+  const existing = (await redis.get<LeadRecord>(key)) ?? null;
+  if (!existing) return;
+  await redis.set(key, { ...existing, resumeToken: token });
+}
+
 export async function setLeadFoundVia(
   email: string,
   foundVia: string,

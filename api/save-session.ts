@@ -18,7 +18,7 @@
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { saveSession } from "./lib/sessionStore.js";
-import { looksLikeEmail } from "./lib/leadStore.js";
+import { looksLikeEmail, setLeadResumeToken } from "./lib/leadStore.js";
 
 export const maxDuration = 10;
 
@@ -65,6 +65,10 @@ export default async function handler(
       selections: body.selections ?? null,
       hasWideAngle: body.hasWideAngle === true,
     });
+    // Link this session's resume token to the lead so the 12-hour win-back
+    // email can point the customer straight back to their saved grid. Best-
+    // effort — never fail the save because the lead write hiccuped. (2026-08-05)
+    void setLeadResumeToken(email, token).catch(() => {});
     res.status(200).json({ ok: true, token });
   } catch (err) {
     console.warn(
