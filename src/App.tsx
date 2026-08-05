@@ -5686,6 +5686,7 @@ const FAQScreen = ({ onStart, onBackToHome, entryFeeEnabled }: FAQScreenProps) =
 type FAQDetailScreenProps = {
   activeFaqSlug: string | null;
   onStart: () => void;
+  onShowGallery: () => void;
   onBackToFaqList: () => void;
   onBackToHome: () => void;
   entryFeeEnabled: boolean;
@@ -5693,6 +5694,7 @@ type FAQDetailScreenProps = {
 const FAQDetailScreen = ({
   activeFaqSlug,
   onStart,
+  onShowGallery,
   onBackToFaqList,
   onBackToHome,
   entryFeeEnabled,
@@ -5923,6 +5925,116 @@ const FAQDetailScreen = ({
                   {paragraph}
                 </p>
               ))}
+          </section>
+
+          {/* ========== TRANSFORMATION GALLERY STRIP ==========
+              Visual "proof" element between the answer and the CTA. Six
+              composite BEFORE/AFTER thumbnails (from GALLERY_PAIRS, which
+              is 4-quarter interleaved for variety) laid out as a landscape
+              strip with a serif "View the transformation gallery →"
+              overlay. Whole thing is a single button that routes to the
+              /gallery screen (via onShowGallery prop). Cream padding around
+              it visually separates from the answer above and cream CTA
+              below without a hard line break.
+
+              This appears on ALL 23 FAQ detail pages via the shared
+              template — one edit, everywhere. */}
+          <section
+            style={{
+              padding:
+                "clamp(24px, 4vw, 48px) clamp(16px, 4vw, 56px)",
+              maxWidth: 1200,
+              margin: "0 auto",
+            }}
+          >
+            <button
+              onClick={onShowGallery}
+              aria-label="View the transformation gallery"
+              style={{
+                width: "100%",
+                border: "none",
+                padding: 0,
+                background: "transparent",
+                cursor: "pointer",
+                borderRadius: 14,
+                overflow: "hidden",
+                position: "relative",
+                boxShadow: "0 4px 20px rgba(0,0,0,0.12)",
+                display: "block",
+              }}
+            >
+              {/* 6-image strip. 6 columns on all screen sizes matching
+                  Kristi's mockup; each image is aspect-ratio 4:5 so the
+                  strip stays landscape-heavy overall. Tiny 2px gutter
+                  between images so they read as a filmstrip, not a single
+                  image. Slight darken filter (brightness 0.72) so the
+                  white text overlay reads at any color background. */}
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(6, 1fr)",
+                  gap: 2,
+                  background: "#000",
+                }}
+              >
+                {GALLERY_PAIRS.slice(0, 6).map((pair, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      aspectRatio: "4 / 5",
+                      overflow: "hidden",
+                      position: "relative",
+                    }}
+                  >
+                    <img
+                      src={pair.src}
+                      alt={pair.alt}
+                      loading="lazy"
+                      decoding="async"
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "cover",
+                        display: "block",
+                        filter: "brightness(0.72)",
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
+              {/* Text overlay — absolutely positioned, centered both axes.
+                  pointerEvents: "none" so clicks pass through to the
+                  parent <button>. Serif matches brand voice. Gold arrow
+                  matches every other CTA on the site. Text shadow gives
+                  legibility over any part of the strip that happens to be
+                  bright in that render. */}
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  pointerEvents: "none",
+                  padding: "0 16px",
+                  textAlign: "center",
+                }}
+              >
+                <span
+                  style={{
+                    fontFamily: SERIF_STACK,
+                    fontSize: "clamp(18px, 3vw, 32px)",
+                    color: BRAND.white,
+                    textShadow: "0 2px 12px rgba(0,0,0,0.55)",
+                    letterSpacing: 0.3,
+                    lineHeight: 1.2,
+                  }}
+                >
+                  View the transformation gallery{" "}
+                  <span style={{ color: BRAND.gold }}>→</span>
+                </span>
+              </div>
+            </button>
           </section>
 
           {/* PRIMARY CTA — the "Try it Free" button Kristi wanted on every
@@ -15363,6 +15475,10 @@ export default function App() {
           activeFaqSlug={activeFaqSlug}
           entryFeeEnabled={entryFeeEnabled}
           onStart={handleStart}
+          onShowGallery={() => {
+            setScreen("gallery");
+            setActiveFaqSlug(null);
+          }}
           onBackToFaqList={() => {
             setScreen("faq");
             if (window.location.pathname !== "/faq") {
