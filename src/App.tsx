@@ -284,7 +284,8 @@ function getStepFromScreen(
     | "delivering"
     | "success"
     | "admin"
-    | "faq",
+    | "faq"
+    | "faq-detail",
 ): number | null {
   switch (screen) {
     case "upload":
@@ -5073,6 +5074,106 @@ const HowItWorksScreen = ({
             </div>
           ))}
         </div>
+
+        {/* ========== BROWSE ALL FAQ TOPICS ==========
+            Links to every /faq/{slug} detail page — internal linking gives
+            Google + AI crawlers a direct path to all 23 pages from the
+            most trafficked spoke page, which is the single biggest thing
+            we can do to speed up their discovery. Also useful UX: someone
+            on /how-it-works who had a question not covered by the 8 above
+            can scan the full list and click straight through. */}
+        <div
+          style={{
+            marginTop: isMobile ? 48 : 72,
+            paddingTop: isMobile ? 32 : 48,
+            borderTop: `1px solid #EFEAE0`,
+          }}
+        >
+          <div style={{ textAlign: "center", marginBottom: isMobile ? 24 : 36 }}>
+            <h3
+              style={{
+                fontFamily: SERIF_STACK,
+                fontSize: isMobile ? 24 : 32,
+                fontWeight: 400,
+                color: BRAND.charcoal,
+                lineHeight: 1.2,
+                margin: 0,
+                letterSpacing: -0.3,
+              }}
+            >
+              Browse every FAQ topic
+            </h3>
+            <p
+              style={{
+                fontSize: isMobile ? 13 : 15,
+                color: BRAND.subText,
+                margin: "10px 0 0",
+                fontStyle: "italic",
+                fontFamily: SERIF_STACK,
+              }}
+            >
+              Every question in one place — click any to read the full answer.
+            </p>
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
+              gap: isMobile ? 10 : 12,
+            }}
+          >
+            {FAQ_QUESTIONS.map((faq) => (
+              <button
+                key={faq.slug}
+                onClick={() => {
+                  // Client-side navigation to /faq/{slug}. pushState +
+                  // synthetic popstate mirrors the pattern in
+                  // FAQDetailScreen's related-questions grid — App's URL
+                  // routing effect handles the rest.
+                  window.history.pushState({}, "", `/faq/${faq.slug}`);
+                  window.dispatchEvent(new PopStateEvent("popstate"));
+                }}
+                style={{
+                  textAlign: "left",
+                  background: BRAND.white,
+                  border: `1px solid #EFEAE0`,
+                  borderRadius: 8,
+                  padding: isMobile ? "14px 16px" : "16px 18px",
+                  cursor: "pointer",
+                  fontFamily: SANS_STACK,
+                  fontSize: isMobile ? 14 : 15,
+                  lineHeight: 1.4,
+                  color: BRAND.charcoal,
+                  transition: "border-color 0.15s ease, background 0.15s ease",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 12,
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = BRAND.gold;
+                  e.currentTarget.style.background = BRAND.cream;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = "#EFEAE0";
+                  e.currentTarget.style.background = BRAND.white;
+                }}
+              >
+                <span>{faq.q}</span>
+                <span
+                  aria-hidden
+                  style={{
+                    flex: "0 0 auto",
+                    color: BRAND.gold,
+                    fontSize: 16,
+                  }}
+                >
+                  →
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
       </section>
 
       {/* ========== BOTTOM CTA ========== */}
@@ -5208,50 +5309,132 @@ const readWideAngleFromFile = async (file: File): Promise<boolean | null> => {
 // prep, cost, time, format, privacy, usage rights, regrets, brand
 // differentiator, money-back guarantee.
 
-const FAQ_QUESTIONS: { q: string; a: string }[] = [
+// Each FAQ has a `slug` used to route /faq/{slug} → per-question standalone
+// page (FAQDetailScreen). Slugs must be URL-safe (lowercase, hyphens only,
+// no punctuation), stable (never renamed once live — breaks external links
+// and Google indexing), and keyword-rich for SEO. Order-independent —
+// FAQDetailScreen looks up by slug, not index.
+const FAQ_QUESTIONS: { slug: string; q: string; a: string }[] = [
   {
+    slug: "how-generation-headshots-works",
     q: "How does Generation Headshots work?",
     a: "Upload 5 to 8 recent selfies, pick a style (Corporate, Creative, Healthcare, etc.) plus your preferred outfit, lighting, and background, and the AI generates 6 professional headshot variations in about 2 to 3 minutes. You preview all 6, pick your favorites, optionally add retouching, and download clean 2K files. No subscription — pay only when you generate.",
   },
   {
+    slug: "will-the-headshots-look-like-me",
     q: "Will the headshots actually look like me?",
     a: "Yes — that's the whole point. The AI heavily weights your uploaded reference photos when learning your face, so the more representative your uploads (varied expressions, angles, good lighting), the closer the match. The first photo you upload counts the most, so lead with your favorite. We intentionally preserve real skin texture and your distinguishing features, including freckles, beauty marks, and asymmetries — these aren't filter-smoothed dolls; they're you.",
   },
   {
+    slug: "what-photos-to-upload",
     q: "What photos do I need to upload?",
     a: "5 to 8 photos works best. Crop tightly to your head and shoulders, face a window for natural light (not overhead lighting — it casts shadows under the eyes), and use a rear camera if possible since selfie cameras are wide-angle and slightly distort the face. Avoid heavily filtered or low-resolution shots — blurry inputs give blurry results.",
   },
   {
+    slug: "how-much-does-it-cost",
     q: "How much does it cost?",
     a: "It's $2.99 to start a session — that unlocks the AI and lets you generate 6 headshots in your chosen style. After you preview the results, you pay per headshot you want to keep: $9.99 for Basic (realistic version only) or $14.99 for the Glow Up Bundle (realistic + polished + glam — three retouching levels of the same photo). No subscriptions, no monthly fees, no surprise charges.",
   },
   {
+    slug: "how-long-does-it-take",
     q: "How long does the whole process take?",
     a: "About 5 to 10 minutes start to finish. The actual AI generation runs in 2 to 3 minutes. Picking favorites, choosing your retouch level, checking out, and receiving the final retouched files at delivery takes another few minutes. The fastest customers go from upload to final download in under 7 minutes.",
   },
   {
+    slug: "file-format-and-resolution",
     q: "What file format and resolution do I get?",
     a: "Every delivered headshot is a high-quality 2K JPEG (1792 × 2400 pixels) suitable for LinkedIn, company directories, conference badges, press, and most professional uses. Files arrive in your inbox AND are available on-screen for direct download right after checkout.",
   },
   {
+    slug: "are-my-photos-kept-private",
     q: "Are my uploaded photos kept private?",
     a: "Yes. Your uploads are used only to generate your headshots. We do not share them, sell them, or use them to train any AI model. Your reference photos and generated files are stored only as long as needed to deliver your order. If you'd like your data deleted at any time, email kristi@kristinasherk.com and we'll remove it.",
   },
   {
+    slug: "can-i-use-for-linkedin-and-business",
     q: "Can I use these for LinkedIn, my business, or marketing materials?",
     a: "Absolutely. You receive full personal and commercial usage rights to every headshot you purchase. Use them for LinkedIn, your company website, business cards, speaker bios, podcast guest bios, conference programs, press kits, dating apps — anywhere a professional photo belongs. The only thing we ask is that you not misrepresent the photos as something they aren't (e.g., government ID photos still require an actual photograph).",
   },
   {
+    slug: "what-if-i-dont-love-first-batch",
     q: "What if I don't love my first batch of headshots?",
     a: "You're never stuck with a batch you don't like. Tap the refresh icon on any individual headshot to regenerate just that one, or go back to the style screen and generate a fresh batch of 6 with different settings (each customer gets up to 6 full batches per session). And if you choose the Glow Up Bundle at checkout, you get three retouching levels of the same final photo — realistic, polished, and glam — so you can pick whichever flavor reads best for your audience.",
   },
   {
+    slug: "what-makes-this-different-from-other-ai-headshot-apps",
     q: "What makes this different from other AI headshot apps?",
     a: "Generation Headshots was built and prompt-engineered by Kristina Sherk — a professional photographer with 20+ years of editorial and commercial portrait experience (clients include Refinery29 and Getty, with retouching on Hollywood campaigns and magazine covers). Most AI headshot tools are built by engineers and marketers; this one is built by someone who actually knows what makes a headshot look real, flattering, and professional — not plastic, AI-glossy, or 'off.' We deliberately preserve skin texture and distinguishing features, support realistic medical scrubs for healthcare professionals (with customer-pickable scrub colors), and tune every prompt with photographic intent.",
   },
   {
+    slug: "money-back-guarantee",
     q: "What if I'm not happy with my purchase?",
     a: "You get a full, no-questions-asked money-back guarantee. If you're unhappy with your delivered headshots for any reason — they don't look like you, they don't fit your needs, you change your mind — email kristi@kristinasherk.com and we'll refund you in full. No hoops, no satisfaction surveys, no fine print. The whole point is that you walk away with a headshot you actually love.",
+  },
+  // ---- 12 SEO / long-tail FAQ questions added 2026-08-05 per Kristi's
+  // approval doc. Each answer is her own wording (from FAQ-Content-Review_KS.pages);
+  // minor typo + capitalization edits applied. These target long-tail
+  // search queries competitors dominate ("most realistic AI headshot,"
+  // "are AI headshots free," "can ChatGPT make a headshot," etc.) and
+  // each becomes its own indexable URL at /faq/{slug}.
+  {
+    slug: "what-to-look-for-in-ai-headshot-generator-linkedin",
+    q: "What should I look for when choosing the best AI headshot generator for LinkedIn?",
+    a: "The worst sign of an AI-generated headshot is plastic, dewey skin and vague, lifeless expressions. Look for a generator that stresses extremely realistic skin and expressions. Don't fall prey to bundles of headshots you didn't want and won't use. Look for per-image pricing, and free previews so you can test before committing. The best tools are built by photographers who understand lighting and posing — not engineers guessing at what makes a headshot work. GenerAItion Headshots meets all of the above criteria with a 100% money-back guarantee.",
+  },
+  {
+    slug: "most-realistic-ai-headshot-generator",
+    q: "Which AI headshot generator gives the most realistic results?",
+    a: "Realism depends more on who built the prompts and retouching pipeline around it rather than the underlying AI model. That's why so many try generating an AI headshot and fail because it 'just didn't look like me.' Engineer-built headshot generators tend to produce smooth, plastic AI-skin; photographer-built tools prioritize real skin texture and preserving unique features. GenerAItion Headshots is built by Kristina Sherk, a headshot photographer with 20 years of professional experience. All of her knowledge has been integrated into her in-depth prompts which accompany your reference photos.",
+  },
+  {
+    slug: "is-ai-headshot-generator-worth-paying-for",
+    q: "How do I know if an AI headshot generator is worth paying for?",
+    a: "Look for these features: preview first, pay-later pricing so you never buy blind, realistic skin texture instead of the plastic AI look, and photos that actually look like you rather than your cousin. Avoid any tool requiring you to buy a bundle before you see results, and be skeptical of tools that only show hero example photos of models. GenerAItion Headshots is free to preview for the first 6 generated shots and only charges for the specific headshots you choose to buy.",
+  },
+  {
+    slug: "are-there-truly-free-ai-headshot-tools",
+    q: "Are there any AI headshot tools that are truly free to use?",
+    a: "Most \"free\" tools have hidden costs — watermarks, signup walls, credit card requirements, or usable resolution locked behind a paywall. GenerAItion Headshots offers six free previews with no credit card and no signup, and you only pay ($9.99–$14.99) for the specific headshots you want to download. If none of them look like you, Kristina covers the cost for you to try it and you don't pay a cent.",
+  },
+  {
+    slug: "are-ai-headshots-free",
+    q: "Are AI headshots free?",
+    a: "Generating AI headshots has real computing costs, so completely free tools are rare and usually limited by watermarks, low resolution, or trial caps. GenerAItion Headshots lets you generate and preview six high-resolution headshots free with no credit card, but yes they are watermarked — you only pay if you want to download the ones you love. Fair trade: Kristina pays for you to preview them first, then there's a small fee to keep the ones you like.",
+  },
+  {
+    slug: "what-makes-generation-headshots-most-realistic",
+    q: "What makes Generation Headshots the most realistic AI headshot?",
+    a: "Aragon has invested heavily in training its AI models, which produces consistent professional-looking results. However, like most engineer-built generators, Aragon can produce the smooth uniform \"AI skin\" look that some viewers spot as unnatural or generic. Their headshots can also drift your identity towards \"AI generic pretty.\" GenerAItion Headshots takes a different approach — built by an actual 20-year headshot photographer, it preserves identity 100% and insists on rendering real skin texture (pores, freckles, natural imperfections) so your headshot looks like a real photo of you, not a polished AI avatar.",
+  },
+  {
+    slug: "what-photos-can-i-use-for-ai-headshots",
+    q: "What kind of photos can I use to create AI-generated headshots?",
+    a: "The more reference photos you upload, the better your results. Use five to eight clear, well-lit selfies from your phone, taken in different conditions (inside, outside, big smile, serious, different angles). This variation significantly helps our face mapping create shots that truly look like you. Avoid heavy filters, sunglasses, hats, extreme profile shots, and low-resolution photos. The clearer and more varied your references, the more the AI-generated headshots will actually look like you.",
+  },
+  {
+    slug: "how-to-make-ai-headshots-look-real",
+    q: "How to do AI headshots that look real?",
+    a: "Realistic AI headshots depend on three things: high-quality uploaded reference photos, a generator that preserves natural skin texture instead of smoothing it into \"AI plastic,\" and prompts written by someone who understands professional lighting, posing, lens choice, angles and backgrounds. Most tools nail one of these; few nail all of them. GenerAItion Headshots was built specifically to solve all those issues, and offers six free previews so you can see the difference before you pay.",
+  },
+  {
+    slug: "can-you-tell-if-headshot-is-ai",
+    q: "Is it possible to tell if a headshot was created by AI?",
+    a: "Yes, most AI headshots have telltale signs like overly smooth skin, smoothed hair texture, and drab expressions that look \"off.\" Well-made AI headshots preserve real skin texture and small natural imperfections that read as authentic. If your headshot has real pores and honest, activated expression, it will pass as a real photo to almost everyone.",
+  },
+  {
+    slug: "can-chatgpt-create-professional-headshots",
+    q: "Can ChatGPT or other AI tools create professional headshots for me?",
+    a: "ChatGPT, Midjourney, and other general AI image tools can generate a \"headshot-looking\" image, but the results rarely look enough like you to pass the smell test. They invent a doppelgänger who vaguely matches your description. This is due to the lack of identity details only one image can contribute to a final headshot. Dedicated headshot generators use your actual reference photos to preserve your likeness, and photographer-built ones apply professional lighting, posing, and retouching principles on top. For a headshot that's actually usable on LinkedIn, use a professional tool, trained on your face which uses multiple reference photos, not just one.",
+  },
+  {
+    slug: "ai-headshots-vs-studio-photos",
+    q: "How accurate are AI headshots compared to real studio photos?",
+    a: "AI headshots today are starting to drift towards a very generic look that one can spot from miles away. Subtle \"AI tells\" like plastic skin, expressionless eyes or generic backgrounds give an AI-generated look immediately. The tradeoff is that AI headshots are dramatically more affordable and faster than a real shoot — you can't direct expressions in real time, but you can regenerate as many times as needed. For most professional uses (LinkedIn, staff directories, speaker profiles), a well-made AI headshot is more than good enough, as long as it actually looks like you.",
+  },
+  {
+    slug: "can-gemini-create-professional-headshot",
+    q: "Can Gemini create my professional headshot?",
+    a: "Google's Gemini and similar general-purpose AI models can generate professional-looking headshots, but they lack the specialized training in headshot lighting, posing, and lens choice that a photographer-built generator provides. GenerAItion Headshots uses advanced AI models under the hood and layers 20 years of professional photography expertise on top — prompt engineering, retouching pipelines, and quality controls a raw model can't do alone. That's what separates a photorealistic image from a usable professional headshot.",
   },
 ];
 
@@ -5479,6 +5662,448 @@ const FAQScreen = ({ onStart, onBackToHome, entryFeeEnabled }: FAQScreenProps) =
           }
         />
       </section>
+    </div>
+  );
+};
+
+// -------------------- FAQ Detail: per-question standalone page --------------------
+//
+// /faq/{slug} — each FAQ becomes its own indexable URL for SEO. Google and
+// AI search engines rank single-question pages more effectively than
+// accordion items buried inside a spoke, AND a direct-linkable question
+// URL means we can share specific answers in emails, ads, or replies.
+//
+// The component looks up its question by slug from FAQ_QUESTIONS at render
+// time. If the slug doesn't match anything, it shows a graceful "question
+// not found" state with a link back to /faq — no 500s if someone hits a
+// stale URL.
+//
+// Layout mirrors HealthcareScreen: sticky top nav → breadcrumb → H1
+// (question) → answer body → primary CTA → related-questions grid →
+// footer. Bottom CTA is the "Try it free" button Kristi wanted on every
+// per-question page.
+
+type FAQDetailScreenProps = {
+  activeFaqSlug: string | null;
+  onStart: () => void;
+  onBackToFaqList: () => void;
+  onBackToHome: () => void;
+  entryFeeEnabled: boolean;
+};
+const FAQDetailScreen = ({
+  activeFaqSlug,
+  onStart,
+  onBackToFaqList,
+  onBackToHome,
+  entryFeeEnabled,
+}: FAQDetailScreenProps) => {
+  const faq = FAQ_QUESTIONS.find((f) => f.slug === activeFaqSlug) ?? null;
+
+  // Sync document.title + meta description per question so the browser tab,
+  // shared link previews, and (eventually) SEO all reflect the specific
+  // question being viewed. Restored on unmount so navigating away doesn't
+  // leave the wrong title in place. Note: for SPA pages, meta changes
+  // update after render, which is fine for tab/share UX but doesn't help
+  // pre-render-based crawlers — the real SEO win comes when we add
+  // pre-rendering to marketing routes.
+  useEffect(() => {
+    if (!faq) return;
+    const prevTitle = document.title;
+    const prevDesc = document
+      .querySelector('meta[name="description"]')
+      ?.getAttribute("content");
+    document.title = `${faq.q} | GenerAItion Headshots`;
+    const descEl = document.querySelector('meta[name="description"]');
+    if (descEl) {
+      // Truncate answer to ~155 chars for meta description (Google's typical
+      // display cap; anything longer gets truncated by Google anyway).
+      const desc =
+        faq.a.length > 155 ? faq.a.slice(0, 152).trimEnd() + "…" : faq.a;
+      descEl.setAttribute("content", desc);
+    }
+    return () => {
+      document.title = prevTitle;
+      if (descEl && prevDesc) descEl.setAttribute("content", prevDesc);
+    };
+  }, [faq]);
+
+  // "Related questions" = 3 sibling FAQs, deterministic (uses slug hash so
+  // the same question always shows the same related set — no jitter on
+  // re-render, and no need for random). Excludes the current question.
+  const related = (() => {
+    if (!faq) return [];
+    const others = FAQ_QUESTIONS.filter((f) => f.slug !== faq.slug);
+    // Simple deterministic rotation: start at (current index + 1), wrap.
+    const currentIdx = FAQ_QUESTIONS.findIndex((f) => f.slug === faq.slug);
+    const startIdx = (currentIdx + 1) % others.length;
+    const rotated = [...others.slice(startIdx), ...others.slice(0, startIdx)];
+    return rotated.slice(0, 3);
+  })();
+
+  return (
+    <div
+      style={{
+        background: BRAND.white,
+        color: BRAND.bodyText,
+        fontFamily: SANS_STACK,
+        minHeight: "100vh",
+      }}
+    >
+      {/* TOP NAV — matches Healthcare/HowItWorks pattern */}
+      <nav
+        style={{
+          height: 76,
+          padding: "0 clamp(16px, 4vw, 56px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          borderBottom: `1px solid #EFEAE0`,
+          background: BRAND.white,
+          position: "sticky",
+          top: 0,
+          zIndex: 10,
+        }}
+      >
+        <button
+          onClick={onBackToHome}
+          aria-label="Back to home"
+          style={{
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            padding: 0,
+          }}
+        >
+          <Wordmark size={20} />
+        </button>
+        <Pill onClick={onStart} variant="primary" size="sm">
+          {entryFeeEnabled ? "Start · $2.99" : "Start free"}
+        </Pill>
+      </nav>
+
+      {/* NOT-FOUND STATE — graceful when someone lands on a bad slug */}
+      {!faq && (
+        <section
+          style={{
+            padding: "clamp(80px, 12vw, 160px) clamp(16px, 4vw, 56px)",
+            maxWidth: 720,
+            margin: "0 auto",
+            textAlign: "center",
+          }}
+        >
+          <h1
+            style={{
+              fontFamily: SERIF_STACK,
+              fontWeight: 400,
+              fontSize: "clamp(28px, 4vw, 44px)",
+              lineHeight: 1.15,
+              margin: "0 0 20px",
+              color: BRAND.charcoal,
+            }}
+          >
+            Question not found
+          </h1>
+          <p
+            style={{
+              fontSize: 17,
+              lineHeight: 1.55,
+              color: BRAND.subText,
+              margin: "0 0 32px",
+            }}
+          >
+            The question you're looking for may have been renamed or moved.
+            Try our full FAQ page — it has all the current questions.
+          </p>
+          <Pill onClick={onBackToFaqList} variant="primary" size="lg">
+            See all FAQs
+          </Pill>
+        </section>
+      )}
+
+      {/* FOUND STATE — the actual per-question content */}
+      {faq && (
+        <>
+          {/* BREADCRUMB */}
+          <div
+            style={{
+              padding: "clamp(20px, 3vw, 32px) clamp(16px, 4vw, 56px) 0",
+              maxWidth: 820,
+              margin: "0 auto",
+              fontSize: 13,
+              color: BRAND.subText,
+              letterSpacing: 0.3,
+            }}
+          >
+            <button
+              onClick={onBackToHome}
+              style={{
+                background: "none",
+                border: "none",
+                padding: 0,
+                cursor: "pointer",
+                color: BRAND.subText,
+                fontFamily: SANS_STACK,
+                fontSize: 13,
+                textDecoration: "underline",
+                textUnderlineOffset: 3,
+              }}
+            >
+              Home
+            </button>
+            <span style={{ margin: "0 8px", opacity: 0.5 }}>›</span>
+            <button
+              onClick={onBackToFaqList}
+              style={{
+                background: "none",
+                border: "none",
+                padding: 0,
+                cursor: "pointer",
+                color: BRAND.subText,
+                fontFamily: SANS_STACK,
+                fontSize: 13,
+                textDecoration: "underline",
+                textUnderlineOffset: 3,
+              }}
+            >
+              FAQ
+            </button>
+            <span style={{ margin: "0 8px", opacity: 0.5 }}>›</span>
+            <span>{faq.q}</span>
+          </div>
+
+          {/* HERO: question as H1 */}
+          <section
+            style={{
+              padding:
+                "clamp(24px, 4vw, 48px) clamp(16px, 4vw, 56px) clamp(32px, 5vw, 56px)",
+              maxWidth: 820,
+              margin: "0 auto",
+            }}
+          >
+            <p
+              style={{
+                fontFamily: SANS_STACK,
+                fontSize: 12,
+                letterSpacing: 2.5,
+                textTransform: "uppercase",
+                color: BRAND.gold,
+                margin: "0 0 14px",
+              }}
+            >
+              Frequently asked
+            </p>
+            <h1
+              style={{
+                fontFamily: SERIF_STACK,
+                fontWeight: 400,
+                fontSize: "clamp(30px, 4.6vw, 52px)",
+                lineHeight: 1.1,
+                letterSpacing: -0.3,
+                margin: "0 0 32px",
+                color: BRAND.charcoal,
+              }}
+            >
+              {faq.q}
+            </h1>
+
+            {/* ANSWER — split on double-newlines for future multi-paragraph
+                answers, but works with single-paragraph answers too */}
+            {faq.a
+              .split(/\n\n+/)
+              .map((paragraph, i) => (
+                <p
+                  key={i}
+                  style={{
+                    fontSize: "clamp(16px, 1.7vw, 19px)",
+                    lineHeight: 1.65,
+                    color: BRAND.bodyText,
+                    margin: "0 0 20px",
+                  }}
+                >
+                  {paragraph}
+                </p>
+              ))}
+          </section>
+
+          {/* PRIMARY CTA — the "Try it Free" button Kristi wanted on every
+              per-question page. Bigger + more prominent than nav CTA. */}
+          <section
+            style={{
+              background: BRAND.cream,
+              padding:
+                "clamp(48px, 7vw, 88px) clamp(16px, 4vw, 56px)",
+              textAlign: "center",
+            }}
+          >
+            <h2
+              style={{
+                fontFamily: SERIF_STACK,
+                fontWeight: 400,
+                fontSize: "clamp(24px, 3.2vw, 36px)",
+                lineHeight: 1.2,
+                color: BRAND.charcoal,
+                margin: "0 0 12px",
+                maxWidth: 640,
+                marginLeft: "auto",
+                marginRight: "auto",
+              }}
+            >
+              See yourself as an AI headshot.
+            </h2>
+            <p
+              style={{
+                fontSize: 15,
+                lineHeight: 1.55,
+                color: BRAND.subText,
+                margin: "0 auto 28px",
+                maxWidth: 480,
+              }}
+            >
+              Six previews free — no credit card. Only pay for the ones that
+              look like you.
+            </p>
+            <Pill onClick={onStart} variant="primary" size="lg">
+              {entryFeeEnabled ? "Try it — $2.99" : "Try it free"}
+            </Pill>
+          </section>
+
+          {/* RELATED QUESTIONS — internal linking for both SEO
+              (keeps Google/AI crawlers moving through the FAQ tree) and
+              UX (visitor who just answered one question might have more) */}
+          {related.length > 0 && (
+            <section
+              style={{
+                padding:
+                  "clamp(48px, 7vw, 88px) clamp(16px, 4vw, 56px)",
+                maxWidth: 900,
+                margin: "0 auto",
+              }}
+            >
+              <h2
+                style={{
+                  fontFamily: SERIF_STACK,
+                  fontWeight: 400,
+                  fontSize: "clamp(22px, 3vw, 32px)",
+                  lineHeight: 1.2,
+                  color: BRAND.charcoal,
+                  margin: "0 0 24px",
+                  textAlign: "center",
+                }}
+              >
+                More questions
+              </h2>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns:
+                    "repeat(auto-fit, minmax(240px, 1fr))",
+                  gap: 16,
+                }}
+              >
+                {related.map((r) => (
+                  <button
+                    key={r.slug}
+                    onClick={() => {
+                      // Client-side navigation to sibling question. URL
+                      // updates via pushState so the browser Back button
+                      // returns them to the previous question, not to /faq.
+                      window.history.pushState({}, "", `/faq/${r.slug}`);
+                      window.dispatchEvent(new PopStateEvent("popstate"));
+                    }}
+                    style={{
+                      textAlign: "left",
+                      background: BRAND.white,
+                      border: `1px solid #EFEAE0`,
+                      borderRadius: 10,
+                      padding: "20px 22px",
+                      cursor: "pointer",
+                      fontFamily: SANS_STACK,
+                      fontSize: 15,
+                      lineHeight: 1.4,
+                      color: BRAND.charcoal,
+                      transition: "border-color 0.15s ease",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = BRAND.gold;
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = "#EFEAE0";
+                    }}
+                  >
+                    <span
+                      style={{
+                        display: "block",
+                        fontSize: 11,
+                        letterSpacing: 2,
+                        textTransform: "uppercase",
+                        color: BRAND.subText,
+                        marginBottom: 8,
+                      }}
+                    >
+                      Read more →
+                    </span>
+                    {r.q}
+                  </button>
+                ))}
+              </div>
+              <div style={{ textAlign: "center", marginTop: 32 }}>
+                <button
+                  onClick={onBackToFaqList}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    padding: 0,
+                    cursor: "pointer",
+                    color: BRAND.charcoal,
+                    fontFamily: SANS_STACK,
+                    fontSize: 14,
+                    textDecoration: "underline",
+                    textUnderlineOffset: 4,
+                  }}
+                >
+                  See all FAQs
+                </button>
+              </div>
+            </section>
+          )}
+        </>
+      )}
+
+      {/* FOOTER — same as other spoke pages */}
+      <footer
+        style={{
+          background: BRAND.charcoal,
+          color: "rgba(255,255,255,0.7)",
+          padding: "clamp(32px, 5vw, 56px) clamp(16px, 4vw, 56px)",
+          textAlign: "center",
+          fontSize: 13,
+        }}
+      >
+        <div style={{ marginBottom: 12 }}>
+          <span
+            style={{
+              color: BRAND.white,
+              fontFamily: SERIF_STACK,
+              fontSize: 18,
+            }}
+          >
+            Gener
+            <span
+              style={{
+                fontStyle: "italic",
+                color: BRAND.gold,
+                fontWeight: 600,
+              }}
+            >
+              AI
+            </span>
+            tion <span style={{ fontWeight: 500 }}>Headshots</span>
+          </span>
+        </div>
+        <p style={{ margin: 0, opacity: 0.6 }}>
+          Made by Kristina Sherk · KristinaSherk.com
+        </p>
+      </footer>
     </div>
   );
 };
@@ -12183,7 +12808,15 @@ type Screen =
   | "admin"
   // "faq" (2026-06-05): full FAQ spoke page reached from the hamburger
   // menu or direct /faq URL. Mirrors /how-it-works architecturally.
-  | "faq";
+  | "faq"
+  // "faq-detail" (2026-08-05): per-question standalone page at
+  // /faq/{slug}. Each FAQ becomes its own indexable URL for SEO — Google
+  // and AI search engines can rank/quote a single-question page far more
+  // effectively than an accordion-inside-a-spoke. The specific question
+  // being shown is tracked in `activeFaqSlug` state (set by URL parser
+  // on mount + popstate). CTA at bottom drops the visitor into the
+  // upload flow, matching healthcare/how-it-works pattern.
+  | "faq-detail";
 
 const TOTAL_HEADSHOTS = 6;
 
@@ -12289,24 +12922,51 @@ export default function App() {
   // popstate so browser back/forward works between / and /healthcare.
   // Vercel.json has a matching rewrite so direct visits to /healthcare serve
   // the SPA's index.html.
+  // Per-question FAQ detail routing (2026-08-05). When the customer lands
+  // on /faq/{slug}, we set screen="faq-detail" AND stash the slug here so
+  // FAQDetailScreen knows which question to render. Null on any other
+  // screen. Populated on initial mount + updated by popstate.
+  const [activeFaqSlug, setActiveFaqSlug] = useState<string | null>(null);
+
   useEffect(() => {
-    const screenForPath = (path: string): Screen | null => {
-      if (path === "/healthcare" || path === "/healthcare/") return "healthcare";
-      if (path === "/how-it-works" || path === "/how-it-works/") return "how-it-works";
-      if (path === "/faq" || path === "/faq/") return "faq";
-      if (path === "/admin" || path === "/admin/") return "admin";
-      if (path === "/" || path === "") return "landing";
+    // FAQ slug regex: matches /faq/{lowercase-hyphens-only-slug}.
+    // Non-matching paths (like /faq/invalid.CAPS or /faq/) fall through
+    // to the "faq" screen (index page) rather than faq-detail.
+    const FAQ_DETAIL_RE = /^\/faq\/([a-z0-9-]+)\/?$/;
+
+    const screenForPath = (path: string): { screen: Screen; faqSlug?: string } | null => {
+      if (path === "/healthcare" || path === "/healthcare/") return { screen: "healthcare" };
+      if (path === "/how-it-works" || path === "/how-it-works/") return { screen: "how-it-works" };
+      const faqDetailMatch = path.match(FAQ_DETAIL_RE);
+      if (faqDetailMatch) return { screen: "faq-detail", faqSlug: faqDetailMatch[1] };
+      if (path === "/faq" || path === "/faq/") return { screen: "faq" };
+      if (path === "/admin" || path === "/admin/") return { screen: "admin" };
+      if (path === "/" || path === "") return { screen: "landing" };
       return null;
     };
-    const initial = screenForPath(window.location.pathname);
-    if (initial) setScreen(initial);
+
+    const applyPath = (path: string) => {
+      const result = screenForPath(path);
+      if (!result) return;
+      setScreen(result.screen);
+      // Only touch activeFaqSlug when we're moving into or out of a
+      // faq-detail path — otherwise we'd stomp valid state during other
+      // navigations. Set on entry, clear on any non-detail screen.
+      if (result.screen === "faq-detail") {
+        setActiveFaqSlug(result.faqSlug ?? null);
+      } else {
+        setActiveFaqSlug(null);
+      }
+    };
+
+    applyPath(window.location.pathname);
+
     const onPopState = () => {
       // When the customer is on a protected post-generation screen, the
       // back-warning guard owns this popstate event — defer to it so we
       // don't yank the customer to the landing screen behind the modal.
       if (protectedScreenGuardActiveRef.current) return;
-      const next = screenForPath(window.location.pathname);
-      if (next) setScreen(next);
+      applyPath(window.location.pathname);
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
@@ -14695,6 +15355,27 @@ export default function App() {
             if (window.location.pathname !== "/") {
               window.history.pushState({}, "", "/");
             }
+          }}
+        />
+      )}
+      {screen === "faq-detail" && (
+        <FAQDetailScreen
+          activeFaqSlug={activeFaqSlug}
+          entryFeeEnabled={entryFeeEnabled}
+          onStart={handleStart}
+          onBackToFaqList={() => {
+            setScreen("faq");
+            if (window.location.pathname !== "/faq") {
+              window.history.pushState({}, "", "/faq");
+            }
+            setActiveFaqSlug(null);
+          }}
+          onBackToHome={() => {
+            setScreen("landing");
+            if (window.location.pathname !== "/") {
+              window.history.pushState({}, "", "/");
+            }
+            setActiveFaqSlug(null);
           }}
         />
       )}
