@@ -1340,7 +1340,43 @@ async function verifyUnlock(
         hasValidPromo = true;
       }
     }
-    if (!hasValidPromo) {
+    // Paid customers are ALSO exempt: a valid, paid, unexpired, unconsumed
+    // $2.99 Stripe unlock skips the per-IP free cap, so we never block someone
+    // who paid with the free-tier limit (Kristi 2026-08-06). Fail toward the
+    // cap on any error — worst case a paid user is capped (same as before this),
+    // never the reverse (which would reopen the free leak).
+    let exempt = hasValidPromo;
+    if (
+      !exempt &&
+      typeof stripeSessionId === "string" &&
+      stripeSessionId.startsWith("cs_")
+    ) {
+      try {
+        const r = await fetch(
+          `https://api.stripe.com/v1/checkout/sessions/${encodeURIComponent(stripeSessionId)}`,
+          { method: "GET", headers: { Authorization: `Bearer ${stripeSecretKey}` } },
+        );
+        if (r.ok) {
+          const ses = (await r.json()) as {
+            payment_status?: string;
+            metadata?: Record<string, string> | null;
+            payment_intent?: { status?: string } | string | null;
+          };
+          const pi =
+            ses.payment_intent && typeof ses.payment_intent === "object"
+              ? ses.payment_intent.status
+              : undefined;
+          const paid = ses.payment_status === "paid" || pi === "succeeded";
+          const consumed = ses.metadata?.unlock_consumed === "true";
+          const exp = Number(ses.metadata?.unlock_expires_at ?? "");
+          const live = Number.isFinite(exp) && exp > 0 && Date.now() <= exp;
+          if (paid && !consumed && live) exempt = true;
+        }
+      } catch {
+        /* any error → not exempt → falls through to the cap */
+      }
+    }
+    if (!exempt) {
       const { allowed } = await checkFreeBatchLimit(ip, batchId);
       if (!allowed) {
         return { ok: false, reason: "free_limit" };

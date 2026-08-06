@@ -30,6 +30,8 @@ function buildEmail(resumeUrl: string): {
     "Your headshots just finished generating and are ready to view! Come back to see them and pick your favorites — you only pay for the ones you actually love, and nothing is charged until you download.";
   const nudge =
     "Sessions don't stay open forever, so it's best to grab the ones you like now while they're fresh.";
+  const feedback =
+    "One last thing — I'm just one person building this, so your feedback means the world to me. Good or bad (honestly, the bad helps me the most!), pretty pretty please hit reply and tell me what you thought. Every note comes straight to me.";
 
   const html = `<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
@@ -45,7 +47,8 @@ function buildEmail(resumeUrl: string): {
         Pick my headshots &rarr;
       </a>
     </div>
-    <p style="font-size:15px;line-height:1.65;margin:22px 0 0;">Thanks!<br>Kristina</p>
+    <p style="font-size:14px;line-height:1.65;margin:22px 0 0;color:#5A5A56;">${feedback}</p>
+    <p style="font-size:15px;line-height:1.65;margin:16px 0 0;">Thanks!<br>Kristina</p>
   </div>
   <p style="max-width:540px;margin:14px auto 0;font-size:12px;color:#9A968D;text-align:center;line-height:1.5;">
     <a href="${SITE_URL}" style="color:#6E6E6A;font-weight:600;">generationheadshots.com</a><br>
@@ -61,6 +64,8 @@ function buildEmail(resumeUrl: string): {
     nudge,
     "",
     `Pick your headshots: ${resumeUrl}`,
+    "",
+    feedback,
     "",
     "Thanks!",
     "Kristina",
