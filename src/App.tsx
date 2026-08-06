@@ -11421,6 +11421,9 @@ const CheckoutScreen = ({
 type DownloadScreenProps = {
   email: string;
   photoUrls: string[];
+  // The two Wild Card previews generated on the grid (Paper/color only),
+  // reused on this screen to flank the pet card (2026-08-06).
+  wildCards: WildCardShot[];
   // "Generate a different Style" — takes the user back to the Style screen
   // with their reference photos preserved (no re-upload required).
   onNewStyle: () => void;
@@ -11469,10 +11472,7 @@ const DownloadScreen = ({
   onNewStyle,
   onHome,
   chosenStyle,
-  referencePhotoUrls,
-  hasWideAngle,
-  attire,
-  lighting,
+  wildCards,
 }: DownloadScreenProps) => {
   const [downloaded, setDownloaded] = useState<Set<number>>(new Set());
   // In-app full-screen photo viewer — shown on MOBILE when the customer
@@ -11678,117 +11678,105 @@ const DownloadScreen = ({
   // completes).
   // ------------------------------------------------------------------
 
-  // Which two styles are "other" relative to the one the user chose. We
-  // randomly pick ONE of them to preview below (alternates per page load)
-  // so the bonus row is a single human teaser + a pet example card.
-  const OTHER_STYLES: StyleSelections["style"][] = chosenStyle
-    ? (["corporate", "creative", "executive", "urban", "healthcare"] as const).filter(
-        (s): s is StyleSelections["style"] => s !== chosenStyle,
-      )
-    : [];
 
-  type BonusSlot = {
-    style: StyleSelections["style"];
-    image: string | null; // data URL from /api/generate, or null while pending/errored
-    loading: boolean;
-    error: string | null;
-  };
-  const [bonus, setBonus] = useState<BonusSlot[]>(() => {
-    if (OTHER_STYLES.length === 0) return [];
-    const pick = OTHER_STYLES[Math.floor(Math.random() * OTHER_STYLES.length)];
-    return [{ style: pick, image: null, loading: false, error: null }];
-  });
-  // Guard against React 19 StrictMode double-invocation firing the bonus API
-  // call twice in development. Survives strict-mode's simulated remount because
-  // useRef state persists across effect re-runs of the same instance.
-  const bonusFired = useRef(false);
+  // Reuse the two Wild Card previews already generated on the grid (Paper/
+  // color only) instead of generating a fresh cross-style shot here
+  // (2026-08-06, Kristi). They flank the pet card below; filter to the ones
+  // that actually came through — if none did, we just show the pet card.
+  const wildCardImages = (wildCards ?? [])
+    .map((w) => w.image)
+    .filter((x): x is string => !!x);
 
-  useEffect(() => {
-    if (bonusFired.current) return;
-    // Need enough inputs to actually generate. If any are missing (e.g. a
-    // direct navigation to /success that skipped checkout), just silently
-    // omit the bonus section.
-    if (
-      !chosenStyle ||
-      !referencePhotoUrls ||
-      referencePhotoUrls.length === 0 ||
-      !attire ||
-      !lighting ||
-      bonus.length === 0
-    ) {
-      return;
-    }
-    bonusFired.current = true;
-
-    const idx = 0;
-    const bonusStyle = bonus[idx].style;
-    // Mark the slot as loading up front so the UI shows a spinner while the
-    // request is in flight.
-    setBonus((prev) => {
-      const next = [...prev];
-      next[idx] = { ...next[idx], loading: true, error: null };
-      return next;
-    });
-
-    fetch("/api/generate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        photoUrls: referencePhotoUrls,
-        style: bonusStyle,
-        attire,
-        lighting,
-        // Corporate needs a background; Creative/Executive pull their
-        // background direction from the style prompt itself. Default to
-        // lightgrey for a safe, clean look that flatters any skin tone.
-        background: bonusStyle === "corporate" ? "lightgrey" : undefined,
-        // variationIndex 0 = Duchenne-eye-smile, slight left lean. Best
-        // single-frame flavor to show off the bonus style.
-        variationIndex: 0,
-        hasWideAngle: hasWideAngle ?? false,
-        // Paywall fields — even bonus previews count against the
-        // session's 4h window. Customer paid, customer gets the bonus.
-        ...readUnlockRequestFields(),
-      }),
-    })
-      .then(async (r) => {
-        if (!r.ok) {
-          const err = (await r.json().catch(() => ({}))) as { error?: string };
-          throw new Error(err.error || `HTTP ${r.status}`);
-        }
-        return r.json() as Promise<{ image: string }>;
-      })
-      .then((data) => {
-        setBonus((prev) => {
-          const next = [...prev];
-          next[idx] = { ...next[idx], loading: false, image: data.image, error: null };
-          return next;
-        });
-      })
-      .catch((e: unknown) => {
-        setBonus((prev) => {
-          const next = [...prev];
-          next[idx] = {
-            ...next[idx],
-            loading: false,
-            error: e instanceof Error ? e.message : "Generation failed",
-          };
-          return next;
-        });
-      });
-    // Mount-only: DownloadScreen is rendered once per delivery and unmounted
-    // when the user navigates away, so a deps array here would add noise.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Pretty label for each style used in the bonus section headings.
-  const STYLE_LABEL: Record<StyleSelections["style"], string> = {
-    corporate: "Corporate",
-    creative: "Creative Natural",
-    urban: "Urban Industrial",
-    executive: "Executive",
-    healthcare: "Healthcare",
-  };
+  const renderBonusWildCard = (image: string, key: string) => (
+    <button
+      type="button"
+      key={key}
+      onClick={onNewStyle}
+      style={{
+        background: C.white,
+        border: `1px solid ${C.border}`,
+        borderRadius: 8,
+        overflow: "hidden",
+        display: "flex",
+        flexDirection: "column",
+        padding: 0,
+        cursor: "pointer",
+        textAlign: "left",
+        ...font,
+      }}
+    >
+      <div
+        style={{
+          aspectRatio: "3/4",
+          background: C.dark,
+          overflow: "hidden",
+          position: "relative",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <img
+          src={image}
+          alt="Bonus headshot — watermarked preview in another style"
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            display: "block",
+            userSelect: "none",
+            pointerEvents: "none",
+          }}
+          draggable={false}
+          onContextMenu={(e) => e.preventDefault()}
+        />
+                        <div
+                          aria-hidden
+                          style={{
+                            position: "absolute",
+                            inset: 0,
+                            pointerEvents: "none",
+                            backgroundImage:
+                              "url(\"data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='110'%3E%3Ctext x='90' y='65' font-family='Arial, sans-serif' font-size='18' font-weight='700' fill='rgba(255,255,255,0.55)' stroke='rgba(0,0,0,0.25)' stroke-width='0.6' text-anchor='middle' letter-spacing='3' transform='rotate(-28 90 65)'%3EPREVIEW%3C/text%3E%3C/svg%3E\")",
+                            backgroundRepeat: "repeat",
+                          }}
+                        />
+        <div
+          style={{
+            position: "absolute",
+            top: 10,
+            left: 10,
+            background: "rgba(44, 44, 42, 0.82)",
+            color: C.white,
+            fontSize: 11,
+            fontWeight: 500,
+            letterSpacing: 0.5,
+            padding: "4px 10px",
+            borderRadius: 999,
+            textTransform: "uppercase",
+          }}
+        >
+          Wild card
+        </div>
+      </div>
+      <div
+        style={{
+          padding: "12px 14px",
+          background: C.dark,
+          color: C.buttonText,
+          fontSize: 13,
+          fontWeight: 500,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 8,
+        }}
+      >
+        <RefreshCw size={16} />
+        <span>Regenerate in a different style</span>
+      </div>
+    </button>
+  );
 
   return (
     <>
@@ -12067,12 +12055,18 @@ const DownloadScreen = ({
           The share-graphic generation pipeline still runs server-side,
           so every customer's email contains those URLs. */}
 
-      {/* Cross-style bonus: two single headshots rendered in the styles the
-          user didn't pick. Each has its own loading / ready / error state and
-          its own download button with Downloaded ✓ confirmation. Only shown
-          if we actually have the inputs needed to fire the requests. */}
-      {bonus.length > 0 && chosenStyle && (
+      {/* Cross-style bonus (2026-08-06): the two Wild Card previews already
+          generated on the grid (Paper/color only), reused here to flank the
+          "upload your pet" card — no fresh generation. If no wild cards came
+          through we just show the pet card. */}
+      {chosenStyle && (
         <div style={{ marginTop: 48 }}>
+          <style>{`
+            @media (max-width: 600px) {
+              .bonus-flank { grid-template-columns: 1fr !important; }
+              .bonus-flank-max { max-width: 360px !important; }
+            }
+          `}</style>
           <div style={{ textAlign: "center", marginBottom: 20 }}>
             <div
               style={{
@@ -12107,165 +12101,27 @@ const DownloadScreen = ({
                 marginRight: "auto",
               }}
             >
-              You picked{" "}
-              <span style={{ color: C.dark, fontWeight: 500 }}>
-                {STYLE_LABEL[chosenStyle]}
-              </span>
-              . Here's a watermarked preview of your photos in another style —
-              and a reminder that this works for pets too.
+              {wildCardImages.length > 0
+                ? "Here are the extra looks we tried for you — watermarked previews in styles you didn’t pick — and a reminder this works for pets too."
+                : "And a reminder — this works for pets too."}
             </p>
           </div>
 
-          {/* Two equal-weight CTAs side-by-side: bonus preview (click =
-              regenerate in a different style) and pet card (click = restart
-              with pet photos). Grid keeps them paired on every viewport —
-              cards shrink together on mobile instead of stacking. */}
+          {/* Wild cards flank the pet card: [wild card] [pet] [wild card].
+              Columns scale to however many wild cards came through; stacks to
+              a single column on mobile. */}
           <div
+            className="bonus-flank bonus-flank-max"
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(2, 1fr)",
+              gridTemplateColumns: `repeat(${1 + wildCardImages.length}, 1fr)`,
               gap: 16,
-              maxWidth: 520,
+              maxWidth: wildCardImages.length >= 2 ? 780 : 520,
               margin: "0 auto",
             }}
           >
-            {bonus.map((slot) => {
-              return (
-                <button
-                  type="button"
-                  key={slot.style}
-                  onClick={onNewStyle}
-                  style={{
-                    background: C.white,
-                    border: `1px solid ${C.border}`,
-                    borderRadius: 8,
-                    overflow: "hidden",
-                    display: "flex",
-                    flexDirection: "column",
-                    padding: 0,
-                    cursor: "pointer",
-                    textAlign: "left",
-                    ...font,
-                  }}
-                >
-                  <div
-                    style={{
-                      // 3:4 to match the generated shot (see grid card note).
-                      aspectRatio: "3/4",
-                      background: C.dark,
-                      overflow: "hidden",
-                      position: "relative",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    {slot.image ? (
-                      <>
-                        <img
-                          src={slot.image}
-                          alt={`${STYLE_LABEL[slot.style]} bonus headshot — watermarked preview`}
-                          style={{
-                            width: "100%",
-                            height: "100%",
-                            objectFit: "cover",
-                            display: "block",
-                            userSelect: "none",
-                            pointerEvents: "none",
-                          }}
-                          draggable={false}
-                          onContextMenu={(e) => e.preventDefault()}
-                        />
-                        {/* Diagonal repeating "PREVIEW" watermark. Rendered as
-                            an SVG background-image pattern so the watermark
-                            appears even on any screenshot the user takes. */}
-                        <div
-                          aria-hidden
-                          style={{
-                            position: "absolute",
-                            inset: 0,
-                            pointerEvents: "none",
-                            backgroundImage:
-                              "url(\"data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='110'%3E%3Ctext x='90' y='65' font-family='Arial, sans-serif' font-size='18' font-weight='700' fill='rgba(255,255,255,0.55)' stroke='rgba(0,0,0,0.25)' stroke-width='0.6' text-anchor='middle' letter-spacing='3' transform='rotate(-28 90 65)'%3EPREVIEW%3C/text%3E%3C/svg%3E\")",
-                            backgroundRepeat: "repeat",
-                          }}
-                        />
-                      </>
-                    ) : slot.loading ? (
-                      <div
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          alignItems: "center",
-                          gap: 10,
-                          color: C.buttonText,
-                          fontSize: 12,
-                        }}
-                      >
-                        <Loader2 size={22} style={{ animation: "spin 1s linear infinite" }} />
-                        <span>Generating {STYLE_LABEL[slot.style]}…</span>
-                      </div>
-                    ) : slot.error ? (
-                      <div
-                        style={{
-                          padding: 16,
-                          textAlign: "center",
-                          color: C.buttonText,
-                          fontSize: 12,
-                          lineHeight: 1.5,
-                        }}
-                      >
-                        Couldn't generate the {STYLE_LABEL[slot.style]} version. Your paid
-                        headshots above are unaffected.
-                      </div>
-                    ) : null}
-                    {/* Style badge in the top-left corner so users can tell at a
-                        glance which style this card represents. */}
-                    <div
-                      style={{
-                        position: "absolute",
-                        top: 10,
-                        left: 10,
-                        background: "rgba(44, 44, 42, 0.82)",
-                        color: C.white,
-                        fontSize: 11,
-                        fontWeight: 500,
-                        letterSpacing: 0.5,
-                        padding: "4px 10px",
-                        borderRadius: 999,
-                        textTransform: "uppercase",
-                      }}
-                    >
-                      {STYLE_LABEL[slot.style]}
-                    </div>
-                  </div>
-                  {/* Dark footer mirrors the pet card's footer so the two
-                      cards read as equal-weight CTAs. Clicking anywhere on
-                      the card fires onNewStyle (back to the Style screen
-                      with reference photos preserved). */}
-                  <div
-                    style={{
-                      padding: "12px 14px",
-                      background: C.dark,
-                      color: C.buttonText,
-                      fontSize: 13,
-                      fontWeight: 500,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: 8,
-                    }}
-                  >
-                    <RefreshCw size={16} />
-                    <span>Regenerate in a different style</span>
-                  </div>
-                </button>
-              );
-            })}
+            {wildCardImages[0] && renderBonusWildCard(wildCardImages[0], "wc-left")}
 
-            {/* Pet card — static example + CTA. Clicking anywhere on the card
-                resets the flow back to Landing so the user can upload their
-                pet and run a fresh set. */}
             <button
               type="button"
               onClick={onHome}
@@ -12338,11 +12194,9 @@ const DownloadScreen = ({
                 <span>Upload your pet</span>
               </div>
             </button>
-          </div>
 
-          {/* No tagline or standalone button here anymore — both cards are
-              self-explanatory via their own footer CTAs ("Regenerate in a
-              different style" / "Upload your pet"). */}
+            {wildCardImages[1] && renderBonusWildCard(wildCardImages[1], "wc-right")}
+          </div>
         </div>
       )}
 
@@ -15740,6 +15594,7 @@ export default function App() {
           email={email}
           photoUrls={deliveredPhotoUrls}
           chosenStyle={lastSelections.style}
+          wildCards={wildCards}
           referencePhotoUrls={lastPhotoUrls}
           hasWideAngle={lastHasWideAngle}
           attire={lastSelections.attire}
