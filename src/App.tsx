@@ -9936,15 +9936,11 @@ const FOUND_VIA_OPTIONS = [
 type FoundViaSurveyModalProps = { onDone: (answer?: string) => void };
 
 const FoundViaSurveyModal = ({ onDone }: FoundViaSurveyModalProps) => {
-  // No auto-close: the survey stays until the customer picks an answer. If they
-  // pick "Other" they must type where they heard about us (2026-08-05) — free
-  // text is far more useful to Kristi than a bare "Other".
-  const [otherMode, setOtherMode] = useState(false);
-  const [otherText, setOtherText] = useState("");
-  const submitOther = () => {
-    const t = otherText.trim();
-    if (t) onDone(t);
-  };
+  // One tap on ANY option (including "Other") immediately closes the survey and
+  // chains to the retouch popup — no text input, no back button — so nobody can
+  // click more than one option (Kristi 2026-08-06). "Other" just records
+  // "Other"; Kristi fills in the real source from Clarity using the editable
+  // Found-via dropdown on the leads page.
   return (
     <div
       role="dialog"
@@ -9987,90 +9983,27 @@ const FoundViaSurveyModal = ({ onDone }: FoundViaSurveyModalProps) => {
         >
           How did you find GenerAItion Headshots?
         </h2>
-        {otherMode ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <input
-              autoFocus
-              type="text"
-              value={otherText}
-              maxLength={60}
-              onChange={(e) => setOtherText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") submitOther();
-              }}
-              placeholder="Where did you hear about us?"
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {FOUND_VIA_OPTIONS.map((o) => (
+            <button
+              key={o}
+              onClick={() => onDone(o)}
               style={{
+                background: C.white,
+                color: C.dark,
                 border: `1px solid ${C.border}`,
                 borderRadius: 10,
                 padding: "11px 14px",
                 fontSize: 14,
-                fontFamily: "inherit",
-                color: C.dark,
-                width: "100%",
-                boxSizing: "border-box",
-              }}
-            />
-            <button
-              onClick={submitOther}
-              disabled={!otherText.trim()}
-              style={{
-                background: otherText.trim() ? C.dark : C.border,
-                color: C.white,
-                border: "none",
-                borderRadius: 10,
-                padding: "11px 14px",
-                fontSize: 14,
-                fontWeight: 600,
-                cursor: otherText.trim() ? "pointer" : "default",
-                fontFamily: "inherit",
-              }}
-            >
-              Submit
-            </button>
-            <button
-              onClick={() => {
-                setOtherMode(false);
-                setOtherText("");
-              }}
-              style={{
-                background: "transparent",
-                border: "none",
-                color: C.mediumGrey,
-                fontSize: 13,
+                fontWeight: 500,
                 cursor: "pointer",
                 fontFamily: "inherit",
-                padding: 4,
               }}
             >
-              ← Back to options
+              {o}
             </button>
-          </div>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {FOUND_VIA_OPTIONS.map((o) => (
-              <button
-                key={o}
-                onClick={() => {
-                  if (o === "Other") setOtherMode(true);
-                  else onDone(o);
-                }}
-                style={{
-                  background: C.white,
-                  color: C.dark,
-                  border: `1px solid ${C.border}`,
-                  borderRadius: 10,
-                  padding: "11px 14px",
-                  fontSize: 14,
-                  fontWeight: 500,
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                }}
-              >
-                {o}
-              </button>
-            ))}
-          </div>
-        )}
+          ))}
+        </div>
       </div>
     </div>
   );
