@@ -9243,6 +9243,35 @@ const GridScreen = ({
         </div>
       )}
 
+      {/* TOP CHECKOUT BAR (2026-08-06) — a checkout reference above the grid
+          so customers know they can pay without scrolling to the bottom. It
+          mirrors the full bar below the grid; the button stays disabled until
+          they have saved at least one pick. */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginTop: 24,
+          padding: "12px 16px",
+          background: C.white,
+          borderRadius: 8,
+          border: `1px solid ${C.border}`,
+          flexWrap: "wrap",
+          gap: 12,
+        }}
+      >
+        <div style={{ fontSize: 13, color: C.dark, fontWeight: 500 }}>
+          <ShoppingBag size={14} style={{ display: "inline", verticalAlign: "middle", marginRight: 6, marginBottom: 2 }} />
+          {cart.length > 0
+            ? `${cart.length} in your cart — check out whenever you’re ready`
+            : "Save your favorites above, then check out here."}
+        </div>
+        <Button onClick={() => onDeliver(cart)} disabled={cart.length === 0}>
+          Check out
+        </Button>
+      </div>
+
       {/* Responsive 3x2 on desktop, 2x3 on mobile. Inline style sets the
           desktop default; the <style> block below overrides to 2 columns
           when the viewport is narrow so each watermarked thumbnail stays
