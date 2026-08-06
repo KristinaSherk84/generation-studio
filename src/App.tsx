@@ -7368,6 +7368,10 @@ const STUDIO_BGS = [
   { id: "dark", color: "#444441", label: "Dark" },
   { id: "black", color: "#0A0A0A", label: "Black" },
   { id: "blue", color: "#B5D4F4", label: "Soft blue" },
+  // Bright Blue (2026-08-06) — Klein blue base + bright "Dell logo" blue
+  // spotlight; reads modern/tech vs. the enterprise navy of "Soft blue".
+  // Renders as a radial gradient (branch in the picker render below).
+  { id: "bluebright", color: "#002FA7", label: "Bright blue" },
   { id: "green", color: "#C0DD97", label: "Soft green" },
   // Graduated goldenrod→firetruck-red→dark-red paper sweep (2026-08-01). The
   // dot shows a medium fire-truck red as its representative color.
@@ -7463,7 +7467,7 @@ export type StyleSelections = {
   style: "corporate" | "creative" | "executive" | "urban" | "healthcare";
   attire: "formal" | "casual" | "keep" | "medical";
   lighting: "studio" | "natural" | "dramatic" | "golden";
-  background?: "white" | "lightgrey" | "dark" | "black" | "blue" | "green" | "red" | "rainbow";
+  background?: "white" | "lightgrey" | "dark" | "black" | "blue" | "bluebright" | "green" | "red" | "rainbow";
   // Skin treatment toggle (added 2026-04-26, expanded 2026-05-01 to add glam).
   // - "realistic" (default) — current behavior, no extra block.
   // - "polished" — BLOCK_SKIN_POLISHED smooths color inconsistencies while
@@ -8125,7 +8129,9 @@ const StyleScreen = ({
                       ? "radial-gradient(circle, #9A9A94 0%, #2A2A26 55%, #171712 100%)"
                       : bg.id === "red"
                         ? "linear-gradient(to top, #E4A81E 0%, #E4A81E 16%, #CE2029 55%, #7A2409 100%)"
-                        : bg.color,
+                        : bg.id === "bluebright"
+                          ? "radial-gradient(circle at 50% 45%, #007DB8 0%, #002FA7 60%, #001a5c 100%)"
+                          : bg.color,
                   border:
                     background === bg.id
                       ? `2px solid ${C.dark}`
