@@ -15025,9 +15025,15 @@ export default function App() {
       void runIdentityPass(selections, photoUrls, hasWideAngle);
     }
 
-    // Wild Card bonus previews — fire for EVERY generation, independent of the
-    // identity pass. Best-effort; never blocks or errors the grid. (2026-08-04)
-    void runWildCards(selections, photoUrls, hasWideAngle);
+    // Wild Card bonus previews — ONLY for the Paper/color (id "corporate")
+    // style. That flat studio-paper backdrop is the look customers are most
+    // likely to find underwhelming, so that's exactly where the wild cards earn
+    // their cost by showing more dynamic alternatives (natural/executive/urban).
+    // Every other style already looks distinctive, so we skip the extra 2 Flash
+    // images there. Best-effort; never blocks the grid. (Kristi 2026-08-06)
+    if (selections.style === "corporate") {
+      void runWildCards(selections, photoUrls, hasWideAngle);
+    }
   };
 
   // Fire the two Wild Card bonus shots after the main batch lands. Gender-

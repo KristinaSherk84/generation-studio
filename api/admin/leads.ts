@@ -21,15 +21,14 @@ import {
 
 export const maxDuration = 10;
 
-// Estimated generation cost of one batch (2026-08-04). Gemini 3.1 Flash Image
-// at the app's 2048px output is ~$0.10/image. Each batch now renders 8 images:
-// the 6 the customer picked PLUS 2 automatic "Wild Card" bonus shots fired
-// after the main grid lands → ~$0.80 per batch. generateCount tracks batches,
-// so cost ≈ generateCount × this. NOTE: this is an ESTIMATE — it does not
-// include per-slot regenerations, the identity auto-regen, or the post-purchase
-// retouch pass (Gemini 3 Pro Image), so true spend runs somewhat higher. (The
-// wild-card gender-detection call uses Gemini 2.5 Flash and is negligible.)
-const GEN_BATCH_COST_USD = 0.8;
+// Estimated generation cost of one batch. Gemini 3.1 Flash Image at the app's
+// 2048px output is ~$0.10/image. Most batches render 6 images (~$0.61); ONLY
+// the Paper/color (corporate) style also fires 2 "Wild Card" bonus shots for 8
+// images (~$0.81) — gated to that style on 2026-08-06. This blended ~$0.65 is a
+// rough middle. generateCount tracks batches, so cost ≈ generateCount × this.
+// NOTE: an ESTIMATE — excludes per-slot regens, identity auto-regen, and the
+// post-purchase Gemini 3 Pro retouch pass, so true spend runs somewhat higher.
+const GEN_BATCH_COST_USD = 0.65;
 const fmtUsd = (n: number) => `$${n.toFixed(2)}`;
 
 // The same six options the customer sees in the "How did you find us?" survey
