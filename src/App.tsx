@@ -9252,48 +9252,75 @@ const GridScreen = ({
         @media (max-width: 600px) {
           .gen-grid { grid-template-columns: repeat(2, 1fr) !important; }
         }
+        .wildcard-thumbs {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 16px;
+          justify-content: center;
+          margin-top: 14px;
+        }
+        .wildcard-thumb { width: 30%; max-width: 240px; }
+        @media (max-width: 600px) {
+          .wildcard-thumb { width: 44%; }
+        }
       `}</style>
-      {/* WILD CARD RESULTS — bonus shots in styles the customer did NOT pick.
-          Positioned ABOVE the main 6 and addable to the cart like any other
-          pick; delivery retouches the picked pixels so the wild-card look is
-          preserved. (2026-08-04) */}
-      {wildCards.length > 0 && (
-        <div style={{ marginTop: 24, marginBottom: 8 }}>
-          <h3
-            style={{
-              fontSize: 20,
-              fontWeight: 600,
-              color: C.dark,
-              margin: 0,
-              letterSpacing: -0.3,
-            }}
-          >
-            Wild Card Results
-          </h3>
-          <p
-            style={{
-              fontSize: 14,
-              color: C.mediumGrey,
-              marginTop: 8,
-              lineHeight: 1.6,
-            }}
-          >
-            Two extra looks we tried for you — different styles than you chose,
-            on us. Tap the + to add them to your cart too.
-          </p>
+      <div
+        className="gen-grid"
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(3, 1fr)",
+          gap: 16,
+          marginTop: 16,
+        }}
+      >
+        {/* WILD CARD RESULTS — bonus shots in styles the customer did NOT
+            pick. Interleaved as a darker, indented box after the first row of
+            the main grid: it spans every column and sits on grid-row 2, so on
+            desktop it reads row-of-3 / the two wild cards / row-of-3, and on
+            mobile row-of-2 / the box / the rest. Addable to cart like any
+            other pick. (2026-08-06) */}
+        {wildCards.length > 0 && (
           <div
-            className="gen-grid"
             style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(3, 1fr)",
-              gap: 16,
-              marginTop: 16,
+              gridColumn: "1 / -1",
+              gridRow: 2,
+              background: C.lightGrey,
+              border: `1px solid ${C.border}`,
+              borderRadius: 14,
+              padding: "18px 20px 20px",
+              margin: "2px 0",
             }}
           >
+            <h3
+              style={{
+                fontSize: 18,
+                fontWeight: 600,
+                color: C.dark,
+                margin: 0,
+                letterSpacing: -0.3,
+                textAlign: "center",
+              }}
+            >
+              Wild Card Results
+            </h3>
+            <p
+              style={{
+                fontSize: 13,
+                color: C.mediumGrey,
+                margin: "6px auto 0",
+                maxWidth: 460,
+                lineHeight: 1.55,
+                textAlign: "center",
+              }}
+            >
+              Two extra looks we tried for you — different styles than you
+              chose, on us. Tap the + to add them to your cart too.
+            </p>
+            <div className="wildcard-thumbs">
             {wildCards.map((wc, i) => {
               const wcPicked = !!wc.image && cartSet.has(wc.image);
               return (
-                <div key={i}>
+                <div key={i} className="wildcard-thumb">
                   <div
                     onClick={() => {
                       if (!wc.image) return;
@@ -9451,19 +9478,9 @@ const GridScreen = ({
                 </div>
               );
             })}
+            </div>
           </div>
-        </div>
-      )}
-
-      <div
-        className="gen-grid"
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(3, 1fr)",
-          gap: 16,
-          marginTop: 16,
-        }}
-      >
+        )}
         {photos.map((i) => {
           const src = images[i]; // may be undefined if this slot failed to generate
           const picked = !!src && cartSet.has(src);
