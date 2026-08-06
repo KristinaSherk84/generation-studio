@@ -15590,7 +15590,7 @@ export default function App() {
           onRegenerateSlot={handleRegenerateSlot}
           regenError={regenError}
           regenCount={regenCount}
-          maxRegens={resumedFromEmail ? MAX_FREE_REGENS : MAX_SINGLE_REGENS}
+          maxRegens={resumedFromEmail || (!entryFeeEnabled && !isUnlocked) ? MAX_FREE_REGENS : MAX_SINGLE_REGENS}
           regeneratingSlots={regeneratingSlots}
           perfectingSlots={perfectingSlots}
           initialBatchInFlight={initialBatchInFlight}
