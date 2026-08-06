@@ -184,7 +184,10 @@ export default async function handler(
       skippedExpired++;
       continue;
     }
-    const resumeUrl = `${SITE_URL}/?resume=${token}`;
+    // UTM tags: a client CLICK shows in GA4/Clarity as email/email,
+    // campaign winback. Unique per client, so a click = that client came
+    // back from the win-back email (2026-08-06).
+    const resumeUrl = `${SITE_URL}/?resume=${token}&utm_source=email&utm_medium=email&utm_campaign=winback`;
 
     try {
       const { subject, html, text } = buildEmail(resumeUrl);

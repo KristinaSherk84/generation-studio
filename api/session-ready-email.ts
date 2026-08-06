@@ -96,9 +96,12 @@ export default async function handler(
     /^[A-Za-z0-9]{16,48}$/.test(body.resumeToken)
       ? body.resumeToken
       : "";
+  // UTM tags so a client CLICK shows up in GA4/Clarity as source/medium
+  // email/email, campaign session_ready. The resume link is unique per
+  // client, so a click = that specific client returned (2026-08-06).
   const resumeUrl = resumeToken
-    ? `${SITE_URL}/?resume=${resumeToken}`
-    : SITE_URL;
+    ? `${SITE_URL}/?resume=${resumeToken}&utm_source=email&utm_medium=email&utm_campaign=session_ready`
+    : `${SITE_URL}/?utm_source=email&utm_medium=email&utm_campaign=session_ready`;
 
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
