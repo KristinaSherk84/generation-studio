@@ -27,7 +27,7 @@
  * generation must never be blocked because of an infra hiccup on this guard.
  *
  * Tuning (Vercel env, no redeploy of logic needed):
- *   FREE_BATCHES_PER_IP    default 2   — distinct free batches allowed per IP
+ *   FREE_BATCHES_PER_IP    default 3   — distinct free batches allowed per IP
  *   FREE_BATCH_WINDOW_HOURS default 24 — rolling window length
  */
 import { Redis } from "@upstash/redis";
@@ -37,7 +37,7 @@ const redis = new Redis({
   token: process.env.KV_REST_API_TOKEN ?? "",
 });
 
-const LIMIT = Math.max(1, Number(process.env.FREE_BATCHES_PER_IP ?? "2"));
+const LIMIT = Math.max(1, Number(process.env.FREE_BATCHES_PER_IP ?? "3"));
 const WINDOW_SECONDS =
   Math.max(1, Number(process.env.FREE_BATCH_WINDOW_HOURS ?? "24")) * 3600;
 
