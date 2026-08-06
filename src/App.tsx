@@ -9003,6 +9003,18 @@ const GridScreen = ({
   const cartSet = new Set(cart);
   const cartIsFull = cart.length >= maxCartSize;
 
+  // First-load reveal (2026-08-06): large 2K blobs sometimes paint
+  // half-decoded on first load, so a tile can look "not fully loaded."
+  // We keep each <img> invisible until its own `load` event fires (which
+  // only happens once the image is fully downloaded AND decoded), fading
+  // it in over a spinner placeholder. Keyed by URL so regenerated slots
+  // and wild cards re-reveal on their new image, not a stale slot flag.
+  const [loadedUrls, setLoadedUrls] = useState<Set<string>>(() => new Set());
+  const markLoaded = (u: string | undefined) => {
+    if (!u) return;
+    setLoadedUrls((prev) => (prev.has(u) ? prev : new Set(prev).add(u)));
+  };
+
   const toggle = (i: number) => {
     const src = images[i];
     if (!src) return; // empty / failed slot — nothing to add
@@ -9373,8 +9385,12 @@ const GridScreen = ({
                           src={wc.image}
                           alt={wc.label}
                           draggable={false}
+                          decoding="async"
+                          onLoad={() => markLoaded(wc.image || undefined)}
                           onContextMenu={(e) => e.preventDefault()}
                           style={{
+                            opacity: wc.image && loadedUrls.has(wc.image) ? 1 : 0,
+                            transition: "opacity 0.35s ease",
                             position: "absolute",
                             inset: 0,
                             width: "100%",
@@ -9564,6 +9580,26 @@ const GridScreen = ({
             >
               {src ? (
                 <>
+                  {/* Loading shimmer/spinner shown until the image's onLoad
+                      fires; the <img> fades in over it (2026-08-06). */}
+                  {!loadedUrls.has(src) && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        background: C.lightGrey,
+                        pointerEvents: "none",
+                      }}
+                    >
+                      <Loader2
+                        size={24}
+                        style={{ animation: "spin 1s linear infinite", color: C.mediumGrey }}
+                      />
+                    </div>
+                  )}
                   {/* ANTI-THEFT: rendered as an <img> with
                       pointer-events:none + -webkit-touch-callout:none, so a
                       long-press never reaches the image and the iOS "Save
@@ -9580,8 +9616,13 @@ const GridScreen = ({
                     src={src}
                     alt={`Headshot variation ${i + 1}`}
                     draggable={false}
+                    decoding="async"
+                    onLoad={() => markLoaded(src)}
                     onContextMenu={(e) => e.preventDefault()}
                     style={{
+                      // Reveal only once fully loaded (see loadedUrls note).
+                      opacity: loadedUrls.has(src) ? 1 : 0,
+                      transition: "opacity 0.35s ease",
                       // position:absolute + inset:0 give the img a DEFINITE
                       // height. Without it, height:100% doesn't resolve inside
                       // an aspect-ratio box on iOS Safari, so object-fit:cover
