@@ -861,6 +861,16 @@ function buildBlock8(
       ? `\n\nGLAM-TIER FINAL OVERRIDE: The expression above creates a warm, engaged, smiling subject — preserve that 100%. The skin around the eyes renders editorial-flawless: soft, smooth, luminous, magazine-beauty-shot quality. The smile-eyes warmth comes ENTIRELY from cheek lift, slight squint, eye sparkle, and catchlights. Think Vogue cover.`
       : "";
 
+  // Extra likeness reinforcement for the HERO shot ONLY (variationIndex 0 =
+  // the first flavor, the first image the customer sees). The post-hoc
+  // identity auto-regen can't be relied on in production (face-descriptor is
+  // slow/flaky on serverless and often no-ops), so we strengthen identity at
+  // GENERATION time for the one slot that matters most. (2026-08-07 per Kristi)
+  const heroIdentityAnchor =
+    variationIndex === 0
+      ? `\n\nHERO-SHOT LIKENESS LOCK (this is the FIRST image the customer sees, so likeness matters most here): Re-examine the reference photos and reproduce THIS EXACT person — their precise face shape, bone structure, eye shape, size, spacing and color, eyebrow shape, nose width and bridge, lip shape, jawline, chin, hairline, and every mole, freckle, or distinguishing mark. The result must be instantly recognizable as the same individual. Hold likeness above expression, pose, and styling for this image.`
+      : "";
+
   return `Photograph direction for this single image:
 - Expression: ${flavor.expression}. Eyes must look alert, engaged, activated, and realistic — never blank, glazed or expressionless. REFERENCE TEETH CHECK (applies to THIS image regardless of the expression wording above): Inspect every reference photo for visible teeth before deciding what kind of smile to render. If NO reference photo shows any visible teeth, render a CLOSED-MOUTH smile that matches the lip style shown in the references — lips together, no upper teeth, no lower teeth, no gap between the lips — even if the expression wording above said "open smile," "teeth-showing," or "bright." Reference fidelity wins over the expression wording. AI-generated teeth on a subject who shows no teeth in references produce uncanny, "AI-tell" output that fails the headshot.
 - Body and head: ${flavor.bodyPose}.
@@ -869,7 +879,7 @@ ${outfitLine}
 
 REFERENCE PHOTO USAGE RULE: The uploaded reference photos are provided ONLY so you can learn the subject's facial likeness — face shape, features, hair, skin tone. You MUST NOT copy, sample, or draw inspiration from the reference photos' backgrounds, environments, colors, lighting, or scenes. The new photograph's background and lighting come ENTIRELY from the direction in the prompt above — ignore anything visible behind or around the subject in the reference photos.${womenSkinAnchor}${glamUnderEyeOverride}
 
-FINAL IDENTITY CHECK (most important rule in this entire prompt): Above all else, the face in this output must look UNMISTAKABLY like the person in the reference photos — same face shape, same bone structure, same eye shape and color, same nose, same mouth, same hairline, same ethnicity, same distinguishing marks. If the generated face wouldn't be recognized by a friend, or family member, you have failed this image. The style, lighting, and outfit directives above NEVER override identity. Do NOT default to a generic professional-headshot face. Do NOT blend toward stock-photo proportions. This is THIS SPECIFIC PERSON in a new setting, not a generic professional in their general age and ethnic range.
+FINAL IDENTITY CHECK (most important rule in this entire prompt): Above all else, the face in this output must look UNMISTAKABLY like the person in the reference photos — same face shape, same bone structure, same eye shape and color, same nose, same mouth, same hairline, same ethnicity, same distinguishing marks. If the generated face wouldn't be recognized by a friend, or family member, you have failed this image. The style, lighting, and outfit directives above NEVER override identity. Do NOT default to a generic professional-headshot face. Do NOT blend toward stock-photo proportions. This is THIS SPECIFIC PERSON in a new setting, not a generic professional in their general age and ethnic range.${heroIdentityAnchor}
 
 IMPORTANT OUTPUT CONSTRAINT: Return exactly ONE single photograph. Do NOT return a grid, contact sheet, collage, multi-panel image, side-by-side comparison, or any composition containing more than one headshot. One photo only.`;
 }
