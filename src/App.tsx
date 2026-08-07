@@ -9306,13 +9306,21 @@ const GridScreen = ({
         .wildcard-thumbs {
           display: flex;
           flex-wrap: wrap;
-          gap: 16px;
+          gap: 22px;
           justify-content: center;
-          margin-top: 14px;
+          margin-top: 12px;
         }
-        .wildcard-thumb { width: 30%; max-width: 240px; }
+        .wildcard-thumb { display: flex; align-items: center; gap: 10px; }
+        .wildcard-thumb:first-child { flex-direction: row-reverse; }
+        .wc-shot { width: 128px; flex: 0 0 128px; }
+        .wc-cap { width: 108px; flex: 0 0 108px; font-size: 12px; }
+        .wildcard-thumb:first-child .wc-cap { text-align: right; }
+        .wildcard-thumb:nth-child(2) .wc-cap { text-align: left; }
         @media (max-width: 600px) {
-          .wildcard-thumb { width: 44%; }
+          .wildcard-thumbs { gap: 14px; }
+          .wildcard-thumb { flex-direction: column !important; gap: 6px; }
+          .wc-shot { width: 116px; flex: 0 0 auto; }
+          .wc-cap { width: auto; flex: 0 0 auto; text-align: center !important; }
         }
       `}</style>
       <div
@@ -9338,7 +9346,7 @@ const GridScreen = ({
               background: C.lightGrey,
               border: `1px solid ${C.border}`,
               borderRadius: 14,
-              padding: "18px 20px 20px",
+              padding: "12px 18px 14px",
               margin: "2px 0",
             }}
           >
@@ -9365,7 +9373,7 @@ const GridScreen = ({
               }}
             >
               Two extra looks we tried for you — different styles than you
-              chose, on us. Tap the + to add them to your cart too.
+              chose, on us.
             </p>
             <div className="wildcard-thumbs">
             {wildCards.map((wc, i) => {
@@ -9373,6 +9381,7 @@ const GridScreen = ({
               return (
                 <div key={i} className="wildcard-thumb">
                   <div
+                    className="wc-shot"
                     onClick={() => {
                       if (!wc.image) return;
                       if (wcPicked) onRemoveFromCart(wc.image);
@@ -9380,7 +9389,6 @@ const GridScreen = ({
                     }}
                     style={{
                       position: "relative",
-                      width: "100%",
                       aspectRatio: "3 / 4",
                       borderRadius: 12,
                       overflow: "hidden",
@@ -9521,11 +9529,11 @@ const GridScreen = ({
                     )}
                   </div>
                   <div
+                    className="wc-cap"
                     style={{
-                      marginTop: 8,
                       fontSize: 12,
                       color: C.dark,
-                      lineHeight: 1.5,
+                      lineHeight: 1.4,
                     }}
                   >
                     {wc.label}
