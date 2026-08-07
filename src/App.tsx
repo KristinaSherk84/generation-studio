@@ -15693,7 +15693,10 @@ export default function App() {
           are ever simultaneously truthy (shouldn't happen — handleDismissIntro
           chains them, but defensive), the intro one wins visually since both
           use the same z-index. */}
-      {showIntroModal && <IntroStepsModal onDismiss={handleDismissIntro} />}
+      {/* Intro "5 steps / How it works" modal DISABLED 2026-08-07 per Kristi
+          — it popped up early in the flow and added friction. Component +
+          state wiring kept intact behind `false` so it is a one-word revert. */}
+      {false && showIntroModal && <IntroStepsModal onDismiss={handleDismissIntro} />}
       {/* Mid-loading "you control the retouching" popup. Fires once
           per session ~3 seconds after the customer enters the loading
           screen so they see one slot start generating before being
