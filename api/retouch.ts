@@ -49,7 +49,7 @@ import { GoogleGenAI, type Part } from "@google/genai";
 import {
   buildRetouchPrompt,
   RETOUCH_MODEL,
-  type RetouchTier as Tier,
+  type RetouchSubTier,
   type AgeBand,
 } from "./lib/retouchPrompts.js";
 
@@ -60,7 +60,9 @@ export const maxDuration = 60;
 
 type RetouchRequest = {
   photoBase64: string; // data URI or raw base64 (we accept both)
-  tier: Tier;
+  // The retouch endpoint operates on a single VERSION of a photo:
+  // "realistic" (returned as-is, no Pro call) or a retouched sub-tier.
+  tier: "realistic" | RetouchSubTier;
   ageBand?: AgeBand;
   stripeSessionId?: string;
   promoCode?: string;
