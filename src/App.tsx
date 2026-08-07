@@ -12909,6 +12909,10 @@ const WILDCARD_ATTIRE_LABELS: Record<string, string> = {
 //     per batch (bounds cost). Kristi: 2 photos, 1 regen each (lowered from 3
 //     to 2 on 2026-08-03 to cut per-session generation cost).
 const IDENTITY_DISTANCE_THRESHOLD = 0.45;
+// The HERO image (slot 0) is the first thing the customer sees, so it is held
+// to a stricter match bar, is redone even when it can't be scored, and is
+// never dropped by the redo cap. (2026-08-07 per Kristi)
+const IDENTITY_HERO_THRESHOLD = 0.42;
 const IDENTITY_MAX_REDOS = 3;
 
 // Standard Euclidean distance between two equal-length numeric vectors
@@ -15103,21 +15107,36 @@ export default function App() {
     if (!ref || ref.length !== 128) return;
 
     const descs = slotDescriptorsRef.current;
+    // Score every slot against the reference face. A slot is a redo candidate
+    // when its distance is over the threshold. Slot 0 — the HERO image, the
+    // first thing the customer sees — gets special handling (2026-08-07):
+    //   • a STRICTER threshold, and
+    //   • it's a candidate even when we couldn't score it (a null descriptor
+    //     is exactly the unverifiable case we must not ship as the first shot).
     const candidates: { index: number; dist: number }[] = [];
     for (let i = 0; i < TOTAL_HEADSHOTS; i++) {
       const d = descs[i];
-      if (d && d.length === 128) {
-        const dist = euclideanDistance(ref, d);
-        if (dist > IDENTITY_DISTANCE_THRESHOLD) {
-          candidates.push({ index: i, dist });
-        }
+      const threshold =
+        i === 0 ? IDENTITY_HERO_THRESHOLD : IDENTITY_DISTANCE_THRESHOLD;
+      if (!d || d.length !== 128) {
+        // Unverifiable. Only the hero earns a defensive redo; other slots
+        // stay as-is (no score => no confident action).
+        if (i === 0) candidates.push({ index: 0, dist: Infinity });
+        continue;
       }
+      const dist = euclideanDistance(ref, d);
+      if (dist > threshold) candidates.push({ index: i, dist });
     }
     if (candidates.length === 0) return;
 
-    // Redo the worst matches first, capped so cost stays bounded.
+    // Worst matches first, capped so cost stays bounded — but the hero (slot
+    // 0) is ALWAYS kept if it's a candidate, even if it isn't among the worst.
     candidates.sort((a, b) => b.dist - a.dist);
-    const toRedo = candidates.slice(0, IDENTITY_MAX_REDOS);
+    let toRedo = candidates.slice(0, IDENTITY_MAX_REDOS);
+    const heroCandidate = candidates.find((c) => c.index === 0);
+    if (heroCandidate && !toRedo.some((c) => c.index === 0)) {
+      toRedo = [heroCandidate, ...toRedo].slice(0, IDENTITY_MAX_REDOS);
+    }
     await Promise.all(
       toRedo.map(({ index }) =>
         perfectSlotIdentity(index, ref, selections, photoUrls, hasWideAngle),
