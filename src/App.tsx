@@ -10044,6 +10044,7 @@ const FoundViaSurveyModal = ({ onDone }: FoundViaSurveyModalProps) => {
       role="dialog"
       aria-modal="true"
       aria-label="One quick question"
+      onClick={() => onDone()}
       style={{
         position: "fixed",
         inset: 0,
@@ -10052,11 +10053,12 @@ const FoundViaSurveyModal = ({ onDone }: FoundViaSurveyModalProps) => {
         alignItems: "center",
         justifyContent: "center",
         padding: 20,
-        zIndex: 1000,
+        zIndex: 1200,
         ...font,
       }}
     >
       <div
+        onClick={(e) => e.stopPropagation()}
         style={{
           background: C.white,
           borderRadius: 16,
@@ -13287,10 +13289,15 @@ export default function App() {
   // fills in there with a spinner. A short grace lets a fast 6th land first.
   useEffect(() => {
     if (screen !== "loading" || generationError) return;
+    // Do NOT yank the screen out from under the "how did you find us" survey
+    // or the retouch popup — auto-advancing while one was open left the survey
+    // un-closable (the click landed on a screen mid-swap). Wait for both to be
+    // dismissed first. (2026-08-07 regression fix)
+    if (showFoundViaSurvey || showLoadingRetouchPopup) return;
     if (readyCount < TOTAL_HEADSHOTS - 1) return;
     const t = window.setTimeout(() => setScreen("grid"), 1500);
     return () => window.clearTimeout(t);
-  }, [screen, readyCount, generationError]);
+  }, [screen, readyCount, generationError, showFoundViaSurvey, showLoadingRetouchPopup]);
 
   // ---- #2 "Ready!" tab-title blink (2026-08-07) ----
   // Pull back customers who tabbed away during the wait: once results are
