@@ -10023,17 +10023,18 @@ const FOUND_VIA_OPTIONS = [
   "LinkedIn Ad",
   '"Best Generator" Article',
   "Facebook",
-  "Other",
 ] as const;
 
 type FoundViaSurveyModalProps = { onDone: (answer?: string) => void };
 
 const FoundViaSurveyModal = ({ onDone }: FoundViaSurveyModalProps) => {
-  // One tap on ANY option (including "Other") immediately closes the survey and
-  // chains to the retouch popup — no text input, no back button — so nobody can
-  // click more than one option (Kristi 2026-08-06). "Other" just records
-  // "Other"; Kristi fills in the real source from Clarity using the editable
-  // Found-via dropdown on the leads page.
+  // One tap on ANY option immediately closes the survey and chains to the
+  // retouch popup — no text input, no back button — so nobody can click more
+  // than one option (Kristi 2026-08-06). "Other" was REMOVED as a survey
+  // option (Kristi 2026-08-07); leads who do not answer simply stay unset, and
+  // Kristi fills the real source from Clarity using the editable Found-via
+  // dropdown on the leads page. ("Other" is still available in the admin
+  // dropdown for manual tagging.)
   return (
     <div
       role="dialog"
