@@ -7367,7 +7367,7 @@ const STUDIO_BGS = [
   { id: "lightgrey", color: "#D3D1C7", label: "Light grey" },
   { id: "dark", color: "#444441", label: "Dark" },
   { id: "black", color: "#0A0A0A", label: "Black" },
-  { id: "blue", color: "#B5D4F4", label: "Soft blue" },
+  { id: "blue", color: "#B5D4F4", label: "Navy blue" },
   // Bright Blue (2026-08-06) — Klein blue base + bright "Dell logo" blue
   // spotlight; reads modern/tech vs. the enterprise navy of "Soft blue".
   // Renders as a radial gradient (branch in the picker render below).
@@ -8133,7 +8133,9 @@ const StyleScreen = ({
                         ? "linear-gradient(to top, #E4A81E 0%, #E4A81E 16%, #CE2029 55%, #7A2409 100%)"
                         : bg.id === "bluebright"
                           ? "radial-gradient(circle at 50% 45%, #007DB8 0%, #002FA7 60%, #001a5c 100%)"
-                          : bg.color,
+                          : bg.id === "blue"
+                            ? "radial-gradient(circle at 50% 45%, #1E5A96 0%, #0B2A5E 55%, #04122E 100%)"
+                            : bg.color,
                   border:
                     background === bg.id
                       ? `2px solid ${C.dark}`
