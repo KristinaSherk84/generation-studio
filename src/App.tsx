@@ -13279,6 +13279,58 @@ export default function App() {
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, [screen, generationError, readyCount]);
+
+  // ---- #1 Auto-advance to the grid (2026-08-07) ----
+  // Customers stall on the loading screen, especially waiting on the slow
+  // 6th image (Gemini often queues it last, 60-120s). As soon as 5 of 6 are
+  // ready, drop them onto the interactive grid automatically; the last slot
+  // fills in there with a spinner. A short grace lets a fast 6th land first.
+  useEffect(() => {
+    if (screen !== "loading" || generationError) return;
+    if (readyCount < TOTAL_HEADSHOTS - 1) return;
+    const t = window.setTimeout(() => setScreen("grid"), 1500);
+    return () => window.clearTimeout(t);
+  }, [screen, readyCount, generationError]);
+
+  // ---- #2 "Ready!" tab-title blink (2026-08-07) ----
+  // Pull back customers who tabbed away during the wait: once results are
+  // ready, if their tab is backgrounded, blink the browser tab title. Stop
+  // and restore it the moment they return.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const resultsReady =
+      readyCount >= TOTAL_HEADSHOTS - 1 || screen === "grid";
+    if (!resultsReady) return;
+    const original = document.title;
+    let flip = false;
+    let timer: number | undefined;
+    const tick = () => {
+      document.title = flip ? original : "\u2705 Your headshots are ready!";
+      flip = !flip;
+    };
+    const start = () => {
+      if (timer !== undefined) return;
+      tick();
+      timer = window.setInterval(tick, 1000);
+    };
+    const stop = () => {
+      if (timer !== undefined) {
+        window.clearInterval(timer);
+        timer = undefined;
+      }
+      document.title = original;
+    };
+    const onVis = () => {
+      if (document.hidden) start();
+      else stop();
+    };
+    if (document.hidden) start();
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      document.removeEventListener("visibilitychange", onVis);
+      stop();
+    };
+  }, [readyCount, screen]);
   // ---- Free-tier feature flag (2026-07-03) ----
   // When ENTRY_FEE_ENABLED=false in Vercel env, the $2.99 paywall moves from
   // the landing page to AFTER the customer's free 6-photo batch + 2 free
