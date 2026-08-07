@@ -7694,7 +7694,9 @@ const StyleScreen = ({
   // for general landing entries; /healthcare entries still pre-pick Healthcare
   // via the defaultStyle prop.
   const [style, setStyle] = useState<string | null>(defaultStyle ?? "urban");
-  const [background, setBackground] = useState<string>("lightgrey");
+  // Paper/color (corporate) background default = the graduated dark-grey
+  // spotlight swatch (id "dark"), per Kristi 2026-08-07.
+  const [background, setBackground] = useState<string>("dark");
   const [attire, setAttire] = useState<string | null>(defaultAttire ?? null);
   const [lighting, setLighting] = useState<string | null>(null);
   // "See example backgrounds" popup (opens from hot text under the Background picker)
