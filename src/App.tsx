@@ -14488,14 +14488,21 @@ export default function App() {
 
   // "Your headshots are ready" email (2026-08-03). Clarity recordings show
   // people kick off a batch, wander off during the 2–3 min wait, forget, and
-  // never come back. When all 6 finish, we (1) upload the finished shots to
-  // Blob and save the grid server-side under a token, then (2) email them a
-  // link that restores their ACTUAL shots on any device (?resume=token).
-  // Sent once per browser+email (localStorage flag) so reloads / new batches
-  // don't re-send. Every step is best-effort: if the upload/save fails, the
-  // email still goes out linking to the site rather than a restored grid.
+  // never come back. When the batch is essentially done we (1) upload the
+  // finished shots to Blob and save the grid server-side under a token, then
+  // (2) email them a link that restores their ACTUAL shots on any device
+  // (?resume=token). Sent once per browser+email (localStorage flag) so
+  // reloads / new batches don't re-send. Every step is best-effort: if the
+  // upload/save fails, the email still goes out linking to the site.
+  //
+  // Fire at TOTAL_HEADSHOTS - 1 (5 of 6), NOT a strict 6/6 (2026-08-08). The
+  // Preview model 503s mean batches often land 5/6, and the old strict gate
+  // meant those sessions saved NO grid and got NO resume token — so the 12h
+  // "your headshots are about to expire" win-back could never fire for them
+  // (its #1 cause of missed sends). Snapshotting whatever finished (>=5) means
+  // nearly every non-buyer now has a resume link the win-back can use.
   useEffect(() => {
-    if (readyCount < TOTAL_HEADSHOTS) return;
+    if (readyCount < TOTAL_HEADSHOTS - 1) return;
     const addr = email.trim();
     if (!addr) return;
     const flagKey = `gh_ready_emailed_${addr.toLowerCase()}`;
