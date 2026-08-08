@@ -43,7 +43,7 @@ const SITE_URL = "https://generationheadshots.com";
 const MIN_AGE_MS =
   Number(process.env.FOLLOWUP_MIN_AGE_HOURS ?? "12") * 60 * 60 * 1000;
 const MAX_AGE_MS =
-  Number(process.env.FOLLOWUP_MAX_AGE_HOURS ?? "48") * 60 * 60 * 1000;
+  Number(process.env.FOLLOWUP_MAX_AGE_HOURS ?? "96") * 60 * 60 * 1000;
 const MAX_PER_RUN = Number(process.env.FOLLOWUP_MAX_PER_RUN ?? "40");
 
 // Never email ourselves / the team even if we show up as leads.
