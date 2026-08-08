@@ -10064,13 +10064,12 @@ const FoundViaSurveyModal = ({ onDone }: FoundViaSurveyModalProps) => {
       }}
     >
       <div
-        onClick={(e) => e.stopPropagation()}
         style={{
           background: C.white,
           borderRadius: 16,
           maxWidth: 400,
           width: "100%",
-          padding: "26px 24px",
+          padding: "22px 16px",
           textAlign: "center",
           boxShadow: "0 20px 60px rgba(0,0,0,0.28)",
         }}
@@ -10099,11 +10098,13 @@ const FoundViaSurveyModal = ({ onDone }: FoundViaSurveyModalProps) => {
                 color: C.dark,
                 border: `1px solid ${C.border}`,
                 borderRadius: 10,
-                padding: "11px 14px",
+                padding: "16px 16px",
+                minHeight: 52,
                 fontSize: 14,
                 fontWeight: 500,
                 cursor: "pointer",
                 fontFamily: "inherit",
+                touchAction: "manipulation",
               }}
             >
               {o}
