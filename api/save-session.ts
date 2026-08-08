@@ -66,9 +66,17 @@ export default async function handler(
       hasWideAngle: body.hasWideAngle === true,
     });
     // Link this session's resume token to the lead so the 12-hour win-back
-    // email can point the customer straight back to their saved grid. Best-
-    // effort — never fail the save because the lead write hiccuped. (2026-08-05)
-    void setLeadResumeToken(email, token).catch(() => {});
+    // email can point the customer straight back to their saved grid. MUST be
+    // awaited: a fire-and-forget write here gets killed when Vercel suspends
+    // the function right after the response, which left many leads with a live
+    // saved grid but no lead.resumeToken — so the win-back could never find
+    // them. Awaited + best-effort (a lead-write error still returns the token
+    // so the ready-email link works). (fixed 2026-08-08)
+    try {
+      await setLeadResumeToken(email, token);
+    } catch {
+      /* don't fail the save if the lead write hiccups */
+    }
     res.status(200).json({ ok: true, token });
   } catch (err) {
     console.warn(
