@@ -7376,16 +7376,6 @@ const STUDIO_BGS = [
   // Graduated goldenrod→firetruck-red→dark-red paper sweep (2026-08-01). The
   // dot shows a medium fire-truck red as its representative color.
   { id: "red", color: "#CE2029", label: "Red" },
-  // Rainbow generates 6 different backgrounds instead of the same color six
-  // times — 3 from the above swatches (light grey, dark, blue) plus 3 new
-  // accent colors (warm beige, burgundy, deep teal). Shown as a conic
-  // gradient swatch in the UI so it reads as "all of them" at a glance.
-  {
-    id: "rainbow",
-    color:
-      "conic-gradient(from 0deg, #D3D1C7, #444441, #B5D4F4, #E8D8C0, #8B4049, #2F5C60, #D3D1C7)",
-    label: "Rainbow (all 6 colors)",
-  },
 ] as const;
 
 const ATTIRE = [
@@ -8109,7 +8099,15 @@ const StyleScreen = ({
       {style === "corporate" && (
         <>
           <SectionLabel>Background color</SectionLabel>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(4, 28px)",
+              gap: 16,
+              justifyContent: "start",
+              maxWidth: 240,
+            }}
+          >
             {STUDIO_BGS.map((bg) => (
               <div
                 key={bg.id}

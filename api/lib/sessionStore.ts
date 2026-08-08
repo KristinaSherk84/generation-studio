@@ -6,7 +6,7 @@
  * device — instead of an empty landing page. Backed by the same Upstash Redis
  * as the lead/promo stores.
  *
- * Each saved session lives at key `session:{token}` with a short 48-hour TTL,
+ * Each saved session lives at key `session:{token}` with a 7-day TTL,
  * so temporary preview images don't accumulate. The token is a 24-char
  * unguessable string embedded in the email link (?resume=token).
  *
@@ -34,7 +34,7 @@ export type SavedSession = {
   createdAt: string;
 };
 
-const TTL_SECONDS = 48 * 60 * 60; // 48 hours
+const TTL_SECONDS = 4 * 24 * 60 * 60; // 4 days (safe cushion; win-back fires ~12h after generation, so the resume link is always alive)
 const key = (token: string) => `session:${token}`;
 
 const TOKEN_ALPHABET =

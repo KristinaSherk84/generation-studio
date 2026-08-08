@@ -43,7 +43,7 @@ const SITE_URL = "https://generationheadshots.com";
 const MIN_AGE_MS =
   Number(process.env.FOLLOWUP_MIN_AGE_HOURS ?? "12") * 60 * 60 * 1000;
 const MAX_AGE_MS =
-  Number(process.env.FOLLOWUP_MAX_AGE_DAYS ?? "7") * 24 * 60 * 60 * 1000;
+  Number(process.env.FOLLOWUP_MAX_AGE_HOURS ?? "48") * 60 * 60 * 1000;
 const MAX_PER_RUN = Number(process.env.FOLLOWUP_MAX_PER_RUN ?? "40");
 
 // Never email ourselves / the team even if we show up as leads.
@@ -161,8 +161,8 @@ export default async function handler(
       eligibleCount: eligible.length,
       eligibleEmails: eligible.map((l) => l.email),
       note: `Would email these on a real run (min ${MIN_AGE_MS / 3.6e6}h / max ${
-        MAX_AGE_MS / 8.64e7
-      }d since last generation).`,
+        MAX_AGE_MS / 3.6e6
+      }h since last generation).`,
     });
   }
 
