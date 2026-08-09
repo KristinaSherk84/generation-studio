@@ -865,11 +865,13 @@ function buildBlock8(
   // the first flavor, the first image the customer sees). The post-hoc
   // identity auto-regen can't be relied on in production (face-descriptor is
   // slow/flaky on serverless and often no-ops), so we strengthen identity at
-  // GENERATION time for the one slot that matters most. (2026-08-07 per Kristi)
+  // GENERATION time on EVERY slot (extra emphasis on the hero/first shot).
+  // (2026-08-08 per Kristi — a user reported a non-hero slot coming back as
+  // someone else, plus invented moles; the lock now forbids inventing marks.)
   const heroIdentityAnchor =
     variationIndex === 0
-      ? `\n\nHERO-SHOT LIKENESS LOCK (this is the FIRST image the customer sees, so likeness matters most here): Re-examine the reference photos and reproduce THIS EXACT person — their precise face shape, bone structure, eye shape, size, spacing and color, eyebrow shape, nose width and bridge, lip shape, jawline, chin, hairline, and every mole, freckle, or distinguishing mark. The result must be instantly recognizable as the same individual. Hold likeness above expression, pose, and styling for this image.`
-      : "";
+      ? `\n\nHERO-SHOT LIKENESS LOCK (this is the FIRST image the customer sees, so likeness matters most here): Re-examine the reference photos and reproduce THIS EXACT person — their precise face shape, bone structure, eye shape, size, spacing and color, eyebrow shape, nose width and bridge, lip shape, jawline, chin, hairline, and every mole, freckle, or distinguishing mark that IS present in the references (and invent NONE that are not). The result must be instantly recognizable as the same individual. Hold likeness above expression, pose, and styling for this image.`
+      : `\n\nLIKENESS LOCK: Re-examine the reference photos and reproduce THIS EXACT person — their precise face shape, bone structure, eye shape, size, spacing and color, eyebrow shape, nose width and bridge, lip shape, jawline, chin, hairline, and every mole, freckle, or distinguishing mark that IS present in the references (and invent NONE that are not — do not add moles, freckles, or spots the references do not show). The result must be instantly recognizable as the same individual, not a look-alike. Hold likeness above expression, pose, and styling.`;
 
   return `Photograph direction for this single image:
 - Expression: ${flavor.expression}. Eyes must look alert, engaged, activated, and realistic — never blank, glazed or expressionless. REFERENCE TEETH CHECK (applies to THIS image regardless of the expression wording above): Inspect every reference photo for visible teeth before deciding what kind of smile to render. If NO reference photo shows any visible teeth, render a CLOSED-MOUTH smile that matches the lip style shown in the references — lips together, no upper teeth, no lower teeth, no gap between the lips — even if the expression wording above said "open smile," "teeth-showing," or "bright." Reference fidelity wins over the expression wording. AI-generated teeth on a subject who shows no teeth in references produce uncanny, "AI-tell" output that fails the headshot.
