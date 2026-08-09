@@ -9113,7 +9113,10 @@ const GridScreen = ({
           textAlign: "right",
         }}
       >
-        Regenerations used: {regenCount} / {maxRegens}
+        Regenerations used:{" "}
+        {maxRegens >= 9999
+          ? `${regenCount} · unlimited`
+          : `${regenCount} / ${maxRegens}`}
       </div>
 
       {/* Inline error banner — appears when a per-slot regenerate API call
@@ -13246,7 +13249,7 @@ export default function App() {
   // Budget of individual-photo regenerations per session. Previously this was
   // 2 bulk-regens (~12 API calls worth); individual regens are cheaper so we
   // give users 6 single swaps, which is the same total cost ceiling at most.
-  const MAX_SINGLE_REGENS = 12; // doubled 6->12 (2026-08-08 per Kristi)
+  const MAX_SINGLE_REGENS = 9999; // effectively UNLIMITED single regens for unlocked/paid users (2026-08-08 per Kristi)
   // Phase 4 (2026-06-03). Cap on FULL 6-image batches the customer can
   // fire in one session. The first one (after upload+style) counts as
   // batch #1; each "Back to style → Generate" cycle counts as another.
@@ -13259,7 +13262,7 @@ export default function App() {
   // a friendly "you've hit the limit, check out with your saved picks"
   // modal. Cart contents are preserved across the gate so the customer
   // can still complete a purchase.
-  const MAX_FULL_BATCHES = 12; // doubled 6->12 (2026-08-08 per Kristi)
+  const MAX_FULL_BATCHES = 8; // full 6-image batches per session (6->8, 2026-08-08 per Kristi)
   const [batchesUsed, setBatchesUsed] = useState(0);
   // True when the customer arrived via the "ready to view" email resume
   // link to VIEW a saved grid. Such sessions get only MAX_FREE_REGENS (2)
