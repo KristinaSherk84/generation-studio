@@ -13620,6 +13620,15 @@ export default function App() {
         if (d.selections) setLastSelections(d.selections);
         setLastHasWideAngle(!!d.hasWideAngle);
         setResumedFromEmail(true);
+        // A resume-link visitor already had their free batch (that's why a
+        // saved grid exists to restore). The batch counter normally resets to
+        // 0 on this fresh page load, which would hand them a whole new free
+        // 6-image round just for clicking the "ready to view" email link — the
+        // free-batch leak. Mark the free batch as already spent so Generate
+        // goes straight to the $2.99 wall. Paid users are gated by isUnlocked,
+        // not this counter, so they're unaffected; single regens keep their
+        // 2-free-on-resume nudge. (2026-08-09 per Kristi)
+        setBatchesUsed(1);
         setScreen("grid");
       } catch {
         /* best-effort — on failure they simply see the landing page */
