@@ -213,6 +213,40 @@ function newBatchId(): string {
   }
 }
 
+// Stagger delay that resolves EARLY the moment the browser tab is hidden.
+// Background tabs heavily throttle setTimeout, which stalls the staggered
+// generation starts — so a customer who switches tabs mid-generation ends up
+// with a batch that never finishes and never sends the "ready to view" email.
+// In-flight fetches are NOT throttled, so when the tab goes hidden we drop the
+// remaining stagger and let the outstanding calls fire immediately; they run
+// to completion in the background. (2026-08-09 per Kristi — observed a lead
+// stall at 1/6 after tabbing away.)
+function staggerDelay(ms: number): Promise<void> {
+  return new Promise<void>((resolve) => {
+    if (typeof document !== "undefined" && document.hidden) {
+      resolve();
+      return;
+    }
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVis);
+      }
+      resolve();
+    };
+    const timer = setTimeout(finish, ms);
+    const onVis = () => {
+      if (typeof document !== "undefined" && document.hidden) finish();
+    };
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", onVis);
+    }
+  });
+}
+
 function readUnlockRequestFields(): {
   stripeSessionId?: string;
   promoCode?: string;
@@ -14936,7 +14970,7 @@ export default function App() {
       // collects them in parallel — we're just delaying the START of the
       // network request, not blocking the array map.
       if (index > 0) {
-        await new Promise((resolve) => setTimeout(resolve, index * STAGGER_MS));
+        await staggerDelay(index * STAGGER_MS);
       }
       try {
         const response = await fetch("/api/generate", {
@@ -15152,7 +15186,7 @@ export default function App() {
     await Promise.all(
       configs.map(async (c, i) => {
         if (i > 0) {
-          await new Promise((res) => setTimeout(res, i * WC_STAGGER_MS));
+          await staggerDelay(i * WC_STAGGER_MS);
         }
         try {
           const response = await fetch("/api/generate", {
