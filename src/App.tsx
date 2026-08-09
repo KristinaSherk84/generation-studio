@@ -14499,13 +14499,19 @@ export default function App() {
   // reloads / new batches don't re-send. Every step is best-effort: if the
   // upload/save fails, the email still goes out linking to the site.
   //
-  // Fire at TOTAL_HEADSHOTS - 1 (5 of 6), NOT a strict 6/6 (2026-08-08). The
-  // Preview model 503s mean batches often land 5/6, and the old strict gate
-  // meant those sessions saved NO grid and got NO resume token — so the 12h
-  // "your headshots are about to expire" win-back could never fire for them
-  // (its #1 cause of missed sends). Snapshotting whatever finished (>=5) means
-  // nearly every non-buyer now has a resume link the win-back can use.
+  // Fire once the batch has SETTLED (all 6 initial calls have returned) with
+  // at least 5 successes — NOT at a bare 5/6 while the 6th is still generating.
+  // Firing early saved a 5-shot grid, so the resume email showed an errored
+  // 6th slot. Waiting for settle means the saved grid holds every shot that
+  // made it: 6 normally, or 5 only if a slot genuinely failed (correct — that
+  // slot errored anyway), which still yields a resume token so the 12h
+  // win-back can reach that non-buyer. (2026-08-08)
   useEffect(() => {
+    // Never re-fire on a restored (resume-link) session — it already has its
+    // grid + token, and re-running would re-send the ready email.
+    if (resumedFromEmail) return;
+    // Wait for every initial call to return before snapshotting.
+    if (initialBatchInFlight.size > 0) return;
     if (readyCount < TOTAL_HEADSHOTS - 1) return;
     const addr = email.trim();
     if (!addr) return;
@@ -14576,7 +14582,7 @@ export default function App() {
         body: JSON.stringify({ email: addr, resumeToken }),
       }).catch(() => {});
     })();
-  }, [readyCount, email]);
+  }, [readyCount, email, initialBatchInFlight, resumedFromEmail]);
 
   // Transition handler from Grid → Retouch (replaces the previous
   // Grid → Checkout direct jump). Pre-fills retouchTiers for any newly
