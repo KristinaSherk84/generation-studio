@@ -7707,17 +7707,11 @@ const StyleScreen = ({
   batchesUsed,
   maxBatches,
 }: StyleScreenProps) => {
-  // Default to "corporate" so the background-color swatches appear on screen
-  // mount without an extra click (2026-05-22). The studio background picker
-  // only renders when style === "corporate", so pre-selecting it surfaces
-  // Kristi's customer's most likely first step.
-  //
-  // If an entry-specialty default was passed (e.g. healthcare-vertical user),
-  // honor it instead so the customer lands on the right preselection.
-  // Default style is Urban Industrial (2026-08-03, Kristi) — falls back to it
-  // for general landing entries; /healthcare entries still pre-pick Healthcare
-  // via the defaultStyle prop.
-  const [style, setStyle] = useState<string | null>(defaultStyle ?? "urban");
+  // Default style is EXECUTIVE (2026-08-10, Kristi) for general landing
+  // entries. If an entry-specialty default was passed (e.g. a /healthcare
+  // vertical user gets "healthcare"), honor that instead so the customer
+  // lands on the right preselection.
+  const [style, setStyle] = useState<string | null>(defaultStyle ?? "executive");
   // Paper/color (corporate) background default = the graduated dark-grey
   // spotlight swatch (id "dark"), per Kristi 2026-08-07.
   const [background, setBackground] = useState<string>("dark");
