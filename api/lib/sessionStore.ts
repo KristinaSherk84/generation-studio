@@ -66,3 +66,31 @@ export async function getSession(token: string): Promise<SavedSession | null> {
     return null;
   }
 }
+
+/**
+ * Replace ONE slot's image URL in an already-saved session, keeping every
+ * other field intact, and refresh the TTL. Used by /api/update-session so a
+ * per-slot regeneration done from the "ready to view" resume link STICKS when
+ * the link is reopened (e.g. fixing a bad-likeness shot before the customer
+ * sees it). Returns false if the session is gone/expired or the input is bad.
+ */
+export async function updateSessionSlot(
+  token: string,
+  index: number,
+  url: string,
+): Promise<boolean> {
+  if (!token || !/^[A-Za-z0-9]{16,48}$/.test(token)) return false;
+  if (!Number.isInteger(index) || index < 0 || index > 7) return false;
+  if (typeof url !== "string" || !/^https?:\/\//.test(url)) return false;
+  let rec: SavedSession | null;
+  try {
+    rec = (await redis.get<SavedSession>(key(token))) ?? null;
+  } catch {
+    return false;
+  }
+  if (!rec || !Array.isArray(rec.generatedUrls)) return false;
+  if (index >= rec.generatedUrls.length) return false;
+  rec.generatedUrls[index] = url;
+  await redis.set(key(token), rec, { ex: TTL_SECONDS });
+  return true;
+}

@@ -13309,6 +13309,10 @@ export default function App() {
   // link to VIEW a saved grid. Such sessions get only MAX_FREE_REGENS (2)
   // single regens, never a fresh full budget (Kristi 2026-08-04).
   const [resumedFromEmail, setResumedFromEmail] = useState(false);
+  // Holds the resume token when the customer arrived via the "ready to view"
+  // email link, so a per-slot regen can be persisted back onto the saved grid
+  // (see handleRegenerateSlot) and thus STICK when the link is reopened.
+  const resumeTokenRef = useRef<string | null>(null);
   const [showRegenLimitModal, setShowRegenLimitModal] = useState(false);
 
   // Guard against the #1 cause of "all generations failed": the customer
@@ -13661,6 +13665,9 @@ export default function App() {
         if (d.selections) setLastSelections(d.selections);
         setLastHasWideAngle(!!d.hasWideAngle);
         setResumedFromEmail(true);
+        // Remember the token so a damage-control regen can be written back to
+        // this same saved grid (below).
+        resumeTokenRef.current = token;
         // A resume-link visitor already had their free batch (that's why a
         // saved grid exists to restore). The batch counter normally resets to
         // 0 on this fresh page load, which would hand them a whole new free
@@ -14743,6 +14750,37 @@ export default function App() {
         next[index] = data.image;
         return next;
       });
+      // Make the regen STICK on the saved "ready to view" grid. Only for
+      // resume-link sessions (that's the only time we hold a token). The
+      // generate endpoint returns a base64 data URL, so upload it to Blob for
+      // a durable https URL, then patch just this slot. Fully best-effort and
+      // in the background — the on-screen regen already updated above.
+      if (resumeTokenRef.current) {
+        const tok = resumeTokenRef.current;
+        const newImg = data.image;
+        void (async () => {
+          try {
+            let url = newImg;
+            if (!/^https?:\/\//.test(url)) {
+              const file = dataUrlToFile(newImg, `regen-${index + 1}.jpg`);
+              if (!file) return;
+              const result = await upload(
+                `session/${Date.now()}-regen-${index}-${file.name}`,
+                file,
+                { access: "public", handleUploadUrl: "/api/upload" },
+              );
+              url = result.url;
+            }
+            await fetch("/api/update-session", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ token: tok, index, url }),
+            });
+          } catch {
+            /* best-effort — the customer still sees the new shot on screen */
+          }
+        })();
+      }
     } catch (err) {
       // Surface a visible error AND refund the regen budget — Gemini charged
       // us regardless, but charging the user a regen budget for a failure
