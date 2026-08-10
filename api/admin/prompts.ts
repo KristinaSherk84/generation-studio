@@ -38,9 +38,9 @@ function esc(v: string): string {
 const RECIPE_DIMS: { key: string; label: string; options: string[] }[] = [
   { key: "style", label: "Style", options: ["corporate", "creative", "executive", "urban", "healthcare"] },
   { key: "background", label: "Background", options: ["white", "lightgrey", "dark", "black", "blue", "bluebright", "green", "red"] },
-  { key: "lighting", label: "Lighting", options: ["studio", "natural", "dramatic", "golden"] },
+  { key: "lighting", label: "Lighting", options: ["studio", "dramatic", "golden"] },
   { key: "attire", label: "Attire", options: ["formal", "casual", "keep", "medical"] },
-  { key: "skin", label: "Skin", options: ["realistic", "polished", "glam"] },
+  { key: "skin", label: "Skin", options: ["realistic"] },
 ];
 const DEFAULT_RECIPE: Record<string, string> = {
   style: "executive",
@@ -108,6 +108,7 @@ export default async function handler(
         .filter((m) => m.group === g)
         .map((m) => {
           const def = catalog.defaults[m.key] ?? "";
+          const alwaysOn = g.startsWith("Retouch");
           const ov = overrides[m.key];
           const isOverridden = typeof ov === "string" && ov.trim().length > 0;
           const value = isOverridden ? ov : def;
@@ -117,7 +118,7 @@ export default async function handler(
             ? `<span class="badge edited">Edited</span>`
             : `<span class="badge def">Default</span>`;
           return `
-        <div class="card" data-key="${esc(m.key)}" data-fires='${firesAttr}'>
+        <div class="card" data-key="${esc(m.key)}" data-fires='${firesAttr}'${alwaysOn ? ' data-always="1"' : ''}>
           <div class="chead">
             <div class="ctitle">${esc(m.label)} ${badge}</div>
             <div class="ckey">${esc(m.key)}</div>
@@ -190,6 +191,7 @@ export default async function handler(
   var recipe=${JSON.stringify(DEFAULT_RECIPE)};
   function applyGrey(){
     document.querySelectorAll('.card').forEach(function(c){
+      if(c.getAttribute('data-always')==='1'){c.classList.remove('dim-off');return;}
       var f={};try{f=JSON.parse(c.getAttribute('data-fires')||'{}')}catch(e){}
       var active=true;
       for(var k in f){ if(f[k]!==recipe[k]){active=false;break;} }
