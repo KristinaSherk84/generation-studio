@@ -14949,24 +14949,27 @@ export default function App() {
     // starts later) but slot 6 actually completes instead of timing out.
     // Net user-visible latency is similar or better because we no longer
     // wait through 2-3 minutes of failed retries.
-    // Count this batch against the customer's lead (drives the est. generation
-    // cost on the admin leads page) and refresh lastSeenAt. Fires once per
-    // actual 6-image batch, AFTER all the gates above, so generateCount tracks
-    // real generation activity (and real spend). Fire-and-forget. (2026-08-03)
-    {
-      const leadEmail = (emailOverride ?? email).trim();
-      if (leadEmail) {
-        try {
-          void fetch("/api/lead", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email: leadEmail, source: "generate" }),
-          }).catch(() => {});
-        } catch {
-          /* lead capture must never block generation */
-        }
+    // Count this batch against the customer's lead (drives GENS + est. cost on
+    // the admin leads page) — but ONLY once at least one image actually comes
+    // back. Fired from the first successful call below via countBatchOnce().
+    // Previously this fired up front, so a paywall-blocked batch (all 402s, $0
+    // cost) or a fully-failed batch still bumped GENS/Est.$ and made the leads
+    // page over-report. (2026-08-10 per Kristi)
+    const leadEmail = (emailOverride ?? email).trim();
+    let leadCounted = false;
+    const countBatchOnce = () => {
+      if (leadCounted || !leadEmail) return;
+      leadCounted = true;
+      try {
+        void fetch("/api/lead", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: leadEmail, source: "generate" }),
+        }).catch(() => {});
+      } catch {
+        /* lead capture must never block generation */
       }
-    }
+    };
 
     const STAGGER_MS = 5000;
     const calls = Array.from({ length: TOTAL_HEADSHOTS }, async (_, index) => {
@@ -15039,6 +15042,7 @@ export default function App() {
           return next;
         });
         setReadyCount((n) => n + 1);
+        countBatchOnce(); // count the batch only now that a real image landed
         return data.image;
       } catch {
         // Swallow per-call errors — we'll surface them only if ALL 6 fail.
