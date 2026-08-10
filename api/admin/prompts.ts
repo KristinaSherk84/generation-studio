@@ -15,11 +15,15 @@
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import {
-  getPromptCatalog,
   getPromptOverrides,
   setPromptOverride,
   resetPromptOverride,
 } from "../lib/promptStore.js";
+import { PROMPT_DEFAULTS, PROMPT_SEGMENTS } from "../generate.js";
+import {
+  RETOUCH_PROMPT_DEFAULTS,
+  RETOUCH_PROMPT_SEGMENTS,
+} from "../lib/retouchPrompts.js";
 
 export const maxDuration = 15;
 
@@ -79,18 +83,15 @@ export default async function handler(
     return;
   }
 
-  const catalog = await getPromptCatalog();
+  // Read the block list DIRECTLY from the deployed code (no Redis seed step),
+  // so the editor is always in sync the instant a deploy finishes — no need to
+  // generate a headshot first. Overrides still layer on top per segment.
+  const catalog = {
+    defaults: { ...PROMPT_DEFAULTS, ...RETOUCH_PROMPT_DEFAULTS },
+    meta: [...PROMPT_SEGMENTS, ...RETOUCH_PROMPT_SEGMENTS],
+    updatedAt: "live (read directly from deployed code)",
+  };
   const overrides = await getPromptOverrides();
-
-  if (!catalog) {
-    res.setHeader("Content-Type", "text/html; charset=utf-8");
-    res.status(200).send(
-      `<!doctype html><meta charset="utf-8"><body style="font:16px system-ui;max-width:640px;margin:60px auto;padding:0 20px;color:#2C2C2A">
-       <h2>Prompt editor — initializing</h2>
-       <p>The editor reads its segment list from the live generator, which seeds it on first run. Generate one headshot on the site (or wait a minute for the next visitor), then reload this page.</p></body>`,
-    );
-    return;
-  }
 
   const groups: string[] = [];
   const seen = new Set<string>();

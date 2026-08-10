@@ -858,7 +858,7 @@ const REFERENCE_PHOTO_RULE_DEFAULT = `REFERENCE PHOTO USAGE RULE: The uploaded r
 const FINAL_IDENTITY_CHECK_DEFAULT = `FINAL IDENTITY CHECK (most important rule in this entire prompt): Above all else, the face in this output must look UNMISTAKABLY like the person in the reference photos — same face shape, same bone structure, same eye shape, spacing and color, same nose width and bridge, same mouth and lips, same jawline and chin, same hairline, same ethnicity, same distinguishing marks, same natural asymmetries. Before finalizing, compare your face to the reference faces feature by feature — eye spacing, nose width, lip shape, overall face width, jaw, chin, and any asymmetry — and correct any feature that has drifted toward a more generic, more symmetrical, or more conventionally attractive shape. The single most common failure is quietly averaging the face toward a good-looking stranger — do NOT do this. If the generated face wouldn't be recognized instantly by a friend or family member, you have failed this image. The style, lighting, and outfit directives above NEVER override identity. Do NOT default to a generic professional-headshot face. Do NOT blend toward stock-photo proportions. This is THIS SPECIFIC PERSON in a new setting, not a generic professional in their general age and ethnic range.`;
 const OUTPUT_CONSTRAINT_DEFAULT = `IMPORTANT OUTPUT CONSTRAINT: Return exactly ONE single photograph. Do NOT return a grid, contact sheet, collage, multi-panel image, side-by-side comparison, or any composition containing more than one headshot. One photo only.`;
 
-const PROMPT_DEFAULTS: Record<string, string> = {
+export const PROMPT_DEFAULTS: Record<string, string> = {
   identity: BLOCK_1_IDENTITY,
   under_eye: BLOCK_UNDER_EYE,
   skin_polished: BLOCK_SKIN_POLISHED,
@@ -903,7 +903,7 @@ const PROMPT_DEFAULTS: Record<string, string> = {
   output_constraint: OUTPUT_CONSTRAINT_DEFAULT,
 };
 
-const PROMPT_SEGMENTS: PromptSegmentMeta[] = [
+export const PROMPT_SEGMENTS: PromptSegmentMeta[] = [
   { key: "identity", label: "Identity (Block 1)", group: "Core", fires: {} },
   { key: "composition", label: "Composition / framing", group: "Core", fires: {} },
   { key: "eyewear", label: "Eyewear", group: "Core", fires: {} },
@@ -939,8 +939,6 @@ const PROMPT_SEGMENTS: PromptSegmentMeta[] = [
   { key: "identity_lock_hero", label: "Likeness lock — hero (slot 1)", group: "Identity", fires: {}, note: "Only the first slot." },
   { key: "identity_lock_all", label: "Likeness lock — other slots", group: "Identity", fires: {}, note: "Slots 2-6." },
   { key: "final_identity_check", label: "Final identity check", group: "Identity", fires: {} },
-  { key: "skin_fidelity_anchor", label: "Skin fidelity anchor", group: "Skin", fires: {}, note: "Women on Polished or Glam." },
-  { key: "glam_override", label: "Glam final override", group: "Skin", fires: { skin: "glam" } },
   { key: "reference_photo_rule", label: "Reference-photo usage rule", group: "Core", fires: {} },
   { key: "output_constraint", label: "Output constraint (one photo)", group: "Core", fires: {} },
 ];
