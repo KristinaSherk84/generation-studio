@@ -236,6 +236,12 @@ export default async function handler(
     const revenueUsd = stripePayments ? stripePayments.total : null;
     const paidFor = (email: string) =>
       paidByEmail[email.trim().toLowerCase()] ?? 0;
+    // What to show in the Paid column: the Stripe amount matched by checkout
+    // email, OR the $2.99 generation unlock we recorded against the email they
+    // generated under (covers the "paid under a different email" case). Whichever
+    // is larger — never summed, so a same-email unlock isn't double-counted.
+    const paidShown = (l: { email: string; entryUnlockUsd?: number | null }) =>
+      Math.max(paidFor(l.email), l.entryUnlockUsd ?? 0);
 
     // ---- CSV download branch ----
     if (format === "csv") {
@@ -258,7 +264,7 @@ export default async function handler(
           formatET(l.lastSeenAt),
           l.generateCount,
           ((l.generateCount ?? 0) * GEN_BATCH_COST_USD).toFixed(2),
-          paidFor(l.email).toFixed(2),
+          paidShown(l).toFixed(2),
           l.purchased,
           formatET(l.purchasedAt),
           l.followedUp,
@@ -323,7 +329,7 @@ export default async function handler(
         <td class="num">${esc(l.generateCount)}</td>
         <td class="num">${esc(fmtUsd(estCost(l)))}</td>
         <td class="num">${
-          paidFor(l.email) > 0 ? esc(fmtUsd(paidFor(l.email))) : "—"
+          paidShown(l) > 0 ? esc(fmtUsd(paidShown(l))) : "—"
         }</td>
         <td class="status">${
           l.purchased

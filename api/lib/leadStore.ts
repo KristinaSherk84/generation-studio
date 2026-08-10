@@ -55,6 +55,11 @@ export type LeadRecord = {
   // win-back email can link the customer straight back to their saved grid
   // (?resume=token). Null/absent for old leads or ones that never saved.
   resumeToken?: string | null;
+  // Dollars the customer paid for the $2.99 generation UNLOCK (not a download
+  // purchase), recorded against the email they GENERATED under — so the leads
+  // page can show it in Paid even when they later check out under a different
+  // email (Stripe-by-email match would otherwise miss it). (2026-08-10)
+  entryUnlockUsd?: number | null;
 };
 
 const KEY_PREFIX = "lead:";
@@ -170,6 +175,25 @@ export async function setLeadFoundVia(
   const existing = (await redis.get<LeadRecord>(key)) ?? null;
   if (!existing) return;
   await redis.set(key, { ...existing, foundVia: foundVia.slice(0, 60) });
+}
+
+/**
+ * Record that this lead paid the $2.99 generation unlock, against the email
+ * they generated under. Attribute-only (never bumps generateCount). Keeps the
+ * largest amount seen so a re-pay can't lower it. No-op if the lead is missing.
+ * (2026-08-10)
+ */
+export async function markLeadEntryUnlock(
+  email: string,
+  usd: number,
+): Promise<void> {
+  if (!looksLikeEmail(email)) return;
+  if (!Number.isFinite(usd) || usd <= 0) return;
+  const key = recordKey(email);
+  const existing = (await redis.get<LeadRecord>(key)) ?? null;
+  if (!existing) return;
+  const prev = existing.entryUnlockUsd ?? 0;
+  await redis.set(key, { ...existing, entryUnlockUsd: Math.max(prev, usd) });
 }
 
 /** Return every lead record, newest-first. Used by the admin export. */

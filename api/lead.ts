@@ -14,7 +14,12 @@
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { recordLead, setLeadFoundVia, looksLikeEmail } from "./lib/leadStore.js";
+import {
+  recordLead,
+  setLeadFoundVia,
+  markLeadEntryUnlock,
+  looksLikeEmail,
+} from "./lib/leadStore.js";
 
 export const maxDuration = 10;
 
@@ -31,11 +36,26 @@ export default async function handler(
     email?: unknown;
     source?: unknown;
     foundVia?: unknown;
+    entryUnlockUsd?: unknown;
   };
   const email = typeof body.email === "string" ? body.email.trim() : "";
 
   if (!looksLikeEmail(email)) {
     res.status(400).json({ ok: false, reason: "invalid_email" });
+    return;
+  }
+
+  // $2.99 generation-unlock payment — attribute update only (never a new
+  // generation). Recorded against the email they generated under so the leads
+  // page shows it in Paid even if they check out under a different email.
+  if (typeof body.entryUnlockUsd === "number" && body.entryUnlockUsd > 0) {
+    try {
+      await markLeadEntryUnlock(email, Math.min(body.entryUnlockUsd, 999));
+      res.status(200).json({ ok: true });
+    } catch (err) {
+      console.error("[lead] markLeadEntryUnlock failed:", err);
+      res.status(200).json({ ok: false, reason: "store_error" });
+    }
     return;
   }
 

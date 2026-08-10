@@ -13963,6 +13963,25 @@ export default function App() {
     }
     setUnlockExpiresAt(expiresAt);
     setIsUnlocked(true);
+    // Record the $2.99 generation unlock against the email they generated
+    // under (React state if present, else the persisted copy from before the
+    // Stripe redirect) so the leads page shows $2.99 in Paid — even when they
+    // checked out under a different email. Best-effort; never blocks. (2026-08-10)
+    let genLeadEmail = email.trim();
+    if (!genLeadEmail && typeof window !== "undefined") {
+      try {
+        genLeadEmail = window.localStorage.getItem("gen_lead_email") || "";
+      } catch {
+        genLeadEmail = "";
+      }
+    }
+    if (genLeadEmail) {
+      void fetch("/api/lead", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: genLeadEmail, entryUnlockUsd: 2.99 }),
+      }).catch(() => {});
+    }
   };
 
   // Mark unlocked via promo. Saves the code so /api/generate can verify
@@ -15150,6 +15169,16 @@ export default function App() {
     // cost) or a fully-failed batch still bumped GENS/Est.$ and made the leads
     // page over-report. (2026-08-10 per Kristi)
     const leadEmail = (emailOverride ?? email).trim();
+    // Persist the email they GENERATED under so we can still attribute the
+    // $2.99 unlock to it after the Stripe redirect wipes React state, even if
+    // they type a different email at checkout. (2026-08-10)
+    if (leadEmail && typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem("gen_lead_email", leadEmail);
+      } catch {
+        /* private mode — fine, we just fall back to React state */
+      }
+    }
     let leadCounted = false;
     const countBatchOnce = () => {
       if (leadCounted || !leadEmail) return;
