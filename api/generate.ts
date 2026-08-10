@@ -846,6 +846,14 @@ const SLOT_TOUCHUP_DEFAULT: Record<number, string> = {
   4: SLOT_SKIN_SMOOTHING,
 };
 
+const SKIN_FIDELITY_ANCHOR_DEFAULT = `FINAL SKIN FIDELITY ANCHOR: Match the reference photos' actual skin condition around the eyes. If the references show smooth, well-rested skin around the eyes, the generated photograph renders smooth, well-rested skin around the eyes. Do not add fine lines, shadows, or signs of fatigue that aren't visible in the references.`;
+const GLAM_OVERRIDE_DEFAULT = `GLAM-TIER FINAL OVERRIDE: The expression above creates a warm, engaged, smiling subject — preserve that 100%. The skin around the eyes renders editorial-flawless: soft, smooth, luminous, magazine-beauty-shot quality. The smile-eyes warmth comes ENTIRELY from cheek lift, slight squint, eye sparkle, and catchlights. Think Vogue cover.`;
+const IDENTITY_LOCK_HERO_DEFAULT = `HERO-SHOT LIKENESS LOCK (this is the FIRST image the customer sees, so likeness matters most here): Re-examine the reference photos and reproduce THIS EXACT person — their precise face shape, bone structure, eye shape, size, spacing and color, eyebrow shape, nose width and bridge, lip shape, jawline, chin, hairline, and every mole, freckle, or distinguishing mark that IS present in the references (and invent NONE that are not). The result must be instantly recognizable as the same individual. Hold likeness above expression, pose, and styling for this image.`;
+const IDENTITY_LOCK_ALL_DEFAULT = `LIKENESS LOCK: Re-examine the reference photos and reproduce THIS EXACT person — their precise face shape, bone structure, eye shape, size, spacing and color, eyebrow shape, nose width and bridge, lip shape, jawline, chin, hairline, and every mole, freckle, or distinguishing mark that IS present in the references (and invent NONE that are not — do not add moles, freckles, or spots the references do not show). The result must be instantly recognizable as the same individual, not a look-alike. Hold likeness above expression, pose, and styling.`;
+const REFERENCE_PHOTO_RULE_DEFAULT = `REFERENCE PHOTO USAGE RULE: The uploaded reference photos are provided ONLY so you can learn the subject's facial likeness — face shape, features, hair, skin tone. You MUST NOT copy, sample, or draw inspiration from the reference photos' backgrounds, environments, colors, lighting, or scenes. The new photograph's background and lighting come ENTIRELY from the direction in the prompt above — ignore anything visible behind or around the subject in the reference photos.`;
+const FINAL_IDENTITY_CHECK_DEFAULT = `FINAL IDENTITY CHECK (most important rule in this entire prompt): Above all else, the face in this output must look UNMISTAKABLY like the person in the reference photos — same face shape, same bone structure, same eye shape and color, same nose, same mouth, same hairline, same ethnicity, same distinguishing marks. If the generated face wouldn't be recognized by a friend, or family member, you have failed this image. The style, lighting, and outfit directives above NEVER override identity. Do NOT default to a generic professional-headshot face. Do NOT blend toward stock-photo proportions. This is THIS SPECIFIC PERSON in a new setting, not a generic professional in their general age and ethnic range.`;
+const OUTPUT_CONSTRAINT_DEFAULT = `IMPORTANT OUTPUT CONSTRAINT: Return exactly ONE single photograph. Do NOT return a grid, contact sheet, collage, multi-panel image, side-by-side comparison, or any composition containing more than one headshot. One photo only.`;
+
 const PROMPT_DEFAULTS: Record<string, string> = {
   identity: BLOCK_1_IDENTITY,
   under_eye: BLOCK_UNDER_EYE,
@@ -882,6 +890,13 @@ const PROMPT_DEFAULTS: Record<string, string> = {
   slot_3: SLOT_TOUCHUP_DEFAULT[3] ?? "",
   slot_4: SLOT_TOUCHUP_DEFAULT[4] ?? "",
   slot_5: SLOT_TOUCHUP_DEFAULT[5] ?? "",
+  skin_fidelity_anchor: SKIN_FIDELITY_ANCHOR_DEFAULT,
+  glam_override: GLAM_OVERRIDE_DEFAULT,
+  identity_lock_hero: IDENTITY_LOCK_HERO_DEFAULT,
+  identity_lock_all: IDENTITY_LOCK_ALL_DEFAULT,
+  reference_photo_rule: REFERENCE_PHOTO_RULE_DEFAULT,
+  final_identity_check: FINAL_IDENTITY_CHECK_DEFAULT,
+  output_constraint: OUTPUT_CONSTRAINT_DEFAULT,
 };
 
 const PROMPT_SEGMENTS: PromptSegmentMeta[] = [
@@ -920,6 +935,13 @@ const PROMPT_SEGMENTS: PromptSegmentMeta[] = [
   { key: "slot_3", label: "Slot 4 touch-up", group: "Per-slot touch-ups", fires: {} },
   { key: "slot_4", label: "Slot 5 touch-up (skin smoothing)", group: "Per-slot touch-ups", fires: {} },
   { key: "slot_5", label: "Slot 6 touch-up", group: "Per-slot touch-ups", fires: {} },
+  { key: "identity_lock_hero", label: "Likeness lock — hero (slot 1)", group: "Identity", fires: {}, note: "Only the first slot." },
+  { key: "identity_lock_all", label: "Likeness lock — other slots", group: "Identity", fires: {}, note: "Slots 2-6." },
+  { key: "final_identity_check", label: "Final identity check", group: "Identity", fires: {} },
+  { key: "skin_fidelity_anchor", label: "Skin fidelity anchor", group: "Skin", fires: {}, note: "Women on Polished or Glam." },
+  { key: "glam_override", label: "Glam final override", group: "Skin", fires: { skin: "glam" } },
+  { key: "reference_photo_rule", label: "Reference-photo usage rule", group: "Core", fires: {} },
+  { key: "output_constraint", label: "Output constraint (one photo)", group: "Core", fires: {} },
 ];
 
 function buildBlock8(
@@ -952,12 +974,12 @@ function buildBlock8(
   // match the reference photos rather than auto-inventing texture.
   const womenSkinAnchor =
     skin === "polished" || skin === "glam"
-      ? `\n\nFINAL SKIN FIDELITY ANCHOR: Match the reference photos' actual skin condition around the eyes. If the references show smooth, well-rested skin around the eyes, the generated photograph renders smooth, well-rested skin around the eyes. Do not add fine lines, shadows, or signs of fatigue that aren't visible in the references.`
+      ? "\n\n" + seg("skin_fidelity_anchor", SKIN_FIDELITY_ANCHOR_DEFAULT)
       : "";
 
   const glamUnderEyeOverride =
     skin === "glam"
-      ? `\n\nGLAM-TIER FINAL OVERRIDE: The expression above creates a warm, engaged, smiling subject — preserve that 100%. The skin around the eyes renders editorial-flawless: soft, smooth, luminous, magazine-beauty-shot quality. The smile-eyes warmth comes ENTIRELY from cheek lift, slight squint, eye sparkle, and catchlights. Think Vogue cover.`
+      ? "\n\n" + seg("glam_override", GLAM_OVERRIDE_DEFAULT)
       : "";
 
   // Extra likeness reinforcement for the HERO shot ONLY (variationIndex 0 =
@@ -969,8 +991,8 @@ function buildBlock8(
   // someone else, plus invented moles; the lock now forbids inventing marks.)
   const heroIdentityAnchor =
     variationIndex === 0
-      ? `\n\nHERO-SHOT LIKENESS LOCK (this is the FIRST image the customer sees, so likeness matters most here): Re-examine the reference photos and reproduce THIS EXACT person — their precise face shape, bone structure, eye shape, size, spacing and color, eyebrow shape, nose width and bridge, lip shape, jawline, chin, hairline, and every mole, freckle, or distinguishing mark that IS present in the references (and invent NONE that are not). The result must be instantly recognizable as the same individual. Hold likeness above expression, pose, and styling for this image.`
-      : `\n\nLIKENESS LOCK: Re-examine the reference photos and reproduce THIS EXACT person — their precise face shape, bone structure, eye shape, size, spacing and color, eyebrow shape, nose width and bridge, lip shape, jawline, chin, hairline, and every mole, freckle, or distinguishing mark that IS present in the references (and invent NONE that are not — do not add moles, freckles, or spots the references do not show). The result must be instantly recognizable as the same individual, not a look-alike. Hold likeness above expression, pose, and styling.`;
+      ? "\n\n" + seg("identity_lock_hero", IDENTITY_LOCK_HERO_DEFAULT)
+      : "\n\n" + seg("identity_lock_all", IDENTITY_LOCK_ALL_DEFAULT);
 
   // Per-slot touch-up hook (2026-08-10 per Kristi). Slots 3 & 5
   // (variationIndex 2 & 4) carry a noticeably-polished skin-smoothing pass so
@@ -986,11 +1008,11 @@ function buildBlock8(
 - Framing: ${flavor.crop}.
 ${outfitLine}
 
-REFERENCE PHOTO USAGE RULE: The uploaded reference photos are provided ONLY so you can learn the subject's facial likeness — face shape, features, hair, skin tone. You MUST NOT copy, sample, or draw inspiration from the reference photos' backgrounds, environments, colors, lighting, or scenes. The new photograph's background and lighting come ENTIRELY from the direction in the prompt above — ignore anything visible behind or around the subject in the reference photos.${womenSkinAnchor}${glamUnderEyeOverride}
+${seg("reference_photo_rule", REFERENCE_PHOTO_RULE_DEFAULT)}${womenSkinAnchor}${glamUnderEyeOverride}
 
-FINAL IDENTITY CHECK (most important rule in this entire prompt): Above all else, the face in this output must look UNMISTAKABLY like the person in the reference photos — same face shape, same bone structure, same eye shape and color, same nose, same mouth, same hairline, same ethnicity, same distinguishing marks. If the generated face wouldn't be recognized by a friend, or family member, you have failed this image. The style, lighting, and outfit directives above NEVER override identity. Do NOT default to a generic professional-headshot face. Do NOT blend toward stock-photo proportions. This is THIS SPECIFIC PERSON in a new setting, not a generic professional in their general age and ethnic range.${heroIdentityAnchor}${slotTouchup}
+${seg("final_identity_check", FINAL_IDENTITY_CHECK_DEFAULT)}${heroIdentityAnchor}${slotTouchup}
 
-IMPORTANT OUTPUT CONSTRAINT: Return exactly ONE single photograph. Do NOT return a grid, contact sheet, collage, multi-panel image, side-by-side comparison, or any composition containing more than one headshot. One photo only.`;
+${seg("output_constraint", OUTPUT_CONSTRAINT_DEFAULT)}`;
 }
 
 // -------------------- Prompt assembly --------------------
