@@ -48,10 +48,12 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { GoogleGenAI, type Part } from "@google/genai";
 import {
   buildRetouchPrompt,
+  setActiveRetouchOverrides,
   RETOUCH_MODEL,
   type RetouchSubTier,
   type AgeBand,
 } from "./lib/retouchPrompts.js";
+import { getPromptOverrides } from "./lib/promptStore.js";
 
 // Pro Image Preview is ~10-15s per call typically, up to 30s on a slow
 // worker. 60s gives us headroom for one retry on a single image. The
@@ -219,6 +221,8 @@ export default async function handler(
   }
 
   try {
+    // Apply any live prompt-editor overrides for the retouch prompts.
+    setActiveRetouchOverrides(await getPromptOverrides());
     const prompt = buildRetouchPrompt(body.tier, body.ageBand);
     const { mimeType, data } = parseBase64Input(body.photoBase64);
 

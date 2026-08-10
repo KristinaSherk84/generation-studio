@@ -37,11 +37,13 @@ import { buildShareGraphic } from "./lib/compositeBeforeAfter.js";
 import { markLeadPurchased } from "./lib/leadStore.js";
 import {
   buildRetouchPrompt,
+  setActiveRetouchOverrides,
   RETOUCH_MODEL,
   subTiersForTier,
   type RetouchTier,
   type RetouchSubTier,
 } from "./lib/retouchPrompts.js";
+import { getPromptOverrides } from "./lib/promptStore.js";
 
 // Bumped from 60s → 300s on 2026-05-15 (Path B launch). 2026-05-18 Glow
 // Up Deluxe pivot: now each Deluxe photo fires BOTH Polished and Glam
@@ -723,6 +725,8 @@ async function applyRetouchPass(
       // Age band is unknown server-side (we don't collect age from the
       // customer) — default to "mature" for the more conservative
       // under-eye treatment. Glam ignores the age band entirely.
+      // Apply any live prompt-editor overrides for the retouch prompts.
+      setActiveRetouchOverrides(await getPromptOverrides());
       const prompt = buildRetouchPrompt(subTier, "mature");
       const parts: Part[] = [
         { text: prompt },

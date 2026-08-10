@@ -34,6 +34,10 @@ import {
   seedPromptCatalog,
   type PromptSegmentMeta,
 } from "./lib/promptStore.js";
+import {
+  RETOUCH_PROMPT_DEFAULTS,
+  RETOUCH_PROMPT_SEGMENTS,
+} from "./lib/retouchPrompts.js";
 
 // ---------------- Editable prompt segments (2026-08-10) ----------------
 // activeOverrides is refreshed per request from Redis. seg(key, fallback)
@@ -1763,8 +1767,8 @@ export default async function handler(
     if (!promptCatalogSeeded) {
       promptCatalogSeeded = true;
       void seedPromptCatalog(
-        PROMPT_DEFAULTS,
-        PROMPT_SEGMENTS,
+        { ...PROMPT_DEFAULTS, ...RETOUCH_PROMPT_DEFAULTS },
+        [...PROMPT_SEGMENTS, ...RETOUCH_PROMPT_SEGMENTS],
         new Date().toISOString(),
       );
     }

@@ -22,6 +22,24 @@
 // underlying Polished/Glam prompts still exist below — they're just no
 // longer separately selectable by the customer. Deluxe customers get both.
 // ============================================================================
+import type { PromptSegmentMeta } from "./promptStore.js";
+
+// ---------- Editable retouch overrides (2026-08-10) ----------
+// Loaded per request by the callers (deliver.ts / retouch.ts) via
+// setActiveRetouchOverrides(await getPromptOverrides()) before buildRetouchPrompt.
+// rseg(key, fallback) returns a saved override (non-blank) else the code
+// constant, so with no overrides the retouch prompt is byte-identical.
+let activeRetouchOverrides: Record<string, string> = {};
+export function setActiveRetouchOverrides(
+  ov: Record<string, string> | null | undefined,
+): void {
+  activeRetouchOverrides = ov && typeof ov === "object" ? ov : {};
+}
+function rseg(key: string, fallback: string): string {
+  const ov = activeRetouchOverrides[key];
+  return typeof ov === "string" && ov.trim().length > 0 ? ov : fallback;
+}
+
 export type RetouchTier = "basic" | "deluxe";
 
 // SubTier identifies which retouching pass is being run. Used internally by
@@ -241,6 +259,20 @@ Pore micro-texture preservation - Preserve the 3D micro-texture of the skin surf
  * parallel against the original Realistic photo. This function returns
  * the prompt for a single sub-tier.
  */
+export const RETOUCH_PROMPT_DEFAULTS: Record<string, string> = {
+  retouch_polished_female: RETOUCH_POLISHED_MATURE,
+  retouch_polished_male: RETOUCH_POLISHED_MALE,
+  retouch_glam_female: RETOUCH_GLAM,
+  retouch_glam_male: RETOUCH_GLAM_MALE,
+};
+
+export const RETOUCH_PROMPT_SEGMENTS: PromptSegmentMeta[] = [
+  { key: "retouch_polished_female", label: "Retouch \u00b7 Polished \u2014 female", group: "Retouch (post-purchase)", fires: { skin: "polished" }, note: "Gemini applies this to female-appearing subjects on the Polished pass." },
+  { key: "retouch_polished_male", label: "Retouch \u00b7 Polished \u2014 male", group: "Retouch (post-purchase)", fires: { skin: "polished" }, note: "Gemini applies this to male-appearing subjects on the Polished pass." },
+  { key: "retouch_glam_female", label: "Retouch \u00b7 Glam \u2014 female", group: "Retouch (post-purchase)", fires: { skin: "glam" }, note: "Gemini applies this to female-appearing subjects on the Glam pass." },
+  { key: "retouch_glam_male", label: "Retouch \u00b7 Glam \u2014 male", group: "Retouch (post-purchase)", fires: { skin: "glam" }, note: "Gemini applies this to male-appearing subjects on the Glam pass." },
+];
+
 export function buildRetouchPrompt(
   subTier: RetouchSubTier,
   ageBand: AgeBand | undefined,
@@ -259,13 +291,13 @@ export function buildRetouchPrompt(
     // ageBand — RETOUCH_POLISHED_MATURE, which was already the only one in use
     // (api/deliver.ts always passed "mature"). RETOUCH_POLISHED_YOUNG is kept
     // exported for reference but is no longer selected here.
-    const womensPolished = RETOUCH_POLISHED_MATURE;
+    const womensPolished = rseg("retouch_polished_female", RETOUCH_POLISHED_MATURE);
     return `SUBJECT GENDER ROUTING — evaluate this FIRST, before reading any directive below. Look at the input photo and determine the subject's apparent gender. Then follow ONLY the single matching section below and COMPLETELY IGNORE the other section — do not blend them.
 
 ============================================================
 IF THE SUBJECT APPEARS TO BE A MAN — follow ONLY this section, ignore the WOMAN section entirely:
 ============================================================
-${RETOUCH_POLISHED_MALE}
+${rseg("retouch_polished_male", RETOUCH_POLISHED_MALE)}
 
 ============================================================
 IF THE SUBJECT APPEARS TO BE A WOMAN — follow ONLY this section, ignore the MAN section entirely:
@@ -281,12 +313,12 @@ ${womensPolished}`;
 ============================================================
 IF THE SUBJECT APPEARS TO BE A MAN — follow ONLY this section, ignore the WOMAN section entirely:
 ============================================================
-${RETOUCH_GLAM_MALE}
+${rseg("retouch_glam_male", RETOUCH_GLAM_MALE)}
 
 ============================================================
 IF THE SUBJECT APPEARS TO BE A WOMAN — follow ONLY this section, ignore the MAN section entirely:
 ============================================================
-${RETOUCH_GLAM}`;
+${rseg("retouch_glam_female", RETOUCH_GLAM)}`;
   }
   throw new Error(
     `buildRetouchPrompt called with unexpected sub-tier: ${subTier}`,
