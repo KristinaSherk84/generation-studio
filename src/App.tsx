@@ -10189,11 +10189,39 @@ const LoadingRetouchPreviewModal = ({
   const [retouchRemaining, setRetouchRemaining] = useState(
     RETOUCH_POPUP_LOCK_SECONDS,
   );
+  // Wall-clock unlock (2026-08-10). The old version decremented via a 1s
+  // setTimeout, which browsers THROTTLE in a backgrounded tab — so if the
+  // customer tabbed away while the rest of the batch finished generating, the
+  // countdown froze and the popup stayed locked long past its 8s, refusing to
+  // close when they came back. Now it locks to a real timestamp: a 250ms
+  // interval (plus a visibilitychange catch-up) recomputes the remaining
+  // seconds from the clock, so it unlocks on time no matter how long the tab
+  // was hidden.
+  const unlockAtRef = useRef<number>(
+    Date.now() + RETOUCH_POPUP_LOCK_SECONDS * 1000,
+  );
   useEffect(() => {
-    if (retouchRemaining <= 0) return;
-    const t = setTimeout(() => setRetouchRemaining((r) => r - 1), 1000);
-    return () => clearTimeout(t);
-  }, [retouchRemaining]);
+    const tick = () => {
+      const rem = Math.max(
+        0,
+        Math.ceil((unlockAtRef.current - Date.now()) / 1000),
+      );
+      setRetouchRemaining(rem);
+      return rem;
+    };
+    tick();
+    const id = window.setInterval(() => {
+      if (tick() <= 0) window.clearInterval(id);
+    }, 250);
+    const onVis = () => {
+      if (document.visibilityState === "visible") tick();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, []);
   const retouchLocked = retouchRemaining > 0;
   return (
   <div
