@@ -29,6 +29,23 @@ import { GoogleGenAI } from "@google/genai";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { isCodeActiveForGenerate } from "./lib/promoStore.js";
 import { checkFreeBatchLimit } from "./lib/freeGenLimit.js";
+import {
+  getPromptOverrides,
+  seedPromptCatalog,
+  type PromptSegmentMeta,
+} from "./lib/promptStore.js";
+
+// ---------------- Editable prompt segments (2026-08-10) ----------------
+// activeOverrides is refreshed per request from Redis. seg(key, fallback)
+// returns a saved override when present & non-blank, else the hardcoded
+// fallback — so with NO overrides every prompt is byte-identical to before.
+// Edited live from /api/admin/prompts.
+let activeOverrides: Record<string, string> = {};
+let promptCatalogSeeded = false;
+function seg(key: string, fallback: string): string {
+  const ov = activeOverrides[key];
+  return typeof ov === "string" && ov.trim().length > 0 ? ov : fallback;
+}
 
 // Vercel function-level config. Allow up to 5 minutes for the full 6-image run.
 export const maxDuration = 300;
@@ -379,7 +396,7 @@ function buildBlock3Style(style: Style, variationIndex: number): string {
   // and Corporate also gets a separate user-picked Block 6 background appended
   // later by assemblePrompt.
   if (style === "corporate" || style === "executive") {
-    return BLOCK_3_STYLE_BASE[style];
+    return seg("style_" + style, BLOCK_3_STYLE_BASE[style]);
   }
 
   if (style === "creative") {
@@ -394,25 +411,25 @@ function buildBlock3Style(style: Style, variationIndex: number): string {
       CREATIVE_BG_FALL_TREES,    // 5
     ];
     const bg = creativeBgs[variationIndex] ?? CREATIVE_BG_TREES;
-    return `${BLOCK_3_STYLE_BASE.creative}\n\n${bg}`;
+    return `${seg("style_creative", BLOCK_3_STYLE_BASE.creative)}\n\n${bg}`;
   }
 
   if (style === "urban") {
     // 2 backgrounds × 3 variations each = 3/3 split.
     // Even indices = industrial office, odd = street.
     const bg = variationIndex % 2 === 0 ? URBAN_BG_INDUSTRIAL : URBAN_BG_STREET;
-    return `${BLOCK_3_STYLE_BASE.urban}\n\n${bg}`;
+    return `${seg("style_urban", BLOCK_3_STYLE_BASE.urban)}\n\n${bg}`;
   }
 
   if (style === "healthcare") {
     // 2 backgrounds × 3 variations each = 3/3 split.
     // Even indices = hospital, odd = medical office.
     const bg = variationIndex % 2 === 0 ? HEALTHCARE_BG_HOSPITAL : HEALTHCARE_BG_OFFICE;
-    return `${BLOCK_3_STYLE_BASE.healthcare}\n\n${bg}`;
+    return `${seg("style_healthcare", BLOCK_3_STYLE_BASE.healthcare)}\n\n${bg}`;
   }
 
   // Defensive default — shouldn't be reachable since Style type is exhaustive.
-  return BLOCK_3_STYLE_BASE[style];
+  return seg("style_" + style, BLOCK_3_STYLE_BASE[style]);
 }
 
 const BLOCK_4_ATTIRE_STATIC: Record<Exclude<Attire, "medical">, string> = {
@@ -527,7 +544,7 @@ function buildBlock4Attire(
     const variant = buildMedicalAttireVariant(scrubColor, variationIndex);
     return `Attire: ${variant}\n\n${MEDICAL_GUARDRAILS_RULE}`;
   }
-  return BLOCK_4_ATTIRE_STATIC[attire];
+  return seg("attire_" + attire, BLOCK_4_ATTIRE_STATIC[attire]);
 }
 
 const BLOCK_5_LIGHTING: Record<Lighting, string> = {
@@ -582,18 +599,18 @@ const CORP_BG_NO_ENVIRONMENT = ` STRICT BACKGROUND RULE (overrides any tendency 
 
 function buildBlock6Background(background: Background, variationIndex: number): string {
   if (background !== "rainbow") {
-    return BLOCK_6_BACKGROUND[background] + CORP_BG_NO_ENVIRONMENT;
+    return seg("bg_" + background, BLOCK_6_BACKGROUND[background]) + CORP_BG_NO_ENVIRONMENT;
   }
   const rainbow = [
-    BLOCK_6_BACKGROUND.lightgrey, // 0: light neutral
-    BLOCK_6_BACKGROUND.dark,      // 1: dark neutral
-    BLOCK_6_BACKGROUND.blue,      // 2: cool (dusty blue)
+    seg("bg_lightgrey", BLOCK_6_BACKGROUND.lightgrey), // 0: light neutral
+    seg("bg_dark", BLOCK_6_BACKGROUND.dark),      // 1: dark neutral
+    seg("bg_blue", BLOCK_6_BACKGROUND.blue),      // 2: cool (dusty blue)
     BG_BEIGE,                     // 3: warm neutral
     BG_BURGUNDY,                  // 4: warm accent
     BG_TEAL,                      // 5: cool accent
   ];
   // Safe fallback: if somehow variationIndex is out of range, default to light grey.
-  return (rainbow[variationIndex] ?? BLOCK_6_BACKGROUND.lightgrey) + CORP_BG_NO_ENVIRONMENT;
+  return (rainbow[variationIndex] ?? seg("bg_lightgrey", BLOCK_6_BACKGROUND.lightgrey)) + CORP_BG_NO_ENVIRONMENT;
 }
 
 // Block 7 TECHNICAL — fires LAST in the prompt, so its language has strong
@@ -719,7 +736,7 @@ For subjects with very short hair (under approximately chin length), no styling 
   }
 
   // Realistic and Polished keep the original universal rule.
-  return BLOCK_HAIR_DEFAULT;
+  return seg("hair_default", BLOCK_HAIR_DEFAULT);
 }
 
 // Smile-style fidelity rule (added 2026-05-15 per recurring customer
@@ -823,6 +840,88 @@ const FLAVORS: Flavor[] = [
 // here lives at the bottom of buildBlock8's output (just above the single-
 // image structural constraint) so it has near-final-word weight while
 // keeping the "one photograph, not a grid" directive last.
+const SLOT_SKIN_SMOOTHING = `SKIN FINISH FOR THIS IMAGE (per-slot touch-up): Render noticeably smooth, polished skin — even out redness, blotchiness, and temporary blemishes for a clean, professional, lightly-retouched magazine finish. Keep the person unmistakably themselves and retain a hint of natural pore texture at close view; do NOT produce plastic, waxy, blurred, or airbrushed-doll skin.`;
+const SLOT_TOUCHUP_DEFAULT: Record<number, string> = {
+  2: SLOT_SKIN_SMOOTHING,
+  4: SLOT_SKIN_SMOOTHING,
+};
+
+const PROMPT_DEFAULTS: Record<string, string> = {
+  identity: BLOCK_1_IDENTITY,
+  under_eye: BLOCK_UNDER_EYE,
+  skin_polished: BLOCK_SKIN_POLISHED,
+  skin_glam: BLOCK_SKIN_GLAM,
+  composition: BLOCK_2_COMPOSITION,
+  style_corporate: BLOCK_3_STYLE_BASE.corporate,
+  style_creative: BLOCK_3_STYLE_BASE.creative,
+  style_executive: BLOCK_3_STYLE_BASE.executive,
+  style_urban: BLOCK_3_STYLE_BASE.urban,
+  style_healthcare: BLOCK_3_STYLE_BASE.healthcare,
+  attire_formal: BLOCK_4_ATTIRE_STATIC.formal,
+  attire_casual: BLOCK_4_ATTIRE_STATIC.casual,
+  attire_keep: BLOCK_4_ATTIRE_STATIC.keep,
+  lighting_studio: BLOCK_5_LIGHTING.studio,
+  lighting_natural: BLOCK_5_LIGHTING.natural,
+  lighting_dramatic: BLOCK_5_LIGHTING.dramatic,
+  lighting_golden: BLOCK_5_LIGHTING.golden,
+  bg_white: BLOCK_6_BACKGROUND.white,
+  bg_lightgrey: BLOCK_6_BACKGROUND.lightgrey,
+  bg_dark: BLOCK_6_BACKGROUND.dark,
+  bg_black: BLOCK_6_BACKGROUND.black,
+  bg_blue: BLOCK_6_BACKGROUND.blue,
+  bg_bluebright: BLOCK_6_BACKGROUND.bluebright,
+  bg_green: BLOCK_6_BACKGROUND.green,
+  bg_red: BLOCK_6_BACKGROUND.red,
+  lens_correction: BLOCK_LENS_CORRECTION,
+  eyewear: BLOCK_EYEWEAR,
+  hair_default: BLOCK_HAIR_DEFAULT,
+  smile_fidelity: BLOCK_SMILE_FIDELITY,
+  slot_0: SLOT_TOUCHUP_DEFAULT[0] ?? "",
+  slot_1: SLOT_TOUCHUP_DEFAULT[1] ?? "",
+  slot_2: SLOT_TOUCHUP_DEFAULT[2] ?? "",
+  slot_3: SLOT_TOUCHUP_DEFAULT[3] ?? "",
+  slot_4: SLOT_TOUCHUP_DEFAULT[4] ?? "",
+  slot_5: SLOT_TOUCHUP_DEFAULT[5] ?? "",
+};
+
+const PROMPT_SEGMENTS: PromptSegmentMeta[] = [
+  { key: "identity", label: "Identity (Block 1)", group: "Core", fires: {} },
+  { key: "composition", label: "Composition / framing", group: "Core", fires: {} },
+  { key: "eyewear", label: "Eyewear", group: "Core", fires: {} },
+  { key: "hair_default", label: "Hair", group: "Core", fires: {} },
+  { key: "smile_fidelity", label: "Smile / teeth lock", group: "Core", fires: {} },
+  { key: "lens_correction", label: "Lens correction", group: "Core", fires: {}, note: "Only fires when a wide-angle selfie is detected." },
+  { key: "under_eye", label: "Under-eye (women)", group: "Skin", fires: {}, note: "Women only; skipped on Glam." },
+  { key: "skin_polished", label: "Skin — Polished tier", group: "Skin", fires: { skin: "polished" } },
+  { key: "skin_glam", label: "Skin — Glam tier", group: "Skin", fires: { skin: "glam" } },
+  { key: "style_corporate", label: "Style — Paper/color", group: "Style", fires: { style: "corporate" } },
+  { key: "style_creative", label: "Style — Creative Natural", group: "Style", fires: { style: "creative" } },
+  { key: "style_executive", label: "Style — Executive", group: "Style", fires: { style: "executive" } },
+  { key: "style_urban", label: "Style — Urban", group: "Style", fires: { style: "urban" } },
+  { key: "style_healthcare", label: "Style — Healthcare", group: "Style", fires: { style: "healthcare" } },
+  { key: "attire_formal", label: "Attire — Business formal", group: "Attire", fires: { attire: "formal" } },
+  { key: "attire_casual", label: "Attire — Business casual", group: "Attire", fires: { attire: "casual" } },
+  { key: "attire_keep", label: "Attire — Keep my outfit", group: "Attire", fires: { attire: "keep" } },
+  { key: "lighting_studio", label: "Lighting — Studio", group: "Lighting", fires: { lighting: "studio" } },
+  { key: "lighting_natural", label: "Lighting — Natural", group: "Lighting", fires: { lighting: "natural" } },
+  { key: "lighting_dramatic", label: "Lighting — Dramatic", group: "Lighting", fires: { lighting: "dramatic" } },
+  { key: "lighting_golden", label: "Lighting — Golden hour", group: "Lighting", fires: { lighting: "golden" } },
+  { key: "bg_white", label: "Background — White", group: "Background", fires: { style: "corporate", background: "white" } },
+  { key: "bg_lightgrey", label: "Background — Light grey", group: "Background", fires: { style: "corporate", background: "lightgrey" } },
+  { key: "bg_dark", label: "Background — Dark", group: "Background", fires: { style: "corporate", background: "dark" } },
+  { key: "bg_black", label: "Background — Black", group: "Background", fires: { style: "corporate", background: "black" } },
+  { key: "bg_blue", label: "Background — Navy blue", group: "Background", fires: { style: "corporate", background: "blue" } },
+  { key: "bg_bluebright", label: "Background — Bright blue", group: "Background", fires: { style: "corporate", background: "bluebright" } },
+  { key: "bg_green", label: "Background — Soft green", group: "Background", fires: { style: "corporate", background: "green" } },
+  { key: "bg_red", label: "Background — Red", group: "Background", fires: { style: "corporate", background: "red" } },
+  { key: "slot_0", label: "Slot 1 touch-up", group: "Per-slot touch-ups", fires: {} },
+  { key: "slot_1", label: "Slot 2 touch-up", group: "Per-slot touch-ups", fires: {} },
+  { key: "slot_2", label: "Slot 3 touch-up (skin smoothing)", group: "Per-slot touch-ups", fires: {} },
+  { key: "slot_3", label: "Slot 4 touch-up", group: "Per-slot touch-ups", fires: {} },
+  { key: "slot_4", label: "Slot 5 touch-up (skin smoothing)", group: "Per-slot touch-ups", fires: {} },
+  { key: "slot_5", label: "Slot 6 touch-up", group: "Per-slot touch-ups", fires: {} },
+];
+
 function buildBlock8(
   attire: Attire,
   variationIndex: number,
@@ -877,10 +976,9 @@ function buildBlock8(
   // (variationIndex 2 & 4) carry a noticeably-polished skin-smoothing pass so
   // we can A/B whether smoother shots get chosen more often. This is the first
   // per-slot touch-up; the prompt editor will make each slot's add-on editable.
-  const slotTouchup =
-    variationIndex === 2 || variationIndex === 4
-      ? `\n\nSKIN FINISH FOR THIS IMAGE (per-slot touch-up): Render noticeably smooth, polished skin — even out redness, blotchiness, and temporary blemishes for a clean, professional, lightly-retouched magazine finish. Keep the person unmistakably themselves and retain a hint of natural pore texture at close view; do NOT produce plastic, waxy, blurred, or airbrushed-doll skin.`
-      : "";
+  const slotBaseTouchup = SLOT_TOUCHUP_DEFAULT[variationIndex] ?? "";
+  const slotEditedTouchup = seg("slot_" + variationIndex, slotBaseTouchup);
+  const slotTouchup = slotEditedTouchup.trim() ? "\n\n" + slotEditedTouchup : "";
 
   return `Photograph direction for this single image:
 - Expression: ${flavor.expression}. Eyes must look alert, engaged, activated, and realistic — never blank, glazed or expressionless. REFERENCE TEETH CHECK (applies to THIS image regardless of the expression wording above): Inspect every reference photo for visible teeth before deciding what kind of smile to render. If NO reference photo shows any visible teeth, render a CLOSED-MOUTH smile that matches the lip style shown in the references — lips together, no upper teeth, no lower teeth, no gap between the lips — even if the expression wording above said "open smile," "teeth-showing," or "bright." Reference fidelity wins over the expression wording. AI-generated teeth on a subject who shows no teeth in references produce uncanny, "AI-tell" output that fails the headshot.
@@ -898,7 +996,7 @@ IMPORTANT OUTPUT CONSTRAINT: Return exactly ONE single photograph. Do NOT return
 // -------------------- Prompt assembly --------------------
 
 function assemblePrompt(req: GenerateRequest): string {
-  const parts: string[] = [BLOCK_1_IDENTITY];
+  const parts: string[] = [seg("identity", BLOCK_1_IDENTITY)];
 
   // BLOCK_UNDER_EYE refines Block 1's under-eye behavior based on the
   // subject's apparent age — young women get smoother under-eye rendering;
@@ -906,7 +1004,7 @@ function assemblePrompt(req: GenerateRequest): string {
   // selected Glam — Glam handles the under-eye as part of overall heavy
   // smoothing and the per-age rules would just confuse Gemini.
   if (req.skin !== "glam") {
-    parts.push(BLOCK_UNDER_EYE);
+    parts.push(seg("under_eye", BLOCK_UNDER_EYE));
   }
 
   // buildBlockPet sits right after identity so Gemini evaluates "is this a
@@ -916,7 +1014,7 @@ function assemblePrompt(req: GenerateRequest): string {
   // variationIndex picks one of 6 attire options (3 feminine + 3 masculine)
   // so a full batch returns a varied grid.
   parts.push(buildBlockPet(req.variationIndex));
-  parts.push(BLOCK_2_COMPOSITION);
+  parts.push(seg("composition", BLOCK_2_COMPOSITION));
   parts.push(buildBlock3Style(req.style, req.variationIndex));
   parts.push(
     buildBlock4Attire(
@@ -925,15 +1023,15 @@ function assemblePrompt(req: GenerateRequest): string {
       req.scrubColor ?? "lightblue",
     ),
   );
-  parts.push(BLOCK_EYEWEAR);
+  parts.push(seg("eyewear", BLOCK_EYEWEAR));
   parts.push(buildBlockHair(req.skin, req.variationIndex));
-  parts.push(BLOCK_5_LIGHTING[req.lighting]);
+  parts.push(seg("lighting_" + req.lighting, BLOCK_5_LIGHTING[req.lighting]));
 
   // Wide-angle lens detected on the client via EXIF? Append the stronger
   // correction block so Gemini KNOWS the distortion is present rather than
   // guessing from pixels.
   if (req.hasWideAngle) {
-    parts.push(BLOCK_LENS_CORRECTION);
+    parts.push(seg("lens_correction", BLOCK_LENS_CORRECTION));
   }
 
   // Skin toggle (women only — each block self-gates internally for men).
@@ -947,9 +1045,9 @@ function assemblePrompt(req: GenerateRequest): string {
   // - "glam": OVERRIDES UNDER_EYE (we already skipped injecting UNDER_EYE
   //   above) — aggressive tone evening + editorial luminosity.
   if (req.skin === "polished") {
-    parts.push(BLOCK_SKIN_POLISHED);
+    parts.push(seg("skin_polished", BLOCK_SKIN_POLISHED));
   } else if (req.skin === "glam") {
-    parts.push(BLOCK_SKIN_GLAM);
+    parts.push(seg("skin_glam", BLOCK_SKIN_GLAM));
   }
 
   // Block 6 Background is ONLY for Corporate. Creative / Executive get their
@@ -974,7 +1072,7 @@ function assemblePrompt(req: GenerateRequest): string {
   // bias — Block 8 was the last thing the model read about expressions).
   // Moving the fidelity rule to LAST position gives it the recency
   // advantage, so the override takes effect.
-  parts.push(BLOCK_SMILE_FIDELITY);
+  parts.push(seg("smile_fidelity", BLOCK_SMILE_FIDELITY));
 
   return parts.join("\n\n");
 }
@@ -1635,6 +1733,19 @@ export default async function handler(
     );
 
     // ---- Assemble the prompt from Kristi's v2 framework ----
+    try {
+      activeOverrides = await getPromptOverrides();
+    } catch {
+      activeOverrides = {};
+    }
+    if (!promptCatalogSeeded) {
+      promptCatalogSeeded = true;
+      void seedPromptCatalog(
+        PROMPT_DEFAULTS,
+        PROMPT_SEGMENTS,
+        new Date().toISOString(),
+      );
+    }
     const prompt = assemblePrompt(body as GenerateRequest);
 
     // ---- Generate ONE headshot. The frontend calls this six times in

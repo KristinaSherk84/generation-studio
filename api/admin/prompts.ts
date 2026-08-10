@@ -1,0 +1,231 @@
+/**
+ * GET  /api/admin/prompts?pw=ADMIN_PASSWORD   -> live prompt editor webpage
+ * POST /api/admin/prompts (pw + {action:"save"|"reset", key, text})
+ *
+ * Edit any prompt segment used by /api/generate and have it go live instantly
+ * (no deploy). Reads the catalog (current code defaults + metadata) that
+ * /api/generate seeds into Redis on cold start, layers the saved overrides on
+ * top, and lets Kristi (or Claude) edit/reset each one. generate.ts falls back
+ * to the code default whenever an override is missing or blank, so this can
+ * never break generation. (2026-08-10)
+ *
+ * Recipe bar: pick a style/background/lighting/attire/skin and the blocks that
+ * don't fire for that recipe grey out, leaving only the active ones editable.
+ */
+
+import type { VercelRequest, VercelResponse } from "@vercel/node";
+import {
+  getPromptCatalog,
+  getPromptOverrides,
+  setPromptOverride,
+  resetPromptOverride,
+} from "../lib/promptStore.js";
+
+export const maxDuration = 15;
+
+function esc(v: string): string {
+  return String(v)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+const RECIPE_DIMS: { key: string; label: string; options: string[] }[] = [
+  { key: "style", label: "Style", options: ["corporate", "creative", "executive", "urban", "healthcare"] },
+  { key: "background", label: "Background", options: ["white", "lightgrey", "dark", "black", "blue", "bluebright", "green", "red"] },
+  { key: "lighting", label: "Lighting", options: ["studio", "natural", "dramatic", "golden"] },
+  { key: "attire", label: "Attire", options: ["formal", "casual", "keep", "medical"] },
+  { key: "skin", label: "Skin", options: ["realistic", "polished", "glam"] },
+];
+const DEFAULT_RECIPE: Record<string, string> = {
+  style: "executive",
+  background: "dark",
+  lighting: "studio",
+  attire: "formal",
+  skin: "realistic",
+};
+
+export default async function handler(
+  req: VercelRequest,
+  res: VercelResponse,
+) {
+  const pw =
+    (typeof req.query.pw === "string" && req.query.pw) ||
+    (req.body && typeof req.body.pw === "string" && req.body.pw) ||
+    "";
+  if (!process.env.ADMIN_PASSWORD || pw !== process.env.ADMIN_PASSWORD) {
+    res.status(401).json({ ok: false, error: "unauthorized" });
+    return;
+  }
+
+  if (req.method === "POST") {
+    const body = (req.body ?? {}) as { action?: string; key?: string; text?: string };
+    const key = typeof body.key === "string" ? body.key : "";
+    if (!key) {
+      res.status(400).json({ ok: false, error: "missing key" });
+      return;
+    }
+    try {
+      if (body.action === "reset") {
+        await resetPromptOverride(key);
+      } else {
+        await setPromptOverride(key, typeof body.text === "string" ? body.text : "");
+      }
+      res.status(200).json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: String(err) });
+    }
+    return;
+  }
+
+  const catalog = await getPromptCatalog();
+  const overrides = await getPromptOverrides();
+
+  if (!catalog) {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.status(200).send(
+      `<!doctype html><meta charset="utf-8"><body style="font:16px system-ui;max-width:640px;margin:60px auto;padding:0 20px;color:#2C2C2A">
+       <h2>Prompt editor — initializing</h2>
+       <p>The editor reads its segment list from the live generator, which seeds it on first run. Generate one headshot on the site (or wait a minute for the next visitor), then reload this page.</p></body>`,
+    );
+    return;
+  }
+
+  const groups: string[] = [];
+  const seen = new Set<string>();
+  for (const m of catalog.meta) {
+    if (!seen.has(m.group)) {
+      seen.add(m.group);
+      groups.push(m.group);
+    }
+  }
+
+  const cards = groups
+    .map((g) => {
+      const items = catalog.meta
+        .filter((m) => m.group === g)
+        .map((m) => {
+          const def = catalog.defaults[m.key] ?? "";
+          const ov = overrides[m.key];
+          const isOverridden = typeof ov === "string" && ov.trim().length > 0;
+          const value = isOverridden ? ov : def;
+          const firesAttr = esc(JSON.stringify(m.fires ?? {}));
+          const note = m.note ? `<div class="note">${esc(m.note)}</div>` : "";
+          const badge = isOverridden
+            ? `<span class="badge edited">Edited</span>`
+            : `<span class="badge def">Default</span>`;
+          return `
+        <div class="card" data-key="${esc(m.key)}" data-fires='${firesAttr}'>
+          <div class="chead">
+            <div class="ctitle">${esc(m.label)} ${badge}</div>
+            <div class="ckey">${esc(m.key)}</div>
+          </div>
+          ${note}
+          <textarea id="ta_${esc(m.key)}" rows="6" spellcheck="false">${esc(value)}</textarea>
+          <div class="cbtns">
+            <button class="save" onclick="save('${esc(m.key)}')">Save (go live)</button>
+            <button class="reset" onclick="reset('${esc(m.key)}')">Reset to default</button>
+            <span class="status" id="st_${esc(m.key)}"></span>
+          </div>
+        </div>`;
+        })
+        .join("");
+      return `<section><h3>${esc(g)}</h3>${items}</section>`;
+    })
+    .join("");
+
+  const recipeBar = RECIPE_DIMS.map((d) => {
+    const opts = d.options
+      .map(
+        (o) =>
+          `<button class="opt${DEFAULT_RECIPE[d.key] === o ? " on" : ""}" data-dim="${d.key}" data-val="${o}" onclick="pick('${d.key}','${o}')">${o}</button>`,
+      )
+      .join("");
+    return `<div class="dim"><span class="dlabel">${d.label}</span>${opts}</div>`;
+  }).join("");
+
+  const html = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prompt editor · GenerAItion</title>
+<style>
+  :root{--dark:#2C2C2A;--med:#888780;--line:#E8E8E6;--bg:#F4F3EF;--accent:#0B7;--edit:#C77}
+  *{box-sizing:border-box}
+  body{font:15px/1.5 system-ui,-apple-system,Segoe UI,Helvetica,Arial;color:var(--dark);background:var(--bg);margin:0;padding:0 0 80px}
+  header{position:sticky;top:0;background:#fff;border-bottom:1px solid var(--line);padding:14px 20px;z-index:10}
+  h1{font-size:18px;margin:0 0 4px}
+  .sub{font-size:12px;color:var(--med);margin-bottom:10px}
+  .dim{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin:4px 0}
+  .dlabel{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--med);width:96px;flex:0 0 96px}
+  .opt{font:12px system-ui;padding:3px 9px;border:1px solid var(--line);border-radius:20px;background:#fff;cursor:pointer;color:var(--dark)}
+  .opt.on{background:var(--dark);color:#fff;border-color:var(--dark)}
+  main{max-width:920px;margin:0 auto;padding:18px 20px}
+  section{margin-bottom:26px}
+  h3{font-size:13px;text-transform:uppercase;letter-spacing:.6px;color:var(--med);border-bottom:1px solid var(--line);padding-bottom:6px;margin:0 0 12px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:12px;transition:opacity .15s}
+  .card.dim-off{opacity:.32}
+  .chead{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+  .ctitle{font-weight:600;font-size:14px}
+  .ckey{font:11px ui-monospace,monospace;color:var(--med)}
+  .badge{font-size:10px;padding:1px 7px;border-radius:10px;vertical-align:middle}
+  .badge.edited{background:#F6E7E3;color:#9A4B3B}
+  .badge.def{background:#EEF0EC;color:#7A7A73}
+  .note{font-size:12px;color:var(--med);margin:4px 0 0}
+  textarea{width:100%;margin-top:8px;padding:9px 11px;border:1px solid var(--line);border-radius:8px;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;resize:vertical;background:#fff;color:var(--dark)}
+  .cbtns{display:flex;align-items:center;gap:8px;margin-top:8px}
+  button.save{background:var(--accent);color:#fff;border:none;border-radius:7px;padding:7px 13px;font:600 12px system-ui;cursor:pointer}
+  button.reset{background:#fff;color:var(--dark);border:1px solid var(--line);border-radius:7px;padding:7px 13px;font:12px system-ui;cursor:pointer}
+  .status{font-size:12px;color:var(--accent)}
+</style></head>
+<body>
+<header>
+  <h1>Prompt editor</h1>
+  <div class="sub">Edit a block and hit Save — it goes live on the next generation. Reset reverts to the code default. Pick a recipe below to grey out blocks that don't fire for it. Last synced from code: ${esc(catalog.updatedAt)}</div>
+  ${recipeBar}
+</header>
+<main>${cards}</main>
+<script>
+  var PW=${JSON.stringify(pw)};
+  var recipe=${JSON.stringify(DEFAULT_RECIPE)};
+  function applyGrey(){
+    document.querySelectorAll('.card').forEach(function(c){
+      var f={};try{f=JSON.parse(c.getAttribute('data-fires')||'{}')}catch(e){}
+      var active=true;
+      for(var k in f){ if(f[k]!==recipe[k]){active=false;break;} }
+      c.classList.toggle('dim-off',!active);
+    });
+  }
+  function pick(dim,val){
+    recipe[dim]=val;
+    document.querySelectorAll('.opt[data-dim="'+dim+'"]').forEach(function(b){
+      b.classList.toggle('on',b.getAttribute('data-val')===val);
+    });
+    applyGrey();
+  }
+  function post(payload,cb){
+    payload.pw=PW;
+    fetch(location.pathname,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+      .then(function(r){return r.json()}).then(cb).catch(function(){cb({ok:false})});
+  }
+  function save(key){
+    var st=document.getElementById('st_'+key); st.textContent='Saving…';
+    var text=document.getElementById('ta_'+key).value;
+    post({action:'save',key:key,text:text},function(r){
+      st.textContent=r&&r.ok?'Saved — live':'Error'; setTimeout(function(){st.textContent=''},2500);
+      if(r&&r.ok){var b=document.querySelector('.card[data-key="'+key+'"] .badge');if(b){var edited=text.trim().length>0;b.className='badge '+(edited?'edited':'def');b.textContent=edited?'Edited':'Default';}}
+    });
+  }
+  function reset(key){
+    var st=document.getElementById('st_'+key); st.textContent='Resetting…';
+    post({action:'reset',key:key},function(r){
+      st.textContent=r&&r.ok?'Reset — reload to see default':'Error'; setTimeout(function(){st.textContent=''},3000);
+      if(r&&r.ok){var b=document.querySelector('.card[data-key="'+key+'"] .badge');if(b){b.className='badge def';b.textContent='Default';}}
+    });
+  }
+  applyGrey();
+</script>
+</body></html>`;
+
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.status(200).send(html);
+}
