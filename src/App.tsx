@@ -8988,6 +8988,11 @@ type GridScreenProps = {
   // One-line error banner shown above the grid when a per-slot regen
   // call fails on the server. App owns the state; GridScreen just renders.
   regenError: string | null;
+  // Admin "damage-control" fix mode (2026-08-10). When true, a small badge
+  // shows Kristi she's in fix mode and how many of her 2 identity regens she
+  // has used. These are separate from the customer's regen budget.
+  adminFixMode: boolean;
+  adminRegensUsed: number;
   // Slots from the INITIAL 6-image batch that are still in flight. Set when
   // the user advanced to the grid early via "Continue with what's ready" on
   // the loading screen. Drives a spinner on those slots instead of the
@@ -9018,6 +9023,8 @@ const GridScreen = ({
   regeneratingSlots,
   perfectingSlots,
   regenError,
+  adminFixMode,
+  adminRegensUsed,
   initialBatchInFlight,
   cart,
   onAddToCart,
@@ -9146,6 +9153,21 @@ const GridScreen = ({
           ? `${regenCount} · unlimited`
           : `${regenCount} / ${maxRegens}`}
       </div>
+      {adminFixMode && (
+        <div
+          style={{
+            marginTop: 6,
+            fontSize: 11,
+            fontWeight: 700,
+            color: "#1B6E3C",
+            textAlign: "right",
+          }}
+          aria-live="polite"
+        >
+          Admin fix mode · {adminRegensUsed} / 2 identity regens used · saved to
+          the grid
+        </div>
+      )}
 
       {/* Inline error banner — appears when a per-slot regenerate API call
           fails. Budget is automatically refunded by the App handler before
@@ -13313,6 +13335,15 @@ export default function App() {
   // email link, so a per-slot regen can be persisted back onto the saved grid
   // (see handleRegenerateSlot) and thus STICK when the link is reopened.
   const resumeTokenRef = useRef<string | null>(null);
+
+  // Admin "damage-control" fix mode (2026-08-10). Turns on when Kristi opens a
+  // customer's resume link with her admin password appended (&fix=<pw>),
+  // verified server-side. Grants 2 identity regens that persist to the saved
+  // grid and are tracked SEPARATELY from the customer's regen budget, so her
+  // fixes never eat into the customer's free regens.
+  const [adminFixMode, setAdminFixMode] = useState(false);
+  const [adminRegensUsed, setAdminRegensUsed] = useState(0);
+  const adminRegenCountRef = useRef(0);
   const [showRegenLimitModal, setShowRegenLimitModal] = useState(false);
 
   // Guard against the #1 cause of "all generations failed": the customer
@@ -13643,8 +13674,11 @@ export default function App() {
     const url = new URL(window.location.href);
     const token = url.searchParams.get("resume");
     if (!token) return;
-    // Strip the param so a refresh doesn't re-trigger the restore.
+    // Admin damage-control password (optional). Captured before we strip it.
+    const fixPw = url.searchParams.get("fix");
+    // Strip the params so a refresh doesn't re-trigger the restore.
     url.searchParams.delete("resume");
+    url.searchParams.delete("fix");
     window.history.replaceState({}, "", url.toString());
     void (async () => {
       try {
@@ -13668,6 +13702,23 @@ export default function App() {
         // Remember the token so a damage-control regen can be written back to
         // this same saved grid (below).
         resumeTokenRef.current = token;
+        // If the link carried a valid admin password, unlock 2 identity
+        // regens (server-verified so a curious customer can't self-grant).
+        if (fixPw) {
+          try {
+            const vr = await fetch("/api/admin/verify-fix", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ pw: fixPw }),
+            });
+            if (vr.ok) {
+              const vd = (await vr.json()) as { ok?: boolean };
+              if (vd.ok) setAdminFixMode(true);
+            }
+          } catch {
+            /* not admin — silently stays a normal resume session */
+          }
+        }
         // A resume-link visitor already had their free batch (that's why a
         // saved grid exists to restore). The batch counter normally resets to
         // 0 on this fresh page load, which would hand them a whole new free
@@ -14676,26 +14727,41 @@ export default function App() {
   // with the slot's variationIndex, and on success overwrites that slot only —
   // the other 5 thumbnails are untouched.
   const handleRegenerateSlot = async (index: number) => {
-    // Free-tier gate (2026-07-03). When entry fee is off AND the customer
-    // hasn't paid the mid-session $2.99 yet, cap single regens at
-    // MAX_FREE_REGENS = 2. The 3rd attempt fires the free-tier paywall
-    // instead of running the generation.
-    // Resumed-from-email sessions (customer clicked the "ready to view" link
-    // to come back and VIEW their saved grid) get only MAX_FREE_REGENS (2)
-    // single regens — never a fresh full budget. Returning to look at finished
-    // shots must not silently hand out 6 more free generations (Kristi 2026-08-04).
-    if (resumedFromEmail && regenCount >= MAX_FREE_REGENS) {
-      setShowFreeTierPaywall(true);
-      return;
-    }
-    if (!entryFeeEnabled && !isUnlocked) {
-      if (regenCount >= MAX_FREE_REGENS) {
+    const admin = adminFixMode;
+    if (admin) {
+      // Admin damage-control: 2 dedicated identity regens, tracked separately
+      // from the customer's budget. They persist to the saved grid (fix mode
+      // only turns on from a resume link, which is the only place we hold a
+      // token). No paywall — Kristi is fixing a bad-likeness shot for the
+      // customer before they open it.
+      if (adminRegenCountRef.current >= 2) {
+        setRegenError(
+          "You've used both admin identity regens for this link. Reload the link to reset them.",
+        );
+        return;
+      }
+    } else {
+      // Free-tier gate (2026-07-03). When entry fee is off AND the customer
+      // hasn't paid the mid-session $2.99 yet, cap single regens at
+      // MAX_FREE_REGENS = 2. The 3rd attempt fires the free-tier paywall
+      // instead of running the generation.
+      // Resumed-from-email sessions (customer clicked the "ready to view" link
+      // to come back and VIEW their saved grid) get only MAX_FREE_REGENS (2)
+      // single regens — never a fresh full budget. Returning to look at finished
+      // shots must not silently hand out 6 more free generations (Kristi 2026-08-04).
+      if (resumedFromEmail && regenCount >= MAX_FREE_REGENS) {
         setShowFreeTierPaywall(true);
         return;
       }
-    } else if (regenCount >= MAX_SINGLE_REGENS) {
-      setShowPaywall(true);
-      return;
+      if (!entryFeeEnabled && !isUnlocked) {
+        if (regenCount >= MAX_FREE_REGENS) {
+          setShowFreeTierPaywall(true);
+          return;
+        }
+      } else if (regenCount >= MAX_SINGLE_REGENS) {
+        setShowPaywall(true);
+        return;
+      }
     }
     if (!lastSelections || lastPhotoUrls.length < 5) {
       // Shouldn't happen — we only show the Grid after a successful generate,
@@ -14710,7 +14776,12 @@ export default function App() {
     // Clear any prior error and burn one regen — we'll refund this if the
     // call fails so the user doesn't lose budget on a server-side problem.
     setRegenError(null);
-    setRegenCount((n) => n + 1);
+    if (admin) {
+      adminRegenCountRef.current += 1;
+      setAdminRegensUsed(adminRegenCountRef.current);
+    } else {
+      setRegenCount((n) => n + 1);
+    }
     setRegeneratingSlots((prev) => {
       const next = new Set(prev);
       next.add(index);
@@ -14785,7 +14856,12 @@ export default function App() {
       // Surface a visible error AND refund the regen budget — Gemini charged
       // us regardless, but charging the user a regen budget for a failure
       // they had no control over is the wrong UX.
-      setRegenCount((n) => Math.max(0, n - 1));
+      if (admin) {
+        adminRegenCountRef.current = Math.max(0, adminRegenCountRef.current - 1);
+        setAdminRegensUsed(adminRegenCountRef.current);
+      } else {
+        setRegenCount((n) => Math.max(0, n - 1));
+      }
       const msg =
         err instanceof Error && err.message.includes("HTTP")
           ? `Regeneration failed (server returned ${err.message.replace("HTTP ", "")}). Try again in a few seconds — if it keeps failing, refresh the page.`
@@ -15734,6 +15810,8 @@ export default function App() {
           onBack={() => setScreen("style")}
           onRegenerateSlot={handleRegenerateSlot}
           regenError={regenError}
+          adminFixMode={adminFixMode}
+          adminRegensUsed={adminRegensUsed}
           regenCount={regenCount}
           maxRegens={resumedFromEmail || (!entryFeeEnabled && !isUnlocked) ? MAX_FREE_REGENS : MAX_SINGLE_REGENS}
           regeneratingSlots={regeneratingSlots}
