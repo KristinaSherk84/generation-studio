@@ -13702,21 +13702,40 @@ export default function App() {
         // Remember the token so a damage-control regen can be written back to
         // this same saved grid (below).
         resumeTokenRef.current = token;
-        // If the link carried a valid admin password, unlock 2 identity
-        // regens (server-verified so a curious customer can't self-grant).
-        if (fixPw) {
+        // Admin damage-control fix mode. Turns on when EITHER the link carries
+        // a valid admin password (&fix=<pw>) OR this device was previously
+        // "armed" — the password is remembered in this browser's localStorage
+        // (see /api/admin/arm), so Kristi never has to edit a link on her
+        // phone. Server-verified either way; on success we (re)remember it on
+        // this device so the next resume link just works.
+        let adminPw: string | null = fixPw;
+        if (!adminPw) {
+          try {
+            adminPw = window.localStorage.getItem("gen_admin_fix_pw");
+          } catch {
+            adminPw = null;
+          }
+        }
+        if (adminPw) {
           try {
             const vr = await fetch("/api/admin/verify-fix", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ pw: fixPw }),
+              body: JSON.stringify({ pw: adminPw }),
             });
             if (vr.ok) {
               const vd = (await vr.json()) as { ok?: boolean };
-              if (vd.ok) setAdminFixMode(true);
+              if (vd.ok) {
+                setAdminFixMode(true);
+                try {
+                  window.localStorage.setItem("gen_admin_fix_pw", adminPw);
+                } catch {
+                  /* private mode — fix mode still works for this visit */
+                }
+              }
             }
           } catch {
-            /* not admin — silently stays a normal resume session */
+            /* not admin / offline — silently stays a normal resume session */
           }
         }
         // A resume-link visitor already had their free batch (that's why a
