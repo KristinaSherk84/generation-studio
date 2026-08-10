@@ -13280,6 +13280,14 @@ export default function App() {
   // photo. Cached at generate time so per-slot regenerations use the same
   // prompt-correction flag. See /api/generate BLOCK_LENS_CORRECTION.
   const [lastHasWideAngle, setLastHasWideAngle] = useState(false);
+  // Detected subject gender for the CURRENT batch (2026-08-10). Set once per
+  // batch from /api/detect-gender and passed into every generate + regen call
+  // so the server sends only the relevant gendered wording. undefined =
+  // unknown/ambiguous → server falls back to today's full wording.
+  const genderRef = useRef<"male" | "female" | undefined>(undefined);
+  const [lastGender, setLastGender] = useState<"male" | "female" | undefined>(
+    undefined,
+  );
   // Which thumbnail slots currently have an in-flight single-slot regeneration.
   // The GridScreen overlays a loading spinner on these so the rest of the grid
   // stays interactive.
@@ -14824,6 +14832,7 @@ export default function App() {
           // batch so the regenerated slot matches the other 5. Only
           // meaningful when attire is medical; server ignores otherwise.
           scrubColor: lastSelections.scrubColor,
+          gender: lastGender,
           ...readUnlockRequestFields(),
         }),
       });
@@ -15005,6 +15014,27 @@ export default function App() {
       return;
     }
 
+    // Kick off gender detection in parallel (2026-08-10). We await it just
+    // before firing the batch so each shot's prompt can be trimmed to the
+    // subject's gender. Fail-open: any error/timeout → undefined → the server
+    // sends today's full (both-gender) wording. Never blocks generation.
+    const genderPromise: Promise<"male" | "female" | undefined> = (async () => {
+      try {
+        const r = await fetch("/api/detect-gender", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ photoUrls }),
+        });
+        if (!r.ok) return undefined;
+        const d = (await r.json()) as { gender?: string };
+        return d.gender === "male" || d.gender === "female"
+          ? d.gender
+          : undefined;
+      } catch {
+        return undefined;
+      }
+    })();
+
     // Reset prior generation state in case the user regenerated.
     // Cart is independent (Phase 1, 2026-06-03 — revised): every Generate
     // refreshes ALL 6 slots so the user sees the new style choice across
@@ -15107,6 +15137,17 @@ export default function App() {
       }
     };
 
+    // Resolve gender before building the 6 prompts, with a safety timeout so a
+    // slow detector can never stall the batch. undefined → today's wording.
+    const detectedGender = await Promise.race([
+      genderPromise,
+      new Promise<"male" | "female" | undefined>((resolve) =>
+        window.setTimeout(() => resolve(undefined), 7000),
+      ),
+    ]);
+    genderRef.current = detectedGender;
+    setLastGender(detectedGender);
+
     const STAGGER_MS = 5000;
     const calls = Array.from({ length: TOTAL_HEADSHOTS }, async (_, index) => {
       // Each call waits its turn before firing. Promise.all below still
@@ -15137,6 +15178,7 @@ export default function App() {
             // can score its likeness and auto-regenerate weak matches (best-
             // effort; server returns null if scoring fails). (2026-07-30)
             wantIdentityScore: identityCheckEnabled,
+            gender: genderRef.current,
             // Paywall enforcement (2026-05-15): server requires either a
             // valid Stripe session ID or the promo code on every call.
             ...readUnlockRequestFields(),
@@ -15343,6 +15385,7 @@ export default function App() {
               lighting: c.lighting,
               background: selections.background,
               variationIndex: c.variationIndex,
+              gender: genderRef.current,
               hasWideAngle,
               skin: selections.skin,
               scrubColor: selections.scrubColor,
@@ -15450,6 +15493,7 @@ export default function App() {
           skin: selections.skin,
           scrubColor: selections.scrubColor,
           wantIdentityScore: true,
+          gender: genderRef.current,
           ...readUnlockRequestFields(),
         }),
       });

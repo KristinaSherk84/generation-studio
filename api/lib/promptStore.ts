@@ -45,6 +45,11 @@ export type PromptSegmentMeta = {
     skin?: string;
   };
   note?: string;
+  // Gendered tab pairing (2026-08-10). When set, the editor renders this
+  // segment as one half of a Men/Women tabbed card. `genderPair` groups the
+  // two halves (same value on both), `gender` says which tab this is.
+  genderPair?: string;
+  gender?: "male" | "female";
 };
 
 export type PromptCatalog = {

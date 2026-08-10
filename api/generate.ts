@@ -51,6 +51,23 @@ function seg(key: string, fallback: string): string {
   return typeof ov === "string" && ov.trim().length > 0 ? ov : fallback;
 }
 
+// Gender-aware segment resolver (2026-08-10). For a KNOWN gender it prefers a
+// gendered override (e.g. "under_eye_male"); if none is saved yet it falls back
+// to any legacy ungendered override, then the hardcoded default — so behavior
+// is byte-identical to today until Kristi edits a Men/Women tab. UNKNOWN gender
+// always uses the ungendered override/default (exactly today's behavior).
+function gseg(
+  baseKey: string,
+  gender: "male" | "female" | undefined,
+  fallback: string,
+): string {
+  if (gender === "male" || gender === "female") {
+    const gv = activeOverrides[baseKey + "_" + gender];
+    if (typeof gv === "string" && gv.trim().length > 0) return gv;
+  }
+  return seg(baseKey, fallback);
+}
+
 // Vercel function-level config. Allow up to 5 minutes for the full 6-image run.
 export const maxDuration = 300;
 
@@ -152,6 +169,10 @@ type GenerateRequest = {
   variationIndex: number; // 0-5; frontend fires 6 parallel calls, each with a unique index
   hasWideAngle?: boolean;
   skin?: Skin;
+  // Detected subject gender (2026-08-10). Set by the client from a one-time
+  // /api/detect-gender call at batch start. Lets gender-specific blocks send
+  // only the relevant wording. Omitted/undefined = unknown → today's behavior.
+  gender?: "male" | "female";
   // Customer-picked scrub color (2026-06-05). Only used when attire === "medical".
   // Defaults to "lightblue" server-side when omitted to keep old clients working.
   scrubColor?: ScrubColor;
@@ -543,12 +564,13 @@ function buildBlock4Attire(
   attire: Attire,
   variationIndex: number,
   scrubColor: ScrubColor,
+  gender?: "male" | "female",
 ): string {
   if (attire === "medical") {
     const variant = buildMedicalAttireVariant(scrubColor, variationIndex);
     return `Attire: ${variant}\n\n${MEDICAL_GUARDRAILS_RULE}`;
   }
-  return seg("attire_" + attire, BLOCK_4_ATTIRE_STATIC[attire]);
+  return gseg("attire_" + attire, gender, BLOCK_4_ATTIRE_STATIC[attire]);
 }
 
 const BLOCK_5_LIGHTING: Record<Lighting, string> = {
@@ -861,6 +883,8 @@ const OUTPUT_CONSTRAINT_DEFAULT = `IMPORTANT OUTPUT CONSTRAINT: Return exactly O
 export const PROMPT_DEFAULTS: Record<string, string> = {
   identity: BLOCK_1_IDENTITY,
   under_eye: BLOCK_UNDER_EYE,
+  under_eye_male: BLOCK_UNDER_EYE,
+  under_eye_female: BLOCK_UNDER_EYE,
   skin_polished: BLOCK_SKIN_POLISHED,
   skin_glam: BLOCK_SKIN_GLAM,
   composition: BLOCK_2_COMPOSITION,
@@ -870,6 +894,8 @@ export const PROMPT_DEFAULTS: Record<string, string> = {
   style_urban: BLOCK_3_STYLE_BASE.urban,
   style_healthcare: BLOCK_3_STYLE_BASE.healthcare,
   attire_formal: BLOCK_4_ATTIRE_STATIC.formal,
+  attire_formal_male: BLOCK_4_ATTIRE_STATIC.formal,
+  attire_formal_female: BLOCK_4_ATTIRE_STATIC.formal,
   attire_casual: BLOCK_4_ATTIRE_STATIC.casual,
   attire_keep: BLOCK_4_ATTIRE_STATIC.keep,
   lighting_studio: BLOCK_5_LIGHTING.studio,
@@ -910,13 +936,15 @@ export const PROMPT_SEGMENTS: PromptSegmentMeta[] = [
   { key: "hair_default", label: "Hair", group: "Core", fires: {} },
   { key: "smile_fidelity", label: "Smile / teeth lock", group: "Core", fires: {} },
   { key: "lens_correction", label: "Lens correction", group: "Core", fires: {}, note: "Only fires when a wide-angle selfie is detected." },
-  { key: "under_eye", label: "Under-eye (women)", group: "Skin", fires: {}, note: "Women only; skipped on Glam." },
+  { key: "under_eye_female", label: "Under-eye — Women", group: "Skin", fires: {}, note: "Sent on women's shots (skipped on Glam).", genderPair: "under_eye", gender: "female" },
+  { key: "under_eye_male", label: "Under-eye — Men", group: "Skin", fires: {}, note: "Sent on men's shots. Trim this down — don't empty it.", genderPair: "under_eye", gender: "male" },
   { key: "style_corporate", label: "Style — Paper/color", group: "Style", fires: { style: "corporate" } },
   { key: "style_creative", label: "Style — Creative Natural", group: "Style", fires: { style: "creative" } },
   { key: "style_executive", label: "Style — Executive", group: "Style", fires: { style: "executive" } },
   { key: "style_urban", label: "Style — Urban", group: "Style", fires: { style: "urban" } },
   { key: "style_healthcare", label: "Style — Healthcare", group: "Style", fires: { style: "healthcare" } },
-  { key: "attire_formal", label: "Attire — Business formal", group: "Attire", fires: { attire: "formal" } },
+  { key: "attire_formal_female", label: "Attire — Business formal — Women", group: "Attire", fires: { attire: "formal" }, genderPair: "attire_formal", gender: "female" },
+  { key: "attire_formal_male", label: "Attire — Business formal — Men", group: "Attire", fires: { attire: "formal" }, genderPair: "attire_formal", gender: "male" },
   { key: "attire_casual", label: "Attire — Business casual", group: "Attire", fires: { attire: "casual" } },
   { key: "attire_keep", label: "Attire — Keep my outfit", group: "Attire", fires: { attire: "keep" } },
   { key: "lighting_studio", label: "Lighting — Studio", group: "Lighting", fires: { lighting: "studio" } },
@@ -1025,7 +1053,7 @@ function assemblePrompt(req: GenerateRequest): string {
   // selected Glam — Glam handles the under-eye as part of overall heavy
   // smoothing and the per-age rules would just confuse Gemini.
   if (req.skin !== "glam") {
-    parts.push(seg("under_eye", BLOCK_UNDER_EYE));
+    parts.push(gseg("under_eye", req.gender, BLOCK_UNDER_EYE));
   }
 
   // buildBlockPet sits right after identity so Gemini evaluates "is this a
@@ -1042,6 +1070,7 @@ function assemblePrompt(req: GenerateRequest): string {
       req.attire,
       req.variationIndex,
       req.scrubColor ?? "lightblue",
+      req.gender,
     ),
   );
   parts.push(seg("eyewear", BLOCK_EYEWEAR));

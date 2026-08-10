@@ -18,6 +18,7 @@ import {
   getPromptOverrides,
   setPromptOverride,
   resetPromptOverride,
+  type PromptSegmentMeta,
 } from "../lib/promptStore.js";
 import { PROMPT_DEFAULTS, PROMPT_SEGMENTS } from "../generate.js";
 import {
@@ -102,22 +103,25 @@ export default async function handler(
     }
   }
 
-  const cards = groups
-    .map((g) => {
-      const items = catalog.meta
-        .filter((m) => m.group === g)
-        .map((m) => {
-          const def = catalog.defaults[m.key] ?? "";
-          const alwaysOn = g.startsWith("Retouch");
-          const ov = overrides[m.key];
-          const isOverridden = typeof ov === "string" && ov.trim().length > 0;
-          const value = isOverridden ? ov : def;
-          const firesAttr = esc(JSON.stringify(m.fires ?? {}));
-          const note = m.note ? `<div class="note">${esc(m.note)}</div>` : "";
-          const badge = isOverridden
-            ? `<span class="badge edited">Edited</span>`
-            : `<span class="badge def">Default</span>`;
-          return `
+  // A saved (non-blank) override, or null.
+  const savedOverride = (key: string): string | null => {
+    const ov = overrides[key];
+    return typeof ov === "string" && ov.trim().length > 0 ? ov : null;
+  };
+
+  // Ordinary (non-gendered) segment card.
+  const singleCard = (g: string, m: PromptSegmentMeta): string => {
+    const def = catalog.defaults[m.key] ?? "";
+    const alwaysOn = g.startsWith("Retouch");
+    const ov = savedOverride(m.key);
+    const isOverridden = ov !== null;
+    const value = isOverridden ? ov : def;
+    const firesAttr = esc(JSON.stringify(m.fires ?? {}));
+    const note = m.note ? `<div class="note">${esc(m.note)}</div>` : "";
+    const badge = isOverridden
+      ? `<span class="badge edited">Edited</span>`
+      : `<span class="badge def">Default</span>`;
+    return `
         <div class="card" data-key="${esc(m.key)}" data-fires='${firesAttr}'${alwaysOn ? ' data-always="1"' : ''}>
           <div class="chead">
             <div class="ctitle">${esc(m.label)} ${badge}</div>
@@ -131,9 +135,81 @@ export default async function handler(
             <span class="status" id="st_${esc(m.key)}"></span>
           </div>
         </div>`;
-        })
-        .join("");
-      return `<section><h3>${esc(g)}</h3>${items}</section>`;
+  };
+
+  // Gendered Men/Women tabbed card. Each tab seeds from its own saved override,
+  // then the (legacy) ungendered override, then the code default — so both tabs
+  // start out showing exactly what's live today.
+  const genderCard = (
+    g: string,
+    pair: string,
+    female: PromptSegmentMeta | undefined,
+    male: PromptSegmentMeta | undefined,
+  ): string => {
+    const any = female ?? male;
+    if (!any) return "";
+    const firesAttr = esc(JSON.stringify(any.fires ?? {}));
+    const alwaysOn = g.startsWith("Retouch");
+    const baseTitle = any.label.replace(/\s—\s(Men|Women)$/, "");
+    const pane = (m: PromptSegmentMeta | undefined, show: boolean): string => {
+      if (!m) return "";
+      const gkey = m.key;
+      const gv = savedOverride(gkey);
+      const bv = savedOverride(pair);
+      const value =
+        gv ?? bv ?? catalog.defaults[gkey] ?? catalog.defaults[pair] ?? "";
+      const isOverridden = gv !== null;
+      const badge = isOverridden
+        ? `<span class="badge edited">Edited</span>`
+        : `<span class="badge def">Default</span>`;
+      const note = m.note ? `<div class="note">${esc(m.note)}</div>` : "";
+      return `<div class="gpane" id="pane_${esc(pair)}_${esc(m.gender ?? "")}"${show ? "" : ' style="display:none"'}>
+          <div style="margin-top:6px">${badge}</div>
+          ${note}
+          <textarea id="ta_${esc(gkey)}" rows="6" spellcheck="false">${esc(value)}</textarea>
+          <div class="cbtns">
+            <button class="save" onclick="save('${esc(gkey)}')">Save (go live)</button>
+            <button class="reset" onclick="reset('${esc(gkey)}')">Reset to default</button>
+            <span class="status" id="st_${esc(gkey)}"></span>
+          </div>
+        </div>`;
+    };
+    return `
+        <div class="card" data-key="${esc(pair)}" data-fires='${firesAttr}'${alwaysOn ? ' data-always="1"' : ''}>
+          <div class="chead">
+            <div class="ctitle">${esc(baseTitle)} · Men / Women</div>
+            <div class="ckey">${esc(pair)} · gendered</div>
+          </div>
+          <div class="gtabs">
+            <button class="gtab on" id="gt_${esc(pair)}_female" onclick="gtab('${esc(pair)}','female')">Women</button>
+            <button class="gtab" id="gt_${esc(pair)}_male" onclick="gtab('${esc(pair)}','male')">Men</button>
+          </div>
+          ${pane(female, true)}
+          ${pane(male, false)}
+        </div>`;
+  };
+
+  const cards = groups
+    .map((g) => {
+      const metas = catalog.meta.filter((m) => m.group === g);
+      const seenPairs = new Set<string>();
+      const rendered: string[] = [];
+      for (const m of metas) {
+        if (m.genderPair) {
+          if (seenPairs.has(m.genderPair)) continue;
+          seenPairs.add(m.genderPair);
+          const female = metas.find(
+            (x) => x.genderPair === m.genderPair && x.gender === "female",
+          );
+          const male = metas.find(
+            (x) => x.genderPair === m.genderPair && x.gender === "male",
+          );
+          rendered.push(genderCard(g, m.genderPair, female, male));
+        } else {
+          rendered.push(singleCard(g, m));
+        }
+      }
+      return `<section><h3>${esc(g)}</h3>${rendered.join("")}</section>`;
     })
     .join("");
 
@@ -178,6 +254,10 @@ export default async function handler(
   button.save{background:var(--accent);color:#fff;border:none;border-radius:7px;padding:7px 13px;font:600 12px system-ui;cursor:pointer}
   button.reset{background:#fff;color:var(--dark);border:1px solid var(--line);border-radius:7px;padding:7px 13px;font:12px system-ui;cursor:pointer}
   .status{font-size:12px;color:var(--accent)}
+  .gtabs{display:flex;gap:6px;margin:6px 0 4px}
+  .gtab{padding:6px 16px;border:1px solid var(--line);background:#fff;border-radius:8px;cursor:pointer;font:600 13px system-ui;color:var(--dark)}
+  .gtab.on{background:var(--dark);color:#fff;border-color:var(--dark)}
+  .gpane{margin-top:2px}
 </style></head>
 <body>
 <header>
@@ -196,6 +276,14 @@ export default async function handler(
       var active=true;
       for(var k in f){ if(f[k]!==recipe[k]){active=false;break;} }
       c.classList.toggle('dim-off',!active);
+    });
+  }
+  function gtab(pair,g){
+    ['female','male'].forEach(function(x){
+      var pane=document.getElementById('pane_'+pair+'_'+x);
+      var btn=document.getElementById('gt_'+pair+'_'+x);
+      if(pane) pane.style.display=(x===g?'':'none');
+      if(btn) btn.classList.toggle('on',x===g);
     });
   }
   function pick(dim,val){
