@@ -11150,7 +11150,16 @@ const CheckoutScreen = ({
       const uploadedUrls: string[] = [];
       for (let i = 0; i < selectedImages.length; i++) {
         setProgressLabel(`Uploading photo ${i + 1} of ${selectedImages.length}…`);
-        const file = dataUrlToFile(selectedImages[i], `headshot-${i + 1}.jpg`);
+        const img = selectedImages[i];
+        // Resumed-session shots (opened via a "ready to view" link) are already
+        // Blob URLs (http), not base64 — reuse them as-is instead of trying to
+        // decode them, which threw "unrecognized format" at checkout for anyone
+        // who came back through a resume link. (2026-08-10 fix)
+        if (/^https?:\/\//.test(img)) {
+          uploadedUrls.push(img);
+          continue;
+        }
+        const file = dataUrlToFile(img, `headshot-${i + 1}.jpg`);
         if (!file) {
           throw new Error(`Photo ${i + 1} was in an unrecognized format.`);
         }
