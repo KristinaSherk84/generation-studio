@@ -32,6 +32,11 @@ export type SavedSession = {
   selections: unknown;
   hasWideAngle: boolean;
   createdAt: string;
+  // The two "Wild Card" bonus previews (Paper/color batches only), persisted so
+  // they survive a reload and show on the "your headshots are ready" email link
+  // instead of vanishing with the live tab. Added post-save via a patch, since
+  // they usually finish generating after the main grid is saved. (2026-08-10)
+  wildCards?: { url: string; label: string }[];
 };
 
 const TTL_SECONDS = 4 * 24 * 60 * 60; // 4 days (safe cushion; win-back fires ~12h after generation, so the resume link is always alive)
@@ -91,6 +96,37 @@ export async function updateSessionSlot(
   if (!rec || !Array.isArray(rec.generatedUrls)) return false;
   if (index >= rec.generatedUrls.length) return false;
   rec.generatedUrls[index] = url;
+  await redis.set(key(token), rec, { ex: TTL_SECONDS });
+  return true;
+}
+
+/**
+ * Attach the finished Wild Card previews to a saved session so the resume link
+ * shows them. Patches the existing record (keeps the grid + refreshes TTL).
+ * Returns false if the session is gone. (2026-08-10)
+ */
+export async function setSessionWildCards(
+  token: string,
+  wildCards: { url: string; label: string }[],
+): Promise<boolean> {
+  if (!token || !/^[A-Za-z0-9]{16,48}$/.test(token)) return false;
+  let rec: SavedSession | null;
+  try {
+    rec = (await redis.get<SavedSession>(key(token))) ?? null;
+  } catch {
+    return false;
+  }
+  if (!rec) return false;
+  const clean = (Array.isArray(wildCards) ? wildCards : [])
+    .filter(
+      (w) => w && typeof w.url === "string" && /^https?:\/\//.test(w.url),
+    )
+    .slice(0, 4)
+    .map((w) => ({
+      url: w.url,
+      label: typeof w.label === "string" ? w.label.slice(0, 160) : "",
+    }));
+  rec.wildCards = clean;
   await redis.set(key(token), rec, { ex: TTL_SECONDS });
   return true;
 }

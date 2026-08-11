@@ -38,5 +38,6 @@ export default async function handler(
     referencePhotoUrls: session.referencePhotoUrls,
     selections: session.selections,
     hasWideAngle: session.hasWideAngle,
+    wildCards: session.wildCards ?? [],
   });
 }

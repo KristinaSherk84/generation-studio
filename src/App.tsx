@@ -13380,6 +13380,49 @@ export default function App() {
   const [adminFixMode, setAdminFixMode] = useState(false);
   const [adminRegensUsed, setAdminRegensUsed] = useState(0);
   const adminRegenCountRef = useRef(0);
+
+  // Wild Card persistence (2026-08-10). Wild cards finish generating AFTER the
+  // grid is saved for the email link, so we patch them onto the saved session
+  // once BOTH the session token and the finished wild cards exist — whichever
+  // lands last triggers the flush. Fires at most once per batch.
+  const pendingWildCardsRef = useRef<{ image: string; label: string }[] | null>(
+    null,
+  );
+  const wildCardsPersistedRef = useRef(false);
+  const flushWildCardPersist = async () => {
+    const token = resumeTokenRef.current;
+    const wcs = pendingWildCardsRef.current;
+    if (!token || !wcs || wcs.length === 0 || wildCardsPersistedRef.current) {
+      return;
+    }
+    wildCardsPersistedRef.current = true;
+    try {
+      const out: { url: string; label: string }[] = [];
+      for (const wc of wcs) {
+        let url = wc.image;
+        if (!/^https?:\/\//.test(url)) {
+          const file = dataUrlToFile(wc.image, `wildcard-${out.length + 1}.jpg`);
+          if (!file) continue;
+          const r = await upload(
+            `session/${Date.now()}-wc-${out.length}-${file.name}`,
+            file,
+            { access: "public", handleUploadUrl: "/api/upload" },
+          );
+          url = r.url;
+        }
+        out.push({ url, label: wc.label });
+      }
+      if (out.length > 0) {
+        await fetch("/api/session-wildcards", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token, wildCards: out }),
+        });
+      }
+    } catch {
+      /* best-effort — wild cards still show live for this session */
+    }
+  };
   const [showRegenLimitModal, setShowRegenLimitModal] = useState(false);
 
   // Guard against the #1 cause of "all generations failed": the customer
@@ -13727,6 +13770,7 @@ export default function App() {
           referencePhotoUrls?: string[];
           selections?: StyleSelections | null;
           hasWideAngle?: boolean;
+          wildCards?: { url: string; label: string }[];
         };
         if (!d.generatedUrls || d.generatedUrls.length === 0) return;
         setGeneratedImages(d.generatedUrls);
@@ -13734,6 +13778,16 @@ export default function App() {
         if (d.referencePhotoUrls) setLastPhotoUrls(d.referencePhotoUrls);
         if (d.selections) setLastSelections(d.selections);
         setLastHasWideAngle(!!d.hasWideAngle);
+        // Restore the saved Wild Card previews so the email link shows them too.
+        if (Array.isArray(d.wildCards) && d.wildCards.length > 0) {
+          setWildCards(
+            d.wildCards.map((w) => ({
+              image: w.url,
+              label: w.label,
+              failed: false,
+            })),
+          );
+        }
         setResumedFromEmail(true);
         // Remember the token so a damage-control regen can be written back to
         // this same saved grid (below).
@@ -14752,7 +14806,12 @@ export default function App() {
           });
           if (resp.ok) {
             const d = (await resp.json()) as { token?: string };
-            if (d.token) resumeToken = d.token;
+            if (d.token) {
+              resumeToken = d.token;
+              // Enable regen + wild-card persistence for this fresh session.
+              resumeTokenRef.current = d.token;
+              void flushWildCardPersist();
+            }
           }
         }
       } catch {
@@ -15102,6 +15161,8 @@ export default function App() {
     setRegeneratingSlots(new Set());
     setInitialBatchInFlight(new Set([0, 1, 2, 3, 4, 5]));
     setWildCards([]); // clear any prior batch's wild cards
+    pendingWildCardsRef.current = null;
+    wildCardsPersistedRef.current = false;
     currentBatchId = newBatchId(); // new free-tier batch id for the per-IP cap
     freeLimitHitRef.current = false;
     // Persist selections + URLs so per-slot regeneration can reuse them
@@ -15426,7 +15487,7 @@ export default function App() {
     // 4. Fire the two calls staggered (same Preview-model 503 pressure the
     //    main batch staggers around). Each updates only its own slot.
     const WC_STAGGER_MS = 6000;
-    await Promise.all(
+    const settled = await Promise.all(
       configs.map(async (c, i) => {
         if (i > 0) {
           await staggerDelay(i * WC_STAGGER_MS);
@@ -15458,15 +15519,26 @@ export default function App() {
             if (next[i]) next[i] = { ...next[i], image: img };
             return next;
           });
+          return { image: img, label: c.label };
         } catch {
           setWildCards((prev) => {
             const next = [...prev];
             if (next[i]) next[i] = { ...next[i], failed: true };
             return next;
           });
+          return null;
         }
       }),
     );
+    // Persist the finished wild cards onto the saved session so they show on
+    // the "your headshots are ready" email link (best-effort).
+    const doneWc = settled.filter(
+      (r): r is { image: string; label: string } => !!r && !!r.image,
+    );
+    if (doneWc.length > 0) {
+      pendingWildCardsRef.current = doneWc;
+      void flushWildCardPersist();
+    }
   };
 
   // Score every generated slot against the reference face; auto-regenerate
