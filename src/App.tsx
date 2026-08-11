@@ -9583,8 +9583,7 @@ const GridScreen = ({
               );
             })}
             <p className="wc-center" style={{ order: 2, color: C.mediumGrey }}>
-              Two extra looks we tried for you — different styles than you
-              chose, on us.
+              Two extra preview looks / styles we tried for you.
             </p>
             </div>
           </div>
