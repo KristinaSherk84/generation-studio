@@ -9357,21 +9357,24 @@ const GridScreen = ({
         .wildcard-thumbs {
           display: flex;
           flex-wrap: wrap;
-          gap: 22px;
+          align-items: center;
+          gap: 14px;
           justify-content: center;
-          margin-top: 12px;
+          margin-top: 8px;
         }
         .wildcard-thumb { display: flex; align-items: center; gap: 10px; }
         .wildcard-thumb:first-child { flex-direction: row-reverse; }
-        .wc-shot { width: 128px; flex: 0 0 128px; }
-        .wc-cap { width: 108px; flex: 0 0 108px; font-size: 12px; }
+        .wc-shot { width: 188px; flex: 0 0 188px; }
+        .wc-cap { width: 96px; flex: 0 0 96px; font-size: 13px; font-weight: 600; line-height: 1.4; }
         .wildcard-thumb:first-child .wc-cap { text-align: right; }
         .wildcard-thumb:nth-child(2) .wc-cap { text-align: left; }
+        .wc-center { flex: 0 0 148px; max-width: 160px; margin: 0; text-align: center; font-size: 13px; line-height: 1.5; }
         @media (max-width: 600px) {
-          .wildcard-thumbs { gap: 14px; }
-          .wildcard-thumb { flex-direction: column !important; gap: 6px; }
-          .wc-shot { width: 116px; flex: 0 0 auto; }
+          .wildcard-thumbs { gap: 12px; }
+          .wildcard-thumb { flex-direction: column !important; gap: 6px; order: 0 !important; }
+          .wc-shot { width: 42vw; max-width: 190px; flex: 0 0 auto; }
           .wc-cap { width: auto; flex: 0 0 auto; text-align: center !important; }
+          .wc-center { flex: 0 0 100%; max-width: 100%; order: 10 !important; }
         }
       `}</style>
       <div
@@ -9413,24 +9416,11 @@ const GridScreen = ({
             >
               Wild Card Results
             </h3>
-            <p
-              style={{
-                fontSize: 13,
-                color: C.mediumGrey,
-                margin: "6px auto 0",
-                maxWidth: 460,
-                lineHeight: 1.55,
-                textAlign: "center",
-              }}
-            >
-              Two extra looks we tried for you — different styles than you
-              chose, on us.
-            </p>
             <div className="wildcard-thumbs">
             {wildCards.map((wc, i) => {
               const wcPicked = !!wc.image && cartSet.has(wc.image);
               return (
-                <div key={i} className="wildcard-thumb">
+                <div key={i} className="wildcard-thumb" style={{ order: i === 0 ? 1 : 3 }}>
                   <div
                     className="wc-shot"
                     onClick={() => {
@@ -9582,16 +9572,20 @@ const GridScreen = ({
                   <div
                     className="wc-cap"
                     style={{
-                      fontSize: 12,
+                      fontSize: 13,
                       color: C.dark,
                       lineHeight: 1.4,
                     }}
                   >
-                    {wc.label}
+                    {wc.label.split(" · ").slice(0, 2).join(" · ")}
                   </div>
                 </div>
               );
             })}
+            <p className="wc-center" style={{ order: 2, color: C.mediumGrey }}>
+              Two extra looks we tried for you — different styles than you
+              chose, on us.
+            </p>
             </div>
           </div>
         )}
