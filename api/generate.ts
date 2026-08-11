@@ -299,6 +299,13 @@ Wide Angle Lens Distortion Adjustment: For wide angle selfies uploaded, correct 
 //   - 50 or older → preserve natural texture (no softening, reads authentic)
 const BLOCK_UNDER_EYE = `Under-eye rule (women only). Use the reference photos' under-eye condition as a base, then noticeably BRIGHTEN and lift the WHOLE orbital region — the under-eye area AND the shadowed eye sockets / hollows beside the nose bridge. Fill light into the tear troughs and orbital hollows so these zones read bright, smooth, and well-rested — clearly lighter than the reference, with no dark, sunken, or muddy pockets. This under-eye and orbital brightening takes priority over any lighting direction that would otherwise leave shadow in the eye sockets. Keep native skin texture — brighten, do not plastic-smooth.`;
 
+// Gendered SKIN MODULE (2026-08-11 per Kristi) — a general, editable skin
+// directive that fires on EVERY generation, resolved per detected gender via
+// gseg (Skin — Men / Skin — Women tabs in the prompt editor). Seeded identical
+// for both so Kristi can tune each side (e.g. women more even/luminous, men
+// more matte with stubble texture kept).
+const SKIN_MODULE_DEFAULT = `Skin: keep the person's REAL skin — natural texture, visible pores, and their genuine complexion and skin tone. Gently even out temporary redness, blotchiness, and shine and soften (do not erase) minor blemishes, while preserving freckles, moles, scars, and character lines exactly as they appear in the reference photos. Never plastic-smooth, airbrush, or render waxy, doll-like, or filtered skin.`;
+
 // Block SKIN_POLISHED — TONE-EVENING companion to Block 1's Polished tier.
 //
 // Restructured 2026-05-01: Block 1 now owns the smoothing PERCENTAGE for all
@@ -885,6 +892,9 @@ export const PROMPT_DEFAULTS: Record<string, string> = {
   under_eye: BLOCK_UNDER_EYE,
   under_eye_male: BLOCK_UNDER_EYE,
   under_eye_female: BLOCK_UNDER_EYE,
+  skin_module: SKIN_MODULE_DEFAULT,
+  skin_module_male: SKIN_MODULE_DEFAULT,
+  skin_module_female: SKIN_MODULE_DEFAULT,
   skin_polished: BLOCK_SKIN_POLISHED,
   skin_glam: BLOCK_SKIN_GLAM,
   composition: BLOCK_2_COMPOSITION,
@@ -938,6 +948,8 @@ export const PROMPT_SEGMENTS: PromptSegmentMeta[] = [
   { key: "lens_correction", label: "Lens correction", group: "Core", fires: {}, note: "Only fires when a wide-angle selfie is detected." },
   { key: "under_eye_female", label: "Under-eye — Women", group: "Skin", fires: {}, note: "Sent on women's shots (skipped on Glam).", genderPair: "under_eye", gender: "female" },
   { key: "under_eye_male", label: "Under-eye — Men", group: "Skin", fires: {}, note: "Sent on men's shots. Trim this down — don't empty it.", genderPair: "under_eye", gender: "male" },
+  { key: "skin_module_female", label: "Skin — Women", group: "Skin", fires: {}, note: "General skin direction sent on women's shots.", genderPair: "skin_module", gender: "female" },
+  { key: "skin_module_male", label: "Skin — Men", group: "Skin", fires: {}, note: "General skin direction sent on men's shots.", genderPair: "skin_module", gender: "male" },
   { key: "style_corporate", label: "Style — Paper/color", group: "Style", fires: { style: "corporate" } },
   { key: "style_creative", label: "Style — Creative Natural", group: "Style", fires: { style: "creative" } },
   { key: "style_executive", label: "Style — Executive", group: "Style", fires: { style: "executive" } },
@@ -1055,6 +1067,10 @@ function assemblePrompt(req: GenerateRequest): string {
   if (req.skin !== "glam") {
     parts.push(gseg("under_eye", req.gender, BLOCK_UNDER_EYE));
   }
+
+  // Gendered skin module (2026-08-11) — always fires; editable per gender via
+  // the Skin — Men / Skin — Women tabs in the prompt editor.
+  parts.push(gseg("skin_module", req.gender, SKIN_MODULE_DEFAULT));
 
   // buildBlockPet sits right after identity so Gemini evaluates "is this a
   // pet?" before it starts applying gendered-human attire rules from
