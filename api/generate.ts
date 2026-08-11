@@ -941,6 +941,18 @@ export const PROMPT_DEFAULTS: Record<string, string> = {
   slot_3: SLOT_TOUCHUP_DEFAULT[3] ?? "",
   slot_4: SLOT_TOUCHUP_DEFAULT[4] ?? "",
   slot_5: SLOT_TOUCHUP_DEFAULT[5] ?? "",
+  slot_pose_0: FLAVORS[0].bodyPose,
+  slot_crop_0: FLAVORS[0].crop,
+  slot_pose_1: FLAVORS[1].bodyPose,
+  slot_crop_1: FLAVORS[1].crop,
+  slot_pose_2: FLAVORS[2].bodyPose,
+  slot_crop_2: FLAVORS[2].crop,
+  slot_pose_3: FLAVORS[3].bodyPose,
+  slot_crop_3: FLAVORS[3].crop,
+  slot_pose_4: FLAVORS[4].bodyPose,
+  slot_crop_4: FLAVORS[4].crop,
+  slot_pose_5: FLAVORS[5].bodyPose,
+  slot_crop_5: FLAVORS[5].crop,
   skin_fidelity_anchor: SKIN_FIDELITY_ANCHOR_DEFAULT,
   glam_override: GLAM_OVERRIDE_DEFAULT,
   identity_lock_hero: IDENTITY_LOCK_HERO_DEFAULT,
@@ -988,6 +1000,18 @@ export const PROMPT_SEGMENTS: PromptSegmentMeta[] = [
   { key: "slot_3", label: "Slot 4 touch-up", group: "Per-slot touch-ups", fires: {} },
   { key: "slot_4", label: "Slot 5 touch-up (skin smoothing)", group: "Per-slot touch-ups", fires: {} },
   { key: "slot_5", label: "Slot 6 touch-up", group: "Per-slot touch-ups", fires: {} },
+  { key: "slot_pose_0", label: "Slot 1 — Body angle", group: "Per-slot pose & framing", fires: {} },
+  { key: "slot_crop_0", label: "Slot 1 — Framing / crop", group: "Per-slot pose & framing", fires: {} },
+  { key: "slot_pose_1", label: "Slot 2 — Body angle", group: "Per-slot pose & framing", fires: {} },
+  { key: "slot_crop_1", label: "Slot 2 — Framing / crop", group: "Per-slot pose & framing", fires: {} },
+  { key: "slot_pose_2", label: "Slot 3 — Body angle", group: "Per-slot pose & framing", fires: {} },
+  { key: "slot_crop_2", label: "Slot 3 — Framing / crop", group: "Per-slot pose & framing", fires: {} },
+  { key: "slot_pose_3", label: "Slot 4 — Body angle", group: "Per-slot pose & framing", fires: {} },
+  { key: "slot_crop_3", label: "Slot 4 — Framing / crop", group: "Per-slot pose & framing", fires: {} },
+  { key: "slot_pose_4", label: "Slot 5 — Body angle", group: "Per-slot pose & framing", fires: {} },
+  { key: "slot_crop_4", label: "Slot 5 — Framing / crop", group: "Per-slot pose & framing", fires: {} },
+  { key: "slot_pose_5", label: "Slot 6 — Body angle", group: "Per-slot pose & framing", fires: {} },
+  { key: "slot_crop_5", label: "Slot 6 — Framing / crop", group: "Per-slot pose & framing", fires: {} },
   { key: "identity_lock_hero", label: "Likeness lock — hero (slot 1)", group: "Identity", fires: {}, note: "Only the first slot." },
   { key: "identity_lock_all", label: "Likeness lock — other slots", group: "Identity", fires: {}, note: "Slots 2-6." },
   { key: "final_identity_check", label: "Final identity check", group: "Identity", fires: {} },
@@ -1055,8 +1079,8 @@ function buildBlock8(
 
   return `Photograph direction for this single image:
 - Expression: ${flavor.expression}. Eyes must look alert, engaged, activated, and realistic — never blank, glazed or expressionless. REFERENCE TEETH CHECK (applies to THIS image regardless of the expression wording above): Inspect every reference photo for visible teeth before deciding what kind of smile to render. If NO reference photo shows any visible teeth, render a CLOSED-MOUTH smile that matches the lip style shown in the references — lips together, no upper teeth, no lower teeth, no gap between the lips — even if the expression wording above said "open smile," "teeth-showing," or "bright." Reference fidelity wins over the expression wording. AI-generated teeth on a subject who shows no teeth in references produce uncanny, "AI-tell" output that fails the headshot.
-- Body and head: ${flavor.bodyPose}.
-- Framing: ${flavor.crop}.
+- Body and head: ${seg("slot_pose_" + variationIndex, flavor.bodyPose)}.
+- Framing: ${seg("slot_crop_" + variationIndex, flavor.crop)}.
 ${outfitLine}
 
 ${seg("reference_photo_rule", REFERENCE_PHOTO_RULE_DEFAULT)}${womenSkinAnchor}${glamUnderEyeOverride}
