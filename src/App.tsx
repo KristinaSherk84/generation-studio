@@ -15151,6 +15151,10 @@ export default function App() {
     // calls fire so a customer who refreshes mid-generation can't bypass
     // the cap by reloading. Worst case: a failed batch still counts —
     // that's intentional, prevents the cap being burned by retry abuse.
+    // Snapshot the current grid so a fully-blocked batch (e.g. out of free
+    // generations) can restore it instead of leaving the customer on a frozen
+    // "generating" screen. (2026-08-11)
+    const priorGrid = generatedImages;
     setBatchesUsed((n) => n + 1);
     setGeneratedImages([]);
     setReadyCount(0);
@@ -15359,9 +15363,16 @@ export default function App() {
     if (successCount === 0) {
       if (freeLimitHitRef.current) {
         // Every call 402'd on the free-tier IP cap — the $2.99 paywall is
-        // already open. Refund the optimistic batch count and stop here
-        // rather than also showing the "connection interrupted" popup.
+        // already open. Refund the optimistic batch count, and CRUCIALLY
+        // restore the grid they came from + leave the loading screen, so
+        // dismissing the paywall doesn't strand them on a frozen "generating"
+        // screen with no way back. (2026-08-11 fix)
         setBatchesUsed((n) => Math.max(0, n - 1));
+        if (priorGrid.length > 0) {
+          setGeneratedImages(priorGrid);
+          setReadyCount(priorGrid.length);
+        }
+        setScreen((sc) => (sc === "loading" ? "grid" : sc));
         return;
       }
       // Edge case: if the user has already advanced to the grid via the
