@@ -9356,25 +9356,30 @@ const GridScreen = ({
         }
         .wildcard-thumbs {
           display: flex;
-          flex-wrap: wrap;
+          flex-wrap: nowrap;
           align-items: center;
-          gap: 14px;
+          gap: 12px;
           justify-content: center;
           margin-top: 8px;
         }
-        .wildcard-thumb { display: flex; align-items: center; gap: 10px; }
+        .wildcard-thumb { display: flex; align-items: center; gap: 10px; min-width: 0; }
         .wildcard-thumb:first-child { flex-direction: row-reverse; }
-        .wc-shot { width: 188px; flex: 0 0 188px; }
-        .wc-cap { width: 96px; flex: 0 0 96px; font-size: 13px; font-weight: 600; line-height: 1.4; }
+        /* Shots shrink with the window (down to a floor) instead of the row
+           wrapping — so the two stay side by side and use the outer space
+           rather than stacking one on top of the other. */
+        .wc-shot { width: clamp(112px, 21vw, 188px); flex: 0 0 auto; }
+        .wc-cap { flex: 0 1 96px; min-width: 70px; font-size: 13px; font-weight: 600; line-height: 1.4; }
         .wildcard-thumb:first-child .wc-cap { text-align: right; }
         .wildcard-thumb:nth-child(2) .wc-cap { text-align: left; }
-        .wc-center { flex: 0 0 148px; max-width: 160px; margin: 0; text-align: center; font-size: 13px; line-height: 1.5; }
-        @media (max-width: 600px) {
-          .wildcard-thumbs { gap: 12px; }
+        .wc-center { flex: 0 1 132px; min-width: 76px; max-width: 140px; margin: 0; text-align: center; font-size: 13px; line-height: 1.45; }
+        /* True phone width: two shots side by side, captions below each, the
+           middle line below both. Still never stacks the images vertically. */
+        @media (max-width: 560px) {
+          .wildcard-thumbs { flex-wrap: wrap; gap: 12px; }
           .wildcard-thumb { flex-direction: column !important; gap: 6px; order: 0 !important; }
-          .wc-shot { width: 42vw; max-width: 190px; flex: 0 0 auto; }
-          .wc-cap { width: auto; flex: 0 0 auto; text-align: center !important; }
-          .wc-center { flex: 0 0 100%; max-width: 100%; order: 10 !important; }
+          .wc-shot { width: 42vw; max-width: 190px; }
+          .wc-cap { width: auto; flex: 0 0 auto; min-width: 0; text-align: center !important; }
+          .wc-center { flex: 0 0 100%; max-width: 100%; min-width: 0; order: 10 !important; }
         }
       `}</style>
       <div
