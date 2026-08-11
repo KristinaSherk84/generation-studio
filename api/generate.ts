@@ -492,6 +492,9 @@ function buildMedicalAttireVariant(
   variationIndex: number,
 ): string {
   const colorDesc = SCRUB_COLOR_DESCRIPTIONS[scrubColor];
+  // Editable via the prompt editor (Attire -> Stethoscope). seg() returns the
+  // saved override when present, else the anatomically-correct default below.
+  const steth = seg("stethoscope", STETHOSCOPE_ANATOMY_DESCRIPTION);
   // Clamp out-of-range variationIndex (per-slot regens use 0-5 but
   // defensive in case of future drift).
   const i = Math.max(0, Math.min(5, variationIndex));
@@ -511,7 +514,7 @@ function buildMedicalAttireVariant(
     return `STRICT GARMENT TYPE: The customer is wearing a DOCTOR'S WHITE COAT (physician's white coat / medical lab coat) over a hospital scrub top. The output IS NOT a business suit, IS NOT a tailored blazer, IS NOT a sport coat — even if other style cues might tempt that rendering. A DOCTOR'S WHITE COAT (physician's white coat / medical lab coat) worn open over freshly pressed, wrinkle-free medical SCRUBS visible at the V-neck. The white coat must be pure white, simple notched collar (no formal suit lapels), and dominate the upper torso. Beneath the coat, only the V-neck of the scrubs is visible — scrubs color: ${colorDesc}. The look reads as a physician mid-shift wearing a white coat over ${scrubColor} scrubs. FAILURE DETECTOR: if the rendered torso is a tailored ${scrubColor} blazer or business jacket with NO visible white coat, you have FAILED this variant — the white coat MUST be the dominant garment.`;
   }
   if (i === 1) {
-    return `STRICT GARMENT TYPE: DOCTOR'S WHITE COAT (NOT a suit jacket, NOT a blazer, NOT a sport coat). A DOCTOR'S WHITE COAT (physician's white coat / medical lab coat) worn open over freshly pressed, wrinkle-free medical SCRUBS visible at the V-neck. The white coat must be pure white and dominate the upper torso. Beneath the coat, only the V-neck of the scrubs is visible — scrubs color: ${colorDesc}. ${STETHOSCOPE_ANATOMY_DESCRIPTION} The look reads as a physician mid-shift. FAILURE DETECTOR: white coat must be the dominant garment; if a ${scrubColor} blazer dominates instead, you have FAILED.`;
+    return `STRICT GARMENT TYPE: DOCTOR'S WHITE COAT (NOT a suit jacket, NOT a blazer, NOT a sport coat). A DOCTOR'S WHITE COAT (physician's white coat / medical lab coat) worn open over freshly pressed, wrinkle-free medical SCRUBS visible at the V-neck. The white coat must be pure white and dominate the upper torso. Beneath the coat, only the V-neck of the scrubs is visible — scrubs color: ${colorDesc}. ${steth} The look reads as a physician mid-shift. FAILURE DETECTOR: white coat must be the dominant garment; if a ${scrubColor} blazer dominates instead, you have FAILED.`;
   }
   if (i === 2) {
     // 2026-06-05 v3 — rewritten after slot-2 of navy generation kept
@@ -545,7 +548,7 @@ function buildMedicalAttireVariant(
     // 2026-07-13: positive rewrite (Kristi) — no "NOT" / "FAILURE" language.
     // Garment type held positively via the scrub-top description + "the only
     // garment worn on top". ${colorDesc} carries the customer's chosen color.
-    return `A soft, short-sleeve V-neck medical scrub top in ${colorDesc}. It has a loose, relaxed drape, a deep V neckline, and an unstructured pullover fit — the classic FIGS or Cherokee scrub-top look — and it is the only garment worn on top. ${STETHOSCOPE_ANATOMY_DESCRIPTION} The scrub color fills the upper body.`;
+    return `A soft, short-sleeve V-neck medical scrub top in ${colorDesc}. It has a loose, relaxed drape, a deep V neckline, and an unstructured pullover fit — the classic FIGS or Cherokee scrub-top look — and it is the only garment worn on top. ${steth} The scrub color fills the upper body.`;
   }
   // i === 5
   // 2026-07-13: positive rewrite (Kristi) — no "NOT" / "FAILURE" language.
@@ -557,7 +560,7 @@ function buildMedicalAttireVariant(
 // was dropping the white coat + scrub color — the long stethoscope block was
 // dominating Gemini's attention. Shorter constant, real Littmann model names
 // as brand anchors, minimal but explicit two-different-ends description.
-const STETHOSCOPE_ANATOMY_DESCRIPTION = `A single stethoscope draped over the neck, its two black tubes hanging down the front and meeting at one round chestpiece.`;
+const STETHOSCOPE_ANATOMY_DESCRIPTION = `A single, anatomically CORRECT stethoscope draped around the back of the neck with both ends hanging down the front. Get the anatomy right — the two ends are DIFFERENT: ONE end is a round, flat metal CHESTPIECE (the drum/diaphragm disc a doctor presses on a patient's chest) and it MUST be clearly present and visible; the OTHER end is the curved metal binaural ear-tubes with soft ear tips (the part that goes in the ears). Exactly ONE chestpiece disc and ONE pair of ear tips, joined by smooth black rubber tubing. FAILURE — do NOT render: ear tips on BOTH ends, a missing chestpiece, two identical Y-fork or mirrored earpiece ends, a doubled stethoscope, or any text/engraving on it. If there is no round chestpiece disc, you have FAILED.`;
 
 const MEDICAL_GUARDRAILS_RULE = `CRITICAL MEDICAL ATTIRE GUARDRAILS — these override any default rendering tendencies:
 
@@ -908,6 +911,7 @@ export const PROMPT_DEFAULTS: Record<string, string> = {
   attire_formal_female: BLOCK_4_ATTIRE_STATIC.formal,
   attire_casual: BLOCK_4_ATTIRE_STATIC.casual,
   attire_keep: BLOCK_4_ATTIRE_STATIC.keep,
+  stethoscope: STETHOSCOPE_ANATOMY_DESCRIPTION,
   lighting_studio: BLOCK_5_LIGHTING.studio,
   lighting_natural: BLOCK_5_LIGHTING.natural,
   lighting_dramatic: BLOCK_5_LIGHTING.dramatic,
@@ -959,6 +963,7 @@ export const PROMPT_SEGMENTS: PromptSegmentMeta[] = [
   { key: "attire_formal_male", label: "Attire — Business formal — Men", group: "Attire", fires: { attire: "formal" }, genderPair: "attire_formal", gender: "male" },
   { key: "attire_casual", label: "Attire — Business casual", group: "Attire", fires: { attire: "casual" } },
   { key: "attire_keep", label: "Attire — Keep my outfit", group: "Attire", fires: { attire: "keep" } },
+  { key: "stethoscope", label: "Stethoscope (healthcare)", group: "Attire", fires: { attire: "medical" }, note: "Only appears on the medical variants that include a stethoscope." },
   { key: "lighting_studio", label: "Lighting — Studio", group: "Lighting", fires: { lighting: "studio" } },
   { key: "lighting_dramatic", label: "Lighting — Dramatic", group: "Lighting", fires: { lighting: "dramatic" } },
   { key: "lighting_golden", label: "Lighting — Golden hour", group: "Lighting", fires: { lighting: "golden" } },
