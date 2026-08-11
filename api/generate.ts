@@ -28,7 +28,10 @@
 import { GoogleGenAI } from "@google/genai";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { isCodeActiveForGenerate } from "./lib/promoStore.js";
-import { checkFreeBatchLimit } from "./lib/freeGenLimit.js";
+import {
+  checkFreeBatchLimit,
+  checkPurchaseBatchCredit,
+} from "./lib/freeGenLimit.js";
 import {
   getPromptOverrides,
   seedPromptCatalog,
@@ -195,6 +198,10 @@ type GenerateRequest = {
   // wild cards + regens of one user-initiated batch; new for each brand-new
   // batch. Used server-side to cap distinct free batches per IP.
   batchId?: string;
+  // The customer's PAID photo-checkout session id (cs_...), sent after a
+  // purchase so the server can grant the post-purchase free-batch credit
+  // (2 more batches) even though their IP already used its free batch. (2026-08-11)
+  purchaseSessionId?: string;
 };
 
 type InlineImage = { mimeType: string; data: string };
@@ -1503,6 +1510,7 @@ async function verifyUnlock(
   stripeSecretKey: string,
   ip: string,
   batchId: string | undefined,
+  purchaseSessionId: string | undefined,
 ): Promise<UnlockCheck> {
   // Feature flag — free-tier mode (added 2026-07-03).
   // When ENTRY_FEE_ENABLED === "false", the $2.99 entry paywall moves from
@@ -1569,6 +1577,42 @@ async function verifyUnlock(
         }
       } catch {
         /* any error → not exempt → falls through to the cap */
+      }
+    }
+    // Post-purchase perk (2026-08-11): a customer who just BOUGHT gets 2 more
+    // free full batches. We verify their photo-checkout session is genuinely
+    // PAID, then allow up to POST_PURCHASE_BATCHES distinct batchIds against it
+    // (regens/wild cards reuse the batchId, so they don't burn extra credit).
+    if (
+      !exempt &&
+      typeof purchaseSessionId === "string" &&
+      purchaseSessionId.startsWith("cs_")
+    ) {
+      try {
+        const r = await fetch(
+          `https://api.stripe.com/v1/checkout/sessions/${encodeURIComponent(purchaseSessionId)}`,
+          { method: "GET", headers: { Authorization: `Bearer ${stripeSecretKey}` } },
+        );
+        if (r.ok) {
+          const ses = (await r.json()) as {
+            payment_status?: string;
+            payment_intent?: { status?: string } | string | null;
+          };
+          const pi =
+            ses.payment_intent && typeof ses.payment_intent === "object"
+              ? ses.payment_intent.status
+              : undefined;
+          const paid = ses.payment_status === "paid" || pi === "succeeded";
+          if (paid) {
+            const { allowed } = await checkPurchaseBatchCredit(
+              purchaseSessionId,
+              batchId,
+            );
+            if (allowed) exempt = true;
+          }
+        }
+      } catch {
+        /* any error → not exempt → falls through to the normal per-IP cap */
       }
     }
     if (!exempt) {
@@ -1728,6 +1772,7 @@ export default async function handler(
     stripeSecretKey,
     clientIp,
     body.batchId,
+    body.purchaseSessionId,
   );
   if (!unlock.ok) {
     return res.status(402).json({

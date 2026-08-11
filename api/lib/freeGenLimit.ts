@@ -64,3 +64,32 @@ export async function checkFreeBatchLimit(
     return { allowed: true, batches: 0 };
   }
 }
+
+/**
+ * Post-purchase batch credit (2026-08-11). After a customer BUYS, they get a
+ * few more free full batches even though their IP already used its free batch.
+ * Keyed by the paid Stripe checkout session (verified paid by the caller), and
+ * counts DISTINCT batchIds — so the batch's regens/wild cards (which reuse the
+ * batchId) don't burn extra credits. Allows up to POST_PURCHASE_BATCHES.
+ * Fail-CLOSED (no credit) on any error — the caller then falls through to the
+ * normal per-IP cap, which is itself fail-open, so generation is never blocked
+ * by an infra hiccup here.
+ */
+const PP_LIMIT = Math.max(1, Number(process.env.POST_PURCHASE_BATCHES ?? "2"));
+const ppKey = (sessionId: string) => `ppcredit:${sessionId}`;
+
+export async function checkPurchaseBatchCredit(
+  sessionId: string | undefined,
+  batchId: string | undefined,
+): Promise<{ allowed: boolean }> {
+  if (!sessionId || !batchId) return { allowed: false };
+  try {
+    const k = ppKey(sessionId);
+    await redis.sadd(k, batchId);
+    await redis.expire(k, 7 * 24 * 3600);
+    const n = await redis.scard(k);
+    return { allowed: n <= PP_LIMIT };
+  } catch {
+    return { allowed: false };
+  }
+}

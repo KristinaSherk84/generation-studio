@@ -251,10 +251,16 @@ function readUnlockRequestFields(): {
   stripeSessionId?: string;
   promoCode?: string;
   batchId?: string;
+  purchaseSessionId?: string;
 } {
-  const batch = currentBatchId ? { batchId: currentBatchId } : {};
+  const batch: { batchId?: string; purchaseSessionId?: string } =
+    currentBatchId ? { batchId: currentBatchId } : {};
   if (typeof window === "undefined") return batch;
   try {
+    // Post-purchase perk: after any purchase we stash the paid session id so
+    // the server can grant 2 more free batches. Sent on every generate call.
+    const psid = window.localStorage.getItem("purchase_session_id");
+    if (psid) batch.purchaseSessionId = psid;
     const source = window.localStorage.getItem("unlock_source");
     if (source === "promo") {
       const code = window.localStorage.getItem("promo_code");
@@ -13314,6 +13320,17 @@ export default function App() {
   const [lastGender, setLastGender] = useState<"male" | "female" | undefined>(
     undefined,
   );
+
+  // Post-purchase perk (2026-08-11): ANY purchase (any amount) grants the
+  // customer 2 more free batches + 3 more single regens before the paywall
+  // returns. Initialized from localStorage so it survives a reload.
+  const [postPurchaseGrant, setPostPurchaseGrant] = useState<boolean>(() => {
+    try {
+      return !!window.localStorage.getItem("purchase_session_id");
+    } catch {
+      return false;
+    }
+  });
   // Which thumbnail slots currently have an in-flight single-slot regeneration.
   // The GridScreen overlays a loading spinner on these so the rest of the grid
   // stays interactive.
@@ -14457,6 +14474,16 @@ export default function App() {
         //      after that batch fires. We intentionally do NOT call
         //      markUnlocked here — that flips isUnlocked permanently and
         //      would give unlimited free batches, not the single perk batch.
+        // Post-purchase perk (2026-08-11): any purchase grants 2 more free
+        // batches + 3 more single regens. Store the paid session so generate
+        // calls can prove the purchase to the server, and flip the client
+        // gates to the larger allowance.
+        try {
+          window.localStorage.setItem("purchase_session_id", sessionId);
+        } catch {
+          /* private mode — server still enforces via the session anyway */
+        }
+        setPostPurchaseGrant(true);
         setBatchesUsed(0);
         setRegenCount(0);
         setShowFreeTierPaywall(false);
@@ -14500,6 +14527,13 @@ export default function App() {
     // Reset batch counter (Phase 4, 2026-06-03). Fresh session, fresh
     // budget. Also clear any leftover gating modal state.
     setBatchesUsed(0);
+    // Fresh session clears any post-purchase perk.
+    try {
+      window.localStorage.removeItem("purchase_session_id");
+    } catch {
+      /* ignore */
+    }
+    setPostPurchaseGrant(false);
     setShowRegenLimitModal(false);
     setHasSeenTips(false);
     setShowTipsModal(false);
@@ -14859,6 +14893,9 @@ export default function App() {
   // the other 5 thumbnails are untouched.
   const handleRegenerateSlot = async (index: number) => {
     const admin = adminFixMode;
+    // Post-purchase perk: 3 free single regens after a purchase, else the
+    // standard 2. (2026-08-11)
+    const singleCap = postPurchaseGrant ? 3 : MAX_FREE_REGENS;
     if (admin) {
       // Admin damage-control: 2 dedicated identity regens, tracked separately
       // from the customer's budget. They persist to the saved grid (fix mode
@@ -14880,12 +14917,12 @@ export default function App() {
       // to come back and VIEW their saved grid) get only MAX_FREE_REGENS (2)
       // single regens — never a fresh full budget. Returning to look at finished
       // shots must not silently hand out 6 more free generations (Kristi 2026-08-04).
-      if (resumedFromEmail && regenCount >= MAX_FREE_REGENS) {
+      if (resumedFromEmail && regenCount >= singleCap) {
         setShowFreeTierPaywall(true);
         return;
       }
       if (!entryFeeEnabled && !isUnlocked) {
-        if (regenCount >= MAX_FREE_REGENS) {
+        if (regenCount >= singleCap) {
           setShowFreeTierPaywall(true);
           return;
         }
@@ -15066,7 +15103,10 @@ export default function App() {
     // on the delivery/success screen, so a paying customer lands back here
     // with batchesUsed === 0 and slips through for exactly one more free
     // batch before this gate re-arms.
-    if (!entryFeeEnabled && !isUnlocked && batchesUsed >= 1) {
+    // Post-purchase perk: a purchase grants 2 free batches; a brand-new free
+    // visitor gets 1. The server enforces the same 2-batch credit. (2026-08-11)
+    const freeBatchAllowance = postPurchaseGrant ? 2 : 1;
+    if (!entryFeeEnabled && !isUnlocked && batchesUsed >= freeBatchAllowance) {
       setShowFreeTierPaywall(true);
       return;
     }
