@@ -158,6 +158,12 @@ const POLO_COLOR_DESCRIPTIONS: Record<PoloColor, string> = {
 // 2026-08-12 - ZERO emblems, logos, or writing anywhere on the garment.
 const POLO_ATTIRE_DEFAULT = `A classic short-sleeve collared POLO SHIRT in {COLOR}. Soft pique-knit cotton with a fold-down ribbed collar and a short 2-3 button placket at the neck; neatly fitted, tailored to the subject's apparent gender as determined from the reference photos. It is a knit POLO SHIRT — NOT a plain t-shirt (it has a real fold-down collar and a button placket), NOT a woven button-down / oxford dress shirt, NOT a medical scrub top, NOT a blazer, sweater, or sport coat. Business-casual and intentional. ZERO emblems, logos, brand marks, crests, embroidery, monograms, appliqués, patches, writing, text, letters, numbers, or graphics ANYWHERE on the polo — not on the chest, not on the collar, not on the sleeve, not on the placket. Every surface of the garment is completely plain, blank, and unbranded — a single solid color. The polo is the only top worn and its color fills the upper torso. FAILURE DETECTOR: if the rendered top is a collarless t-shirt, a stiff woven dress shirt, a scrub top, or a jacket/blazer — or if ANY logo, emblem, badge, or text appears on it — you have FAILED this variant; it must read as a soft, collared, completely unbranded knit polo.`;
 
+// Per-slot polo lock (2026-08-12). Injected by buildBlock8 for polo instead of
+// the generic variety attireHint, which for slots 5 & 6 pushed the polo toward
+// a charcoal/navy tone or a blazer. Editable in the prompt editor as
+// "Attire - Polo shirt - per-slot lock".
+const POLO_OUTFIT_LOCK_DEFAULT = `the polo shirt described above is the complete outfit for this image — the SAME collared knit polo in the EXACT same specified color as every other image in this set. Do NOT substitute a blazer, suit jacket, sport coat, cardigan, sweater, or woven dress shirt, and do NOT shift the polo's color (no charcoal, grey, or navy unless that is the specified color).`;
+
 function buildPoloAttire(poloColor: PoloColor): string {
   const colorDesc = POLO_COLOR_DESCRIPTIONS[poloColor];
   return seg("attire_polo", POLO_ATTIRE_DEFAULT).replace(/\{COLOR\}/g, colorDesc);
@@ -975,6 +981,7 @@ export const PROMPT_DEFAULTS: Record<string, string> = {
   attire_formal_female: BLOCK_4_ATTIRE_STATIC.formal,
   attire_casual: BLOCK_4_ATTIRE_STATIC.casual,
   attire_polo: POLO_ATTIRE_DEFAULT,
+  polo_outfit_lock: POLO_OUTFIT_LOCK_DEFAULT,
   attire_keep: BLOCK_4_ATTIRE_STATIC.keep,
   stethoscope: STETHOSCOPE_ANATOMY_DESCRIPTION,
   lighting_studio: BLOCK_5_LIGHTING.studio,
@@ -1046,6 +1053,7 @@ export const PROMPT_SEGMENTS: PromptSegmentMeta[] = [
   { key: "attire_formal_male", label: "Attire — Business formal — Men", group: "Attire", fires: { attire: "formal" }, genderPair: "attire_formal", gender: "male" },
   { key: "attire_casual", label: "Attire — Business casual", group: "Attire", fires: { attire: "casual" } },
   { key: "attire_polo", label: "Attire — Polo shirt", group: "Attire", fires: { attire: "polo" }, note: "The {COLOR} token is auto-filled with the customer's picked polo color — keep it in the text." },
+  { key: "polo_outfit_lock", label: "Attire — Polo shirt — per-slot lock", group: "Attire", fires: { attire: "polo" }, note: "Keeps every slot's polo the same garment + color. This is what blocks slots 5 & 6 from drifting to a grey polo or a blazer." },
   { key: "attire_keep", label: "Attire — Keep my outfit", group: "Attire", fires: { attire: "keep" } },
   { key: "stethoscope", label: "Stethoscope (healthcare)", group: "Attire", fires: { attire: "medical" }, note: "Only appears on the medical variants that include a stethoscope." },
   { key: "lighting_studio", label: "Lighting — Studio", group: "Lighting", fires: { lighting: "studio" } },
@@ -1121,7 +1129,7 @@ function buildBlock8(
             // 8 sits closer to the model's "what to render" reasoning, were
             // overriding the polo (slot 5 → grey polo, slot 6 → a blazer).
             // Reassert the polo positively and lock its color instead.
-            `- Outfit: the polo shirt described above is the complete outfit for this image — the SAME collared knit polo in the EXACT same specified color as every other image in this set. Do NOT substitute a blazer, suit jacket, sport coat, cardigan, sweater, or woven dress shirt, and do NOT shift the polo's color (no charcoal, grey, or navy unless that is the specified color).`
+            `- Outfit: ${seg("polo_outfit_lock", POLO_OUTFIT_LOCK_DEFAULT)}`
           : `- Outfit detail: ${flavor.attireHint}. This must stay firmly within the attire category specified above.`;
 
   // For women on Polished or Glam tiers, add a final-position reference-

@@ -13537,6 +13537,10 @@ export default function App() {
   // True when the last batch was blocked by the server-side free-tier IP cap
   // (so the zero-success handler shows the paywall, not a connection error).
   const freeLimitHitRef = useRef(false);
+  // Ready-to-view email guard — fires once per batch. Reset at the start of
+  // each handleGenerate so every new generation sends a fresh email, but a
+  // single batch never double-sends. (Kristi 2026-08-12)
+  const readyEmailedThisBatchRef = useRef(false);
   // Which slots from the INITIAL 6-image batch are still in flight. Distinct
   // from regeneratingSlots (which tracks per-slot regen clicks from the grid).
   // Used so the user can advance to the grid early — once 5 of 6 are ready,
@@ -14974,20 +14978,14 @@ export default function App() {
     if (readyCount < TOTAL_HEADSHOTS - 1) return;
     const addr = email.trim();
     if (!addr) return;
-    const flagKey = `gh_ready_emailed_${addr.toLowerCase()}`;
-    try {
-      if (
-        typeof window !== "undefined" &&
-        window.localStorage.getItem(flagKey) === "1"
-      ) {
-        return;
-      }
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem(flagKey, "1");
-      }
-    } catch {
-      /* storage blocked — the effect's own deps still prevent re-fire */
-    }
+    // Fire ONCE PER BATCH (Kristi 2026-08-12): every generation with an entered
+    // email should send its own "ready to view" email. readyEmailedThisBatchRef
+    // is reset at the start of each handleGenerate, so a new batch re-arms it;
+    // within a batch this guard prevents a double-send as readyCount settles.
+    // (Replaces the old once-per-browser+email localStorage flag, which
+    // suppressed every email after the first a browser ever sent.)
+    if (readyEmailedThisBatchRef.current) return;
+    readyEmailedThisBatchRef.current = true;
     // Snapshot the finished grid at fire time.
     const shots = generatedImages.filter((s) => !!s);
     const refUrls = lastPhotoUrls;
@@ -15446,6 +15444,7 @@ export default function App() {
       currentBatchId = newBatchId();
     }
     freeLimitHitRef.current = false;
+    readyEmailedThisBatchRef.current = false;
     // Persist selections + URLs so per-slot regeneration can reuse them
     // without asking the user to reselect anything.
     setLastSelections(selections);
