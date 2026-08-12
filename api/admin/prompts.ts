@@ -40,7 +40,7 @@ const RECIPE_DIMS: { key: string; label: string; options: string[] }[] = [
   { key: "style", label: "Style", options: ["corporate", "creative", "executive", "urban", "healthcare"] },
   { key: "background", label: "Background", options: ["white", "lightgrey", "dark", "black", "blue", "bluebright", "green", "red"] },
   { key: "lighting", label: "Lighting", options: ["studio", "dramatic", "golden"] },
-  { key: "attire", label: "Attire", options: ["formal", "casual", "keep", "medical"] },
+  { key: "attire", label: "Attire", options: ["formal", "casual", "polo", "keep", "medical"] },
   { key: "skin", label: "Skin", options: ["realistic"] },
 ];
 const DEFAULT_RECIPE: Record<string, string> = {

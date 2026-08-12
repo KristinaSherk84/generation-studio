@@ -119,53 +119,48 @@ const SCRUB_COLOR_VALUES: ScrubColor[] = [
 // request omits the field. Keep this list in sync with POLO_COLOR_SWATCHES in
 // src/App.tsx (the on-screen swatch row).
 type PoloColor =
-  | "white"
   | "black"
+  | "white"
   | "navy"
-  | "lightblue"
-  | "grey"
-  | "forestgreen"
-  | "burgundy"
-  | "red";
+  | "royal"
+  | "charcoal"
+  | "heather"
+  | "firered";
 
 const POLO_COLOR_VALUES: PoloColor[] = [
-  "white",
   "black",
+  "white",
   "navy",
-  "lightblue",
-  "grey",
-  "forestgreen",
-  "burgundy",
-  "red",
+  "royal",
+  "charcoal",
+  "heather",
+  "firered",
 ];
 
 // Tonal anchors + "NOT X" exclusions for each polo color, following the same
 // pattern as the scrub descriptions (Gemini drifts toward neighboring hues
-// without explicit exclusions).
+// without explicit exclusions). Palette set by Kristi 2026-08-12.
 const POLO_COLOR_DESCRIPTIONS: Record<PoloColor, string> = {
+  black: "true neutral black (NOT charcoal grey, NOT very-dark-navy, NOT brown)",
   white: "clean bright white (NOT cream, NOT ivory, NOT light grey)",
-  black: "true neutral black (NOT charcoal, NOT very-dark-navy, NOT brown)",
   navy: "deep classic navy blue (NOT royal blue, NOT baby blue, NOT black)",
-  lightblue: "soft pale sky blue, sometimes called 'ceil blue' (NOT navy, NOT royal, NOT white)",
-  grey: "medium heather grey (NOT black, NOT white, NOT blue-grey)",
-  forestgreen: "deep forest / hunter green (NOT olive, NOT sage, NOT mint, NOT bright kelly green)",
-  burgundy: "deep wine burgundy (NOT bright crimson, NOT pink, NOT brown, NOT maroon-purple)",
-  red: "vivid true red (NOT orange-red, NOT pink, NOT maroon, NOT burgundy)",
+  royal: "vivid saturated royal blue — a bright, rich medium blue (NOT navy, NOT baby/sky blue, NOT teal, NOT purple)",
+  charcoal: "dark charcoal grey — a deep slate grey (NOT black, NOT medium/heather grey, NOT navy)",
+  heather: "heather grey — a soft marled light-to-mid grey (NOT charcoal grey, NOT black, NOT white, NOT blue-grey)",
+  firered: "vivid firetruck red — a bright, bold, saturated true red (NOT orange, NOT pink, NOT maroon, NOT burgundy)",
 };
 
-// Polo attire block. A single collared knit polo in the customer's chosen
-// color, tailored to apparent gender, with hard guardrails so Gemini renders
-// an actual polo (collar + button placket + pique knit) and not a t-shirt,
-// dress shirt, scrub top, or blazer. Solid color only, no logos/text.
-function buildPoloAttire(poloColor: PoloColor, gender?: "male" | "female"): string {
+// Editable polo attire template (2026-08-12). {COLOR} is replaced at prompt-
+// build time with the picked color's description (see buildPoloAttire). Exposed
+// in the prompt editor as "Attire - Polo shirt"; the {COLOR} token must stay in
+// the text. Hard guardrails so Gemini renders an actual collared pique-knit
+// polo (not a t-shirt / dress shirt / scrub / blazer) and - per Kristi
+// 2026-08-12 - ZERO emblems, logos, or writing anywhere on the garment.
+const POLO_ATTIRE_DEFAULT = `A classic short-sleeve collared POLO SHIRT in {COLOR}. Soft pique-knit cotton with a fold-down ribbed collar and a short 2-3 button placket at the neck; neatly fitted, tailored to the subject's apparent gender as determined from the reference photos. It is a knit POLO SHIRT — NOT a plain t-shirt (it has a real fold-down collar and a button placket), NOT a woven button-down / oxford dress shirt, NOT a medical scrub top, NOT a blazer, sweater, or sport coat. Business-casual and intentional. ZERO emblems, logos, brand marks, crests, embroidery, monograms, appliqués, patches, writing, text, letters, numbers, or graphics ANYWHERE on the polo — not on the chest, not on the collar, not on the sleeve, not on the placket. Every surface of the garment is completely plain, blank, and unbranded — a single solid color. The polo is the only top worn and its color fills the upper torso. FAILURE DETECTOR: if the rendered top is a collarless t-shirt, a stiff woven dress shirt, a scrub top, or a jacket/blazer — or if ANY logo, emblem, badge, or text appears on it — you have FAILED this variant; it must read as a soft, collared, completely unbranded knit polo.`;
+
+function buildPoloAttire(poloColor: PoloColor): string {
   const colorDesc = POLO_COLOR_DESCRIPTIONS[poloColor];
-  const fit =
-    gender === "female"
-      ? "a women's-cut polo, neatly fitted to a woman's frame"
-      : gender === "male"
-        ? "a men's-cut polo, neatly fitted to a man's frame"
-        : "neatly fitted, tailored to the subject's apparent gender from the reference photos";
-  return `A classic short-sleeve collared POLO SHIRT in ${colorDesc}. Soft pique-knit cotton with a fold-down ribbed collar and a short 2-3 button placket at the neck; ${fit}. It is a knit POLO SHIRT — NOT a plain t-shirt (it has a real fold-down collar and a button placket), NOT a woven button-down / oxford dress shirt, NOT a medical scrub top, NOT a blazer, sweater, or sport coat. Business-casual and intentional. SOLID ${poloColor} color only — absolutely no logos, embroidery, monograms, text, numbers, or graphics anywhere on the garment (leave the chest completely clean). The polo is the only top worn and its ${poloColor} color fills the upper torso. FAILURE DETECTOR: if the rendered top is a collarless t-shirt, a stiff woven dress shirt, a scrub top, or a jacket/blazer, you have FAILED this variant — it must read as a soft collared knit polo.`;
+  return seg("attire_polo", POLO_ATTIRE_DEFAULT).replace(/\{COLOR\}/g, colorDesc);
 }
 
 // Descriptive language for each scrub color, anchored with explicit
@@ -647,7 +642,7 @@ function buildBlock4Attire(
     return `Attire: ${variant}\n\n${MEDICAL_GUARDRAILS_RULE}`;
   }
   if (attire === "polo") {
-    return `Attire: ${buildPoloAttire(poloColor, gender)}`;
+    return `Attire: ${buildPoloAttire(poloColor)}`;
   }
   return gseg("attire_" + attire, gender, BLOCK_4_ATTIRE_STATIC[attire]);
 }
@@ -979,6 +974,7 @@ export const PROMPT_DEFAULTS: Record<string, string> = {
   attire_formal_male: BLOCK_4_ATTIRE_STATIC.formal,
   attire_formal_female: BLOCK_4_ATTIRE_STATIC.formal,
   attire_casual: BLOCK_4_ATTIRE_STATIC.casual,
+  attire_polo: POLO_ATTIRE_DEFAULT,
   attire_keep: BLOCK_4_ATTIRE_STATIC.keep,
   stethoscope: STETHOSCOPE_ANATOMY_DESCRIPTION,
   lighting_studio: BLOCK_5_LIGHTING.studio,
@@ -1049,6 +1045,7 @@ export const PROMPT_SEGMENTS: PromptSegmentMeta[] = [
   { key: "attire_formal_female", label: "Attire — Business formal — Women", group: "Attire", fires: { attire: "formal" }, genderPair: "attire_formal", gender: "female" },
   { key: "attire_formal_male", label: "Attire — Business formal — Men", group: "Attire", fires: { attire: "formal" }, genderPair: "attire_formal", gender: "male" },
   { key: "attire_casual", label: "Attire — Business casual", group: "Attire", fires: { attire: "casual" } },
+  { key: "attire_polo", label: "Attire — Polo shirt", group: "Attire", fires: { attire: "polo" }, note: "The {COLOR} token is auto-filled with the customer's picked polo color — keep it in the text." },
   { key: "attire_keep", label: "Attire — Keep my outfit", group: "Attire", fires: { attire: "keep" } },
   { key: "stethoscope", label: "Stethoscope (healthcare)", group: "Attire", fires: { attire: "medical" }, note: "Only appears on the medical variants that include a stethoscope." },
   { key: "lighting_studio", label: "Lighting — Studio", group: "Lighting", fires: { lighting: "studio" } },

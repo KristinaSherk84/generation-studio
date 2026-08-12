@@ -7560,28 +7560,26 @@ const SCRUB_COLOR_SWATCHES: {
 // Polo colors available in the picker (2026-08-12). Order = on-screen
 // left-to-right. Keep in sync with POLO_COLOR_VALUES in api/generate.ts.
 export type PoloColor =
-  | "white"
   | "black"
+  | "white"
   | "navy"
-  | "lightblue"
-  | "grey"
-  | "forestgreen"
-  | "burgundy"
-  | "red";
+  | "royal"
+  | "charcoal"
+  | "heather"
+  | "firered";
 
 const POLO_COLOR_SWATCHES: {
   value: PoloColor;
   label: string;
   hex: string;
 }[] = [
-  { value: "white", label: "White", hex: "#FFFFFF" },
   { value: "black", label: "Black", hex: "#1A1A1A" },
-  { value: "navy", label: "Navy", hex: "#1B2D4F" },
-  { value: "lightblue", label: "Light blue", hex: "#A8C3D9" },
-  { value: "grey", label: "Heather grey", hex: "#9BA0A6" },
-  { value: "forestgreen", label: "Forest green", hex: "#1F4F30" },
-  { value: "burgundy", label: "Burgundy", hex: "#5C1F2A" },
-  { value: "red", label: "Red", hex: "#C0392B" },
+  { value: "white", label: "White", hex: "#FFFFFF" },
+  { value: "navy", label: "Navy blue", hex: "#1B2D4F" },
+  { value: "royal", label: "Royal blue", hex: "#2F52C9" },
+  { value: "charcoal", label: "Charcoal grey", hex: "#3A3D42" },
+  { value: "heather", label: "Heather grey", hex: "#9BA0A6" },
+  { value: "firered", label: "Firetruck red", hex: "#CE2029" },
 ];
 
 // -------------------- Background examples popup --------------------
