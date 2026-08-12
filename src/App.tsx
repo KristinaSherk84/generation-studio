@@ -10245,7 +10245,7 @@ type LoadingRetouchPreviewModalProps = {
 
 // Shortened 10s -> 8s (2026-08-04): the longer lock was correlating with
 // abandonment on the loading screen. Kristi's call.
-const RETOUCH_POPUP_LOCK_SECONDS = 8;
+const RETOUCH_POPUP_LOCK_SECONDS = 5;
 const LoadingRetouchPreviewModal = ({
   onDismiss,
 }: LoadingRetouchPreviewModalProps) => {
@@ -10287,6 +10287,17 @@ const LoadingRetouchPreviewModal = ({
       window.clearInterval(id);
       document.removeEventListener("visibilitychange", onVis);
     };
+  }, []);
+  // Auto-close after 20s if the customer never clicks Got it / the X (Kristi
+  // 2026-08-12). The 5s lock still applies first; this is the outer safety
+  // net so the popup never blocks the flow for someone who reads it and walks
+  // away. Kept in a ref so the single mount timer isn't reset by parent
+  // re-renders (readyCount ticks, tab-title blink, etc.).
+  const dismissRef = useRef(onDismiss);
+  dismissRef.current = onDismiss;
+  useEffect(() => {
+    const id = window.setTimeout(() => dismissRef.current(), 20000);
+    return () => window.clearTimeout(id);
   }, []);
   const retouchLocked = retouchRemaining > 0;
   return (
