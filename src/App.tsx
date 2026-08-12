@@ -10143,12 +10143,28 @@ const FoundViaSurveyModal = ({ onDone }: FoundViaSurveyModalProps) => {
   // Kristi fills the real source from Clarity using the editable Found-via
   // dropdown on the leads page. ("Other" is still available in the admin
   // dropdown for manual tagging.)
+  //
+  // Reliability (2026-08-12): the survey mounts the instant the 3rd headshot
+  // lands — frequently right under the customer's resting thumb on mobile.
+  // On mobile Safari a tap whose touchstart began on the (now-unmounted)
+  // loading screen and whose touchend lands on this just-mounted button does
+  // NOT synthesize a click, so the first tap was silently dropped and the
+  // survey looked un-closable (Clarity heatmaps show the lost taps clustering
+  // low-centre, where the thumb rests). Fix: act on pointerup (which DOES fire
+  // on touch even when the click is suppressed), fall back to click for mouse,
+  // and dedupe with a ref so only one onDone runs.
+  const doneRef = useRef(false);
+  const finish = (answer?: string) => {
+    if (doneRef.current) return;
+    doneRef.current = true;
+    onDone(answer);
+  };
   return (
     <div
       role="dialog"
       aria-modal="true"
       aria-label="One quick question"
-      onClick={() => onDone()}
+      onClick={() => finish()}
       style={{
         position: "fixed",
         inset: 0,
@@ -10162,6 +10178,7 @@ const FoundViaSurveyModal = ({ onDone }: FoundViaSurveyModalProps) => {
       }}
     >
       <div
+        onClick={(e) => e.stopPropagation()}
         style={{
           background: C.white,
           borderRadius: 16,
@@ -10190,7 +10207,15 @@ const FoundViaSurveyModal = ({ onDone }: FoundViaSurveyModalProps) => {
           {FOUND_VIA_OPTIONS.map((o) => (
             <button
               key={o}
-              onClick={() => onDone(o)}
+              type="button"
+              onPointerUp={(e) => {
+                e.stopPropagation();
+                finish(o);
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                finish(o);
+              }}
               style={{
                 background: C.white,
                 color: C.dark,
