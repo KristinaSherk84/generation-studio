@@ -28,7 +28,7 @@ export const maxDuration = 10;
 // rough middle. generateCount tracks batches, so cost ≈ generateCount × this.
 // NOTE: an ESTIMATE — excludes per-slot regens, identity auto-regen, and the
 // post-purchase Gemini 3 Pro retouch pass, so true spend runs somewhat higher.
-const GEN_BATCH_COST_USD = 0.65;
+const GEN_BATCH_COST_USD = 0.95;
 const fmtUsd = (n: number) => `$${n.toFixed(2)}`;
 
 // The same six options the customer sees in the "How did you find us?" survey

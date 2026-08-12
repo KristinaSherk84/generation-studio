@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
-import { Upload, Check, X, ArrowLeft, RefreshCw, Loader2, Download, Maximize2, ChevronDown, User, Sparkles, CircleUser, ArrowDown, ArrowRight, Menu, Plus, ShoppingBag, Trash2 } from "lucide-react";
+import { Upload, Check, X, ArrowLeft, RefreshCw, Loader2, Download, Maximize2, ChevronDown, User, Sparkles, CircleUser, ArrowDown, ArrowRight, Menu, Plus, ShoppingBag, Trash2, Lock } from "lucide-react";
 import { upload } from "@vercel/blob/client";
 import exifr from "exifr";
 
@@ -9006,6 +9006,10 @@ type GridScreenProps = {
   // call resolves (so users don't burn a regen on a slot that's about to
   // populate naturally).
   initialBatchInFlight: Set<number>;
+  // Slots blocked on a free "taster" 2nd batch (2026-08-12): render a
+  // "Blocked by free generations limit" placeholder; tapping opens the paywall.
+  blockedSlots: Set<number>;
+  onBlockedSlotClick: () => void;
   // CART (Phase 1, 2026-06-03). URLs the user has added. Lifted to App so
   // it survives unmount-on-back-to-style — the whole point of the cart is
   // persistence across regenerations. URL-keyed (not slot-index-keyed) so
@@ -9032,6 +9036,8 @@ const GridScreen = ({
   adminFixMode,
   adminRegensUsed,
   initialBatchInFlight,
+  blockedSlots,
+  onBlockedSlotClick,
   cart,
   onAddToCart,
   onRemoveFromCart,
@@ -9604,6 +9610,7 @@ const GridScreen = ({
           const picked = !!src && cartSet.has(src);
           const regenerating = regeneratingSlots.has(i);
           const perfecting = perfectingSlots.has(i);
+          const blocked = blockedSlots.has(i);
           // True only for slots whose ORIGINAL /api/generate call hasn't come
           // back yet — i.e., the user advanced via "Continue with what's ready"
           // on the loading screen and one (or more) calls are still in flight.
@@ -9617,7 +9624,7 @@ const GridScreen = ({
           // the initial batch failed on. 2026-05-01 fix. We do still hide
           // the button for slots stillLoadingFromInitial.
           const canRegenThisSlot =
-            !regenerating && !stillLoadingFromInitial && regenCount < maxRegens;
+            !regenerating && !stillLoadingFromInitial && regenCount < maxRegens && !blocked;
           const handleRegenClick = (e: MouseEvent) => {
             e.stopPropagation(); // don't also toggle selection
             if (!canRegenThisSlot) return;
@@ -9635,7 +9642,13 @@ const GridScreen = ({
           return (
             <div
               key={i}
-              onClick={() => src && !regenerating && !perfecting && toggle(i)}
+              onClick={() => {
+                if (blocked) {
+                  onBlockedSlotClick();
+                  return;
+                }
+                if (src && !regenerating && !perfecting) toggle(i);
+              }}
               style={{
                 position: "relative",
                 // Must match the generated image's true ratio (api/generate
@@ -9651,7 +9664,31 @@ const GridScreen = ({
                 transition: "border-color 0.15s",
               }}
             >
-              {src ? (
+              {blocked ? (
+                <div
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 8,
+                    padding: 16,
+                    textAlign: "center",
+                    background: C.lightGrey,
+                    cursor: "pointer",
+                  }}
+                >
+                  <Lock size={22} style={{ color: C.mediumGrey }} />
+                  <div style={{ fontSize: 12.5, fontWeight: 600, color: C.dark, lineHeight: 1.4 }}>
+                    Blocked by free generations limit
+                  </div>
+                  <div style={{ fontSize: 11, color: C.mediumGrey }}>
+                    Tap to unlock
+                  </div>
+                </div>
+              ) : src ? (
                 <>
                   {/* Loading shimmer/spinner shown until the image's onLoad
                       fires; the <img> fades in over it (2026-08-06). */}
@@ -13360,6 +13397,10 @@ export default function App() {
   // gets queue-placed last by Gemini's Tier 1 burst limiter and takes 60–120s
   // longer than slots 1–5.
   const [initialBatchInFlight, setInitialBatchInFlight] = useState<Set<number>>(new Set());
+  // Slots deliberately NOT generated because the customer is on a free
+  // "taster" 2nd batch (2026-08-12): these render "Blocked by free generations
+  // limit" and tapping them opens the paywall.
+  const [blockedSlots, setBlockedSlots] = useState<Set<number>>(new Set());
   // Budget of individual-photo regenerations per session. Previously this was
   // 2 bulk-regens (~12 API calls worth); individual regens are cheaper so we
   // give users 6 single swaps, which is the same total cost ceiling at most.
@@ -13527,7 +13568,7 @@ export default function App() {
   // Cap for free-tier single-photo regens before the paywall. 2 keeps max
   // free session cost at (6 + 2) × $0.101 ≈ $0.81 baseline, ≈$0.97 with
   // typical 20% retry multiplier.
-  const MAX_FREE_REGENS = 2;
+  const MAX_FREE_REGENS = 4;
   // "You have 1 more free regen" nudge modal — fires after regenCount = 1.
   const [showFreeRegenWarning, setShowFreeRegenWarning] = useState(false);
   // Post-generation $2.99 paywall (free-tier only) — fires when the customer
@@ -15105,10 +15146,21 @@ export default function App() {
     // batch before this gate re-arms.
     // Post-purchase perk: a purchase grants 2 free batches; a brand-new free
     // visitor gets 1. The server enforces the same 2-batch credit. (2026-08-11)
+    const isFreeUser = !entryFeeEnabled && !isUnlocked;
     const freeBatchAllowance = postPurchaseGrant ? 2 : 1;
-    if (!entryFeeEnabled && !isUnlocked && batchesUsed >= freeBatchAllowance) {
-      setShowFreeTierPaywall(true);
-      return;
+    // Partial "taster" 2nd batch (2026-08-12 per Kristi): instead of a hard
+    // paywall, a pre-purchase free user who tries a 2nd batch gets 4 shots free
+    // with the bottom two slots BLOCKED ("Blocked by free generations limit").
+    // A gentler nudge that keeps them exploring. Post-purchase users get full
+    // batches; the 3rd+ batch still hits the wall.
+    let partialBatch = false;
+    if (isFreeUser && batchesUsed >= freeBatchAllowance) {
+      if (!postPurchaseGrant && batchesUsed === 1) {
+        partialBatch = true;
+      } else {
+        setShowFreeTierPaywall(true);
+        return;
+      }
     }
     // Phase 4 cap (2026-06-03). Refuse to start a new batch if the
     // customer has already hit MAX_FULL_BATCHES. The modal explains
@@ -15201,11 +15253,19 @@ export default function App() {
     setGenerationError(null);
     setRegenCount(0);
     setRegeneratingSlots(new Set());
-    setInitialBatchInFlight(new Set([0, 1, 2, 3, 4, 5]));
+    setInitialBatchInFlight(
+      new Set(partialBatch ? [0, 1, 2, 3] : [0, 1, 2, 3, 4, 5]),
+    );
+    setBlockedSlots(partialBatch ? new Set([4, 5]) : new Set());
     setWildCards([]); // clear any prior batch's wild cards
     pendingWildCardsRef.current = null;
     wildCardsPersistedRef.current = false;
-    currentBatchId = newBatchId(); // new free-tier batch id for the per-IP cap
+    // A full batch gets a fresh id (counts against the per-IP cap). The
+    // partial taster REUSES the first batch's id so the server treats its 4
+    // calls as part of that batch and lets them through.
+    if (!partialBatch) {
+      currentBatchId = newBatchId();
+    }
     freeLimitHitRef.current = false;
     // Persist selections + URLs so per-slot regeneration can reuse them
     // without asking the user to reselect anything.
@@ -15309,7 +15369,8 @@ export default function App() {
     setLastGender(detectedGender);
 
     const STAGGER_MS = 5000;
-    const calls = Array.from({ length: TOTAL_HEADSHOTS }, async (_, index) => {
+    const slotCount = partialBatch ? 4 : TOTAL_HEADSHOTS;
+    const calls = Array.from({ length: slotCount }, async (_, index) => {
       // Each call waits its turn before firing. Promise.all below still
       // collects them in parallel — we're just delaying the START of the
       // network request, not blocking the array map.
@@ -15448,7 +15509,7 @@ export default function App() {
     // and auto-regenerate the weakest matches (capped). Runs in the
     // background: good shots are already interactive, and only the weak ones
     // show the "Perfecting identity preservation" overlay while they refresh.
-    if (identityCheckEnabled) {
+    if (identityCheckEnabled && !partialBatch) {
       if (refDescPromise) {
         try {
           await refDescPromise;
@@ -15465,7 +15526,7 @@ export default function App() {
     // their cost by showing more dynamic alternatives (natural/executive/urban).
     // Every other style already looks distinctive, so we skip the extra 2 Flash
     // images there. Best-effort; never blocks the grid. (Kristi 2026-08-06)
-    if (selections.style === "corporate") {
+    if (!partialBatch && selections.style === "corporate") {
       void runWildCards(selections, photoUrls, hasWideAngle);
     }
   };
@@ -16058,6 +16119,8 @@ export default function App() {
           regeneratingSlots={regeneratingSlots}
           perfectingSlots={perfectingSlots}
           initialBatchInFlight={initialBatchInFlight}
+          blockedSlots={blockedSlots}
+          onBlockedSlotClick={() => setShowFreeTierPaywall(true)}
           cart={cart}
           onAddToCart={addToCart}
           onRemoveFromCart={removeFromCart}
