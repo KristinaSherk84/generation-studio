@@ -15237,13 +15237,17 @@ export default function App() {
         setRegenCount((n) => Math.max(0, n - 1));
       }
       if (err instanceof Error && err.message === "free_limit") {
-        // Cap hit: block just this slot and open the $2.99 unlock popup. No
-        // red banner — the blocked tile + popup already explain what happened.
-        setBlockedSlots((prev) => {
-          const next = new Set(prev);
-          next.add(index);
-          return next;
-        });
+        // Cap hit: open the $2.99 unlock popup instead of the red banner. Only
+        // cover the slot with the paywall tile if it is EMPTY — never hide a
+        // shot the customer already had (they keep the image they regenerated
+        // from; only the unlock popup appears).
+        if (!generatedImages[index]) {
+          setBlockedSlots((prev) => {
+            const next = new Set(prev);
+            next.add(index);
+            return next;
+          });
+        }
         setShowFreeTierPaywall(true);
       } else {
         const msg =
