@@ -1112,7 +1112,17 @@ function buildBlock8(
           // a dark jacket over the scrubs). Reassert the medical attire
           // positively instead.
           `- Outfit: the medical attire described above is the complete outfit for this image — worn exactly as specified, in the specified color, as the outer layer.`
-        : `- Outfit detail: ${flavor.attireHint}. This must stay firmly within the attire category specified above.`;
+        : attire === "polo"
+          ? // 2026-08-12 BUGFIX (same class as the medical fix above): polo is
+            // fully specified by buildBlock4Attire (collared knit polo + the
+            // customer's chosen color). Do NOT inject flavor.attireHint — the
+            // per-slot hints for slots 5 & 6 ("charcoal or deep navy", "a dark
+            // blazer or cardigan") are CORPORATE variations that, because Block
+            // 8 sits closer to the model's "what to render" reasoning, were
+            // overriding the polo (slot 5 → grey polo, slot 6 → a blazer).
+            // Reassert the polo positively and lock its color instead.
+            `- Outfit: the polo shirt described above is the complete outfit for this image — the SAME collared knit polo in the EXACT same specified color as every other image in this set. Do NOT substitute a blazer, suit jacket, sport coat, cardigan, sweater, or woven dress shirt, and do NOT shift the polo's color (no charcoal, grey, or navy unless that is the specified color).`
+          : `- Outfit detail: ${flavor.attireHint}. This must stay firmly within the attire category specified above.`;
 
   // For women on Polished or Glam tiers, add a final-position reference-
   // fidelity anchor right before the output constraint. This is the single
