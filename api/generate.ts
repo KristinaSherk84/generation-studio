@@ -1891,7 +1891,7 @@ export default async function handler(
   if (!body.style || !["corporate", "creative", "executive", "urban", "healthcare"].includes(body.style)) {
     return res.status(400).json({ error: "Invalid style" });
   }
-  if (!body.attire || !["formal", "casual", "keep", "medical"].includes(body.attire)) {
+  if (!body.attire || !["formal", "casual", "keep", "medical", "polo"].includes(body.attire)) {
     return res.status(400).json({ error: "Invalid attire" });
   }
   if (

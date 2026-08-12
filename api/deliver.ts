@@ -992,7 +992,7 @@ export default async function handler(
   }
   if (
     !body.attire ||
-    !["formal", "casual", "keep", "medical"].includes(body.attire)
+    !["formal", "casual", "keep", "medical", "polo"].includes(body.attire)
   ) {
     return res.status(400).json({ error: "Invalid attire" });
   }
