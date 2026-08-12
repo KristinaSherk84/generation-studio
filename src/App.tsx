@@ -9691,11 +9691,33 @@ const GridScreen = ({
                 >
                   <Lock size={22} style={{ color: C.mediumGrey }} />
                   <div style={{ fontSize: 12.5, fontWeight: 600, color: C.dark, lineHeight: 1.4 }}>
-                    Blocked by free generations limit
+                    Free generation limit reached
                   </div>
-                  <div style={{ fontSize: 11, color: C.mediumGrey }}>
-                    Tap to unlock
+                  <div style={{ fontSize: 11, color: C.mediumGrey, lineHeight: 1.4 }}>
+                    Unlock unlimited regenerations for $2.99
                   </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onBlockedSlotClick();
+                    }}
+                    style={{
+                      marginTop: 4,
+                      padding: "9px 14px",
+                      background: C.dark,
+                      color: C.buttonText,
+                      border: "none",
+                      borderRadius: 8,
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      lineHeight: 1.2,
+                      fontFamily: "inherit",
+                    }}
+                  >
+                    Check out · $2.99
+                  </button>
                 </div>
               ) : src ? (
                 <>
@@ -15064,6 +15086,19 @@ export default function App() {
         }),
       });
       if (response.status === 402) {
+        const reason402 = await response
+          .json()
+          .then((d: { reason?: string }) => d?.reason)
+          .catch(() => undefined);
+        if (reason402 === "free_limit" || (!entryFeeEnabled && !isUnlocked)) {
+          // Free-tier per-IP cap hit on the SERVER even though the client
+          // thought a regen was left — usually the page was refreshed so the
+          // client counter reset while the server still counts the IP. Show
+          // the $2.99 unlock (handled in catch), NOT a scary red "failed,
+          // refresh the page" error, and mark this slot blocked so it renders
+          // the paywall tile. (Kristi 2026-08-12)
+          throw new Error("free_limit");
+        }
         clearUnlock();
         throw new Error(PAYWALL_EXPIRED_MESSAGE);
       }
@@ -15117,11 +15152,22 @@ export default function App() {
       } else {
         setRegenCount((n) => Math.max(0, n - 1));
       }
-      const msg =
-        err instanceof Error && err.message.includes("HTTP")
-          ? `Regeneration failed (server returned ${err.message.replace("HTTP ", "")}). Try again in a few seconds — if it keeps failing, refresh the page.`
-          : `Regeneration failed for slot ${index + 1}. Try again in a few seconds — if it keeps failing, refresh the page.`;
-      setRegenError(msg);
+      if (err instanceof Error && err.message === "free_limit") {
+        // Cap hit: block just this slot and open the $2.99 unlock popup. No
+        // red banner — the blocked tile + popup already explain what happened.
+        setBlockedSlots((prev) => {
+          const next = new Set(prev);
+          next.add(index);
+          return next;
+        });
+        setShowFreeTierPaywall(true);
+      } else {
+        const msg =
+          err instanceof Error && err.message.includes("HTTP")
+            ? `Regeneration failed (server returned ${err.message.replace("HTTP ", "")}). Try again in a few seconds — if it keeps failing, refresh the page.`
+            : `Regeneration failed for slot ${index + 1}. Try again in a few seconds — if it keeps failing, refresh the page.`;
+        setRegenError(msg);
+      }
     } finally {
       setRegeneratingSlots((prev) => {
         const next = new Set(prev);
@@ -15461,6 +15507,16 @@ export default function App() {
             // "your 2 hours expired" copy) and leave any unlock state alone.
             freeLimitHitRef.current = true;
             setShowFreeTierPaywall(true);
+            // Mark this specific slot blocked so a PARTIAL cap (some slots
+            // landed, some 402'd) renders the paywall tile on the capped ones
+            // instead of a scary "Generation failed" placeholder. If EVERY
+            // slot 402s we clear these again below and restore the prior grid.
+            // (Kristi 2026-08-12)
+            setBlockedSlots((prev) => {
+              const next = new Set(prev);
+              next.add(index);
+              return next;
+            });
             throw new Error("free_limit");
           }
           // Otherwise the unlock expired or was consumed — clear it and show
@@ -15514,6 +15570,10 @@ export default function App() {
         // dismissing the paywall doesn't strand them on a frozen "generating"
         // screen with no way back. (2026-08-11 fix)
         setBatchesUsed((n) => Math.max(0, n - 1));
+        // Every slot 402'd — this was a whole capped batch, not a partial.
+        // Clear the per-slot blocked marks set above so the restored prior
+        // grid shows the customer's real earlier shots, not blocked tiles.
+        setBlockedSlots(new Set());
         if (priorGrid.length > 0) {
           setGeneratedImages(priorGrid);
           setReadyCount(priorGrid.length);
