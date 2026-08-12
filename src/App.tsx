@@ -5398,7 +5398,7 @@ const FAQ_QUESTIONS: { slug: string; q: string; a: string }[] = [
   {
     slug: "what-if-i-dont-love-first-batch",
     q: "What if I don't love my first batch of headshots?",
-    a: "You're never stuck with a batch you don't like. Tap the refresh icon on any individual headshot to regenerate just that one, or go back to the style screen and generate a fresh batch of 6 with different settings (each customer gets up to 6 full batches per session). And if you choose the Glow Up Bundle at checkout, you get three retouching levels of the same final photo — realistic, polished, and glam — so you can pick whichever flavor reads best for your audience.",
+    a: "The first batch of 6 headshots is paid for by us. It's for you to preview the type of headshots and the realistic results we strive so hard to produce. We allow two free SINGLE regenerations. Tap the refresh icon on any individual headshot to regenerate just that one. If you want to try a different style, a $2.99 'try more styles' fee is required. This protects us from users who generate tons of headshots, but don't intend to buy any.",
   },
   {
     slug: "what-makes-this-different-from-other-ai-headshot-apps",
