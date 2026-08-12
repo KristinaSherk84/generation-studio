@@ -5769,6 +5769,15 @@ const FAQDetailScreen = ({
     };
   }, [faq]);
 
+  // Scroll to the top whenever a question opens. This is a single-page app, so
+  // clicking a FAQ card does NOT reset scroll the way a real page load would —
+  // the window kept the FAQ-list scroll position, dropping the customer at the
+  // BOTTOM of the answer page instead of the question. Keyed on the slug so it
+  // also re-scrolls when they jump between related questions (Kristi 2026-08-12).
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [activeFaqSlug]);
+
   // "Related questions" = 3 sibling FAQs, deterministic (uses slug hash so
   // the same question always shows the same related set — no jitter on
   // re-render, and no need for random). Excludes the current question.
