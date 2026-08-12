@@ -84,7 +84,7 @@ export const maxDuration = 300;
 //   urban        → "Urban Industrial" (NEW — combines the old Creative
 //                  industrial-office background with a new urban-street one)
 type Style = "corporate" | "creative" | "executive" | "urban" | "healthcare";
-type Attire = "formal" | "casual" | "keep" | "medical";
+type Attire = "formal" | "casual" | "keep" | "medical" | "polo";
 type Lighting = "studio" | "natural" | "dramatic" | "golden";
 // Scrub colors (2026-06-05) — customer-pickable when attire === "medical".
 // All 6 generated headshots use the SAME scrub color (3 with lab coat,
@@ -112,6 +112,61 @@ const SCRUB_COLOR_VALUES: ScrubColor[] = [
   "burgundy",
   "pink",
 ];
+
+// Polo-shirt colors (2026-08-12) — customer-pickable when attire === "polo".
+// Mirrors the scrub-color picker: all 6 headshots use the SAME polo color so
+// the batch reads as a matched set. Defaults to "navy" server-side when the
+// request omits the field. Keep this list in sync with POLO_COLOR_SWATCHES in
+// src/App.tsx (the on-screen swatch row).
+type PoloColor =
+  | "white"
+  | "black"
+  | "navy"
+  | "lightblue"
+  | "grey"
+  | "forestgreen"
+  | "burgundy"
+  | "red";
+
+const POLO_COLOR_VALUES: PoloColor[] = [
+  "white",
+  "black",
+  "navy",
+  "lightblue",
+  "grey",
+  "forestgreen",
+  "burgundy",
+  "red",
+];
+
+// Tonal anchors + "NOT X" exclusions for each polo color, following the same
+// pattern as the scrub descriptions (Gemini drifts toward neighboring hues
+// without explicit exclusions).
+const POLO_COLOR_DESCRIPTIONS: Record<PoloColor, string> = {
+  white: "clean bright white (NOT cream, NOT ivory, NOT light grey)",
+  black: "true neutral black (NOT charcoal, NOT very-dark-navy, NOT brown)",
+  navy: "deep classic navy blue (NOT royal blue, NOT baby blue, NOT black)",
+  lightblue: "soft pale sky blue, sometimes called 'ceil blue' (NOT navy, NOT royal, NOT white)",
+  grey: "medium heather grey (NOT black, NOT white, NOT blue-grey)",
+  forestgreen: "deep forest / hunter green (NOT olive, NOT sage, NOT mint, NOT bright kelly green)",
+  burgundy: "deep wine burgundy (NOT bright crimson, NOT pink, NOT brown, NOT maroon-purple)",
+  red: "vivid true red (NOT orange-red, NOT pink, NOT maroon, NOT burgundy)",
+};
+
+// Polo attire block. A single collared knit polo in the customer's chosen
+// color, tailored to apparent gender, with hard guardrails so Gemini renders
+// an actual polo (collar + button placket + pique knit) and not a t-shirt,
+// dress shirt, scrub top, or blazer. Solid color only, no logos/text.
+function buildPoloAttire(poloColor: PoloColor, gender?: "male" | "female"): string {
+  const colorDesc = POLO_COLOR_DESCRIPTIONS[poloColor];
+  const fit =
+    gender === "female"
+      ? "a women's-cut polo, neatly fitted to a woman's frame"
+      : gender === "male"
+        ? "a men's-cut polo, neatly fitted to a man's frame"
+        : "neatly fitted, tailored to the subject's apparent gender from the reference photos";
+  return `A classic short-sleeve collared POLO SHIRT in ${colorDesc}. Soft pique-knit cotton with a fold-down ribbed collar and a short 2-3 button placket at the neck; ${fit}. It is a knit POLO SHIRT — NOT a plain t-shirt (it has a real fold-down collar and a button placket), NOT a woven button-down / oxford dress shirt, NOT a medical scrub top, NOT a blazer, sweater, or sport coat. Business-casual and intentional. SOLID ${poloColor} color only — absolutely no logos, embroidery, monograms, text, numbers, or graphics anywhere on the garment (leave the chest completely clean). The polo is the only top worn and its ${poloColor} color fills the upper torso. FAILURE DETECTOR: if the rendered top is a collarless t-shirt, a stiff woven dress shirt, a scrub top, or a jacket/blazer, you have FAILED this variant — it must read as a soft collared knit polo.`;
+}
 
 // Descriptive language for each scrub color, anchored with explicit
 // "NOT X, NOT Y" exclusions because Gemini drifts toward similar tones
@@ -179,6 +234,9 @@ type GenerateRequest = {
   // Customer-picked scrub color (2026-06-05). Only used when attire === "medical".
   // Defaults to "lightblue" server-side when omitted to keep old clients working.
   scrubColor?: ScrubColor;
+  // Customer-picked polo color (2026-08-12). Only used when attire === "polo".
+  // Defaults to "navy" server-side when omitted.
+  poloColor?: PoloColor;
   // ---- Paywall enforcement (added 2026-05-15) ----
   // Exactly one of these two must be present and valid for the request to
   // be processed:
@@ -471,7 +529,7 @@ function buildBlock3Style(style: Style, variationIndex: number): string {
   return seg("style_" + style, BLOCK_3_STYLE_BASE[style]);
 }
 
-const BLOCK_4_ATTIRE_STATIC: Record<Exclude<Attire, "medical">, string> = {
+const BLOCK_4_ATTIRE_STATIC: Record<Exclude<Attire, "medical" | "polo">, string> = {
   formal: `Attire: A polished formal business look, tailored to the subject's apparent gender as determined from the reference photos.
 - If the subject appears to be a MAN: a well-tailored suit jacket in a neutral color (charcoal, navy, or black) over a crisp collared dress shirt. A necktie is optional based on what flatters the subject's face shape and the overall style.
 - If the subject appears to be a WOMAN: a well-tailored slim-fit blazer in a neutral color (charcoal, navy, or black) over a professional blouse, silk top, or fine knit top with a clean, feminine neckline (crew neck, V-neck, open collar, or tasteful scoop). NEVER a necktie. NEVER a men's business shirt with a men's tie. The silhouette should read clearly as women's business attire — softer shoulder, feminine cut, tailored to a woman's frame.
@@ -581,11 +639,15 @@ function buildBlock4Attire(
   attire: Attire,
   variationIndex: number,
   scrubColor: ScrubColor,
+  poloColor: PoloColor,
   gender?: "male" | "female",
 ): string {
   if (attire === "medical") {
     const variant = buildMedicalAttireVariant(scrubColor, variationIndex);
     return `Attire: ${variant}\n\n${MEDICAL_GUARDRAILS_RULE}`;
+  }
+  if (attire === "polo") {
+    return `Attire: ${buildPoloAttire(poloColor, gender)}`;
   }
   return gseg("attire_" + attire, gender, BLOCK_4_ATTIRE_STATIC[attire]);
 }
@@ -1134,6 +1196,7 @@ function assemblePrompt(req: GenerateRequest): string {
       req.attire,
       req.variationIndex,
       req.scrubColor ?? "lightblue",
+      req.poloColor ?? "navy",
       req.gender,
     ),
   );
@@ -1867,6 +1930,14 @@ export default async function handler(
     !SCRUB_COLOR_VALUES.includes(body.scrubColor as ScrubColor)
   ) {
     return res.status(400).json({ error: "Invalid scrubColor" });
+  }
+  // poloColor is optional; if present, must be a known value. Server defaults
+  // to "navy" when omitted (handled inline in assemblePrompt).
+  if (
+    body.poloColor &&
+    !POLO_COLOR_VALUES.includes(body.poloColor as PoloColor)
+  ) {
+    return res.status(400).json({ error: "Invalid poloColor" });
   }
 
   const apiKey = process.env.GEMINI_API_KEY;

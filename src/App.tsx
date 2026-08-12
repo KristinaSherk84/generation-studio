@@ -7430,6 +7430,7 @@ const STUDIO_BGS = [
 const ATTIRE = [
   { id: "formal", label: "Business formal" },
   { id: "casual", label: "Business casual" },
+  { id: "polo", label: "Polo shirt" },
   { id: "medical", label: "🩺 Healthcare" },
   { id: "keep", label: "Keep my outfit" },
 ] as const;
@@ -7504,7 +7505,7 @@ const SectionLabel = ({ children, style = {} }: SectionLabelProps) => (
 // and Executive get their background direction from the style prompt itself.
 export type StyleSelections = {
   style: "corporate" | "creative" | "executive" | "urban" | "healthcare";
-  attire: "formal" | "casual" | "keep" | "medical";
+  attire: "formal" | "casual" | "keep" | "medical" | "polo";
   lighting: "studio" | "natural" | "dramatic" | "golden";
   background?: "white" | "lightgrey" | "dark" | "black" | "blue" | "bluebright" | "green" | "red" | "rainbow";
   // Skin treatment toggle (added 2026-04-26, expanded 2026-05-01 to add glam).
@@ -7522,6 +7523,9 @@ export type StyleSelections = {
   // All 6 generated healthcare headshots use this color (3 lab coat + 3 scrubs).
   // Default "lightblue" when omitted server-side.
   scrubColor?: ScrubColor;
+  // Customer-picked polo color (2026-08-12). Only used when attire === "polo".
+  // Default "navy" when omitted server-side.
+  poloColor?: PoloColor;
 };
 
 // Scrub colors available in the picker. Keep order in sync with the
@@ -7551,6 +7555,33 @@ const SCRUB_COLOR_SWATCHES: {
   { value: "black", label: "Black", hex: "#1A1A1A" },
   { value: "burgundy", label: "Burgundy", hex: "#5C1F2A" },
   { value: "pink", label: "Pink", hex: "#DEA7A7" },
+];
+
+// Polo colors available in the picker (2026-08-12). Order = on-screen
+// left-to-right. Keep in sync with POLO_COLOR_VALUES in api/generate.ts.
+export type PoloColor =
+  | "white"
+  | "black"
+  | "navy"
+  | "lightblue"
+  | "grey"
+  | "forestgreen"
+  | "burgundy"
+  | "red";
+
+const POLO_COLOR_SWATCHES: {
+  value: PoloColor;
+  label: string;
+  hex: string;
+}[] = [
+  { value: "white", label: "White", hex: "#FFFFFF" },
+  { value: "black", label: "Black", hex: "#1A1A1A" },
+  { value: "navy", label: "Navy", hex: "#1B2D4F" },
+  { value: "lightblue", label: "Light blue", hex: "#A8C3D9" },
+  { value: "grey", label: "Heather grey", hex: "#9BA0A6" },
+  { value: "forestgreen", label: "Forest green", hex: "#1F4F30" },
+  { value: "burgundy", label: "Burgundy", hex: "#5C1F2A" },
+  { value: "red", label: "Red", hex: "#C0392B" },
 ];
 
 // -------------------- Background examples popup --------------------
@@ -7748,6 +7779,8 @@ const StyleScreen = ({
   // Default to "lightblue" which is the most common and matches the prior
   // hardcoded baby-blue look so existing customer expectations don't shift.
   const [scrubColor, setScrubColor] = useState<ScrubColor>("lightblue");
+  // Polo color picker (2026-08-12) — only relevant when attire === "polo".
+  const [poloColor, setPoloColor] = useState<PoloColor>("navy");
 
   // Center the horizontal style-card carousel on mount (2026-06-05) so
   // mobile users see partial Corporate on the left edge AND partial
@@ -8256,6 +8289,57 @@ const StyleScreen = ({
         </>
       )}
 
+      {/* Polo color picker (2026-08-12). Only renders when the customer chose
+          Polo shirt attire. Same behavior as the scrub-color row: all 6
+          headshots use this single color so the batch reads as a matched set. */}
+      {attire === "polo" && (
+        <>
+          <SectionLabel>Polo color</SectionLabel>
+          <div
+            style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
+            role="radiogroup"
+            aria-label="Polo color"
+          >
+            {POLO_COLOR_SWATCHES.map((s) => {
+              const selected = poloColor === s.value;
+              return (
+                <div
+                  key={s.value}
+                  onClick={() => setPoloColor(s.value)}
+                  title={s.label}
+                  role="radio"
+                  aria-checked={selected}
+                  aria-label={s.label}
+                  style={{
+                    width: 28,
+                    height: 28,
+                    borderRadius: "50%",
+                    background: s.hex,
+                    border: selected
+                      ? `2px solid ${C.dark}`
+                      : `1px solid ${C.border}`,
+                    cursor: "pointer",
+                    transition: "border 0.15s",
+                  }}
+                />
+              );
+            })}
+          </div>
+          <div
+            style={{
+              fontSize: 12,
+              color: C.mediumGrey,
+              marginTop: 6,
+            }}
+          >
+            {POLO_COLOR_SWATCHES.find((s) => s.value === poloColor)?.label}
+            <span style={{ marginLeft: 6 }}>
+              · all 6 headshots use this color
+            </span>
+          </div>
+        </>
+      )}
+
       {/* Lighting */}
       <SectionLabel>Lighting</SectionLabel>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -8300,6 +8384,7 @@ const StyleScreen = ({
               // it gets stored in lastSelections so per-slot regen reuses
               // the same color.
               scrubColor: attire === "medical" ? scrubColor : undefined,
+              poloColor: attire === "polo" ? poloColor : undefined,
             });
           }}
           disabled={!canGenerate}
@@ -15081,6 +15166,7 @@ export default function App() {
           // batch so the regenerated slot matches the other 5. Only
           // meaningful when attire is medical; server ignores otherwise.
           scrubColor: lastSelections.scrubColor,
+          poloColor: lastSelections.poloColor,
           gender: lastGender,
           ...readUnlockRequestFields(),
         }),
@@ -15486,6 +15572,7 @@ export default function App() {
             // parallel calls send the same value so the grid renders
             // 6 matched-color healthcare headshots.
             scrubColor: selections.scrubColor,
+            poloColor: selections.poloColor,
             // Ask the server to also return this shot's face descriptor so we
             // can score its likeness and auto-regenerate weak matches (best-
             // effort; server returns null if scoring fails). (2026-07-30)
@@ -15722,6 +15809,7 @@ export default function App() {
               hasWideAngle,
               skin: selections.skin,
               scrubColor: selections.scrubColor,
+              poloColor: selections.poloColor,
               ...readUnlockRequestFields(),
             }),
           });
@@ -15836,6 +15924,7 @@ export default function App() {
           hasWideAngle,
           skin: selections.skin,
           scrubColor: selections.scrubColor,
+          poloColor: selections.poloColor,
           wantIdentityScore: true,
           gender: genderRef.current,
           ...readUnlockRequestFields(),
