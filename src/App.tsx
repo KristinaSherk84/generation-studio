@@ -9075,6 +9075,8 @@ type GridScreenProps = {
   onDeliver: (selectedUrls: string[]) => void;
   onBack: () => void;
   onRegenerateSlot: (index: number) => void;
+  onRegenerateWildCard: (index: number) => void;
+  wildCardRegenerating: Set<number>;
   regenCount: number;
   maxRegens: number;
   regeneratingSlots: Set<number>;
@@ -9120,6 +9122,8 @@ const GridScreen = ({
   onDeliver,
   onBack,
   onRegenerateSlot,
+  onRegenerateWildCard,
+  wildCardRegenerating,
   regenCount,
   maxRegens,
   regeneratingSlots,
@@ -9647,6 +9651,56 @@ const GridScreen = ({
                             <Plus size={17} strokeWidth={2.4} />
                           )}
                         </div>
+                        {wc.image &&
+                          wc.variationIndex !== undefined &&
+                          regenCount < maxRegens &&
+                          !wildCardRegenerating.has(i) && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onRegenerateWildCard(i);
+                              }}
+                              title="Regenerate this wild card"
+                              aria-label="Regenerate this wild card"
+                              style={{
+                                position: "absolute",
+                                bottom: 10,
+                                right: 10,
+                                background: "rgba(255, 255, 255, 0.85)",
+                                color: C.dark,
+                                border: "none",
+                                borderRadius: "50%",
+                                width: 32,
+                                height: 32,
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                cursor: "pointer",
+                                boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+                                padding: 0,
+                              }}
+                            >
+                              <RefreshCw size={16} />
+                            </button>
+                          )}
+                        {wildCardRegenerating.has(i) && (
+                          <div
+                            style={{
+                              position: "absolute",
+                              inset: 0,
+                              background: "rgba(0, 0, 0, 0.55)",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                          >
+                            <Loader2
+                              size={26}
+                              style={{ animation: "spin 1s linear infinite", color: C.white }}
+                            />
+                          </div>
+                        )}
                       </>
                     ) : wc.failed ? (
                       <div
@@ -13328,7 +13382,16 @@ const TOTAL_HEADSHOTS = 6;
 // detection failure) get an urban-industrial studio look + the same dramatic
 // executive look. Both reuse the customer's own attire. Display-only for now
 // (watermarked preview, not addable to cart).
-type WildCardShot = { image: string | null; label: string; failed: boolean };
+type WildCardShot = {
+  image: string | null;
+  label: string;
+  failed: boolean;
+  // Generation config so a wild card can be regenerated. Present on shots made
+  // this session; absent on shots restored from a resume link (regen hidden).
+  style?: string;
+  lighting?: string;
+  variationIndex?: number;
+};
 const WILDCARD_ATTIRE_LABELS: Record<string, string> = {
   formal: "your business formal look",
   casual: "your casual professional look",
@@ -13626,6 +13689,9 @@ export default function App() {
   const [generatedImages, setGeneratedImages] = useState<string[]>([]);
   // Wild Card bonus previews shown below the main grid (2026-08-04).
   const [wildCards, setWildCards] = useState<WildCardShot[]>([]);
+  const [wildCardRegenerating, setWildCardRegenerating] = useState<Set<number>>(
+    new Set(),
+  );
   // How many of the 6 parallel requests have returned successfully so far.
   // Drives the "Generating headshot N of 6" copy on the loading screen.
   const [readyCount, setReadyCount] = useState(0);
@@ -15421,6 +15487,108 @@ export default function App() {
     }
   };
 
+  // Regenerate a single Wild Card bonus shot (2026-08-12). Re-fires its own
+  // style/lighting config (stored on the shot). Counts against the SAME regen
+  // budget + $2.99 paywall as a main-grid regen, per Kristi. Keeps the old image
+  // visible under a spinner until the new one lands; refunds the regen on
+  // failure. No-op for shots restored from a resume link (no stored config).
+  const handleRegenerateWildCard = async (index: number) => {
+    const wc = wildCards[index];
+    if (
+      !wc ||
+      !wc.image ||
+      wc.style === undefined ||
+      wc.lighting === undefined ||
+      wc.variationIndex === undefined
+    ) {
+      return;
+    }
+    if (wildCardRegenerating.has(index)) return;
+    if (!lastSelections || lastPhotoUrls.length < 1) return;
+    // Budget gate — identical to handleRegenerateSlot's caps so wild card
+    // regens behave exactly like main-grid regens.
+    const singleCap = postPurchaseGrant ? 3 : MAX_FREE_REGENS;
+    if (resumedFromEmail && regenCount >= singleCap) {
+      setShowFreeTierPaywall(true);
+      return;
+    }
+    if (!entryFeeEnabled && !isUnlocked) {
+      if (regenCount >= singleCap) {
+        setShowFreeTierPaywall(true);
+        return;
+      }
+    } else if (regenCount >= MAX_SINGLE_REGENS) {
+      setShowPaywall(true);
+      return;
+    }
+    setRegenCount((n) => n + 1);
+    setWildCardRegenerating((prev) => {
+      const next = new Set(prev);
+      next.add(index);
+      return next;
+    });
+    try {
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          photoUrls: lastPhotoUrls,
+          style: wc.style,
+          attire: lastSelections.attire,
+          lighting: wc.lighting,
+          background: lastSelections.background,
+          variationIndex: wc.variationIndex,
+          gender: lastGender,
+          hasWideAngle: lastHasWideAngle,
+          skin: lastSelections.skin,
+          scrubColor: lastSelections.scrubColor,
+          poloColor: lastSelections.poloColor,
+          ...readUnlockRequestFields(),
+        }),
+      });
+      if (response.status === 402) {
+        const reason402 = await response
+          .json()
+          .then((d: { reason?: string }) => d?.reason)
+          .catch(() => undefined);
+        if (reason402 === "free_limit" || (!entryFeeEnabled && !isUnlocked)) {
+          throw new Error("free_limit");
+        }
+        clearUnlock();
+        throw new Error(PAYWALL_EXPIRED_MESSAGE);
+      }
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = (await response.json()) as { image?: string };
+      if (!data.image) throw new Error("no image");
+      const img = data.image;
+      setWildCards((prev) => {
+        const next = [...prev];
+        if (next[index]) next[index] = { ...next[index], image: img, failed: false };
+        // Re-persist the updated set (best-effort) so a later resume-email grid
+        // reflects the regenerated wild card.
+        pendingWildCardsRef.current = next
+          .filter((w) => !!w.image)
+          .map((w) => ({ image: w.image as string, label: w.label }));
+        wildCardsPersistedRef.current = false;
+        return next;
+      });
+      void flushWildCardPersist();
+    } catch (err) {
+      // Refund — a failed or paywalled attempt shouldn't burn a regen. The old
+      // image stays (we never cleared it), so nothing is lost on failure.
+      setRegenCount((n) => Math.max(0, n - 1));
+      if (err instanceof Error && err.message === "free_limit") {
+        setShowFreeTierPaywall(true);
+      }
+    } finally {
+      setWildCardRegenerating((prev) => {
+        const next = new Set(prev);
+        next.delete(index);
+        return next;
+      });
+    }
+  };
+
   // Kicks off the 6 parallel /api/generate calls. Runs after the user picks
   // Style + Attire + Lighting + Background and clicks "Generate 6 headshots".
   //
@@ -15593,6 +15761,7 @@ export default function App() {
     );
     setBlockedSlots(partialBatch ? new Set([4, 5]) : new Set());
     setWildCards([]); // clear any prior batch's wild cards
+    setWildCardRegenerating(new Set());
     pendingWildCardsRef.current = null;
     wildCardsPersistedRef.current = false;
     // A full batch gets a fresh id (counts against the per-IP cap). The
@@ -15943,7 +16112,14 @@ export default function App() {
           ];
     // 3. Show the section immediately with per-shot loading placeholders.
     setWildCards(
-      configs.map((c) => ({ image: null, label: c.label, failed: false })),
+      configs.map((c) => ({
+        image: null,
+        label: c.label,
+        failed: false,
+        style: c.style,
+        lighting: c.lighting,
+        variationIndex: c.variationIndex,
+      })),
     );
     // 4. Fire the two calls staggered (same Preview-model 503 pressure the
     //    main batch staggers around). Each updates only its own slot.
@@ -16466,6 +16642,8 @@ export default function App() {
           onDeliver={handleAdvanceToRetouch}
           onBack={() => setScreen("style")}
           onRegenerateSlot={handleRegenerateSlot}
+          onRegenerateWildCard={handleRegenerateWildCard}
+          wildCardRegenerating={wildCardRegenerating}
           regenError={regenError}
           adminFixMode={adminFixMode}
           adminRegensUsed={adminRegensUsed}
