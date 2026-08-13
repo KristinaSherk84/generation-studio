@@ -9479,11 +9479,28 @@ const GridScreen = ({
         /* True phone width: two shots side by side, captions below each, the
            middle line below both. Still never stacks the images vertically. */
         @media (max-width: 560px) {
-          .wildcard-thumbs { flex-wrap: wrap; gap: 12px; }
-          .wildcard-thumb { flex-direction: column !important; gap: 6px; order: 0 !important; }
-          .wc-shot { width: 42vw; max-width: 190px; }
-          .wc-cap { width: auto; flex: 0 0 auto; min-width: 0; text-align: center !important; }
-          .wc-center { flex: 0 0 100%; max-width: 100%; min-width: 0; order: 10 !important; }
+          /* Keep the two wild cards SIDE BY SIDE and compact on phones so the
+             rest of the main grid is visible beneath them (Kristi 2026-08-12).
+             flex 1 1 44% + max-width 47% + min-width 0 forces each card to ~half
+             the row regardless of caption length; the caption wraps instead of
+             pushing the card wider (which used to make them wrap and stack). */
+          .wildcard-thumbs { flex-wrap: wrap; gap: 10px; align-items: flex-start; }
+          .wildcard-thumb {
+            flex-direction: column !important;
+            align-items: center;
+            flex: 1 1 44%;
+            max-width: 47%;
+            min-width: 0;
+            gap: 6px;
+            order: 0 !important;
+          }
+          .wc-shot { width: 100%; max-width: 150px; }
+          .wc-cap {
+            width: 100%; flex: 0 0 auto; min-width: 0;
+            text-align: center !important; font-size: 12px;
+            overflow-wrap: anywhere; word-break: break-word;
+          }
+          .wc-center { flex: 0 0 100%; max-width: 100%; min-width: 0; order: 10 !important; margin-top: 2px; }
         }
       `}</style>
       <div
