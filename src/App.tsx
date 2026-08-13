@@ -12753,6 +12753,130 @@ const PaywallModal = ({ onClose }: PaywallModalProps) => (
   </div>
 );
 
+type GalleryFirstModalProps = {
+  onViewGallery: () => void;
+  onContinue: () => void;
+  onClose: () => void;
+};
+// "This round is on me" nudge (2026-08-12). Shown once per visit the first time
+// a visitor clicks a Start/Generate CTA on any marketing page EXCEPT the
+// examples/gallery page. Points them at the gallery to set expectations about
+// realistic skin, and states the $2.99 fee for additional rounds — reduces
+// surprise regen abandonment and primes the $2.99 unlock.
+const GalleryFirstModal = ({ onViewGallery, onContinue, onClose }: GalleryFirstModalProps) => (
+  <div
+    role="dialog"
+    aria-modal="true"
+    aria-label="This round is on me"
+    onClick={onClose}
+    style={{
+      position: "fixed",
+      inset: 0,
+      background: "rgba(44, 44, 42, 0.55)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 20,
+      zIndex: 1150,
+      ...font,
+    }}
+  >
+    <div
+      onClick={(e) => e.stopPropagation()}
+      style={{
+        background: C.white,
+        borderRadius: 18,
+        maxWidth: 430,
+        width: "100%",
+        overflow: "hidden",
+        boxShadow: "0 24px 70px rgba(0,0,0,0.32)",
+      }}
+    >
+      <div
+        style={{
+          background: "linear-gradient(180deg, #FAF8F4, #F3EEE4)",
+          padding: "18px 20px 0",
+          textAlign: "center",
+          position: "relative",
+        }}
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          style={{
+            position: "absolute",
+            top: 12,
+            right: 14,
+            width: 28,
+            height: 28,
+            borderRadius: "50%",
+            border: "none",
+            background: "rgba(255,255,255,0.7)",
+            color: C.mediumGrey,
+            fontSize: 16,
+            lineHeight: 1,
+            cursor: "pointer",
+          }}
+        >
+          ×
+        </button>
+        <img
+          src="/marketing/ai-headshot-photographer-kristi-sherk.png"
+          alt="Kristina Sherk, founder and photographer"
+          style={{ width: "78%", maxWidth: 300, height: "auto", display: "block", margin: "0 auto" }}
+        />
+      </div>
+      <div style={{ padding: "22px 30px 26px", textAlign: "center" }}>
+        <h2
+          style={{
+            fontFamily: SERIF_STACK,
+            fontWeight: 600,
+            fontSize: 30,
+            lineHeight: 1.15,
+            color: C.dark,
+            margin: "0 0 14px",
+          }}
+        >
+          This round is on me
+        </h2>
+        <p style={{ fontSize: 15, lineHeight: 1.62, color: C.dark, margin: "0 0 14px" }}>
+          I pay for your first batch when you try my app. So — to make sure you're
+          comfortable with the <strong>hyper-realistic skin</strong> we create — please
+          view the gallery first and make sure you're OK with the results.
+        </p>
+        <div
+          style={{
+            display: "inline-block",
+            background: "#FAF8F4",
+            border: `1px solid ${C.border}`,
+            borderRadius: 10,
+            padding: "11px 16px",
+            fontSize: 14.5,
+            fontWeight: 600,
+            color: C.dark,
+            margin: "2px 0 16px",
+          }}
+        >
+          Additional rounds of generations will cost{" "}
+          <span style={{ color: "#C9A961" }}>$2.99</span>
+        </div>
+        <p style={{ fontSize: 14, color: "#6E6E6A", fontStyle: "italic", margin: "2px 0 22px" }}>
+          — Kristina, founder &amp; photographer
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <Button onClick={onViewGallery} full>
+            View the gallery first
+          </Button>
+          <Button onClick={onContinue} variant="ghost" full>
+            Continue anyway
+          </Button>
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
 // -------------------- Free-tier "1 more free regen" warning modal --------------------
 // (2026-07-03) — Fires after the customer's 1st single-photo regen when they're
 // in free-tier mode. Just a nudge to prepare them for the paywall on the 3rd try.
@@ -13541,6 +13665,9 @@ export default function App() {
   // each handleGenerate so every new generation sends a fresh email, but a
   // single batch never double-sends. (Kristi 2026-08-12)
   const readyEmailedThisBatchRef = useRef(false);
+  // "This round is on me" gallery-first popup: shown once per visit.
+  const galleryPromptShownRef = useRef(false);
+  const pendingStartRef = useRef<(() => void) | null>(null);
   // Which slots from the INITIAL 6-image batch are still in flight. Distinct
   // from regeneratingSlots (which tracks per-slot regen clicks from the grid).
   // Used so the user can advance to the grid early — once 5 of 6 are ready,
@@ -13728,6 +13855,7 @@ export default function App() {
   // Post-generation $2.99 paywall (free-tier only) — fires when the customer
   // tries their 3rd single regen OR Back-to-full-regen without paying.
   const [showFreeTierPaywall, setShowFreeTierPaywall] = useState(false);
+  const [showGalleryFirstModal, setShowGalleryFirstModal] = useState(false);
   // CART (Phase 1, 2026-06-03 — revised). Image URLs the user has added to
   // their cart. Stored as an ordered string[] (most-recently-added last so
   // we can render an "order of selection" feel later).
@@ -14740,6 +14868,19 @@ export default function App() {
   // code earlier in this session), go straight to Upload. Otherwise redirect
   // to Stripe Checkout for the $4.99 entry fee — on return, the mount-time
   // useEffect above catches ?paid=1&session_id=... and advances them here.
+  // "This round is on me" gate: the first Start/Generate click in a visit opens
+  // the gallery-first popup (once per visit); later clicks start directly. The
+  // examples/gallery page passes handleStart directly and bypasses this.
+  const requestStart = (startFn: () => void) => {
+    if (galleryPromptShownRef.current) {
+      startFn();
+      return;
+    }
+    galleryPromptShownRef.current = true;
+    pendingStartRef.current = startFn;
+    setShowGalleryFirstModal(true);
+  };
+
   const handleStart = async () => {
     if (isUnlocked) {
       setScreen("upload");
@@ -16131,7 +16272,7 @@ export default function App() {
       {screen === "landing" && (
         <LandingV2
           entryFeeEnabled={entryFeeEnabled}
-          onStart={handleStart}
+          onStart={() => requestStart(handleStart)}
           onPromoUnlock={handlePromoUnlock}
           onShowGallery={() => setScreen("gallery")}
           onNavigateHowItWorks={() => {
@@ -16164,7 +16305,7 @@ export default function App() {
       {screen === "how-it-works" && (
         <HowItWorksScreen
           entryFeeEnabled={entryFeeEnabled}
-          onStart={handleStart}
+          onStart={() => requestStart(handleStart)}
           onBackToHome={() => {
             setScreen("landing");
             if (window.location.pathname !== "/") {
@@ -16176,7 +16317,7 @@ export default function App() {
       {screen === "faq" && (
         <FAQScreen
           entryFeeEnabled={entryFeeEnabled}
-          onStart={handleStart}
+          onStart={() => requestStart(handleStart)}
           onBackToHome={() => {
             setScreen("landing");
             if (window.location.pathname !== "/") {
@@ -16189,7 +16330,7 @@ export default function App() {
         <FAQDetailScreen
           activeFaqSlug={activeFaqSlug}
           entryFeeEnabled={entryFeeEnabled}
-          onStart={handleStart}
+          onStart={() => requestStart(handleStart)}
           onShowGallery={() => {
             setScreen("gallery");
             setActiveFaqSlug(null);
@@ -16224,8 +16365,10 @@ export default function App() {
             // Record the entry specialty so the Style screen lands with
             // Healthcare style + Medical attire pre-checked instead of the
             // generic "corporate" default. Added 2026-05-27.
-            setEntrySpecialty("healthcare");
-            handleStart();
+            requestStart(() => {
+              setEntrySpecialty("healthcare");
+              handleStart();
+            });
           }}
           onBackToHome={() => {
             setScreen("landing");
@@ -16481,6 +16624,25 @@ export default function App() {
           headshot populates, right BEFORE the retouch popup (2026-08-02). */}
       {showFoundViaSurvey && (
         <FoundViaSurveyModal onDone={closeFoundViaSurvey} />
+      )}
+      {showGalleryFirstModal && (
+        <GalleryFirstModal
+          onViewGallery={() => {
+            setShowGalleryFirstModal(false);
+            pendingStartRef.current = null;
+            setScreen("gallery");
+          }}
+          onContinue={() => {
+            setShowGalleryFirstModal(false);
+            const fn = pendingStartRef.current;
+            pendingStartRef.current = null;
+            fn?.();
+          }}
+          onClose={() => {
+            setShowGalleryFirstModal(false);
+            pendingStartRef.current = null;
+          }}
+        />
       )}
       {showLoadingRetouchPopup && retouchImgReady && (
         <LoadingRetouchPreviewModal
