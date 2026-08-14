@@ -43,6 +43,35 @@ const WINDOW_SECONDS =
 
 const key = (ip: string) => `freebatch:${ip}`;
 
+// Absolute per-IP generation cap (2026-08-14). Independent of the paywall /
+// unlock: even a paid $2.99 unlock (which otherwise grants unlimited regens for
+// 2h) tops out at HARD_CAP total image generations per IP within the window, so
+// one power user can't turn $2.99 into unlimited Gemini spend. Counts EVERY
+// image call. Fail-open (never blocks on a Redis hiccup). Tunable live in the
+// Vercel dashboard WITHOUT a redeploy: GEN_HARD_CAP_PER_IP (default 40),
+// GEN_HARD_CAP_WINDOW_HOURS (default 24).
+const HARD_CAP = Math.max(1, Number(process.env.GEN_HARD_CAP_PER_IP ?? "40"));
+const HARD_CAP_WINDOW_SECONDS =
+  Math.max(1, Number(process.env.GEN_HARD_CAP_WINDOW_HOURS ?? "24")) * 3600;
+const hardCapKey = (ip: string) => `gencap:${ip}`;
+
+export async function checkGenHardCap(
+  ip: string | undefined,
+): Promise<{ allowed: boolean; count: number }> {
+  if (!ip) return { allowed: true, count: 0 };
+  try {
+    const k = hardCapKey(ip);
+    const count = await redis.incr(k);
+    // Fixed window: set the TTL only on the first call so the counter decays on
+    // its own after the window rather than sliding forever.
+    if (count === 1) await redis.expire(k, HARD_CAP_WINDOW_SECONDS);
+    return { allowed: count <= HARD_CAP, count };
+  } catch {
+    // Redis unreachable → never block generation on this guard.
+    return { allowed: true, count: 0 };
+  }
+}
+
 export async function checkFreeBatchLimit(
   ip: string | undefined,
   batchId: string | undefined,

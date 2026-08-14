@@ -13744,6 +13744,8 @@ export default function App() {
   // True when the last batch was blocked by the server-side free-tier IP cap
   // (so the zero-success handler shows the paywall, not a connection error).
   const freeLimitHitRef = useRef(false);
+  // Absolute per-IP generation cap hit this batch (over_limit) — friendly stop.
+  const overLimitHitRef = useRef(false);
   // Ready-to-view email guard — fires once per batch. Reset at the start of
   // each handleGenerate so every new generation sends a fresh email, but a
   // single batch never double-sends. (Kristi 2026-08-12)
@@ -15400,6 +15402,11 @@ export default function App() {
           .json()
           .then((d: { reason?: string }) => d?.reason)
           .catch(() => undefined);
+        if (reason402 === "over_limit") {
+          // Absolute per-IP generation cap reached (even paid). Stop cleanly
+          // with a message — do NOT clear the unlock or prompt another payment.
+          throw new Error("over_limit");
+        }
         if (reason402 === "free_limit" || (!entryFeeEnabled && !isUnlocked)) {
           // Free-tier per-IP cap hit on the SERVER even though the client
           // thought a regen was left — usually the page was refreshed so the
@@ -15462,7 +15469,12 @@ export default function App() {
       } else {
         setRegenCount((n) => Math.max(0, n - 1));
       }
-      if (err instanceof Error && err.message === "free_limit") {
+      if (err instanceof Error && err.message === "over_limit") {
+        // Absolute generation cap reached — friendly stop, no payment prompt.
+        setRegenError(
+          "You've reached the generation limit for now — pick your favorites and download them. Generation is paused to keep things fair for everyone.",
+        );
+      } else if (err instanceof Error && err.message === "free_limit") {
         // Cap hit: open the $2.99 unlock popup instead of the red banner. Only
         // cover the slot with the paywall tile if it is EMPTY — never hide a
         // shot the customer already had (they keep the image they regenerated
@@ -15775,6 +15787,7 @@ export default function App() {
       currentBatchId = newBatchId();
     }
     freeLimitHitRef.current = false;
+    overLimitHitRef.current = false;
     readyEmailedThisBatchRef.current = false;
     // Persist selections + URLs so per-slot regeneration can reuse them
     // without asking the user to reselect anything.
@@ -15920,6 +15933,11 @@ export default function App() {
             .json()
             .then((d: { reason?: string }) => d?.reason)
             .catch(() => undefined);
+          if (reason402 === "over_limit") {
+            // Absolute per-IP generation cap reached (even paid). Stop cleanly.
+            overLimitHitRef.current = true;
+            throw new Error("over_limit");
+          }
           if (reason402 === "free_limit") {
             // Server-side per-IP free-batch cap hit (2026-08-05): this IP has
             // already used its free batches. Show the $2.99 paywall (not the
@@ -15982,6 +16000,21 @@ export default function App() {
     const successCount = results.filter((r) => r !== null).length;
 
     if (successCount === 0) {
+      if (overLimitHitRef.current) {
+        // Absolute generation cap reached mid-batch — restore their grid and
+        // show a friendly stop, no payment prompt.
+        setBatchesUsed((n) => Math.max(0, n - 1));
+        setBlockedSlots(new Set());
+        if (priorGrid.length > 0) {
+          setGeneratedImages(priorGrid);
+          setReadyCount(priorGrid.length);
+        }
+        setScreen((sc) => (sc === "loading" ? "grid" : sc));
+        setRegenError(
+          "You've reached the generation limit for now — pick your favorites and download them. Generation is paused to keep things fair for everyone.",
+        );
+        return;
+      }
       if (freeLimitHitRef.current) {
         // Every call 402'd on the free-tier IP cap — the $2.99 paywall is
         // already open. Refund the optimistic batch count, and CRUCIALLY

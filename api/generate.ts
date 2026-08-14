@@ -31,6 +31,7 @@ import { isCodeActiveForGenerate } from "./lib/promoStore.js";
 import {
   checkFreeBatchLimit,
   checkPurchaseBatchCredit,
+  checkGenHardCap,
 } from "./lib/freeGenLimit.js";
 import { bumpApiCall } from "./lib/dailyStats.js";
 import {
@@ -1893,6 +1894,19 @@ export default async function handler(
     return res.status(402).json({
       error: "Payment required",
       reason: unlock.reason,
+    });
+  }
+
+  // Absolute per-IP generation cap (2026-08-14): even a paid $2.99 unlock is
+  // FINITE — one power user can't turn $2.99 into unlimited Gemini spend. Over
+  // GEN_HARD_CAP_PER_IP (default 40) total image calls per IP within the window
+  // → 402 "over_limit". Fail-open in the lib. Tunable live in the Vercel
+  // dashboard (GEN_HARD_CAP_PER_IP) with no redeploy.
+  const hardCap = await checkGenHardCap(clientIp);
+  if (!hardCap.allowed) {
+    return res.status(402).json({
+      error: "Generation limit reached",
+      reason: "over_limit",
     });
   }
 
