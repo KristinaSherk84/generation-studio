@@ -32,6 +32,7 @@ import {
   checkFreeBatchLimit,
   checkPurchaseBatchCredit,
 } from "./lib/freeGenLimit.js";
+import { bumpApiCall } from "./lib/dailyStats.js";
 import {
   getPromptOverrides,
   seedPromptCatalog,
@@ -1894,6 +1895,13 @@ export default async function handler(
       reason: unlock.reason,
     });
   }
+
+  // Daily activity counter (2026-08-14): this call has cleared the paywall and
+  // is about to hit the model, so it's one billable Gemini image call. Count it
+  // and register the caller's IP as a distinct generator for today (ET). Awaited
+  // but best-effort (never throws) so the number is reliable without the
+  // serverless function freezing before a fire-and-forget write lands.
+  await bumpApiCall(clientIp);
 
   if (
     !body.photoUrls ||

@@ -34,7 +34,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { GoogleGenAI, type Part } from "@google/genai";
 import sharp from "sharp";
 import { buildShareGraphic } from "./lib/compositeBeforeAfter.js";
-import { markLeadPurchased } from "./lib/leadStore.js";
+import { recordPurchase } from "./lib/leadStore.js";
 import {
   buildRetouchPrompt,
   setActiveRetouchOverrides,
@@ -1125,9 +1125,11 @@ export default async function handler(
     // ---- Mark this email as having purchased so it drops out of the
     //      abandonment-recovery list (leadStore groundwork). Wrapped so a
     //      lead-store / Redis blip can never fail the delivery response;
-    //      markLeadPurchased is also a no-op for unknown/invalid emails. ----
+    //      recordPurchase creates the lead if missing (so resume-link /
+    //      different-email buyers still show as purchased) and is a no-op for
+    //      invalid emails. ----
     try {
-      await markLeadPurchased(body.email);
+      await recordPurchase(body.email);
     } catch (err) {
       console.error("[deliver] markLeadPurchased failed:", err);
     }

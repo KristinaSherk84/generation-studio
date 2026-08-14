@@ -129,6 +129,38 @@ export async function markLeadPurchased(email: string): Promise<void> {
 }
 
 /**
+ * Record a PURCHASE against an email — creating the lead if it doesn't exist
+ * yet. This is the fix for buyers who never generated under their checkout /
+ * delivery email (e.g. they came back via a resume link, or paid under a
+ * different address): markLeadPurchased alone was a no-op for them, so the sale
+ * was invisible in the leads form. Now every purchase guarantees a row marked
+ * purchased. The Paid amount still comes from the Stripe-by-checkout-email match
+ * in the admin page, which now succeeds because the row exists. Does NOT bump
+ * generateCount (a purchase is not a generation). Safe on invalid email.
+ * (Kristi 2026-08-14)
+ */
+export async function recordPurchase(email: string): Promise<void> {
+  if (!looksLikeEmail(email)) return;
+  const key = recordKey(email);
+  const now = new Date().toISOString();
+  const existing = (await redis.get<LeadRecord>(key)) ?? null;
+  const rec: LeadRecord = existing
+    ? { ...existing, purchased: true, purchasedAt: existing.purchasedAt ?? now, lastSeenAt: now }
+    : {
+        email: email.trim(),
+        createdAt: now,
+        lastSeenAt: now,
+        generateCount: 0,
+        purchased: true,
+        purchasedAt: now,
+        followedUp: false,
+        source: "purchase",
+      };
+  await redis.set(key, rec);
+  await redis.sadd(INDEX_KEY, email.trim().toLowerCase());
+}
+
+/**
  * Mark a lead as having received the win-back follow-up email, recording the
  * unique promo code we minted for them. Called by the follow-up cron ONLY
  * after Resend accepts the send, so a failed send is retried next run rather

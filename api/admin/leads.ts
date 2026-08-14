@@ -18,6 +18,11 @@ import {
   markLeadPurchased,
   setLeadFoundVia,
 } from "../lib/leadStore.js";
+import {
+  getDailyStats,
+  setDailySpend,
+  lastEtDates,
+} from "../lib/dailyStats.js";
 
 export const maxDuration = 10;
 
@@ -179,6 +184,8 @@ export default async function handler(
       email?: unknown;
       action?: unknown;
       foundVia?: unknown;
+      date?: unknown;
+      spendUsd?: unknown;
     };
     const bpw = typeof body.pw === "string" ? body.pw : "";
     const expectedPw = process.env.ADMIN_PASSWORD ?? "";
@@ -204,6 +211,21 @@ export default async function handler(
       } catch (err) {
         console.error("[admin/leads] setFoundVia failed:", err);
         res.status(500).json({ ok: false, error: "Failed to save" });
+      }
+      return;
+    }
+    if (body.action === "setSpend" && typeof body.date === "string") {
+      const usd = Number(body.spendUsd);
+      if (!Number.isFinite(usd) || usd < 0) {
+        res.status(400).json({ ok: false, error: "Invalid amount" });
+        return;
+      }
+      try {
+        await setDailySpend(body.date, usd);
+        res.status(200).json({ ok: true });
+      } catch (err) {
+        console.error("[admin/leads] setSpend failed:", err);
+        res.status(500).json({ ok: false, error: "Failed to save spend" });
       }
       return;
     }
@@ -234,6 +256,10 @@ export default async function handler(
     const stripePayments = await fetchStripePayments();
     const paidByEmail = stripePayments ? stripePayments.byEmail : {};
     const revenueUsd = stripePayments ? stripePayments.total : null;
+
+    // Daily activity (2026-08-14): API calls (Gemini image calls) + distinct
+    // people who generated, per ET day, plus the Google spend Kristi types in.
+    const dailyStats = await getDailyStats(lastEtDates(14));
     const paidFor = (email: string) =>
       paidByEmail[email.trim().toLowerCase()] ?? 0;
     // What to show in the Paid column: the Stripe amount matched by checkout
@@ -342,6 +368,37 @@ export default async function handler(
       )
       .join("");
 
+    const dailyRowsHtml = dailyStats
+      .map((d) => {
+        const cpc =
+          d.spendUsd != null && d.apiCalls > 0
+            ? d.spendUsd / d.apiCalls
+            : null;
+        return `<tr>
+        <td>${esc(d.date)}</td>
+        <td class="num">${d.apiCalls.toLocaleString()}</td>
+        <td class="num">${d.people.toLocaleString()}</td>
+        <td class="num">$<input class="spendinput" data-date="${esc(
+          d.date,
+        )}" type="number" step="0.01" min="0" value="${
+          d.spendUsd != null ? d.spendUsd : ""
+        }" placeholder="—" style="width:78px;padding:4px 6px;border:1px solid #E2E0DA;border-radius:6px;font:inherit;text-align:right" /></td>
+        <td class="num">${cpc != null ? "$" + cpc.toFixed(4) : "—"}</td>
+      </tr>`;
+      })
+      .join("");
+    const dailyTableHtml = `
+  <h2 style="font-size:16px;font-weight:600;margin:24px 0 4px;color:#2C2C2A">Daily activity <span style="font-weight:400;color:#888780;font-size:13px">(ET · last 14 days)</span></h2>
+  <p class="meta" style="margin:0 0 10px">API calls = Gemini image calls that hit the model (each ≈ one unit of Google spend). People = distinct visitors who generated (by IP). Type the day's real spend from <a href="https://aistudio.google.com/spend?project=gen-lang-client-0496086422" target="_blank" rel="noopener">your Google AI Studio spend page ↗</a> and cost-per-call fills in.</p>
+  <div class="tablewrap">
+    <table>
+      <thead><tr>
+        <th>Date (ET)</th><th class="num">API calls</th><th class="num">People generated</th><th class="num">Google spend</th><th class="num">$ / call</th>
+      </tr></thead>
+      <tbody>${dailyRowsHtml}</tbody>
+    </table>
+  </div>
+`;
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -406,6 +463,8 @@ export default async function handler(
     }</div><div class="l">Est. cost / purchase</div></div>
   </div>
   <p class="meta" style="margin:-10px 0 18px">Est. spend = batches × ~$0.60 (6 images at 2K). Rough — excludes per-slot regens, identity auto-regen, and the post-purchase retouch pass, so real spend runs higher.</p>
+
+  ${dailyTableHtml}
 
   ${foundViaHtml}
 
@@ -477,6 +536,27 @@ export default async function handler(
           else { sel.disabled = false; sel.value = prev; alert('Failed: ' + ((d && d.error) || 'unknown')); }
         })
         .catch(function () { sel.disabled = false; sel.value = prev; alert('Network error'); });
+    });
+  });
+  document.querySelectorAll('.spendinput').forEach(function (inp) {
+    var prev = inp.value;
+    inp.addEventListener('change', function () {
+      var v = (inp.value || '').trim();
+      if (v === '') { inp.value = prev; return; }
+      var usd = parseFloat(v);
+      if (isNaN(usd) || usd < 0) { alert('Enter a dollar amount'); inp.value = prev; return; }
+      inp.disabled = true;
+      fetch('/api/admin/leads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'setSpend', pw: PW, date: inp.dataset.date, spendUsd: usd }),
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d && d.ok) { location.reload(); }
+          else { inp.disabled = false; inp.value = prev; alert('Failed: ' + ((d && d.error) || 'unknown')); }
+        })
+        .catch(function () { inp.disabled = false; inp.value = prev; alert('Network error'); });
     });
   });
 </script>
