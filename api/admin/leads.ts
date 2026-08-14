@@ -16,6 +16,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import {
   listLeads,
   markLeadPurchased,
+  recordPurchase,
   setLeadFoundVia,
 } from "../lib/leadStore.js";
 import {
@@ -211,6 +212,21 @@ export default async function handler(
       } catch (err) {
         console.error("[admin/leads] setFoundVia failed:", err);
         res.status(500).json({ ok: false, error: "Failed to save" });
+      }
+      return;
+    }
+    if (body.action === "addPurchase" && typeof body.email === "string") {
+      const em = body.email.trim();
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) {
+        res.status(400).json({ ok: false, error: "Invalid email" });
+        return;
+      }
+      try {
+        await recordPurchase(em);
+        res.status(200).json({ ok: true });
+      } catch (err) {
+        console.error("[admin/leads] addPurchase failed:", err);
+        res.status(500).json({ ok: false, error: "Failed to add" });
       }
       return;
     }
@@ -483,6 +499,15 @@ export default async function handler(
       : ""
   }
 
+  <div style="margin:18px 0;padding:14px 16px;border:1px solid #E2E0DA;border-radius:10px;background:#fff">
+    <div style="font-weight:600;font-size:14px;margin-bottom:4px;color:#2C2C2A">Add a purchaser Stripe caught but the form missed</div>
+    <div style="font-size:13px;color:#888780;margin-bottom:8px">Type the buyer's email (from Stripe). Creates a row marked ✅ Purchased; the paid amount fills in from Stripe automatically.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <input id="addemail" type="email" placeholder="email@example.com" style="flex:1;min-width:220px;padding:8px 10px;border:1px solid #E2E0DA;border-radius:8px;font:inherit" />
+      <button class="btn" id="addbtn">Add as purchased</button>
+    </div>
+  </div>
+
   <div class="tablewrap">
     ${
       total
@@ -538,6 +563,25 @@ export default async function handler(
         .catch(function () { sel.disabled = false; sel.value = prev; alert('Network error'); });
     });
   });
+  var addBtn = document.getElementById('addbtn');
+  if (addBtn) {
+    addBtn.addEventListener('click', function () {
+      var em = (document.getElementById('addemail').value || '').trim();
+      if (!em) { alert('Enter an email'); return; }
+      addBtn.disabled = true; addBtn.textContent = 'Adding…';
+      fetch('/api/admin/leads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'addPurchase', pw: PW, email: em }),
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d && d.ok) { location.reload(); }
+          else { addBtn.disabled = false; addBtn.textContent = 'Add as purchased'; alert('Failed: ' + ((d && d.error) || 'unknown')); }
+        })
+        .catch(function () { addBtn.disabled = false; addBtn.textContent = 'Add as purchased'; alert('Network error'); });
+    });
+  }
   document.querySelectorAll('.spendinput').forEach(function (inp) {
     var prev = inp.value;
     inp.addEventListener('change', function () {
