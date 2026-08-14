@@ -18,6 +18,7 @@ import {
   markLeadPurchased,
   recordPurchase,
   setLeadFoundVia,
+  getLeadCallCounts,
 } from "../lib/leadStore.js";
 import {
   getDailyStats,
@@ -28,14 +29,12 @@ import {
 
 export const maxDuration = 10;
 
-// Estimated generation cost of one batch. Gemini 3.1 Flash Image at the app's
-// 2048px output is ~$0.10/image. Most batches render 6 images (~$0.61); ONLY
-// the Paper/color (corporate) style also fires 2 "Wild Card" bonus shots for 8
-// images (~$0.81) — gated to that style on 2026-08-06. This blended ~$0.65 is a
-// rough middle. generateCount tracks batches, so cost ≈ generateCount × this.
-// NOTE: an ESTIMATE — excludes per-slot regens, identity auto-regen, and the
-// post-purchase Gemini 3 Pro retouch pass, so true spend runs somewhat higher.
-const GEN_BATCH_COST_USD = 0.95;
+// Estimated cost of ONE image call. Gemini 3.1 Flash Image at the app's 2048px
+// output is ~$0.10/image. The "Calls" column counts every billable image call
+// per person (initial 6, auto identity redos, wild-card bonus shots, per-slot
+// regens), so cost ≈ calls × this. Matches the ~$0.10/call Kristi used for the
+// Everett estimate. (2026-08-14 — replaced the old per-batch estimate.)
+const PER_CALL_COST_USD = 0.1;
 const fmtUsd = (n: number) => `$${n.toFixed(2)}`;
 
 // The same six options the customer sees in the "How did you find us?" survey
@@ -189,7 +188,7 @@ export default async function handler(
       date?: unknown;
       spendUsd?: unknown;
       people?: unknown;
-      gens?: unknown;
+      calls?: unknown;
       costUsd?: unknown;
     };
     const bpw = typeof body.pw === "string" ? body.pw : "";
@@ -225,9 +224,9 @@ export default async function handler(
         res.status(400).json({ ok: false, error: "Invalid email" });
         return;
       }
-      const opts: { gens?: number; estCostUsd?: number } = {};
-      const g = Number(body.gens);
-      if (Number.isFinite(g) && g >= 0) opts.gens = g;
+      const opts: { calls?: number; estCostUsd?: number } = {};
+      const cl = Number(body.calls);
+      if (Number.isFinite(cl) && cl >= 0) opts.calls = cl;
       const c = Number(body.costUsd);
       if (Number.isFinite(c) && c >= 0) opts.estCostUsd = c;
       try {
@@ -310,15 +309,28 @@ export default async function handler(
     // is larger — never summed, so a same-email unlock isn't double-counted.
     const paidShown = (l: { email: string; entryUnlockUsd?: number | null }) =>
       Math.max(paidFor(l.email), l.entryUnlockUsd ?? 0);
-    // Estimated AI cost per lead: a manual override when we set one (from the
-    // real per-call count in the logs), else batches × the flat rate.
+    // Real per-person image-call totals (2026-08-14): every billable call the
+    // client attributed to this email. A hand-typed override wins; otherwise
+    // the live counter. Old leads read 0 until they generate again (calls that
+    // predate this counter can't be backfilled).
+    const callCounts = await getLeadCallCounts(leads.map((l) => l.email));
+    const shownCalls = (l: {
+      email: string;
+      callCountOverride?: number | null;
+    }) =>
+      l.callCountOverride != null
+        ? l.callCountOverride
+        : callCounts[l.email.trim().toLowerCase()] ?? 0;
+    // Estimated AI cost per lead: a manual override when we set one, else the
+    // real image-call count × the per-call rate.
     const estCost = (l: {
-      generateCount?: number;
+      email: string;
+      callCountOverride?: number | null;
       estCostOverrideUsd?: number | null;
     }) =>
       l.estCostOverrideUsd != null
         ? l.estCostOverrideUsd
-        : (l.generateCount ?? 0) * GEN_BATCH_COST_USD;
+        : shownCalls(l) * PER_CALL_COST_USD;
 
     // ---- CSV download branch ----
     if (format === "csv") {
@@ -326,7 +338,7 @@ export default async function handler(
         "email",
         "createdAt (ET)",
         "lastSeenAt (ET)",
-        "generateCount",
+        "imageCalls",
         "estGenCostUsd",
         "amountPaidUsd",
         "purchased",
@@ -339,7 +351,7 @@ export default async function handler(
           l.email,
           formatET(l.createdAt),
           formatET(l.lastSeenAt),
-          l.generateCount,
+          shownCalls(l),
           estCost(l).toFixed(2),
           paidShown(l).toFixed(2),
           l.purchased,
@@ -364,7 +376,7 @@ export default async function handler(
     // Conversion rate = purchasers / everyone who generated (2026-08-03).
     const conversionPct =
       total > 0 ? Math.round((purchasedCount / total) * 1000) / 10 : 0;
-    // Estimated generation spend (see GEN_BATCH_COST_USD note).
+    // Estimated generation spend (see PER_CALL_COST_USD note).
     const totalEstCost = leads.reduce((s, l) => s + estCost(l), 0);
     const costPerPurchase =
       purchasedCount > 0 ? totalEstCost / purchasedCount : 0;
@@ -401,7 +413,7 @@ export default async function handler(
         <td class="email">${esc(l.email)}</td>
         <td>${esc(formatET(l.createdAt))}</td>
         <td>${esc(formatET(l.lastSeenAt))}</td>
-        <td class="num">${esc(l.generateCount)}</td>
+        <td class="num">${esc(shownCalls(l))}</td>
         <td class="num">${esc(fmtUsd(estCost(l)))}</td>
         <td class="num">${
           paidShown(l) > 0 ? esc(fmtUsd(paidShown(l))) : "—"
@@ -544,10 +556,10 @@ export default async function handler(
 
   <div style="margin:18px 0;padding:14px 16px;border:1px solid #E2E0DA;border-radius:10px;background:#fff">
     <div style="font-weight:600;font-size:14px;margin-bottom:4px;color:#2C2C2A">Add a purchaser Stripe caught but the form missed</div>
-    <div style="font-size:13px;color:#888780;margin-bottom:8px">Type the buyer's email (from Stripe). Creates a row marked ✅ Purchased; the paid amount fills in from Stripe automatically. Sessions &amp; est. cost are optional — set them when you know the real numbers from the logs.</div>
+    <div style="font-size:13px;color:#888780;margin-bottom:8px">Type the buyer's email (from Stripe). Creates a row marked ✅ Purchased; the paid amount fills in from Stripe automatically. Image calls &amp; est. cost are optional — set them when you know the real numbers from the logs.</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <input id="addemail" type="email" placeholder="email@example.com" style="flex:1;min-width:200px;padding:8px 10px;border:1px solid #E2E0DA;border-radius:8px;font:inherit" />
-      <input id="addgens" type="number" min="0" step="1" placeholder="Sessions" title="Sessions / batches (optional)" style="width:104px;padding:8px 10px;border:1px solid #E2E0DA;border-radius:8px;font:inherit" />
+      <input id="addgens" type="number" min="0" step="1" placeholder="Image calls" title="Total image calls (optional)" style="width:104px;padding:8px 10px;border:1px solid #E2E0DA;border-radius:8px;font:inherit" />
       <input id="addcost" type="number" min="0" step="0.01" placeholder="Est. cost $" title="Estimated AI cost in dollars (optional)" style="width:118px;padding:8px 10px;border:1px solid #E2E0DA;border-radius:8px;font:inherit" />
       <button class="btn" id="addbtn">Add as purchased</button>
     </div>
@@ -559,7 +571,7 @@ export default async function handler(
         ? `<table>
       <thead><tr>
         <th>Email</th><th>First seen (ET)</th><th>Last seen (ET)</th>
-        <th class="num">Gens</th><th class="num">Est. $</th><th class="num">Paid</th><th>Status</th><th>Purchased (ET)</th><th>Found via</th>
+        <th class="num" title="Total AI image calls made for this person - the real cost driver. Includes the 6 they see plus automatic likeness redos, bonus shots, and any regenerations (~10-13 per round). Counting started 2026-08-14.">Calls</th><th class="num">Est. $</th><th class="num">Paid</th><th>Status</th><th>Purchased (ET)</th><th>Found via</th>
       </tr></thead>
       <tbody>${rowsHtml}</tbody>
     </table>`
@@ -616,7 +628,7 @@ export default async function handler(
       var gensV = (document.getElementById('addgens').value || '').trim();
       var costV = (document.getElementById('addcost').value || '').trim();
       var payload = { action: 'addPurchase', pw: PW, email: em };
-      if (gensV !== '') payload.gens = parseInt(gensV, 10);
+      if (gensV !== '') payload.calls = parseInt(gensV, 10);
       if (costV !== '') payload.costUsd = parseFloat(costV);
       addBtn.disabled = true; addBtn.textContent = 'Adding…';
       fetch('/api/admin/leads', {

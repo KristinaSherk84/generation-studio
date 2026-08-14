@@ -34,6 +34,7 @@ import {
   checkGenHardCap,
 } from "./lib/freeGenLimit.js";
 import { bumpApiCall } from "./lib/dailyStats.js";
+import { bumpLeadCalls } from "./lib/leadStore.js";
 import {
   getPromptOverrides,
   seedPromptCatalog,
@@ -240,6 +241,10 @@ type GenerateRequest = {
   // Customer-picked polo color (2026-08-12). Only used when attire === "polo".
   // Defaults to "navy" server-side when omitted.
   poloColor?: PoloColor;
+  // Email the customer generated under (2026-08-14). Merged into every generate
+  // body by the client so we can count each billable image call against them in
+  // the leads form. Attribution only - never gates or validates the request.
+  email?: string;
   // ---- Paywall enforcement (added 2026-05-15) ----
   // Exactly one of these two must be present and valid for the request to
   // be processed:
@@ -1916,6 +1921,13 @@ export default async function handler(
   // but best-effort (never throws) so the number is reliable without the
   // serverless function freezing before a fire-and-forget write lands.
   await bumpApiCall(clientIp);
+  // Per-person attribution (2026-08-14): also count this billable image call
+  // against the email the customer generated under, so the leads form shows a
+  // real per-person image-call total (not just rounds started). bumpLeadCalls
+  // validates the address itself and no-ops on anything invalid. Best-effort.
+  if (typeof body.email === "string") {
+    await bumpLeadCalls(body.email);
+  }
 
   if (
     !body.photoUrls ||

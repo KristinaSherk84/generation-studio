@@ -252,11 +252,22 @@ function readUnlockRequestFields(): {
   promoCode?: string;
   batchId?: string;
   purchaseSessionId?: string;
+  email?: string;
 } {
-  const batch: { batchId?: string; purchaseSessionId?: string } =
-    currentBatchId ? { batchId: currentBatchId } : {};
+  const batch: {
+    batchId?: string;
+    purchaseSessionId?: string;
+    email?: string;
+  } = currentBatchId ? { batchId: currentBatchId } : {};
   if (typeof window === "undefined") return batch;
   try {
+    // Per-person image-call attribution (2026-08-14): the email the customer
+    // generated under, merged into EVERY /api/generate body so the server can
+    // count all their image calls (initial 6, auto identity redos, wild cards,
+    // regens, download previews) against them in the leads form. Read from the
+    // same localStorage key lead capture writes. Server ignores if absent.
+    const genEmail = window.localStorage.getItem("gen_lead_email");
+    if (genEmail) batch.email = genEmail;
     // Post-purchase perk: after any purchase we stash the paid session id so
     // the server can grant 2 more free batches. Sent on every generate call.
     const psid = window.localStorage.getItem("purchase_session_id");
@@ -13409,14 +13420,15 @@ const WILDCARD_ATTIRE_LABELS: Record<string, string> = {
 //     cutoff. LOWER = stricter (more redos, better likeness, more cost);
 //     HIGHER = looser. Start moderately strict and adjust from live data.
 //   - IDENTITY_MAX_REDOS: hard cap on how many of the 6 shots we auto-redo
-//     per batch (bounds cost). Kristi: 2 photos, 1 regen each (lowered from 3
-//     to 2 on 2026-08-03 to cut per-session generation cost).
+//     per batch (bounds cost). Scores all 6, redoes only the worst matches
+//     that fall below the bar. Set to 2 (2026-08-14, Kristi) - "check all 6,
+//     regenerate the 2 worst" - down from 3 to cut per-session cost.
 const IDENTITY_DISTANCE_THRESHOLD = 0.45;
 // The HERO image (slot 0) is the first thing the customer sees, so it is held
 // to a stricter match bar, is redone even when it can't be scored, and is
 // never dropped by the redo cap. (2026-08-07 per Kristi)
 const IDENTITY_HERO_THRESHOLD = 0.42;
-const IDENTITY_MAX_REDOS = 3;
+const IDENTITY_MAX_REDOS = 2;
 
 // Standard Euclidean distance between two equal-length numeric vectors
 // (face descriptors). Lower = more similar faces.

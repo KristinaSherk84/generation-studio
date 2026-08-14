@@ -30,6 +30,10 @@ export type LeadRecord = {
   lastSeenAt: string;
   // How many times this email kicked off a generation batch.
   generateCount: number;
+  // Manual override for the "Calls" (image calls) shown in the leads form,
+  // typed on the admin page for hand-added rows. When set, it wins over the
+  // auto per-email image-call counter. (2026-08-14)
+  callCountOverride?: number | null;
   // Flips true once this email completes a purchase (set by the delivery /
   // checkout path later — groundwork for abandonment follow-up so we only
   // email people who did NOT buy).
@@ -132,6 +136,48 @@ export async function markLeadPurchased(email: string): Promise<void> {
   });
 }
 
+// ---- Per-person image-call counter (2026-08-14) --------------------------
+// Every billable /api/generate call (initial 6, auto identity redos, wild
+// cards, per-slot regens) is counted against the email the customer generated
+// under, so the leads form can show a real per-person image-call total - the
+// true cost driver - instead of just "rounds started". A separate INCR key per
+// email keeps the six parallel calls in a batch atomic. ~400-day TTL.
+const CALLS_PREFIX = "leadcalls:";
+const CALLS_TTL_SEC = 60 * 60 * 24 * 400;
+
+/** Count one billable image call against an email. Best-effort; validates. */
+export async function bumpLeadCalls(email: string): Promise<void> {
+  if (!looksLikeEmail(email)) return;
+  try {
+    const key = CALLS_PREFIX + email.trim().toLowerCase();
+    const n = await redis.incr(key);
+    if (n === 1) await redis.expire(key, CALLS_TTL_SEC);
+  } catch {
+    /* best-effort - never block a generation on a stats write */
+  }
+}
+
+/** Lifetime image-call counts for a set of emails (lowercased -> count). */
+export async function getLeadCallCounts(
+  emails: string[],
+): Promise<Record<string, number>> {
+  const out: Record<string, number> = {};
+  const uniq = Array.from(
+    new Set(emails.map((e) => e.trim().toLowerCase()).filter(Boolean)),
+  );
+  if (uniq.length === 0) return out;
+  try {
+    const keys = uniq.map((e) => CALLS_PREFIX + e);
+    const vals = await redis.mget<(string | number | null)[]>(...keys);
+    uniq.forEach((e, i) => {
+      out[e] = Number(vals[i]) || 0;
+    });
+  } catch {
+    /* ignore - callers treat a missing count as 0 */
+  }
+  return out;
+}
+
 /**
  * Record a PURCHASE against an email — creating the lead if it doesn't exist
  * yet. This is the fix for buyers who never generated under their checkout /
@@ -145,7 +191,7 @@ export async function markLeadPurchased(email: string): Promise<void> {
  */
 export async function recordPurchase(
   email: string,
-  opts?: { gens?: number; estCostUsd?: number },
+  opts?: { gens?: number; calls?: number; estCostUsd?: number },
 ): Promise<void> {
   if (!looksLikeEmail(email)) return;
   const key = recordKey(email);
@@ -167,6 +213,9 @@ export async function recordPurchase(
   // admin page — e.g. Everett, whose real session count came from the logs).
   if (opts?.gens != null && Number.isFinite(opts.gens)) {
     rec.generateCount = Math.max(0, Math.round(opts.gens));
+  }
+  if (opts?.calls != null && Number.isFinite(opts.calls)) {
+    rec.callCountOverride = Math.max(0, Math.round(opts.calls));
   }
   if (opts?.estCostUsd != null && Number.isFinite(opts.estCostUsd)) {
     rec.estCostOverrideUsd = Math.max(0, opts.estCostUsd);
