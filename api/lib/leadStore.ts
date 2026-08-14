@@ -60,6 +60,10 @@ export type LeadRecord = {
   // page can show it in Paid even when they later check out under a different
   // email (Stripe-by-email match would otherwise miss it). (2026-08-10)
   entryUnlockUsd?: number | null;
+  // Manual override for the estimated AI cost of this lead (dollars). Set from
+  // the real per-call count in the logs for specific customers; when present it
+  // replaces the batches × flat-rate estimate on the leads page. (2026-08-14)
+  estCostOverrideUsd?: number | null;
 };
 
 const KEY_PREFIX = "lead:";
@@ -139,7 +143,10 @@ export async function markLeadPurchased(email: string): Promise<void> {
  * generateCount (a purchase is not a generation). Safe on invalid email.
  * (Kristi 2026-08-14)
  */
-export async function recordPurchase(email: string): Promise<void> {
+export async function recordPurchase(
+  email: string,
+  opts?: { gens?: number; estCostUsd?: number },
+): Promise<void> {
   if (!looksLikeEmail(email)) return;
   const key = recordKey(email);
   const now = new Date().toISOString();
@@ -156,6 +163,14 @@ export async function recordPurchase(email: string): Promise<void> {
         followedUp: false,
         source: "purchase",
       };
+  // Optional manual corrections (used when adding a purchaser by hand from the
+  // admin page — e.g. Everett, whose real session count came from the logs).
+  if (opts?.gens != null && Number.isFinite(opts.gens)) {
+    rec.generateCount = Math.max(0, Math.round(opts.gens));
+  }
+  if (opts?.estCostUsd != null && Number.isFinite(opts.estCostUsd)) {
+    rec.estCostOverrideUsd = Math.max(0, opts.estCostUsd);
+  }
   await redis.set(key, rec);
   await redis.sadd(INDEX_KEY, email.trim().toLowerCase());
 }

@@ -187,6 +187,8 @@ export default async function handler(
       foundVia?: unknown;
       date?: unknown;
       spendUsd?: unknown;
+      gens?: unknown;
+      costUsd?: unknown;
     };
     const bpw = typeof body.pw === "string" ? body.pw : "";
     const expectedPw = process.env.ADMIN_PASSWORD ?? "";
@@ -221,8 +223,13 @@ export default async function handler(
         res.status(400).json({ ok: false, error: "Invalid email" });
         return;
       }
+      const opts: { gens?: number; estCostUsd?: number } = {};
+      const g = Number(body.gens);
+      if (Number.isFinite(g) && g >= 0) opts.gens = g;
+      const c = Number(body.costUsd);
+      if (Number.isFinite(c) && c >= 0) opts.estCostUsd = c;
       try {
-        await recordPurchase(em);
+        await recordPurchase(em, opts);
         res.status(200).json({ ok: true });
       } catch (err) {
         console.error("[admin/leads] addPurchase failed:", err);
@@ -284,6 +291,15 @@ export default async function handler(
     // is larger — never summed, so a same-email unlock isn't double-counted.
     const paidShown = (l: { email: string; entryUnlockUsd?: number | null }) =>
       Math.max(paidFor(l.email), l.entryUnlockUsd ?? 0);
+    // Estimated AI cost per lead: a manual override when we set one (from the
+    // real per-call count in the logs), else batches × the flat rate.
+    const estCost = (l: {
+      generateCount?: number;
+      estCostOverrideUsd?: number | null;
+    }) =>
+      l.estCostOverrideUsd != null
+        ? l.estCostOverrideUsd
+        : (l.generateCount ?? 0) * GEN_BATCH_COST_USD;
 
     // ---- CSV download branch ----
     if (format === "csv") {
@@ -305,7 +321,7 @@ export default async function handler(
           formatET(l.createdAt),
           formatET(l.lastSeenAt),
           l.generateCount,
-          ((l.generateCount ?? 0) * GEN_BATCH_COST_USD).toFixed(2),
+          estCost(l).toFixed(2),
           paidShown(l).toFixed(2),
           l.purchased,
           formatET(l.purchasedAt),
@@ -330,8 +346,6 @@ export default async function handler(
     const conversionPct =
       total > 0 ? Math.round((purchasedCount / total) * 1000) / 10 : 0;
     // Estimated generation spend (see GEN_BATCH_COST_USD note).
-    const estCost = (l: (typeof leads)[number]) =>
-      (l.generateCount ?? 0) * GEN_BATCH_COST_USD;
     const totalEstCost = leads.reduce((s, l) => s + estCost(l), 0);
     const costPerPurchase =
       purchasedCount > 0 ? totalEstCost / purchasedCount : 0;
@@ -501,9 +515,11 @@ export default async function handler(
 
   <div style="margin:18px 0;padding:14px 16px;border:1px solid #E2E0DA;border-radius:10px;background:#fff">
     <div style="font-weight:600;font-size:14px;margin-bottom:4px;color:#2C2C2A">Add a purchaser Stripe caught but the form missed</div>
-    <div style="font-size:13px;color:#888780;margin-bottom:8px">Type the buyer's email (from Stripe). Creates a row marked ✅ Purchased; the paid amount fills in from Stripe automatically.</div>
+    <div style="font-size:13px;color:#888780;margin-bottom:8px">Type the buyer's email (from Stripe). Creates a row marked ✅ Purchased; the paid amount fills in from Stripe automatically. Sessions &amp; est. cost are optional — set them when you know the real numbers from the logs.</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <input id="addemail" type="email" placeholder="email@example.com" style="flex:1;min-width:220px;padding:8px 10px;border:1px solid #E2E0DA;border-radius:8px;font:inherit" />
+      <input id="addemail" type="email" placeholder="email@example.com" style="flex:1;min-width:200px;padding:8px 10px;border:1px solid #E2E0DA;border-radius:8px;font:inherit" />
+      <input id="addgens" type="number" min="0" step="1" placeholder="Sessions" title="Sessions / batches (optional)" style="width:104px;padding:8px 10px;border:1px solid #E2E0DA;border-radius:8px;font:inherit" />
+      <input id="addcost" type="number" min="0" step="0.01" placeholder="Est. cost $" title="Estimated AI cost in dollars (optional)" style="width:118px;padding:8px 10px;border:1px solid #E2E0DA;border-radius:8px;font:inherit" />
       <button class="btn" id="addbtn">Add as purchased</button>
     </div>
   </div>
@@ -568,11 +584,16 @@ export default async function handler(
     addBtn.addEventListener('click', function () {
       var em = (document.getElementById('addemail').value || '').trim();
       if (!em) { alert('Enter an email'); return; }
+      var gensV = (document.getElementById('addgens').value || '').trim();
+      var costV = (document.getElementById('addcost').value || '').trim();
+      var payload = { action: 'addPurchase', pw: PW, email: em };
+      if (gensV !== '') payload.gens = parseInt(gensV, 10);
+      if (costV !== '') payload.costUsd = parseFloat(costV);
       addBtn.disabled = true; addBtn.textContent = 'Adding…';
       fetch('/api/admin/leads', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'addPurchase', pw: PW, email: em }),
+        body: JSON.stringify(payload),
       })
         .then(function (r) { return r.json(); })
         .then(function (d) {
