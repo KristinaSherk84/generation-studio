@@ -14955,7 +14955,11 @@ export default function App() {
   // the gallery-first popup (once per visit); later clicks start directly. The
   // examples/gallery page passes handleStart directly and bypasses this.
   const requestStart = (startFn: () => void) => {
-    if (galleryPromptShownRef.current) {
+    // Once a customer has paid the $2.99 unlock, "this round is on me / extra
+    // rounds cost $2.99" no longer applies to them — skip the popup and start
+    // directly. Also skip after it has already shown once this visit. (Kristi
+    // 2026-08-14)
+    if (isUnlocked || galleryPromptShownRef.current) {
       startFn();
       return;
     }
