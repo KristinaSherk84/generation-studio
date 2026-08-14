@@ -22,6 +22,7 @@ import {
 import {
   getDailyStats,
   setDailySpend,
+  setDailyPeople,
   lastEtDates,
 } from "../lib/dailyStats.js";
 
@@ -187,6 +188,7 @@ export default async function handler(
       foundVia?: unknown;
       date?: unknown;
       spendUsd?: unknown;
+      people?: unknown;
       gens?: unknown;
       costUsd?: unknown;
     };
@@ -249,6 +251,23 @@ export default async function handler(
       } catch (err) {
         console.error("[admin/leads] setSpend failed:", err);
         res.status(500).json({ ok: false, error: "Failed to save spend" });
+      }
+      return;
+    }
+    if (body.action === "setPeople" && typeof body.date === "string") {
+      // Empty string clears the override (revert to the auto email/IP count).
+      const raw =
+        body.people === "" || body.people == null ? null : Number(body.people);
+      if (raw != null && (!Number.isFinite(raw) || raw < 0)) {
+        res.status(400).json({ ok: false, error: "Invalid count" });
+        return;
+      }
+      try {
+        await setDailyPeople(body.date, raw == null ? null : Math.round(raw));
+        res.status(200).json({ ok: true });
+      } catch (err) {
+        console.error("[admin/leads] setPeople failed:", err);
+        res.status(500).json({ ok: false, error: "Failed to save" });
       }
       return;
     }
@@ -407,7 +426,17 @@ export default async function handler(
         return `<tr>
         <td>${esc(d.date)}</td>
         <td class="num">${d.apiCalls.toLocaleString()}</td>
-        <td class="num">${d.people.toLocaleString()}</td>
+        <td class="num"><input class="peopleinput" data-date="${esc(
+          d.date,
+        )}" type="number" step="1" min="0" value="${
+          d.peopleOverride != null ? d.peopleOverride : ""
+        }" placeholder="${d.people.toLocaleString()}" title="${
+          d.peopleOverride != null
+            ? "Manual override - clear the box to go back to the automatic count"
+            : "Automatic count (distinct ready-to-view emails). Type a number to override."
+        }" style="width:64px;padding:4px 6px;border:1px solid ${
+          d.peopleOverride != null ? "#C9A227" : "#E2E0DA"
+        };border-radius:6px;font:inherit;text-align:right" /></td>
         <td class="num">$<input class="spendinput" data-date="${esc(
           d.date,
         )}" type="number" step="0.01" min="0" value="${
@@ -419,7 +448,7 @@ export default async function handler(
       .join("");
     const dailyTableHtml = `
   <h2 style="font-size:16px;font-weight:600;margin:24px 0 4px;color:#2C2C2A">Daily activity <span style="font-weight:400;color:#888780;font-size:13px">(ET · last 14 days)</span></h2>
-  <p class="meta" style="margin:0 0 10px">API calls = Gemini image calls that hit the model (each ≈ one unit of Google spend). People = distinct visitors who generated (by IP). Type the day's real spend from <a href="https://aistudio.google.com/spend?project=gen-lang-client-0496086422" target="_blank" rel="noopener">your Google AI Studio spend page ↗</a> and cost-per-call fills in.</p>
+  <p class="meta" style="margin:0 0 10px">API calls = Gemini image calls that hit the model (each ≈ one unit of Google spend). People generated = distinct email addresses that got a “ready to view” email that day (older days fall back to distinct IPs). The box is editable — type a number to override it, or clear the box to go back to the automatic count. Type the day's real spend from <a href="https://aistudio.google.com/spend?project=gen-lang-client-0496086422" target="_blank" rel="noopener">your Google AI Studio spend page ↗</a> and cost-per-call fills in.</p>
   <div class="tablewrap">
     <table>
       <thead><tr>
@@ -603,6 +632,29 @@ export default async function handler(
         .catch(function () { addBtn.disabled = false; addBtn.textContent = 'Add as purchased'; alert('Network error'); });
     });
   }
+  document.querySelectorAll('.peopleinput').forEach(function (inp) {
+    var prev = inp.value;
+    inp.addEventListener('change', function () {
+      var v = (inp.value || '').trim();
+      // Empty = clear the override and revert to the automatic count.
+      if (v !== '') {
+        var n = parseInt(v, 10);
+        if (isNaN(n) || n < 0) { alert('Enter a whole number'); inp.value = prev; return; }
+      }
+      inp.disabled = true;
+      fetch('/api/admin/leads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'setPeople', pw: PW, date: inp.dataset.date, people: v }),
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d && d.ok) { location.reload(); }
+          else { inp.disabled = false; inp.value = prev; alert('Failed: ' + ((d && d.error) || 'unknown')); }
+        })
+        .catch(function () { inp.disabled = false; inp.value = prev; alert('Network error'); });
+    });
+  });
   document.querySelectorAll('.spendinput').forEach(function (inp) {
     var prev = inp.value;
     inp.addEventListener('change', function () {

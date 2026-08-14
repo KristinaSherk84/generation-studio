@@ -24,6 +24,15 @@ const redis = new Redis({
 const API_PREFIX = "stats:apicalls:";
 const GEN_PREFIX = "stats:generators:";
 const SPEND_PREFIX = "stats:spend:";
+// Distinct email addresses that received a "your headshots are ready to view"
+// email that day. SCARD ~ how many real people generated - dedupes a person
+// who generates several batches, and counts one person once even across
+// devices. Preferred over the IP set. Added 2026-08-14 (Kristi).
+const EMAIL_PREFIX = "stats:genemails:";
+// Manual per-day override for the "People generated" number, typed on the admin
+// page (e.g. to backfill a day from before email-tracking existed). When set,
+// it wins over both the email and IP counts.
+const PEOPLE_OVERRIDE_PREFIX = "stats:people_override:";
 
 // Counters expire after ~60 days so the store never grows unbounded; the admin
 // page only ever shows the last two weeks. Spend values are kept ~400 days.
@@ -62,10 +71,30 @@ export async function bumpApiCall(ip: string): Promise<void> {
   }
 }
 
+/**
+ * Register one distinct email address as having generated today (ET): the
+ * recipient of a "your headshots are ready to view" email. Fire once per
+ * successful ready-email send. SADD dedupes, so a person who generates several
+ * times still counts once. Best-effort.
+ */
+export async function bumpGeneratedEmail(email: string): Promise<void> {
+  try {
+    const addr = (email || "").trim().toLowerCase();
+    if (!addr) return;
+    const day = etDateKey(new Date());
+    const key = EMAIL_PREFIX + day;
+    await redis.sadd(key, addr);
+    await redis.expire(key, COUNTER_TTL_SEC);
+  } catch {
+    /* best-effort - stats must never block the email path */
+  }
+}
+
 export type DailyStat = {
   date: string; // YYYY-MM-DD (ET)
   apiCalls: number;
-  people: number;
+  people: number; // resolved: override ?? distinct-emails ?? distinct-IPs
+  peopleOverride: number | null; // manual override if one is set, else null
   spendUsd: number | null; // null = not entered yet
 };
 
@@ -74,7 +103,9 @@ export async function getDailyStats(dates: string[]): Promise<DailyStat[]> {
   const out: DailyStat[] = [];
   for (const date of dates) {
     let apiCalls = 0;
-    let people = 0;
+    let peopleByIp = 0;
+    let peopleByEmail = 0;
+    let peopleOverride: number | null = null;
     let spendUsd: number | null = null;
     try {
       apiCalls = Number(await redis.get(API_PREFIX + date)) || 0;
@@ -82,7 +113,20 @@ export async function getDailyStats(dates: string[]): Promise<DailyStat[]> {
       /* ignore */
     }
     try {
-      people = Number(await redis.scard(GEN_PREFIX + date)) || 0;
+      peopleByIp = Number(await redis.scard(GEN_PREFIX + date)) || 0;
+    } catch {
+      /* ignore */
+    }
+    try {
+      peopleByEmail = Number(await redis.scard(EMAIL_PREFIX + date)) || 0;
+    } catch {
+      /* ignore */
+    }
+    try {
+      const raw = await redis.get(PEOPLE_OVERRIDE_PREFIX + date);
+      peopleOverride = raw == null ? null : Number(raw);
+      if (peopleOverride != null && !Number.isFinite(peopleOverride))
+        peopleOverride = null;
     } catch {
       /* ignore */
     }
@@ -93,7 +137,16 @@ export async function getDailyStats(dates: string[]): Promise<DailyStat[]> {
     } catch {
       /* ignore */
     }
-    out.push({ date, apiCalls, people, spendUsd });
+    // Prefer the distinct-email count (one real person = one email); fall back
+    // to the IP set for older days before email-tracking existed. A manual
+    // override always wins.
+    const people =
+      peopleOverride != null
+        ? peopleOverride
+        : peopleByEmail > 0
+          ? peopleByEmail
+          : peopleByIp;
+    out.push({ date, apiCalls, people, peopleOverride, spendUsd });
   }
   return out;
 }
@@ -103,6 +156,25 @@ export async function setDailySpend(date: string, usd: number): Promise<void> {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
   const key = SPEND_PREFIX + date;
   await redis.set(key, usd);
+  await redis.expire(key, SPEND_TTL_SEC);
+}
+
+/**
+ * Manually override the "People generated" number for an ET date, or clear it
+ * by passing null. Overrides win over the auto email/IP counts. Used from the
+ * admin page - e.g. to backfill a day from before email-tracking existed.
+ */
+export async function setDailyPeople(
+  date: string,
+  count: number | null,
+): Promise<void> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+  const key = PEOPLE_OVERRIDE_PREFIX + date;
+  if (count == null) {
+    await redis.del(key);
+    return;
+  }
+  await redis.set(key, count);
   await redis.expire(key, SPEND_TTL_SEC);
 }
 

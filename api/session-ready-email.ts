@@ -15,6 +15,7 @@
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { looksLikeEmail } from "./lib/leadStore.js";
+import { bumpGeneratedEmail } from "./lib/dailyStats.js";
 
 export const maxDuration = 10;
 
@@ -136,6 +137,9 @@ export default async function handler(
       res.status(200).json({ ok: false, reason: "send_failed" });
       return;
     }
+    // Count this recipient as a distinct person who generated today. SADD
+    // dedupes, so multiple batches from the same person still count once.
+    await bumpGeneratedEmail(email);
     res.status(200).json({ ok: true });
   } catch (err) {
     console.warn(
