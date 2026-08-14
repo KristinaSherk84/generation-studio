@@ -96,9 +96,9 @@ type DeliverRequest = {
   stripeSessionId?: string;
   // Per-photo retouch tier (Glow Up Deluxe pivot 2026-05-18). Same index
   // as photoUrls.
-  //   "basic"  — Realistic only, no retouching. $9.99 per photo.
+  //   "basic"  — Realistic only, no retouching. $12.99 per photo.
   //   "deluxe" — Customer receives all 3 versions of the headshot:
-  //              Realistic + Polished + Glam. $14.99 per photo.
+  //              Realistic + Polished + Glam. $17.99 per photo.
   // Optional for back-compat — a missing or empty array falls back to
   // "basic" for every photo (the safest fallback: no Pro calls, no
   // unexpected per-photo cost).

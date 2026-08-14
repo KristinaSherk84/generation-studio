@@ -3592,7 +3592,7 @@ const LandingV2 = ({
               {([
                 {
                   label: "Starting price",
-                  us: "$9.99",
+                  us: "$12.99",
                   usSub: "Per image. Pay only for the ones you love.",
                   values: ["$29", "$44+"],
                   valuesSub: ["40-pack bundle — keep or not.", "100-pack bundle — keep or not."],
@@ -3800,7 +3800,7 @@ const LandingV2 = ({
             margin: "28px auto 0",
           }}
         >
-          $2.99 to start your session. $9.99 per Basic keeper, or $14.99 for the
+          $2.99 to start your session. $12.99 per Basic keeper, or $17.99 for the
           Glow Up Deluxe Bundle — smoother skin + magazine-style polish across
           3 retouched versions (just $5 more than Basic). No surprise fees, no
           charges for headshots that don't look like you.
@@ -4328,7 +4328,7 @@ const HealthcareScreen = ({
           — for about 1% the cost of an in-person session.
         </p>
         {/* Price clarification under the hero CTA. Customers don't "get" the
-            6 previews — they pay $2.99 to try, then $9.99 per keeper they
+            6 previews — they pay $2.99 to try, then $12.99 per keeper they
             actually want to download. This line prevents an over-promise
             that would damage trust at the checkout screen. Free-tier flag
             swaps the button text + subtitle to the free-tier pricing line
@@ -4349,7 +4349,7 @@ const HealthcareScreen = ({
                 margin: "16px auto 0",
               }}
             >
-              Only buy what looks like you. Downloads starting at $9.99.
+              Only buy what looks like you. Downloads starting at $12.99.
             </p>
           }
         />
@@ -4961,7 +4961,7 @@ const HOW_IT_WORKS_FAQ: { q: string; a: string }[] = [
   },
   {
     q: "What's the difference between Basic and Glow Up Deluxe?",
-    a: "Basic ($9.99 per headshot) gives you one realistic version of each chosen headshot — natural skin, professional finish. Glow Up Deluxe ($14.99 per headshot, just $5 more than Basic) gives you three versions of each chosen headshot — realistic, polished (smoother skin), and glam (magazine-style retouching). Most customers who pick Deluxe say the glam version is the one they end up using.",
+    a: "Basic ($12.99 per headshot) gives you one realistic version of each chosen headshot — natural skin, professional finish. Glow Up Deluxe ($17.99 per headshot, just $5 more than Basic) gives you three versions of each chosen headshot — realistic, polished (smoother skin), and glam (magazine-style retouching). Most customers who pick Deluxe say the glam version is the one they end up using.",
   },
   {
     q: "Are my photos kept private?",
@@ -5373,7 +5373,7 @@ const FAQ_QUESTIONS: { slug: string; q: string; a: string }[] = [
   {
     slug: "how-much-does-it-cost",
     q: "How much does it cost?",
-    a: "It's $2.99 to start a session — that unlocks the AI and lets you generate 6 headshots in your chosen style. After you preview the results, you pay per headshot you want to keep: $9.99 for Basic (realistic version only) or $14.99 for the Glow Up Bundle (realistic + polished + glam — three retouching levels of the same photo). No subscriptions, no monthly fees, no surprise charges.",
+    a: "It's $2.99 to start a session — that unlocks the AI and lets you generate 6 headshots in your chosen style. After you preview the results, you pay per headshot you want to keep: $12.99 for Basic (realistic version only) or $17.99 for the Glow Up Bundle (realistic + polished + glam — three retouching levels of the same photo). No subscriptions, no monthly fees, no surprise charges.",
   },
   {
     slug: "how-long-does-it-take",
@@ -5434,7 +5434,7 @@ const FAQ_QUESTIONS: { slug: string; q: string; a: string }[] = [
   {
     slug: "are-there-truly-free-ai-headshot-tools",
     q: "Are there any AI headshot tools that are truly free to use?",
-    a: "Most \"free\" tools have hidden costs — watermarks, signup walls, credit card requirements, or usable resolution locked behind a paywall. GenerAItion Headshots offers six free previews with no credit card and no signup, and you only pay ($9.99–$14.99) for the specific headshots you want to download. If none of them look like you, Kristina covers the cost for you to try it and you don't pay a cent.",
+    a: "Most \"free\" tools have hidden costs — watermarks, signup walls, credit card requirements, or usable resolution locked behind a paywall. GenerAItion Headshots offers six free previews with no credit card and no signup, and you only pay ($12.99–$17.99) for the specific headshots you want to download. If none of them look like you, Kristina covers the cost for you to try it and you don't pay a cent.",
   },
   {
     slug: "are-ai-headshots-free",
@@ -10261,8 +10261,8 @@ const GridScreen = ({
 
 // Glow Up Deluxe tier model (2026-05-18). Replaces the prior 3-tier
 // (Realistic/Polished/Glam) picker. Now a customer picks per photo:
-//   basic  — Realistic only, $9.99
-//   deluxe — All 3 versions (Realistic + Polished + Glam), $14.99
+//   basic  — Realistic only, $12.99
+//   deluxe — All 3 versions (Realistic + Polished + Glam), $17.99
 // The underlying Polished/Glam retouching still happens server-side for
 // Deluxe photos — the customer just doesn't have to commit to one tier
 // before purchase.
@@ -10279,7 +10279,7 @@ const RETOUCH_TIER_DESCRIPTIONS: {
   {
     tier: "basic",
     label: "Basic",
-    price: "$9.99",
+    price: "$12.99",
     // description retained in the type for the (now-disabled) IntroRetouchModal
     // dead-code reference; not rendered on RetouchScreen any more — see the
     // top-of-screen explainer block instead.
@@ -10288,7 +10288,7 @@ const RETOUCH_TIER_DESCRIPTIONS: {
   {
     tier: "deluxe",
     label: "Glow Up Bundle",
-    price: "$14.99",
+    price: "$17.99",
     description:
       "Smoother skin + magazine polish — $5 more for 3 versions.",
   },
@@ -11017,18 +11017,18 @@ const RetouchScreen = ({
         <div style={{ marginBottom: 4 }}>
           You're getting the{" "}
           <span style={{ fontWeight: 700 }}>Glow Up Bundle</span> on each
-          photo — three retouched versions for $14.99. Downshift to Basic
+          photo — three retouched versions for $17.99. Downshift to Basic
           if you'd rather just the realistic version.
         </div>
         <div>
           <span style={{ fontWeight: 700 }}>Glow Up Bundle:</span> Realistic
           + Polished + Glam — three retouching levels of each photo.{" "}
-          <span style={{ color: C.mediumGrey }}>$14.99</span>
+          <span style={{ color: C.mediumGrey }}>$17.99</span>
         </div>
         <div>
           <span style={{ fontWeight: 700 }}>Basic:</span> Realistic version
           only.{" "}
-          <span style={{ color: C.mediumGrey }}>$9.99</span>
+          <span style={{ color: C.mediumGrey }}>$12.99</span>
         </div>
       </div>
 
@@ -11418,8 +11418,8 @@ const CheckoutScreen = ({
 
   // Glow Up Deluxe pricing (2026-05-18). Mixed totals supported per
   // photo — see retouchTiers prop.
-  const PRICE_BASIC = 9.99;
-  const PRICE_DELUXE = 14.99;
+  const PRICE_BASIC = 12.99;
+  const PRICE_DELUXE = 17.99;
   const basicCount = retouchTiers.filter((t) => t === "basic").length;
   const deluxeCount = retouchTiers.filter((t) => t === "deluxe").length;
   const subtotal = PRICE_BASIC * basicCount + PRICE_DELUXE * deluxeCount;
@@ -11663,13 +11663,13 @@ const CheckoutScreen = ({
             <span>
               {basicCount > 0 && (
                 <>
-                  {basicCount} basic × $9.99
+                  {basicCount} basic × $12.99
                 </>
               )}
               {basicCount > 0 && deluxeCount > 0 && <span> + </span>}
               {deluxeCount > 0 && (
                 <>
-                  {deluxeCount} Glow Up Deluxe × $14.99
+                  {deluxeCount} Glow Up Deluxe × $17.99
                 </>
               )}
             </span>
@@ -12593,7 +12593,7 @@ const DownloadScreen = ({
           to creative, indoor to outdoor, whatever direction you want.
           Your uploaded reference photos are still saved, so you'll skip
           straight to the style picker — no re-uploading. Just $2.99 to
-          start a fresh session, then $9.99 per Basic keeper or $14.99 for
+          start a fresh session, then $12.99 per Basic keeper or $17.99 for
           the Glow Up Deluxe Bundle — smoother skin + magazine-style polish
           across 3 retouched versions ($5 more than Basic).
         </div>
@@ -13777,7 +13777,7 @@ export default function App() {
   // At 6 batches × 6 images × $0.101/img = $3.64 max API spend per
   // session. Combined with the per-slot regen budget (MAX_SINGLE_REGENS),
   // worst-case total session cost ≈ $4.25 — still profitable on a
-  // single Basic ($9.99) purchase.
+  // single Basic ($12.99) purchase.
   //
   // After the cap, the next /api/generate is blocked client-side with
   // a friendly "you've hit the limit, check out with your saved picks"
@@ -15281,7 +15281,7 @@ export default function App() {
   // selected URLs that don't have a tier yet — defaults to "basic"
   // per Glow Up Deluxe (2026-05-18): basic is the cheaper option and
   // the safest default so a customer who just clicks through doesn't
-  // get auto-upsold to $14.99/photo.
+  // get auto-upsold to $17.99/photo.
   // 2026-06-03: takes URL list (was index list) so the cart can hold
   // picks from across multiple generation rounds.
   const handleAdvanceToRetouch = (selections: string[]) => {

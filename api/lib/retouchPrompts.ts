@@ -12,9 +12,9 @@
 
 // ============================================================================
 // Customer-facing tier model (2026-05-18 Glow Up Deluxe pivot):
-//   "basic"  — Realistic only. No retouching. $9.99 per photo.
+//   "basic"  — Realistic only. No retouching. $12.99 per photo.
 //   "deluxe" — Glow Up Deluxe Bundle. Customer receives all 3 versions of
-//              the same headshot: Realistic, Polished, and Glam. $14.99
+//              the same headshot: Realistic, Polished, and Glam. $17.99
 //              per photo. /api/deliver runs both Polished and Glam Gemini
 //              Pro passes in parallel on the original Realistic photo.
 //

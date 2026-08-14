@@ -8,8 +8,8 @@
  * Body: { retouchTiers: ("basic" | "deluxe")[], customerEmail? }.
  *
  * Pricing model (current 2026-05-18, Glow Up Deluxe Bundle launch):
- *   - Basic photo: $9.99 — Realistic only, no retouching.
- *   - Glow Up Deluxe Bundle photo: $14.99 — customer receives all 3
+ *   - Basic photo: $12.99 — Realistic only, no retouching.
+ *   - Glow Up Deluxe Bundle photo: $17.99 — customer receives all 3
  *     versions of that headshot (Realistic + Polished + Glam).
  *   - Per-photo tier is chosen on the new RetouchScreen. Mixed orders
  *     are allowed — a customer can buy 1 Basic + 2 Deluxe for $39.97.
@@ -35,8 +35,8 @@ export const maxDuration = 15;
 
 // Glow Up Deluxe pricing in cents (2026-05-18). Bifurcated from the prior
 // flat $11.99 model.
-const PRICE_BASIC_CENTS = 999;     // $9.99 — Realistic only, no retouching
-const PRICE_DELUXE_CENTS = 1499;   // $14.99 — Realistic + Polished + Glam
+const PRICE_BASIC_CENTS = 1299;     // $12.99 — Realistic only, no retouching
+const PRICE_DELUXE_CENTS = 1799;   // $17.99 — Realistic + Polished + Glam
 
 type RetouchTier = "basic" | "deluxe";
 
@@ -104,7 +104,7 @@ export default async function handler(
   const basicCount = tiers.filter((t) => t === "basic").length;
   const deluxeCount = tiers.filter((t) => t === "deluxe").length;
 
-  // Mixed total: Basic at $9.99 each + Deluxe at $14.99 each.
+  // Mixed total: Basic at $12.99 each + Deluxe at $17.99 each.
   const totalCents = tiers.reduce(
     (sum, t) => sum + priceCentsForTier(t),
     0,
