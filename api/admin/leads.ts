@@ -458,6 +458,53 @@ export default async function handler(
       </tr>`;
       })
       .join("");
+    // Win-back "about to expire" reminder funnel (2026-08-15): where every
+    // NON-purchased lead sits relative to the 12-96h reminder, so it's obvious
+    // at a glance how many actually get it vs slip past the window. Mirrors the
+    // exact eligibility the hourly cron uses.
+    const WB_MIN_H = 12;
+    const WB_MAX_H = 96;
+    const wbInternal = new Set([
+      "kristi@kristinasherk.com",
+      "nic@kristinasherk.com",
+    ]);
+    const wbNowMs = Date.now();
+    const wb = { emailed: 0, eligibleNow: 0, tooNew: 0, tooOld: 0, noLink: 0 };
+    for (const l of leads) {
+      if (l.purchased) continue;
+      if (wbInternal.has(l.email.trim().toLowerCase())) continue;
+      if (l.followedUp) {
+        wb.emailed++;
+        continue;
+      }
+      if (!l.resumeToken) {
+        wb.noLink++;
+        continue;
+      }
+      const seenMs = Date.parse(l.lastSeenAt || l.createdAt);
+      if (!Number.isFinite(seenMs)) {
+        wb.noLink++;
+        continue;
+      }
+      const ageH = (wbNowMs - seenMs) / 3.6e6;
+      if (ageH < WB_MIN_H) wb.tooNew++;
+      else if (ageH > WB_MAX_H) wb.tooOld++;
+      else wb.eligibleNow++;
+    }
+    const wbPill = (label: string, n: number, color: string) =>
+      `<span style="display:inline-block;margin:0 8px 6px 0;padding:5px 11px;border-radius:999px;background:${color}1A;border:1px solid ${color}55;font-size:13px;color:#2C2C2A"><b>${n}</b> ${label}</span>`;
+    const winbackHtml = `
+  <h2 style="font-size:16px;font-weight:600;margin:24px 0 4px;color:#2C2C2A">Win-back &ldquo;about to expire&rdquo; reminder</h2>
+  <p class="meta" style="margin:0 0 10px">Where non-buyers sit for the automatic reminder. It sends once, ~12h after they leave, up to 4 days out (after that their saved photos are deleted, so there is no working link to send).</p>
+  <div style="margin:0 0 6px">
+    ${wbPill("already emailed", wb.emailed, "#2E7D32")}
+    ${wbPill("eligible now", wb.eligibleNow, "#1565C0")}
+    ${wbPill("waiting (&lt;12h)", wb.tooNew, "#B8860B")}
+    ${wbPill("missed window (&gt;4 days)", wb.tooOld, "#B00020")}
+    ${wbPill("no photo link", wb.noLink, "#6E6E6A")}
+  </div>
+`;
+
     const dailyTableHtml = `
   <h2 style="font-size:16px;font-weight:600;margin:24px 0 4px;color:#2C2C2A">Daily activity <span style="font-weight:400;color:#888780;font-size:13px">(ET · last 14 days)</span></h2>
   <p class="meta" style="margin:0 0 10px">API calls = Gemini image calls that hit the model (each ≈ one unit of Google spend). People generated = distinct email addresses that got a “ready to view” email that day (older days fall back to distinct IPs). The box is editable — type a number to override it, or clear the box to go back to the automatic count. Type the day's real spend from <a href="https://aistudio.google.com/spend?project=gen-lang-client-0496086422" target="_blank" rel="noopener">your Google AI Studio spend page ↗</a> and cost-per-call fills in.</p>
@@ -535,6 +582,7 @@ export default async function handler(
   </div>
   <p class="meta" style="margin:-10px 0 18px">Est. spend = batches × ~$0.60 (6 images at 2K). Rough — excludes per-slot regens, identity auto-regen, and the post-purchase retouch pass, so real spend runs higher.</p>
 
+  ${winbackHtml}
   ${dailyTableHtml}
 
   ${foundViaHtml}
