@@ -18,7 +18,11 @@
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { saveSession } from "./lib/sessionStore.js";
-import { looksLikeEmail, setLeadResumeToken } from "./lib/leadStore.js";
+import {
+  looksLikeEmail,
+  setLeadResumeToken,
+  setEmailResumeToken,
+} from "./lib/leadStore.js";
 
 export const maxDuration = 10;
 
@@ -73,9 +77,16 @@ export default async function handler(
     // them. Awaited + best-effort (a lead-write error still returns the token
     // so the ready-email link works). (fixed 2026-08-08)
     try {
-      await setLeadResumeToken(email, token);
+      // Two writes, on purpose: the lead-record field (nice for the admin page)
+      // AND the atomic email->token pointer (the reliable source the win-back
+      // reads - immune to the lead not existing yet or a clobbering race that
+      // was silently losing the token and starving the expiry email). 2026-08-15
+      await Promise.all([
+        setLeadResumeToken(email, token),
+        setEmailResumeToken(email, token),
+      ]);
     } catch {
-      /* don't fail the save if the lead write hiccups */
+      /* don't fail the save if a lead write hiccups */
     }
     res.status(200).json({ ok: true, token });
   } catch (err) {

@@ -33,6 +33,7 @@ import {
   listLeads,
   markLeadFollowedUp,
   looksLikeEmail,
+  getEmailResumeToken,
 } from "./lib/leadStore.js";
 import { getSession } from "./lib/sessionStore.js";
 
@@ -143,17 +144,32 @@ export default async function handler(
     return res.status(500).json({ error: "Failed to load leads" });
   }
 
-  const eligible = leads.filter((l) => {
+  // Cheap synchronous filters first: not purchased, not already emailed, valid
+  // address, and inside the 12-96h window. The resume token is resolved AFTER,
+  // because some leads need a Redis lookup (the atomic pointer) for it.
+  const inWindow = leads.filter((l) => {
     if (l.purchased) return false;
     if (l.followedUp) return false;
     if (!looksLikeEmail(l.email)) return false;
     if (INTERNAL_EMAILS.has(l.email.trim().toLowerCase())) return false;
-    if (!l.resumeToken) return false;
     const seenMs = Date.parse(l.lastSeenAt || l.createdAt);
     if (!Number.isFinite(seenMs)) return false;
     const age = now - seenMs;
     return age >= MIN_AGE_MS && age <= MAX_AGE_MS;
   });
+
+  // Resolve each candidate's resume token: prefer the lead-record field, fall
+  // back to the atomic email->token pointer (the reliable source that survives
+  // the races which were starving this email). Drop only leads with NEITHER -
+  // we genuinely can't link those to a saved grid. (2026-08-15)
+  const eligible: Array<(typeof inWindow)[number] & { resolvedToken: string }> =
+    [];
+  for (const l of inWindow) {
+    const token =
+      (typeof l.resumeToken === "string" && l.resumeToken) ||
+      (await getEmailResumeToken(l.email));
+    if (token) eligible.push({ ...l, resolvedToken: token });
+  }
 
   if (dryRun) {
     return res.status(200).json({
@@ -173,7 +189,7 @@ export default async function handler(
   const errors: string[] = [];
 
   for (const lead of batch) {
-    const token = lead.resumeToken as string;
+    const token = lead.resolvedToken;
     try {
       const session = await getSession(token);
       if (!session) {

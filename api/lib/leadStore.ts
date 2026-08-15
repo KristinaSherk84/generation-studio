@@ -72,6 +72,15 @@ export type LeadRecord = {
 
 const KEY_PREFIX = "lead:";
 const INDEX_KEY = "lead:_index";
+// Standalone email -> resume-token pointer (2026-08-15). The 12h win-back needs
+// a resume token per lead, but attaching it to the lead RECORD is fragile: the
+// lead may not exist yet when save-session fires, and other lead writes can
+// clobber the field in a read-modify-write race. This pointer is written with a
+// single atomic SET, so it can't be lost that way - the win-back reads it as the
+// reliable source (falling back to lead.resumeToken). TTL outlives the 96h
+// win-back window.
+const TOKEN_PTR_PREFIX = "leadtoken:";
+const TOKEN_PTR_TTL_SEC = 60 * 60 * 24 * 7;
 
 function recordKey(email: string): string {
   return `${KEY_PREFIX}${email.trim().toLowerCase()}`;
@@ -247,9 +256,11 @@ export async function markLeadFollowedUp(
 }
 
 /**
- * Record the customer's "How did you find us?" answer against their lead,
- * WITHOUT bumping generateCount / lastSeenAt (this isn't a new generation, just
- * an attribute update). No-op if the lead doesn't exist yet. (2026-08-02)
+ * Attach a saved-session resume token to the lead RECORD so the admin page can
+ * show it. UPSERTS: if the lead's /api/lead write hasn't landed yet (or was
+ * lost), create a minimal lead rather than dropping the token on the floor -
+ * one half of why the win-back was missing people. A later recordLead spreads
+ * ...existing and preserves the token. (2026-08-15)
  */
 export async function setLeadResumeToken(
   email: string,
@@ -258,8 +269,56 @@ export async function setLeadResumeToken(
   if (!looksLikeEmail(email)) return;
   const key = recordKey(email);
   const existing = (await redis.get<LeadRecord>(key)) ?? null;
-  if (!existing) return;
-  await redis.set(key, { ...existing, resumeToken: token });
+  if (existing) {
+    await redis.set(key, { ...existing, resumeToken: token });
+    return;
+  }
+  const now = new Date().toISOString();
+  await redis.set(key, {
+    email: email.trim(),
+    createdAt: now,
+    lastSeenAt: now,
+    generateCount: 0,
+    purchased: false,
+    purchasedAt: null,
+    followedUp: false,
+    source: "session",
+    resumeToken: token,
+  } as LeadRecord);
+  await redis.sadd(INDEX_KEY, email.trim().toLowerCase());
+}
+
+/**
+ * Write the atomic email -> resume-token pointer. A single SET, so unlike the
+ * lead-record field it can't be clobbered by a concurrent lead write or lost to
+ * a not-yet-created lead. The reliable source the win-back reads. (2026-08-15)
+ */
+export async function setEmailResumeToken(
+  email: string,
+  token: string,
+): Promise<void> {
+  if (!looksLikeEmail(email)) return;
+  try {
+    await redis.set(TOKEN_PTR_PREFIX + email.trim().toLowerCase(), token, {
+      ex: TOKEN_PTR_TTL_SEC,
+    });
+  } catch {
+    /* best-effort */
+  }
+}
+
+/** Read the atomic email -> resume-token pointer, or null. (2026-08-15) */
+export async function getEmailResumeToken(
+  email: string,
+): Promise<string | null> {
+  try {
+    const t = await redis.get<string>(
+      TOKEN_PTR_PREFIX + email.trim().toLowerCase(),
+    );
+    return typeof t === "string" && t ? t : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function setLeadFoundVia(
