@@ -24,6 +24,7 @@ const SITE_URL = (process.env.SITE_URL || "https://generationheadshots.com").rep
 type SessionRec = {
   email?: string;
   generatedUrls?: string[];
+  referencePhotoUrls?: string[];
   createdAt?: string;
 };
 
@@ -49,6 +50,7 @@ export default async function handler(
     createdAt: string | null;
     imageCount: number;
     generatedUrls: string[];
+    referencePhotoUrls: string[];
   }[] = [];
   let scanned = 0;
   let cursor = 0;
@@ -78,6 +80,12 @@ export default async function handler(
           createdAt: rec.createdAt ?? null,
           imageCount: Array.isArray(rec.generatedUrls) ? rec.generatedUrls.length : 0,
           generatedUrls: Array.isArray(rec.generatedUrls) ? rec.generatedUrls : [],
+          // The customer's ORIGINAL uploaded reference photos (2026-08-15) - so
+          // Kristi can inspect what they actually submitted (e.g. did any show
+          // their real teeth) straight from this one lookup.
+          referencePhotoUrls: Array.isArray(rec.referencePhotoUrls)
+            ? rec.referencePhotoUrls
+            : [],
         });
       }
     } while (cursor !== 0);
