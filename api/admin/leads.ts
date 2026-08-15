@@ -332,6 +332,39 @@ export default async function handler(
         ? l.estCostOverrideUsd
         : shownCalls(l) * PER_CALL_COST_USD;
 
+    // ---- Revenue-by-source branch (2026-08-15) ----
+    // Aggregates paidShown per foundVia so channel ROI (e.g. the "Best
+    // Generator" article vs its cost) is one precise call. Uses the same
+    // Stripe-matched paidShown as the page, so numbers agree with the table.
+    if (format === "sourcerev") {
+      const agg: Record<
+        string,
+        { leads: number; paying: number; revenueUsd: number }
+      > = {};
+      for (const l of leads) {
+        const src =
+          l.foundVia && l.foundVia.trim() ? l.foundVia.trim() : "(no answer)";
+        const paid = paidShown(l);
+        if (!agg[src]) agg[src] = { leads: 0, paying: 0, revenueUsd: 0 };
+        agg[src].leads++;
+        if (paid > 0) {
+          agg[src].paying++;
+          agg[src].revenueUsd += paid;
+        }
+      }
+      const sources = Object.entries(agg)
+        .map(([source, v]) => ({
+          source,
+          leads: v.leads,
+          paying: v.paying,
+          revenueUsd: Math.round(v.revenueUsd * 100) / 100,
+        }))
+        .sort((a, b) => b.revenueUsd - a.revenueUsd);
+      res.setHeader("Cache-Control", "no-store");
+      res.status(200).json({ ok: true, sources });
+      return;
+    }
+
     // ---- CSV download branch ----
     if (format === "csv") {
       const header = [
