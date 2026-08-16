@@ -13420,15 +13420,15 @@ const WILDCARD_ATTIRE_LABELS: Record<string, string> = {
 //     cutoff. LOWER = stricter (more redos, better likeness, more cost);
 //     HIGHER = looser. Start moderately strict and adjust from live data.
 //   - IDENTITY_MAX_REDOS: hard cap on how many of the 6 shots we auto-redo
-//     per batch (bounds cost). Scores all 6, redoes only the worst matches
-//     that fall below the bar. Set to 2 (2026-08-14, Kristi) - "check all 6,
-//     regenerate the 2 worst" - down from 3 to cut per-session cost.
+//     per batch (bounds cost). Scores all 6, redoes only the worst match
+//     that falls below the bar. Set to 1 (2026-08-16, Kristi) - one redo,
+//     hero-prioritized - down from 2 to cut per-session cost further.
 const IDENTITY_DISTANCE_THRESHOLD = 0.45;
 // The HERO image (slot 0) is the first thing the customer sees, so it is held
 // to a stricter match bar, is redone even when it can't be scored, and is
 // never dropped by the redo cap. (2026-08-07 per Kristi)
 const IDENTITY_HERO_THRESHOLD = 0.42;
-const IDENTITY_MAX_REDOS = 2;
+const IDENTITY_MAX_REDOS = 1;
 
 // Standard Euclidean distance between two equal-length numeric vectors
 // (face descriptors). Lower = more similar faces.
