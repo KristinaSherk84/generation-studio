@@ -24,6 +24,10 @@ const redis = new Redis({
 const API_PREFIX = "stats:apicalls:";
 const GEN_PREFIX = "stats:generators:";
 const SPEND_PREFIX = "stats:spend:";
+// Gemini 3 Pro (retouch) image calls on a given ET day - the expensive
+// per-image retouch renders fired inside /api/deliver, counted separately from
+// the cheap flash previews so the admin can see each. (2026-08-16, Kristi)
+const PRO_PREFIX = "stats:procalls:";
 // Distinct email addresses that received a "your headshots are ready to view"
 // email that day. SCARD ~ how many real people generated - dedupes a person
 // who generates several batches, and counts one person once even across
@@ -72,6 +76,23 @@ export async function bumpApiCall(ip: string): Promise<void> {
 }
 
 /**
+ * Count Gemini 3 Pro (retouch) image calls for today (ET). Fire once per
+ * generateContent call to the Pro model in the delivery retouch pass, so the
+ * admin can split expensive retouch renders from cheap flash previews.
+ * Best-effort - never blocks a delivery.
+ */
+export async function bumpProCall(n = 1): Promise<void> {
+  try {
+    const day = etDateKey(new Date());
+    const key = PRO_PREFIX + day;
+    await redis.incrby(key, n);
+    await redis.expire(key, COUNTER_TTL_SEC);
+  } catch {
+    /* best-effort - stats must never block a delivery */
+  }
+}
+
+/**
  * Register one distinct email address as having generated today (ET): the
  * recipient of a "your headshots are ready to view" email. Fire once per
  * successful ready-email send. SADD dedupes, so a person who generates several
@@ -92,7 +113,8 @@ export async function bumpGeneratedEmail(email: string): Promise<void> {
 
 export type DailyStat = {
   date: string; // YYYY-MM-DD (ET)
-  apiCalls: number;
+  apiCalls: number; // flash preview image calls (stats:apicalls)
+  proCalls: number; // Gemini 3 Pro retouch image calls (stats:procalls)
   people: number; // resolved: override ?? distinct-emails ?? distinct-IPs
   peopleOverride: number | null; // manual override if one is set, else null
   spendUsd: number | null; // null = not entered yet
@@ -103,12 +125,18 @@ export async function getDailyStats(dates: string[]): Promise<DailyStat[]> {
   const out: DailyStat[] = [];
   for (const date of dates) {
     let apiCalls = 0;
+    let proCalls = 0;
     let peopleByIp = 0;
     let peopleByEmail = 0;
     let peopleOverride: number | null = null;
     let spendUsd: number | null = null;
     try {
       apiCalls = Number(await redis.get(API_PREFIX + date)) || 0;
+    } catch {
+      /* ignore */
+    }
+    try {
+      proCalls = Number(await redis.get(PRO_PREFIX + date)) || 0;
     } catch {
       /* ignore */
     }
@@ -146,7 +174,7 @@ export async function getDailyStats(dates: string[]): Promise<DailyStat[]> {
         : peopleByEmail > 0
           ? peopleByEmail
           : peopleByIp;
-    out.push({ date, apiCalls, people, peopleOverride, spendUsd });
+    out.push({ date, apiCalls, proCalls, people, peopleOverride, spendUsd });
   }
   return out;
 }

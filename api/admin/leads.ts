@@ -35,6 +35,11 @@ export const maxDuration = 10;
 // regens), so cost ≈ calls × this. Matches the ~$0.10/call Kristi used for the
 // Everett estimate. (2026-08-14 — replaced the old per-batch estimate.)
 const PER_CALL_COST_USD = 0.1;
+// Google's per-image prices at the app's 2K / 3:4 resolution (2026-08-16, from
+// ai.google.dev/gemini-api/docs/pricing): flash preview vs Pro retouch. Used
+// for the daily "Est. cost" column.
+const FLASH_IMG_COST_USD = 0.101;
+const PRO_IMG_COST_USD = 0.134;
 const fmtUsd = (n: number) => `$${n.toFixed(2)}`;
 
 // The same six options the customer sees in the "How did you find us?" survey
@@ -464,13 +469,15 @@ export default async function handler(
 
     const dailyRowsHtml = dailyStats
       .map((d) => {
+        const totalCalls = d.apiCalls + d.proCalls;
+        const estCost =
+          d.apiCalls * FLASH_IMG_COST_USD + d.proCalls * PRO_IMG_COST_USD;
         const cpc =
-          d.spendUsd != null && d.apiCalls > 0
-            ? d.spendUsd / d.apiCalls
-            : null;
+          d.spendUsd != null && totalCalls > 0 ? d.spendUsd / totalCalls : null;
         return `<tr>
         <td>${esc(d.date)}</td>
         <td class="num">${d.apiCalls.toLocaleString()}</td>
+        <td class="num">${d.proCalls.toLocaleString()}</td>
         <td class="num"><input class="peopleinput" data-date="${esc(
           d.date,
         )}" type="number" step="1" min="0" value="${
@@ -487,6 +494,7 @@ export default async function handler(
         )}" type="number" step="0.01" min="0" value="${
           d.spendUsd != null ? d.spendUsd : ""
         }" placeholder="—" style="width:78px;padding:4px 6px;border:1px solid #E2E0DA;border-radius:6px;font:inherit;text-align:right" /></td>
+        <td class="num">${totalCalls > 0 ? "$" + estCost.toFixed(2) : "—"}</td>
         <td class="num">${cpc != null ? "$" + cpc.toFixed(4) : "—"}</td>
       </tr>`;
       })
@@ -540,11 +548,11 @@ export default async function handler(
 
     const dailyTableHtml = `
   <h2 style="font-size:16px;font-weight:600;margin:24px 0 4px;color:#2C2C2A">Daily activity <span style="font-weight:400;color:#888780;font-size:13px">(ET · last 14 days)</span></h2>
-  <p class="meta" style="margin:0 0 10px">API calls = Gemini image calls that hit the model (each ≈ one unit of Google spend). People generated = distinct email addresses that got a “ready to view” email that day (older days fall back to distinct IPs). The box is editable — type a number to override it, or clear the box to go back to the automatic count. Type the day's real spend from <a href="https://aistudio.google.com/spend?project=gen-lang-client-0496086422" target="_blank" rel="noopener">your Google AI Studio spend page ↗</a> and cost-per-call fills in.</p>
+  <p class="meta" style="margin:0 0 10px">Flash calls = preview generations (~$0.10 each); Pro calls = retouch renders that run when someone buys a Deluxe photo (~$0.13 each). Est. cost = flash x $0.101 + pro x $0.134 — compare it to the real Google spend you type in; a big gap usually means retried/overloaded generations. Each is still a Gemini image call that hit the model (each ≈ one unit of Google spend). People generated = distinct email addresses that got a “ready to view” email that day (older days fall back to distinct IPs). The box is editable — type a number to override it, or clear the box to go back to the automatic count. Type the day's real spend from <a href="https://aistudio.google.com/spend?project=gen-lang-client-0496086422" target="_blank" rel="noopener">your Google AI Studio spend page ↗</a> and cost-per-call fills in.</p>
   <div class="tablewrap">
     <table>
       <thead><tr>
-        <th>Date (ET)</th><th class="num">API calls</th><th class="num">People generated</th><th class="num">Google spend</th><th class="num">$ / call</th>
+        <th>Date (ET)</th><th class="num">Flash calls</th><th class="num">Pro calls</th><th class="num">People generated</th><th class="num">Google spend</th><th class="num">Est. cost</th><th class="num">$ / call</th>
       </tr></thead>
       <tbody>${dailyRowsHtml}</tbody>
     </table>

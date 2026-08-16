@@ -43,6 +43,7 @@ import {
   type RetouchTier,
   type RetouchSubTier,
 } from "./lib/retouchPrompts.js";
+import { bumpProCall } from "./lib/dailyStats.js";
 import { getPromptOverrides } from "./lib/promptStore.js";
 
 // Bumped from 60s → 300s on 2026-05-15 (Path B launch). 2026-05-18 Glow
@@ -753,6 +754,9 @@ async function applyRetouchPass(
             contents: [{ role: "user", parts }],
             config: { imageConfig: { aspectRatio: "3:4" } },
           });
+          // Count this billable Gemini 3 Pro retouch call (each attempt = one
+          // Pro image call) for the admin's flash-vs-pro daily cost split.
+          void bumpProCall();
           const timeoutPromise = new Promise<never>((_, reject) => {
             setTimeout(
               () =>
