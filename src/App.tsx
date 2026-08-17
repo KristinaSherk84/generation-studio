@@ -15145,34 +15145,36 @@ export default function App() {
   // already seen real generated headshots — the popup explains the
   // visible "realistic skin on purpose" output and previews what's
   // coming next. Once dismissed it doesn't re-fire.
+  // Show the "How did you find us?" survey RIGHT AFTER the customer submits
+  // their email and generation begins (Kristi 2026-08-16). It used to mount at
+  // 3-of-6-ready, mid-generation, under the customer's resting thumb — on
+  // mobile a tap that began on the loading screen and ended on the just-mounted
+  // survey button doesn't synthesize a click, so the first tap was dropped, it
+  // looked un-closable, and it sat over the flow right before the buy step
+  // (cart abandonment). Now it mounts once, at the START of the wait, after a
+  // short delay so the "Generate" tap has fully lifted — a clean fresh tap
+  // closes it, and it is nowhere near the results/cart.
+  useEffect(() => {
+    if (screen !== "loading" || hasSeenFoundViaSurvey) return;
+    const t = setTimeout(() => {
+      setShowFoundViaSurvey(true);
+      setHasSeenFoundViaSurvey(true);
+    }, 700);
+    return () => clearTimeout(t);
+  }, [screen, hasSeenFoundViaSurvey]);
+
+  // Retouch/glam heads-up popup fires once 3 of 6 headshots are visible (so it
+  // explains the on-screen "realistic skin on purpose" output). Decoupled from
+  // the survey (2026-08-16): it no longer chains off closeFoundViaSurvey. The
+  // !showFoundViaSurvey guard just prevents it opening ON TOP of a survey the
+  // customer has not dismissed yet.
   useEffect(() => {
     if (screen !== "loading" || hasSeenLoadingRetouchPopup) return;
-    if (readyCount >= 3) {
-      // Show the one-question "How did you find us?" survey FIRST (once per
-      // browser); the retouch popup follows when the survey closes (see
-      // closeFoundViaSurvey). If the survey was already asked in a prior
-      // session/batch, go straight to the retouch popup as before.
-      if (!hasSeenFoundViaSurvey) {
-        setShowFoundViaSurvey(true);
-        setHasSeenFoundViaSurvey(true);
-      } else if (!showFoundViaSurvey) {
-        // Only jump straight to the retouch/glam popup when the survey was
-        // seen in a PRIOR session. The !showFoundViaSurvey guard fixes a bug
-        // where showing the survey flipped hasSeenFoundViaSurvey → this effect
-        // re-ran → this branch fired the glam popup ON TOP of the still-open
-        // survey, so the customer saw glam first and the survey only after
-        // dismissing it. Per Kristi 2026-08-03.
-        setShowLoadingRetouchPopup(true);
-        setHasSeenLoadingRetouchPopup(true);
-      }
+    if (readyCount >= 3 && !showFoundViaSurvey) {
+      setShowLoadingRetouchPopup(true);
+      setHasSeenLoadingRetouchPopup(true);
     }
-  }, [
-    screen,
-    hasSeenLoadingRetouchPopup,
-    hasSeenFoundViaSurvey,
-    showFoundViaSurvey,
-    readyCount,
-  ]);
+  }, [screen, hasSeenLoadingRetouchPopup, showFoundViaSurvey, readyCount]);
 
   // Close the survey once the customer picks an answer, record it against the
   // customer's email, then chain into the retouch popup.
@@ -15189,10 +15191,8 @@ export default function App() {
         /* survey capture must never block the flow */
       }
     }
-    if (!hasSeenLoadingRetouchPopup) {
-      setShowLoadingRetouchPopup(true);
-      setHasSeenLoadingRetouchPopup(true);
-    }
+    // The retouch popup no longer chains off the survey — it fires on its own
+    // once 3 headshots are ready (see the effect above). (2026-08-16)
   };
 
   // "Your headshots are ready" email (2026-08-03). Clarity recordings show
