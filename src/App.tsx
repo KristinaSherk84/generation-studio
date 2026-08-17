@@ -122,7 +122,7 @@ const font: CSSProperties = {
 };
 
 // ---- Free-tier mid-session return storage (IndexedDB) ----
-// When a free-tier customer pays the $2.99 mid-session, we stash their whole
+// When a free-tier customer pays the $3.99 mid-session, we stash their whole
 // session (6 base64 generated images + cart picks + uploaded selfies) so we
 // can drop them straight back onto their grid after Stripe. That payload is
 // several MB — it blows past localStorage's ~5MB quota, so the old
@@ -292,7 +292,7 @@ function readUnlockRequestFields(): {
 const PAYWALL_EXPIRED_MESSAGE =
   "API Error: Your 2 hours to try the app has expired.";
 // Note: above message also fires if the unlock was consumed by /api/deliver
-// (the burn-on-download path). Same UX outcome — user re-pays $2.99.
+// (the burn-on-download path). Same UX outcome — user re-pays $3.99.
 
 // -------------------- Flow-step framework --------------------
 // The user-facing journey is communicated as 5 numbered steps. The intro
@@ -561,7 +561,7 @@ const GenerationStepsList = ({ currentStep }: GenerationStepsListProps) => (
 
 // -------------------- Welcome popup with 2-hour countdown --------------------
 //
-// Fires the moment /api/verify-checkout confirms the $2.99 entry payment.
+// Fires the moment /api/verify-checkout confirms the $3.99 entry payment.
 // Tells the customer the rules of the road: they have 2 hours, refund
 // available, email Kristi for support. Includes a live ticking countdown
 // so they SEE the 2 hours start visibly, not just as words on a screen.
@@ -732,7 +732,7 @@ const WelcomeUnlockedModal = ({
 // header countdown chip because the chip ate too much screen real estate
 // for a value that's irrelevant most of the time. One sharp prompt at
 // the 15-minute mark is enough to let the user decide whether to wrap
-// up or pay another $2.99 for a fresh try.
+// up or pay another $3.99 for a fresh try.
 
 type SessionTimeWarningModalProps = {
   // Epoch ms — shown in the body so the user knows their actual deadline.
@@ -822,7 +822,7 @@ const SessionTimeWarningModal = ({
           >
             {remainingText}
           </span>
-          . If you need more time after that, pay $2.99 to start a new session.
+          . If you need more time after that, pay $3.99 to start a new session.
         </p>
         <button
           onClick={onDismiss}
@@ -1745,7 +1745,7 @@ const GalleryScreen = ({ onBack, onStart, entryFeeEnabled }: GalleryScreenProps)
               color: BRAND.subText,
             }}
           >
-            Starts at <strong style={{ color: BRAND.charcoal }}>$2.99</strong> ·
+            Starts at <strong style={{ color: BRAND.charcoal }}>$3.99</strong> ·
             Money-back guarantee · 5 minutes
           </div>
         }
@@ -2088,7 +2088,7 @@ const HowItWorks = ({ isMobile }: HowItWorksProps) => {
 // ---- Free-tier CTA helper (2026-07-03) ----
 // Renders the primary "Generate" button + a subtitle line. Copy changes
 // based on ENTRY_FEE_ENABLED:
-//   Classic mode: "Generate 6 Headshots $2.99" + optional classic subtitle
+//   Classic mode: "Generate 6 Headshots $3.99" + optional classic subtitle
 //   Free-tier:    "Generate your first 6 free" + pricing subtitle
 // Every CTA on the landing/how-it-works/healthcare/faq pages goes through
 // this so flipping the flag re-labels everything in one shot.
@@ -2113,7 +2113,7 @@ const StartCTAWithSubtitle = ({
   <>
     <Pill onClick={onStart} variant={variant} size={size}>
       {entryFeeEnabled
-        ? "Generate 6 Headshots $2.99"
+        ? "Generate 6 Headshots $3.99"
         : "Generate your first 6 free"}
     </Pill>
     {entryFeeEnabled ? (
@@ -2153,7 +2153,7 @@ type LandingV2Props = LandingProps & {
   // dedicated FAQScreen build.
   onNavigateFAQ: () => void;
   // Free-tier feature flag (2026-07-03). Swaps CTA copy between
-  // "Generate 6 Headshots $2.99" (classic) and "Generate your first 6
+  // "Generate 6 Headshots $3.99" (classic) and "Generate your first 6
   // free" (+ pricing subtitle) at every button site on this page.
   entryFeeEnabled: boolean;
 };
@@ -2753,7 +2753,7 @@ const LandingV2 = ({
                   letterSpacing: 0.3,
                 }}
               >
-                Starts at <strong style={{ color: BRAND.charcoal }}>$2.99</strong> ·
+                Starts at <strong style={{ color: BRAND.charcoal }}>$3.99</strong> ·
                 {isMobile ? " 5 min · Money-back" : " Money-back guarantee · 5 minutes"}
               </div>
             </>
@@ -3206,7 +3206,7 @@ const LandingV2 = ({
           who liked what they saw in HowItWorks can convert without having
           to scroll all the way through the trust strip + comparison chart.
           Uses the price-anchored variant so this slot reinforces the
-          $2.99 entry point while the hero + promise CTAs use the simpler
+          $3.99 entry point while the hero + promise CTAs use the simpler
           action-verb variant. Background stays cream to visually group
           with the HowItWorks section above. */}
       <section
@@ -3811,7 +3811,7 @@ const LandingV2 = ({
             margin: "28px auto 0",
           }}
         >
-          $2.99 to start your session. $12.99 per Basic keeper, or $17.99 for the
+          $3.99 to start your session. $12.99 per Basic keeper, or $17.99 for the
           Glow Up Deluxe Bundle — smoother skin + magazine-style polish across
           3 retouched versions (just $5 more than Basic). No surprise fees, no
           charges for headshots that don't look like you.
@@ -4339,7 +4339,7 @@ const HealthcareScreen = ({
           — for about 1% the cost of an in-person session.
         </p>
         {/* Price clarification under the hero CTA. Customers don't "get" the
-            6 previews — they pay $2.99 to try, then $12.99 per keeper they
+            6 previews — they pay $3.99 to try, then $12.99 per keeper they
             actually want to download. This line prevents an over-promise
             that would damage trust at the checkout screen. Free-tier flag
             swaps the button text + subtitle to the free-tier pricing line
@@ -4960,7 +4960,7 @@ const HOW_IT_WORKS_FAQ: { q: string; a: string }[] = [
   },
   {
     q: "What if I don't like any of my headshots?",
-    a: "You only pay for the ones that look like you. Preview all six before you decide. If none of them feel right, you don't pay for any — and we have a money-back guarantee on the $2.99 session fee too. We'd rather you walk away happy than hand you headshots you can't use.",
+    a: "You only pay for the ones that look like you. Preview all six before you decide. If none of them feel right, you don't pay for any — and we have a money-back guarantee on the $3.99 session fee too. We'd rather you walk away happy than hand you headshots you can't use.",
   },
   {
     q: "Can I use these for LinkedIn, my company website, real estate listings, anywhere professional?",
@@ -5384,7 +5384,7 @@ const FAQ_QUESTIONS: { slug: string; q: string; a: string }[] = [
   {
     slug: "how-much-does-it-cost",
     q: "How much does it cost?",
-    a: "It's $2.99 to start a session — that unlocks the AI and lets you generate 6 headshots in your chosen style. After you preview the results, you pay per headshot you want to keep: $12.99 for Basic (realistic version only) or $17.99 for the Glow Up Bundle (realistic + polished + glam — three retouching levels of the same photo). No subscriptions, no monthly fees, no surprise charges.",
+    a: "It's $3.99 to start a session — that unlocks the AI and lets you generate 6 headshots in your chosen style. After you preview the results, you pay per headshot you want to keep: $12.99 for Basic (realistic version only) or $17.99 for the Glow Up Bundle (realistic + polished + glam — three retouching levels of the same photo). No subscriptions, no monthly fees, no surprise charges.",
   },
   {
     slug: "how-long-does-it-take",
@@ -5409,7 +5409,7 @@ const FAQ_QUESTIONS: { slug: string; q: string; a: string }[] = [
   {
     slug: "what-if-i-dont-love-first-batch",
     q: "What if I don't love my first batch of headshots?",
-    a: "The first batch of 6 headshots is paid for by us. It's for you to preview the type of headshots and the realistic results we strive so hard to produce. We allow two free SINGLE regenerations. Tap the refresh icon on any individual headshot to regenerate just that one. If you want to try a different style, a $2.99 'try more styles' fee is required. This protects us from users who generate tons of headshots, but don't intend to buy any.",
+    a: "The first batch of 6 headshots is paid for by us. It's for you to preview the type of headshots and the realistic results we strive so hard to produce. We allow two free SINGLE regenerations. Tap the refresh icon on any individual headshot to regenerate just that one. If you want to try a different style, a $3.99 'try more styles' fee is required. This protects us from users who generate tons of headshots, but don't intend to buy any.",
   },
   {
     slug: "what-makes-this-different-from-other-ai-headshot-apps",
@@ -5839,7 +5839,7 @@ const FAQDetailScreen = ({
           <Wordmark size={20} />
         </button>
         <Pill onClick={onStart} variant="primary" size="sm">
-          {entryFeeEnabled ? "Start · $2.99" : "Start free"}
+          {entryFeeEnabled ? "Start · $3.99" : "Start free"}
         </Pill>
       </nav>
 
@@ -6135,7 +6135,7 @@ const FAQDetailScreen = ({
               look like you.
             </p>
             <Pill onClick={onStart} variant="primary" size="lg">
-              {entryFeeEnabled ? "Try it — $2.99" : "Try it free"}
+              {entryFeeEnabled ? "Try it — $3.99" : "Try it free"}
             </Pill>
           </section>
 
@@ -9894,7 +9894,7 @@ const GridScreen = ({
                     Free Generations Used Up
                   </div>
                   <div style={{ fontSize: 11, color: C.mediumGrey, lineHeight: 1.4 }}>
-                    Unlock Unlimited Regens — $2.99
+                    Unlock Unlimited Regens — $3.99
                   </div>
                   <button
                     type="button"
@@ -9916,7 +9916,7 @@ const GridScreen = ({
                       fontFamily: "inherit",
                     }}
                   >
-                    Check out · $2.99
+                    Check out · $3.99
                   </button>
                 </div>
               ) : src ? (
@@ -11427,7 +11427,7 @@ const CheckoutScreen = ({
   const nameLooksValid = customerName.trim().length >= 2;
 
   // --- Phase 2 pricing math (simplified 2026-05-14) ---
-  // Pricing model: $2.99 to try (entry fee — pays for app access), then a
+  // Pricing model: $3.99 to try (entry fee — pays for app access), then a
   // flat $11.99 per photo. No credit applied on first photo. History: the
   // original model gave a $2.99 credit on first photo, but the credit_used
   // tracking lived in sessionStorage, which resets per tab — so customers
@@ -11978,7 +11978,7 @@ const DownloadScreen = ({
   const handleDownload = async (url: string, index: number) => {
     if (inFlight.has(index)) return;
 
-    // Burn the $2.99 unlock on the FIRST download click (2026-06-12).
+    // Burn the $3.99 unlock on the FIRST download click (2026-06-12).
     // Moved here from /api/deliver so the bonus "regenerate in another
     // style" teaser, which fires on Download-screen mount BEFORE any
     // click, can still hit /api/generate successfully. unlockBurned ref
@@ -12638,7 +12638,7 @@ const DownloadScreen = ({
           Generate 6 brand-new headshots in a different style — corporate
           to creative, indoor to outdoor, whatever direction you want.
           Your uploaded reference photos are still saved, so you'll skip
-          straight to the style picker — no re-uploading. Just $2.99 to
+          straight to the style picker — no re-uploading. Just $3.99 to
           start a fresh session, then $12.99 per Basic keeper or $17.99 for
           the Glow Up Deluxe Bundle — smoother skin + magazine-style polish
           across 3 retouched versions ($5 more than Basic).
@@ -12878,8 +12878,8 @@ type GalleryFirstModalProps = {
 // "This round is on me" nudge (2026-08-12). Shown once per visit the first time
 // a visitor clicks a Start/Generate CTA on any marketing page EXCEPT the
 // examples/gallery page. Points them at the gallery to set expectations about
-// realistic skin, and states the $2.99 fee for additional rounds — reduces
-// surprise regen abandonment and primes the $2.99 unlock.
+// realistic skin, and states the $3.99 fee for additional rounds — reduces
+// surprise regen abandonment and primes the $3.99 unlock.
 const GalleryFirstModal = ({ onViewGallery, onContinue, onClose }: GalleryFirstModalProps) => (
   <div
     role="dialog"
@@ -12976,7 +12976,7 @@ const GalleryFirstModal = ({ onViewGallery, onContinue, onClose }: GalleryFirstM
           }}
         >
           Additional rounds of generations will cost{" "}
-          <span style={{ color: "#C9A961" }}>$2.99</span>
+          <span style={{ color: "#C9A961" }}>$3.99</span>
         </div>
         <p style={{ fontSize: 14, color: "#6E6E6A", fontStyle: "italic", margin: "2px 0 22px" }}>
           — Kristina, founder &amp; photographer
@@ -13021,7 +13021,7 @@ const FreeRegenWarningModal = ({ onClose }: FreeRegenWarningModalProps) => (
         You're reaching your free regenerate limit
       </div>
       <div style={{ fontSize: 14, color: C.mediumGrey, marginTop: 12, lineHeight: 1.6 }}>
-        After one more single regenerate, you'll need to unlock unlimited regens for $2.99 to keep going.
+        After one more single regenerate, you'll need to unlock unlimited regens for $3.99 to keep going.
       </div>
       <div style={{ marginTop: 24 }}>
         <Button onClick={onClose} full>
@@ -13032,9 +13032,9 @@ const FreeRegenWarningModal = ({ onClose }: FreeRegenWarningModalProps) => (
   </div>
 );
 
-// -------------------- Free-tier $2.99 mid-session paywall modal --------------------
+// -------------------- Free-tier $3.99 mid-session paywall modal --------------------
 // (2026-07-03) — Fires when the customer tries their 3rd single regen OR clicks
-// Back-to-full-regen while in free-tier mode. Offers the $2.99 unlock.
+// Back-to-full-regen while in free-tier mode. Offers the $3.99 unlock.
 
 type FreeTierPaywallModalProps = {
   onClose: () => void;
@@ -13063,7 +13063,7 @@ const FreeTierPaywallModal = ({ onClose, onPay, onRevert, canRevert }: FreeTierP
       </div>
       <div style={{ fontSize: 14, color: C.mediumGrey, marginTop: 12, lineHeight: 1.6 }}>
         Thanks for trying out my app! I paid for your first round of generations
-        to get you started. If you'd like to keep perfecting your look, the $2.99
+        to get you started. If you'd like to keep perfecting your look, the $3.99
         covers the generation costs — it unlocks unlimited regenerates for the
         rest of your session, and your saved headshots stay right where they are
         while you check out.
@@ -13072,7 +13072,7 @@ const FreeTierPaywallModal = ({ onClose, onPay, onRevert, canRevert }: FreeTierP
         {canRevert ? (
           <>
             {/* Primary action (Kristi 2026-08-17): keep the customer's most
-                recent headshots. The $2.99 unlock is the secondary option. */}
+                recent headshots. The $3.99 unlock is the secondary option. */}
             <Button onClick={onRevert} full>
               Go back to my headshots
             </Button>
@@ -13090,13 +13090,13 @@ const FreeTierPaywallModal = ({ onClose, onPay, onRevert, canRevert }: FreeTierP
                 fontFamily: "inherit",
               }}
             >
-              Unlock for $2.99
+              Unlock for $3.99
             </button>
           </>
         ) : (
           <>
             <Button onClick={onPay} full>
-              Unlock for $2.99
+              Unlock for $3.99
             </Button>
             <button
               onClick={onClose}
@@ -13122,7 +13122,7 @@ const FreeTierPaywallModal = ({ onClose, onPay, onRevert, canRevert }: FreeTierP
 // -------------------- Back-button warning --------------------
 //
 // Added 2026-05-27 after the 2026-05-26 night Stripe audit showed
-// a probable session-loss event: a customer paid the $2.99 entry
+// a probable session-loss event: a customer paid the $3.99 entry
 // fee then hit 12 sequential /api/generate 402 errors over 90s.
 // The most plausible cause is a browser-back navigation wiping
 // the unlock state. This modal fires when the customer is on a
@@ -13515,7 +13515,7 @@ export default function App() {
   // is on a post-generation screen (grid / retouch / checkout) and hits
   // the browser back button, we intercept and show a warning modal so
   // they don't accidentally throw away their generated headshots and have
-  // to pay $2.99 again. The ref is read inside the existing pathname-based
+  // to pay $3.99 again. The ref is read inside the existing pathname-based
   // popstate handler so the two effects don't fight over the same event.
   const [showBackWarning, setShowBackWarning] = useState(false);
   const protectedScreenGuardActiveRef = useRef(false);
@@ -14009,7 +14009,7 @@ export default function App() {
     };
   }, [readyCount, screen]);
   // ---- Free-tier feature flag (2026-07-03) ----
-  // When ENTRY_FEE_ENABLED=false in Vercel env, the $2.99 paywall moves from
+  // When ENTRY_FEE_ENABLED=false in Vercel env, the $3.99 paywall moves from
   // the landing page to AFTER the customer's free 6-photo batch + 2 free
   // single-photo regens. entryFeeEnabled is fetched from /api/config on
   // mount; the fallback of `true` matches classic behavior if config fails.
@@ -14020,7 +14020,7 @@ export default function App() {
   const MAX_FREE_REGENS = 4;
   // "You have 1 more free regen" nudge modal — fires after regenCount = 1.
   const [showFreeRegenWarning, setShowFreeRegenWarning] = useState(false);
-  // Post-generation $2.99 paywall (free-tier only) — fires when the customer
+  // Post-generation $3.99 paywall (free-tier only) — fires when the customer
   // tries their 3rd single regen OR Back-to-full-regen without paying.
   const [showFreeTierPaywall, setShowFreeTierPaywall] = useState(false);
   const [showGalleryFirstModal, setShowGalleryFirstModal] = useState(false);
@@ -14115,7 +14115,7 @@ export default function App() {
 
   // Welcome-after-payment popup. Fires when /api/verify-checkout returns
   // paid:true with a fresh sessionId+unlockExpiresAt — i.e., the user
-  // just finished the $2.99 Stripe Checkout and we want to confirm the
+  // just finished the $3.99 Stripe Checkout and we want to confirm the
   // unlock + start the 2-hour countdown visibly.
   const [showWelcomePopup, setShowWelcomePopup] = useState(false);
 
@@ -14132,7 +14132,7 @@ export default function App() {
   // --------- Paywall unlock state (2026-05-15: session-bound model) ---------
   //
   // Two ways to be unlocked:
-  //   (a) Stripe path: user paid $2.99 via Stripe Checkout. localStorage
+  //   (a) Stripe path: user paid $3.99 via Stripe Checkout. localStorage
   //       holds the cs_xxx session ID + the server-provided expires_at.
   //       /api/generate verifies the session against Stripe metadata on
   //       every call. Unlock dies when:
@@ -14235,8 +14235,8 @@ export default function App() {
     }
   }, [regenCount, entryFeeEnabled, isUnlocked]);
 
-  // ---- Free-tier: restore mid-session grid state after $2.99 unlock ----
-  // When the customer pays the $2.99 mid-session paywall, Stripe redirects
+  // ---- Free-tier: restore mid-session grid state after $3.99 unlock ----
+  // When the customer pays the $3.99 mid-session paywall, Stripe redirects
   // back to /?paid=1&session_id=... which would normally reset the app.
   // Before firing the checkout we stash generatedImages, selections, cart,
   // and counters to localStorage. On mount, if we detect a return + a
@@ -14339,7 +14339,7 @@ export default function App() {
         // 0 on this fresh page load, which would hand them a whole new free
         // 6-image round just for clicking the "ready to view" email link — the
         // free-batch leak. Mark the free batch as already spent so Generate
-        // goes straight to the $2.99 wall. Paid users are gated by isUnlocked,
+        // goes straight to the $3.99 wall. Paid users are gated by isUnlocked,
         // not this counter, so they're unaffected; single regens keep their
         // 2-free-on-resume nudge. (2026-08-09 per Kristi)
         setBatchesUsed(1);
@@ -14523,9 +14523,9 @@ export default function App() {
     }
     setUnlockExpiresAt(expiresAt);
     setIsUnlocked(true);
-    // Record the $2.99 generation unlock against the email they generated
+    // Record the $3.99 generation unlock against the email they generated
     // under (React state if present, else the persisted copy from before the
-    // Stripe redirect) so the leads page shows $2.99 in Paid — even when they
+    // Stripe redirect) so the leads page shows $3.99 in Paid — even when they
     // checked out under a different email. Best-effort; never blocks. (2026-08-10)
     let genLeadEmail = email.trim();
     if (!genLeadEmail && typeof window !== "undefined") {
@@ -14539,7 +14539,7 @@ export default function App() {
       void fetch("/api/lead", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: genLeadEmail, entryUnlockUsd: 2.99 }),
+        body: JSON.stringify({ email: genLeadEmail, entryUnlockUsd: 3.99 }),
       }).catch(() => {});
     }
   };
@@ -14675,7 +14675,7 @@ export default function App() {
 
           if (data.paid) {
             // GA4 / Google Ads conversion tracking (2026-06-11). Fires
-            // the purchase event for the $2.99 entry payment. Dedup'd
+            // the purchase event for the $3.99 entry payment. Dedup'd
             // by paymentIntentId — the polling loop runs every few
             // seconds during async settlement, so this guards against
             // duplicate fires across the same poll loop AND across page
@@ -14954,7 +14954,7 @@ export default function App() {
         setLastPhotoUrls(stash.referencePhotoUrls);
         setLastHasWideAngle(false);
         // ---- Buyer perk (2026-07-29): a completed purchase waives the
-        //      free-tier $2.99 paywall and grants another free batch of 6
+        //      free-tier $3.99 paywall and grants another free batch of 6
         //      generations. We reset the two counters that drive the
         //      free-tier gates — batchesUsed (the "another full batch"
         //      gate at the top of handleGenerate) and regenCount (the
@@ -15040,8 +15040,8 @@ export default function App() {
   // the gallery-first popup (once per visit); later clicks start directly. The
   // examples/gallery page passes handleStart directly and bypasses this.
   const requestStart = (startFn: () => void) => {
-    // Once a customer has paid the $2.99 unlock, "this round is on me / extra
-    // rounds cost $2.99" no longer applies to them — skip the popup and start
+    // Once a customer has paid the $3.99 unlock, "this round is on me / extra
+    // rounds cost $3.99" no longer applies to them — skip the popup and start
     // directly. Also skip after it has already shown once this visit. (Kristi
     // 2026-08-14)
     if (isUnlocked || galleryPromptShownRef.current) {
@@ -15064,7 +15064,7 @@ export default function App() {
       return;
     }
     // Free-tier (2026-07-03): skip Stripe checkout, go straight to upload.
-    // The customer will hit the $2.99 paywall AFTER generating (via
+    // The customer will hit the $3.99 paywall AFTER generating (via
     // handleRegenerateSlot 3rd attempt, or handleGenerate 2nd batch).
     if (!entryFeeEnabled) {
       setScreen("upload");
@@ -15096,7 +15096,7 @@ export default function App() {
   };
 
   // Free-tier mid-session unlock (2026-07-03; storage reworked 2026-07-30).
-  // Called when the customer clicks "Unlock for $2.99" in the
+  // Called when the customer clicks "Unlock for $3.99" in the
   // FreeTierPaywallModal. Stashes the current grid state (heavy base64
   // images) into IndexedDB + a tiny timestamp marker in localStorage, so the
   // mount-time restore effect (see above) can rehydrate everything when
@@ -15109,7 +15109,7 @@ export default function App() {
       const stash = {
         // The email the customer entered at the capture gate — saved with
         // the session so it's preserved (and re-linked) on return, rather
-        // than blank / re-prompted after the $2.99 round-trip (2026-07-30).
+        // than blank / re-prompted after the $3.99 round-trip (2026-07-30).
         email,
         generatedImages,
         lastSelections,
@@ -15453,7 +15453,7 @@ export default function App() {
       }
     } else {
       // Free-tier gate (2026-07-03). When entry fee is off AND the customer
-      // hasn't paid the mid-session $2.99 yet, cap single regens at
+      // hasn't paid the mid-session $3.99 yet, cap single regens at
       // MAX_FREE_REGENS = 2. The 3rd attempt fires the free-tier paywall
       // instead of running the generation.
       // Resumed-from-email sessions (customer clicked the "ready to view" link
@@ -15539,7 +15539,7 @@ export default function App() {
           // Free-tier per-IP cap hit on the SERVER even though the client
           // thought a regen was left — usually the page was refreshed so the
           // client counter reset while the server still counts the IP. Show
-          // the $2.99 unlock (handled in catch), NOT a scary red "failed,
+          // the $3.99 unlock (handled in catch), NOT a scary red "failed,
           // refresh the page" error, and mark this slot blocked so it renders
           // the paywall tile. (Kristi 2026-08-12)
           throw new Error("free_limit");
@@ -15603,7 +15603,7 @@ export default function App() {
           "You've reached the generation limit for now — pick your favorites and download them. Generation is paused to keep things fair for everyone.",
         );
       } else if (err instanceof Error && err.message === "free_limit") {
-        // Cap hit: open the $2.99 unlock popup instead of the red banner. Only
+        // Cap hit: open the $3.99 unlock popup instead of the red banner. Only
         // cover the slot with the paywall tile if it is EMPTY — never hide a
         // shot the customer already had (they keep the image they regenerated
         // from; only the unlock popup appears).
@@ -15633,7 +15633,7 @@ export default function App() {
 
   // Regenerate a single Wild Card bonus shot (2026-08-12). Re-fires its own
   // style/lighting config (stored on the shot). Counts against the SAME regen
-  // budget + $2.99 paywall as a main-grid regen, per Kristi. Keeps the old image
+  // budget + $3.99 paywall as a main-grid regen, per Kristi. Keeps the old image
   // visible under a spinner until the new one lands; refunds the regen on
   // failure. No-op for shots restored from a resume link (no stored config).
   const handleRegenerateWildCard = async (index: number) => {
@@ -15844,7 +15844,7 @@ export default function App() {
 
     // Fallback (2026-07-31): a "generate in a different style" batch reuses the
     // SAME reference photos, which already live in Blob as lastPhotoUrls. If
-    // the in-memory `photos` list is short (e.g. after the $2.99 restore, where
+    // the in-memory `photos` list is short (e.g. after the $3.99 restore, where
     // the original File-backed previews don't survive the page reload), fall
     // back to those persistent URLs so the second generation still fires.
     if (photoUrls.length < 5 && lastPhotoUrls.length >= 5) {
@@ -15986,7 +15986,7 @@ export default function App() {
     // page over-report. (2026-08-10 per Kristi)
     const leadEmail = (emailOverride ?? email).trim();
     // Persist the email they GENERATED under so we can still attribute the
-    // $2.99 unlock to it after the Stripe redirect wipes React state, even if
+    // $3.99 unlock to it after the Stripe redirect wipes React state, even if
     // they type a different email at checkout. (2026-08-10)
     if (leadEmail && typeof window !== "undefined") {
       try {
@@ -16071,7 +16071,7 @@ export default function App() {
           }
           if (reason402 === "free_limit") {
             // Server-side per-IP free-batch cap hit (2026-08-05): this IP has
-            // already used its free batches. Show the $2.99 paywall (not the
+            // already used its free batches. Show the $3.99 paywall (not the
             // "your 2 hours expired" copy) and leave any unlock state alone.
             freeLimitHitRef.current = true;
             setShowFreeTierPaywall(true);
@@ -16147,7 +16147,7 @@ export default function App() {
         return;
       }
       if (freeLimitHitRef.current) {
-        // Every call 402'd on the free-tier IP cap — the $2.99 paywall is
+        // Every call 402'd on the free-tier IP cap — the $3.99 paywall is
         // already open. Refund the optimistic batch count, and CRUCIALLY
         // leave the loading screen, so dismissing the paywall doesn't strand
         // them on a frozen "generating" screen with no way back. (2026-08-11)
@@ -16162,7 +16162,7 @@ export default function App() {
         // else: no earlier grid to restore (fresh tab, or a resume link, on an
         // out-of-free-generations IP). KEEP the per-slot blocked marks so all 6
         // tiles render the "Free Generations Used Up — Unlock Unlimited Regens
-        // $2.99" paywall card (with the Stripe button) instead of falling
+        // $3.99" paywall card (with the Stripe button) instead of falling
         // through to the generic "Generation failed. Try regenerating."
         // placeholder — which wrongly reads as a system error to a customer who
         // simply used up their free generations. (2026-08-17)
@@ -16921,7 +16921,7 @@ export default function App() {
         <FreeRegenWarningModal onClose={() => setShowFreeRegenWarning(false)} />
       )}
 
-      {/* Free-tier $2.99 mid-session paywall (2026-07-03). Fires when the
+      {/* Free-tier $3.99 mid-session paywall (2026-07-03). Fires when the
           customer tries their 3rd single regen OR Back-to-full-regen while
           in free-tier mode + unpaid. onPay stashes grid state to localStorage
           then redirects to Stripe Checkout. On return, mount effect restores. */}
@@ -16958,7 +16958,7 @@ export default function App() {
       {/* Photographer's tips modal — shown once per session on Landing→Upload.
           Overlays the Upload screen until the user clicks "Got it." */}
       {/* Welcome popup with the 2-hour countdown — fires the moment a
-          fresh $2.99 payment is confirmed by /api/verify-checkout. Higher
+          fresh $3.99 payment is confirmed by /api/verify-checkout. Higher
           z-index than the intro/tips modals so if multiple are in flight
           this one shows first (it carries the most important info: the
           customer's clock has started). */}
