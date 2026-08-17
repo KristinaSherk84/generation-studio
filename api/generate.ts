@@ -86,7 +86,7 @@ export const maxDuration = 300;
 //   executive    → "Executive"
 //   urban        → "Urban Industrial" (NEW — combines the old Creative
 //                  industrial-office background with a new urban-street one)
-type Style = "corporate" | "creative" | "executive" | "urban" | "healthcare";
+type Style = "corporate" | "creative" | "executive" | "urban" | "healthcare" | "tech";
 type Attire = "formal" | "casual" | "keep" | "medical" | "polo";
 type Lighting = "studio" | "natural" | "dramatic" | "golden";
 // Scrub colors (2026-06-05) — customer-pickable when attire === "medical".
@@ -469,6 +469,8 @@ const BLOCK_3_STYLE_BASE: Record<Style, string> = {
   // structural pattern (base style + 2 rotating backgrounds, 3/3 split
   // across the 6-image batch).
   healthcare: `Style: Clean, bright, professional medical setting. Reads as a healthcare professional photographed in a real clinical environment — a physician in a contemporary hospital, a nurse practitioner in a modern wellness center, a clinician at a private practice. Background is always a real medical setting (hospital interior or modern, bright cool toned, medical office) always rendered with extreme bokeh.`,
+  // Tech / IT — dark data-center scene with cool colored LED bokeh (Kristi 2026-08-16).
+  tech: `Style: Modern tech / IT professional headshot. Reads as a confident software engineer, IT leader, CTO, or data professional photographed on-location in a high-tech environment. FRAMING: a tight head-and-shoulders headshot — the subject is CLOSE to the camera and fills the frame exactly like a studio headshot; only the BACKGROUND is far behind. Do NOT pull the camera back, do NOT show the full body. The tech environment sits far BEHIND the subject, extremely out of focus. Cool-toned image. Facial expression realistic, sharp, engaged, quietly confident — the look of someone who solves hard problems. Add confidence through the eyes.`,
 };
 
 // Background variants — the frontend passes variationIndex 0-5; the
@@ -495,6 +497,8 @@ const URBAN_BG_STREET = `Background: Extremely blurry city sidewalk and storefro
 const HEALTHCARE_BG_HOSPITAL = `Background: A modern hospital interior — soft white walls, polished floors, large windows with diffused daylight. All background elements far away, out of focus, blurry with extreme creamy bokeh (replicate bokeh from 200mm lens at f/1.2). Heavily blur the background. No identifiable text anywhere. Do generate bright clean diffused light, soft whites, pale blues, gentle out-of-focus highlights. NO hospital signage, badge, or text. Think "ambient clinical light and color washes," not "photo of a hospital."`;
 
 const HEALTHCARE_BG_OFFICE = `Background: bright, modern medical office interior — soft neutral walls, contemporary furniture, cool tones. Reception area or exam room. All background elements far away, out of focus, blurry with extreme creamy bokeh (bokeh from 200mm lens at f/1.2). NO text or logos anywhere in the background. What should be visible: bright, cool lighting, soft architectural color washes (warm cream, pale sage, white washed wood tones), out-of-focus highlights. Think "bright modern medical office wash," not "photo of an exam room."`;
+
+const TECH_BG_SERVER_ROOM = `Background: A dark, extremely out-of-focus server room / data center. The background must be SO heavily blurred (the most extreme creamy bokeh imaginable, as if shot on a 200mm lens at f/1.2, the environment 60+ feet behind the subject) that NO server rack, cabinet, cable, screen, edge, or object is identifiable — no straight lines survive. What SHOULD be visible: a deep near-black background scattered with large, soft, creamy bokeh orbs of light in COOL COLORS ONLY — electric blues, teals, emerald greens, and purples/violets (the glow of server LEDs and status lights). The bokeh orbs vary in size and softness, glowing against the darkness. What must NOT be visible: any recognizable server, rack, monitor, cable, keyboard, hard edge, text, or warm/orange light. RIM / EDGE LIGHTING on the subject: add soft colored rim lights along the hair and shoulders in the SAME palette — blues, teals, greens, and purples — to separate the subject from the dark background and echo the bokeh. Keep the FACE cleanly and naturally lit with neutral, flattering light; the colored light lives ONLY in the rim/edges and the background bokeh, never washing the skin tone with color. Think: a tech leader photographed in a dark data center lit by cool LED bokeh.`;
 
 function buildBlock3Style(style: Style, variationIndex: number): string {
   // Corporate / Executive: no rotating background — Block 3 is the full style,
@@ -531,6 +535,14 @@ function buildBlock3Style(style: Style, variationIndex: number): string {
     // Even indices = hospital, odd = medical office.
     const bg = variationIndex % 2 === 0 ? HEALTHCARE_BG_HOSPITAL : HEALTHCARE_BG_OFFICE;
     return `${seg("style_healthcare", BLOCK_3_STYLE_BASE.healthcare)}\n\n${bg}`;
+  }
+
+  if (style === "tech") {
+    // Single dark server-room scene (colored LED bokeh) for all 6 variations.
+    return `${seg("style_tech", BLOCK_3_STYLE_BASE.tech)}\n\n${seg(
+      "tech_bg_serverroom",
+      TECH_BG_SERVER_ROOM,
+    )}`;
   }
 
   // Defensive default — shouldn't be reachable since Style type is exhaustive.
@@ -983,6 +995,8 @@ export const PROMPT_DEFAULTS: Record<string, string> = {
   style_executive: BLOCK_3_STYLE_BASE.executive,
   style_urban: BLOCK_3_STYLE_BASE.urban,
   style_healthcare: BLOCK_3_STYLE_BASE.healthcare,
+  style_tech: BLOCK_3_STYLE_BASE.tech,
+  tech_bg_serverroom: TECH_BG_SERVER_ROOM,
   attire_formal: BLOCK_4_ATTIRE_STATIC.formal,
   attire_formal_male: BLOCK_4_ATTIRE_STATIC.formal,
   attire_formal_female: BLOCK_4_ATTIRE_STATIC.formal,
@@ -1056,6 +1070,8 @@ export const PROMPT_SEGMENTS: PromptSegmentMeta[] = [
   { key: "style_executive", label: "Style — Executive", group: "Style", fires: { style: "executive" } },
   { key: "style_urban", label: "Style — Urban", group: "Style", fires: { style: "urban" } },
   { key: "style_healthcare", label: "Style — Healthcare", group: "Style", fires: { style: "healthcare" } },
+  { key: "style_tech", label: "Style — Tech / IT", group: "Style", fires: { style: "tech" } },
+  { key: "tech_bg_serverroom", label: "Tech / IT — server-room background", group: "Style", fires: { style: "tech" } },
   { key: "attire_formal_female", label: "Attire — Business formal — Women", group: "Attire", fires: { attire: "formal" }, genderPair: "attire_formal", gender: "female" },
   { key: "attire_formal_male", label: "Attire — Business formal — Men", group: "Attire", fires: { attire: "formal" }, genderPair: "attire_formal", gender: "male" },
   { key: "attire_casual", label: "Attire — Business casual", group: "Attire", fires: { attire: "casual" } },
@@ -1940,7 +1956,7 @@ export default async function handler(
     // must move together so the user doesn't sneak past the UI gate.
     return res.status(400).json({ error: "At least 5 reference photos required" });
   }
-  if (!body.style || !["corporate", "creative", "executive", "urban", "healthcare"].includes(body.style)) {
+  if (!body.style || !["corporate", "creative", "executive", "urban", "healthcare", "tech"].includes(body.style)) {
     return res.status(400).json({ error: "Invalid style" });
   }
   if (!body.attire || !["formal", "casual", "keep", "medical", "polo"].includes(body.attire)) {

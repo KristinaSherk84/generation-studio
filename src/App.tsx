@@ -7387,7 +7387,7 @@ const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) 
 // at a glance. Each silhouette is a darker variant of its swatch color,
 // EXCEPT Executive — its swatch is already near-black, so the silhouette
 // is LIGHTER than the bg to remain visible.
-type StyleVisual = "creative" | "corporate" | "executive" | "urban" | "healthcare" | "realtor";
+type StyleVisual = "creative" | "corporate" | "executive" | "urban" | "healthcare" | "realtor" | "tech";
 type StyleEntry = {
   id: string;
   name: string;
@@ -7405,6 +7405,7 @@ const STYLES: readonly StyleEntry[] = [
   { id: "creative",   name: "Creative Natural",  swatch: "#7A8A5C", silhouette: "#3D452E", visual: "creative" },
   { id: "executive",  name: "Executive",         swatch: "#2A2A28", silhouette: "#6C6B66", visual: "executive" },
   { id: "healthcare", name: "Healthcare",        swatch: "#BCCDCB", silhouette: "#4A6868", visual: "healthcare" },
+  { id: "tech",       name: "Tech / IT",         swatch: "#0E1A2B", silhouette: "#0A0F1A", visual: "tech" },
   { id: "realtor",    name: "Realtor",           swatch: "#C8B68E", silhouette: "#7A6A4A", visual: "realtor", comingSoon: true },
 ] as const;
 
@@ -7515,7 +7516,7 @@ const SectionLabel = ({ children, style = {} }: SectionLabelProps) => (
 // except `background` — which is only meaningful for Corporate style. Creative
 // and Executive get their background direction from the style prompt itself.
 export type StyleSelections = {
-  style: "corporate" | "creative" | "executive" | "urban" | "healthcare";
+  style: "corporate" | "creative" | "executive" | "urban" | "healthcare" | "tech";
   attire: "formal" | "casual" | "keep" | "medical" | "polo";
   lighting: "studio" | "natural" | "dramatic" | "golden";
   background?: "white" | "lightgrey" | "dark" | "black" | "blue" | "bluebright" | "green" | "red" | "rainbow";
@@ -8071,6 +8072,40 @@ const StyleScreen = ({
                     light). Placeholder visual only — final treatment can
                     differentiate further once the prompt-engineering for
                     realtor backgrounds is dialed in. */}
+                {s.visual === "tech" && (
+                  <>
+                    <div
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        background:
+                          "radial-gradient(circle at 50% 45%, rgba(18,30,52,0.75) 0%, rgba(3,6,12,0.96) 85%)",
+                      }}
+                    />
+                    {/* Cool LED bokeh orbs — blue, teal, green, purple */}
+                    {[
+                      { c: "rgba(60,130,246,0.55)", t: "16%", l: "20%", z: "34%" },
+                      { c: "rgba(22,190,180,0.5)", t: "56%", l: "12%", z: "26%" },
+                      { c: "rgba(60,200,120,0.45)", t: "28%", l: "66%", z: "30%" },
+                      { c: "rgba(150,90,230,0.5)", t: "62%", l: "60%", z: "36%" },
+                      { c: "rgba(90,170,255,0.4)", t: "74%", l: "34%", z: "22%" },
+                    ].map((o, i) => (
+                      <div
+                        key={i}
+                        style={{
+                          position: "absolute",
+                          top: o.t,
+                          left: o.l,
+                          width: o.z,
+                          height: o.z,
+                          background: `radial-gradient(circle, ${o.c} 0%, transparent 70%)`,
+                          filter: "blur(4px)",
+                        }}
+                      />
+                    ))}
+                  </>
+                )}
+
                 {s.visual === "realtor" && (
                   <>
                     <div
