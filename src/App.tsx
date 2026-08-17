@@ -13680,6 +13680,12 @@ export default function App() {
   // popup; stays 4s or until they tick an answer, which is saved against their
   // email in the lead store.
   const [showFoundViaSurvey, setShowFoundViaSurvey] = useState(false);
+  // Stash for a "How did you find us?" answer picked BEFORE the email is known.
+  // Free-tier users answer the survey DURING generation and only enter their
+  // email later on the "Almost there" screen, so the answer must not be dropped
+  // when email is still empty — it's flushed to /api/lead once a valid email
+  // lands (effect below). (2026-08-17 — fixes foundVia landing as "unset".)
+  const pendingFoundViaRef = useRef<string | null>(null);
   // In-memory only (2026-08-05): resets each page load so repeat visitors are
   // asked again. Kristi: collecting attribution matters more than never
   // re-asking a returning customer. The flag still prevents a double-ask
@@ -15215,20 +15221,46 @@ export default function App() {
   // customer's email, then chain into the retouch popup.
   const closeFoundViaSurvey = (answer?: string) => {
     setShowFoundViaSurvey(false);
-    if (answer && email) {
+    if (!answer) return;
+    const addr = email.trim();
+    if (addr) {
+      // Email already known — record immediately.
       try {
         void fetch("/api/lead", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, foundVia: answer }),
+          body: JSON.stringify({ email: addr, foundVia: answer }),
         }).catch(() => {});
       } catch {
         /* survey capture must never block the flow */
       }
+    } else {
+      // No email yet (survey answered during generation) — stash it; the effect
+      // below sends it the moment the email lands so it is never lost.
+      pendingFoundViaRef.current = answer;
     }
     // The retouch popup no longer chains off the survey — it fires on its own
     // once 3 headshots are ready (see the effect above). (2026-08-16)
   };
+
+  // Flush a stashed "How did you find us?" answer once the customer's email is
+  // known (they picked it before entering their email). Sends exactly once.
+  useEffect(() => {
+    const answer = pendingFoundViaRef.current;
+    if (!answer) return;
+    const addr = email.trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(addr)) return;
+    pendingFoundViaRef.current = null;
+    try {
+      void fetch("/api/lead", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: addr, foundVia: answer }),
+      }).catch(() => {});
+    } catch {
+      /* best-effort — never block the flow */
+    }
+  }, [email]);
 
   // "Your headshots are ready" email (2026-08-03). Clarity recordings show
   // people kick off a batch, wander off during the 2–3 min wait, forget, and
