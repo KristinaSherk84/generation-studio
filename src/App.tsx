@@ -13105,7 +13105,7 @@ const FreeTierPaywallModal = ({ onClose, onPay, onRevert, canRevert }: FreeTierP
         while you check out.
       </div>
       <div style={{ fontSize: 12, color: C.mediumGrey, marginTop: 8, lineHeight: 1.5 }}>
-        Up to 50 additional image creation credits.
+        Up to 40 additional image creation credits.
       </div>
       <div style={{ marginTop: 24, display: "flex", gap: 8, flexDirection: "column" }}>
         {canRevert ? (

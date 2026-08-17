@@ -48,9 +48,9 @@ const key = (ip: string) => `freebatch:${ip}`;
 // 2h) tops out at HARD_CAP total image generations per IP within the window, so
 // one power user can't turn $2.99 into unlimited Gemini spend. Counts EVERY
 // image call. Fail-open (never blocks on a Redis hiccup). Tunable live in the
-// Vercel dashboard WITHOUT a redeploy: GEN_HARD_CAP_PER_IP (default 50),
+// Vercel dashboard WITHOUT a redeploy: GEN_HARD_CAP_PER_IP (default 40),
 // GEN_HARD_CAP_WINDOW_HOURS (default 24).
-const HARD_CAP = Math.max(1, Number(process.env.GEN_HARD_CAP_PER_IP ?? "50"));
+const HARD_CAP = Math.max(1, Number(process.env.GEN_HARD_CAP_PER_IP ?? "40"));
 const HARD_CAP_WINDOW_SECONDS =
   Math.max(1, Number(process.env.GEN_HARD_CAP_WINDOW_HOURS ?? "24")) * 3600;
 const hardCapKey = (ip: string) => `gencap:${ip}`;
