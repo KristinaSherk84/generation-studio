@@ -205,6 +205,42 @@ async function idbClearFreeTierStash(): Promise<void> {
 // batch's wild cards + regens, so the server's per-IP free-batch cap counts
 // them as ONE batch. Merged into every /api/generate body below.
 let currentBatchId = "";
+// Pull any shots we saved server-side for this batch (Phase A, 2026-08-17).
+// /api/generate stores each headshot the instant it's made, so a dropped
+// connection usually means the images exist even though they never reached the
+// tab. Returns a slot-indexed array (holes for slots we didn't get back), or
+// null if nothing is recoverable.
+async function tryRecoverBatch(batchId: string): Promise<string[] | null> {
+  if (!batchId) return null;
+  try {
+    const r = await fetch(
+      "/api/recover-batch?batchId=" + encodeURIComponent(batchId),
+    );
+    if (!r.ok) return null;
+    const d = (await r.json()) as {
+      found?: boolean;
+      images?: { index?: number; url?: string }[];
+    };
+    if (!d.found || !Array.isArray(d.images) || d.images.length === 0)
+      return null;
+    const grid: string[] = [];
+    for (const img of d.images) {
+      if (
+        img &&
+        typeof img.index === "number" &&
+        img.index >= 0 &&
+        img.index < 8 &&
+        typeof img.url === "string" &&
+        /^https?:\/\//.test(img.url)
+      ) {
+        grid[img.index] = img.url;
+      }
+    }
+    return grid.some(Boolean) ? grid : null;
+  } catch {
+    return null;
+  }
+}
 function newBatchId(): string {
   try {
     return Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
@@ -16187,6 +16223,18 @@ export default function App() {
       // retry isn't wrongly paywalled, and (b) surface honest, non-blaming
       // "Connection interrupted" copy (the LoadingScreen turns this specific
       // message into a popup). (2026-08-01)
+      // Before showing an error, try to recover from the server: /api/generate
+      // saves each shot the instant it's made, so a dropped connection usually
+      // means the images exist server-side even though they didn't reach this
+      // tab. Pull them and show the grid instead of an error. Keep the batch
+      // counted — real images were generated. (Phase A, 2026-08-17)
+      const recovered = await tryRecoverBatch(currentBatchId);
+      if (recovered && recovered.some(Boolean)) {
+        setGeneratedImages(recovered);
+        setReadyCount(recovered.filter(Boolean).length);
+        setScreen((sc) => (sc === "loading" ? "grid" : sc));
+        return;
+      }
       setBatchesUsed((n) => Math.max(0, n - 1));
       setGenerationError(
         "Connection interrupted — your headshots didn't reach this page. Please stay on this page and don't close, refresh, or navigate away while they generate. Your photos are fine; tap Try again.",
