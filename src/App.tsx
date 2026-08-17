@@ -13039,9 +13039,11 @@ const FreeRegenWarningModal = ({ onClose }: FreeRegenWarningModalProps) => (
 type FreeTierPaywallModalProps = {
   onClose: () => void;
   onPay: () => void;
+  onRevert: () => void;
+  canRevert: boolean;
 };
 
-const FreeTierPaywallModal = ({ onClose, onPay }: FreeTierPaywallModalProps) => (
+const FreeTierPaywallModal = ({ onClose, onPay, onRevert, canRevert }: FreeTierPaywallModalProps) => (
   <div
     style={{
       position: "fixed",
@@ -13070,20 +13072,39 @@ const FreeTierPaywallModal = ({ onClose, onPay }: FreeTierPaywallModalProps) => 
         <Button onClick={onPay} full>
           Unlock for $2.99
         </Button>
-        <button
-          onClick={onClose}
-          style={{
-            background: "transparent",
-            border: "none",
-            color: C.mediumGrey,
-            fontSize: 13,
-            padding: 8,
-            cursor: "pointer",
-            fontFamily: "inherit",
-          }}
-        >
-          Not right now
-        </button>
+        {canRevert ? (
+          <button
+            onClick={onRevert}
+            style={{
+              background: "transparent",
+              border: `1.5px solid ${C.border}`,
+              borderRadius: 8,
+              color: C.dark,
+              fontSize: 14,
+              fontWeight: 600,
+              padding: "11px 8px",
+              cursor: "pointer",
+              fontFamily: "inherit",
+            }}
+          >
+            Go back to my headshots
+          </button>
+        ) : (
+          <button
+            onClick={onClose}
+            style={{
+              background: "transparent",
+              border: "none",
+              color: C.mediumGrey,
+              fontSize: 13,
+              padding: 8,
+              cursor: "pointer",
+              fontFamily: "inherit",
+            }}
+          >
+            Not right now
+          </button>
+        )}
       </div>
     </div>
   </div>
@@ -15130,6 +15151,21 @@ export default function App() {
     }
   };
 
+  // "Go back to my headshots" — the non-paying exit on the out-of-free-gens
+  // paywall. Dismisses the paywall and drops the customer back on their MOST
+  // RECENT grid (their latest shots, with any single-slot regenerations
+  // reflected) so they can pick / download / checkout what they already have
+  // instead of being stranded. The grid is already sitting in generatedImages
+  // here — restored from priorGrid on a blocked full batch, or untouched on a
+  // blocked single regen — so we just clear the paywall state and show it.
+  // (2026-08-17)
+  const handleRevertToRecentGrid = () => {
+    setShowFreeTierPaywall(false);
+    setBlockedSlots(new Set());
+    setReadyCount(generatedImages.filter(Boolean).length);
+    setScreen((sc) => (sc === "loading" ? "grid" : sc));
+  };
+
   // Promo code success path. Marks the paywall unlocked with source="promo"
   // so the Phase 2 per-photo checkout can skip Stripe entirely (promo users
   // get free everything). Friends skip both fees.
@@ -16884,6 +16920,8 @@ export default function App() {
         <FreeTierPaywallModal
           onClose={() => setShowFreeTierPaywall(false)}
           onPay={handleFreeTierUnlockPay}
+          onRevert={handleRevertToRecentGrid}
+          canRevert={generatedImages.filter(Boolean).length > 0}
         />
       )}
 
