@@ -62,6 +62,23 @@ export async function saveSession(
   return token;
 }
 
+/**
+ * Overwrite an existing saved session's grid IN PLACE, keeping the SAME token
+ * and refreshing the TTL. Used by /api/save-session so a customer who generates
+ * more than one batch keeps ONE stable resume link that always shows their
+ * latest shots — instead of accumulating multiple divergent tokens where the
+ * wild cards / likeness regen only ever landed on one of them. (2026-08-17)
+ */
+export async function replaceSession(
+  token: string,
+  data: Omit<SavedSession, "createdAt">,
+): Promise<boolean> {
+  if (!token || !/^[A-Za-z0-9]{16,48}$/.test(token)) return false;
+  const rec: SavedSession = { ...data, createdAt: new Date().toISOString() };
+  await redis.set(key(token), rec, { ex: TTL_SECONDS });
+  return true;
+}
+
 /** Fetch a saved session by token, or null if missing / expired / malformed. */
 export async function getSession(token: string): Promise<SavedSession | null> {
   if (!token || !/^[A-Za-z0-9]{16,48}$/.test(token)) return null;

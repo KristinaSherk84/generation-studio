@@ -17,11 +17,12 @@
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { saveSession } from "./lib/sessionStore.js";
+import { saveSession, getSession, replaceSession } from "./lib/sessionStore.js";
 import {
   looksLikeEmail,
   setLeadResumeToken,
   setEmailResumeToken,
+  getEmailResumeToken,
 } from "./lib/leadStore.js";
 
 export const maxDuration = 10;
@@ -62,13 +63,33 @@ export default async function handler(
     : [];
 
   try {
-    const token = await saveSession({
+    const payload = {
       email,
       generatedUrls: body.generatedUrls as string[],
       referencePhotoUrls,
       selections: body.selections ?? null,
       hasWideAngle: body.hasWideAngle === true,
-    });
+    };
+    // One stable resume link per email (2026-08-17). If this email already has
+    // a LIVE saved session, overwrite it in place and REUSE its token instead
+    // of minting a new one — so a customer who generates more than one batch
+    // keeps a single link that always shows their latest shots (plus the wild
+    // cards and any likeness regen, which patch whatever token is current).
+    // Fixes the divergent-snapshot bug where two "ready" emails pointed at two
+    // different grids and only one collected the wild cards / likeness fix.
+    let token: string | null = null;
+    try {
+      const existing = await getEmailResumeToken(email);
+      if (existing && (await getSession(existing))) {
+        const ok = await replaceSession(existing, payload);
+        if (ok) token = existing;
+      }
+    } catch {
+      /* fall through to a fresh save below */
+    }
+    if (!token) {
+      token = await saveSession(payload);
+    }
     // Link this session's resume token to the lead so the 12-hour win-back
     // email can point the customer straight back to their saved grid. MUST be
     // awaited: a fire-and-forget write here gets killed when Vercel suspends
