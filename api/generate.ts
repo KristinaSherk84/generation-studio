@@ -35,6 +35,8 @@ import {
 } from "./lib/freeGenLimit.js";
 import { bumpApiCall } from "./lib/dailyStats.js";
 import { bumpLeadCalls } from "./lib/leadStore.js";
+import { put } from "@vercel/blob";
+import { recordBatchImage } from "./lib/batchStore.js";
 import {
   getPromptOverrides,
   seedPromptCatalog,
@@ -2042,7 +2044,52 @@ export default async function handler(
     const ai = new GoogleGenAI({ apiKey });
     const image = await generateOneHeadshotWithRetry(ai, prompt, photos);
 
-    return res.status(200).json({ image });
+    // Never lose a generated shot to a dropped browser connection (Phase A,
+    // 2026-08-17): save it server-side the instant it's made, keyed to the
+    // batch, so the client can recover it from /api/recover-batch instead of
+    // showing "Connection interrupted". BEST-EFFORT — any failure here is
+    // swallowed and must NEVER affect the image we return to the customer.
+    let savedUrl: string | undefined;
+    try {
+      const m =
+        typeof image === "string"
+          ? /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/s.exec(image)
+          : null;
+      if (body.batchId && m) {
+        const buf = Buffer.from(m[2], "base64");
+        const ext = m[1] === "image/png" ? "png" : "jpg";
+        const slot = typeof body.variationIndex === "number" ? body.variationIndex : 0;
+        const blob = await put(`batch/${body.batchId}-${slot}.${ext}`, buf, {
+          access: "public",
+          contentType: m[1],
+          addRandomSuffix: true,
+        });
+        savedUrl = blob.url;
+        await recordBatchImage(body.batchId, slot, blob.url, {
+          email: typeof body.email === "string" ? body.email : undefined,
+          referencePhotoUrls: Array.isArray(body.photoUrls)
+            ? body.photoUrls
+            : undefined,
+          selections: {
+            style: body.style,
+            attire: body.attire,
+            lighting: body.lighting,
+            background: body.background,
+            skin: body.skin,
+            scrubColor: body.scrubColor,
+            poloColor: body.poloColor,
+          },
+          hasWideAngle: body.hasWideAngle === true,
+        });
+      }
+    } catch (persistErr) {
+      console.warn(
+        "[generate] batch persist (non-fatal):",
+        persistErr instanceof Error ? persistErr.message : String(persistErr),
+      );
+    }
+
+    return res.status(200).json({ image, url: savedUrl });
   } catch (error) {
     // Log full error details to Vercel Runtime Logs so we can see exactly what
     // Google returned (status, message, body). The status-only view in the
