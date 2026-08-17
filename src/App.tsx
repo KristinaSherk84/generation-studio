@@ -15348,7 +15348,11 @@ export default function App() {
       // to come back and VIEW their saved grid) get only MAX_FREE_REGENS (2)
       // single regens — never a fresh full budget. Returning to look at finished
       // shots must not silently hand out 6 more free generations (Kristi 2026-08-04).
-      if (resumedFromEmail && regenCount >= singleCap) {
+      // Resumed-from-email + NOT paid: ZERO free regens (reset-leak fix, Kristi
+      // 2026-08-16). regenCount resets to 0 on the resume page load, so gating on
+      // the counter re-granted a full free budget on every click. Gate on payment
+      // instead; paid users (isUnlocked) fall through to their normal budget.
+      if (resumedFromEmail && !isUnlocked) {
         setShowFreeTierPaywall(true);
         return;
       }
@@ -15536,7 +15540,10 @@ export default function App() {
     // Budget gate — identical to handleRegenerateSlot's caps so wild card
     // regens behave exactly like main-grid regens.
     const singleCap = postPurchaseGrant ? 3 : MAX_FREE_REGENS;
-    if (resumedFromEmail && regenCount >= singleCap) {
+    // Resumed-from-email + NOT paid: ZERO free regens (reset-leak fix, same as
+    // handleRegenerateSlot). regenCount resets on the resume page load, so gate
+    // on payment, not the counter. Paid users fall through to normal budget.
+    if (resumedFromEmail && !isUnlocked) {
       setShowFreeTierPaywall(true);
       return;
     }
@@ -16697,7 +16704,7 @@ export default function App() {
           adminFixMode={adminFixMode}
           adminRegensUsed={adminRegensUsed}
           regenCount={regenCount}
-          maxRegens={resumedFromEmail || (!entryFeeEnabled && !isUnlocked) ? MAX_FREE_REGENS : MAX_SINGLE_REGENS}
+          maxRegens={isUnlocked ? MAX_SINGLE_REGENS : resumedFromEmail ? 0 : !entryFeeEnabled ? MAX_FREE_REGENS : MAX_SINGLE_REGENS}
           regeneratingSlots={regeneratingSlots}
           perfectingSlots={perfectingSlots}
           initialBatchInFlight={initialBatchInFlight}
