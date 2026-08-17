@@ -7405,7 +7405,7 @@ const STYLES: readonly StyleEntry[] = [
   { id: "creative",   name: "Creative Natural",  swatch: "#7A8A5C", silhouette: "#3D452E", visual: "creative" },
   { id: "executive",  name: "Executive",         swatch: "#2A2A28", silhouette: "#6C6B66", visual: "executive" },
   { id: "healthcare", name: "Healthcare",        swatch: "#BCCDCB", silhouette: "#4A6868", visual: "healthcare" },
-  { id: "tech",       name: "Tech / IT",         swatch: "#0E1A2B", silhouette: "#0A0F1A", visual: "tech" },
+  { id: "tech",       name: "IT/Tech",         swatch: "#0E1A2B", silhouette: "#0A0F1A", visual: "tech" },
   { id: "realtor",    name: "Realtor",           swatch: "#C8B68E", silhouette: "#7A6A4A", visual: "realtor", comingSoon: true },
 ] as const;
 
