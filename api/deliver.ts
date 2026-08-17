@@ -991,7 +991,7 @@ export default async function handler(
   if (!Array.isArray(body.referencePhotoUrls)) {
     return res.status(400).json({ error: "referencePhotoUrls must be an array" });
   }
-  if (!body.style || !["corporate", "creative", "executive", "urban", "healthcare"].includes(body.style)) {
+  if (!body.style || !["corporate", "creative", "executive", "urban", "healthcare", "tech"].includes(body.style)) {
     return res.status(400).json({ error: "Invalid style" });
   }
   if (
