@@ -9891,10 +9891,10 @@ const GridScreen = ({
                 >
                   <Lock size={22} style={{ color: C.mediumGrey }} />
                   <div style={{ fontSize: 12.5, fontWeight: 600, color: C.dark, lineHeight: 1.4 }}>
-                    Free generation limit reached
+                    Free Generations Used Up
                   </div>
                   <div style={{ fontSize: 11, color: C.mediumGrey, lineHeight: 1.4 }}>
-                    Unlock unlimited regenerations for $2.99
+                    Unlock Unlimited Regens — $2.99
                   </div>
                   <button
                     type="button"
@@ -16104,18 +16104,23 @@ export default function App() {
       if (freeLimitHitRef.current) {
         // Every call 402'd on the free-tier IP cap — the $2.99 paywall is
         // already open. Refund the optimistic batch count, and CRUCIALLY
-        // restore the grid they came from + leave the loading screen, so
-        // dismissing the paywall doesn't strand them on a frozen "generating"
-        // screen with no way back. (2026-08-11 fix)
+        // leave the loading screen, so dismissing the paywall doesn't strand
+        // them on a frozen "generating" screen with no way back. (2026-08-11)
         setBatchesUsed((n) => Math.max(0, n - 1));
-        // Every slot 402'd — this was a whole capped batch, not a partial.
-        // Clear the per-slot blocked marks set above so the restored prior
-        // grid shows the customer's real earlier shots, not blocked tiles.
-        setBlockedSlots(new Set());
         if (priorGrid.length > 0) {
+          // They have earlier shots to fall back to — clear the per-slot
+          // blocked marks and show those real shots (paywall modal on top).
+          setBlockedSlots(new Set());
           setGeneratedImages(priorGrid);
           setReadyCount(priorGrid.length);
         }
+        // else: no earlier grid to restore (fresh tab, or a resume link, on an
+        // out-of-free-generations IP). KEEP the per-slot blocked marks so all 6
+        // tiles render the "Free Generations Used Up — Unlock Unlimited Regens
+        // $2.99" paywall card (with the Stripe button) instead of falling
+        // through to the generic "Generation failed. Try regenerating."
+        // placeholder — which wrongly reads as a system error to a customer who
+        // simply used up their free generations. (2026-08-17)
         setScreen((sc) => (sc === "loading" ? "grid" : sc));
         return;
       }
