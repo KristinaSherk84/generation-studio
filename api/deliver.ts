@@ -991,28 +991,21 @@ export default async function handler(
   if (!Array.isArray(body.referencePhotoUrls)) {
     return res.status(400).json({ error: "referencePhotoUrls must be an array" });
   }
-  if (!body.style || !["corporate", "creative", "executive", "urban", "healthcare", "tech"].includes(body.style)) {
-    return res.status(400).json({ error: "Invalid style" });
-  }
-  if (
-    !body.attire ||
-    !["formal", "casual", "keep", "medical", "polo"].includes(body.attire)
-  ) {
-    return res.status(400).json({ error: "Invalid attire" });
-  }
-  if (
-    !body.lighting ||
-    !["studio", "natural", "dramatic", "golden"].includes(body.lighting)
-  ) {
-    return res.status(400).json({ error: "Invalid lighting" });
-  }
-  if (
-    body.background &&
-    !["white", "lightgrey", "dark", "black", "blue", "bluebright", "green", "red", "rainbow"].includes(
-      body.background,
-    )
-  ) {
-    return res.status(400).json({ error: "Invalid background" });
+  // NOTE (2026-08-17, per Kristi): we intentionally do NOT re-validate style /
+  // attire / lighting / background here. They arrive already-validated from
+  // /api/generate (the image can't exist without valid selections) and are only
+  // RECORDED into the manifest below — never acted on. The old strict whitelists
+  // duplicated generate.ts and silently broke delivery every time a new option
+  // was added (the polo attire bug, then the IT/Tech style bug). Dropping them
+  // makes every current and future style/attire/color deliver automatically.
+  // generate.ts remains the single source of truth for valid selections.
+  // We still require style/attire/lighting to be PRESENT (a presence check, not
+  // a value whitelist — so any current/future value delivers) since the manifest
+  // types them as required. Background stays optional.
+  if (!body.style || !body.attire || !body.lighting) {
+    return res
+      .status(400)
+      .json({ error: "Missing style, attire, or lighting" });
   }
   if (body.skin && !["realistic", "polished", "glam"].includes(body.skin)) {
     return res.status(400).json({ error: "Invalid skin" });
