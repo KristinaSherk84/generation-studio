@@ -13069,41 +13069,50 @@ const FreeTierPaywallModal = ({ onClose, onPay, onRevert, canRevert }: FreeTierP
         while you check out.
       </div>
       <div style={{ marginTop: 24, display: "flex", gap: 8, flexDirection: "column" }}>
-        <Button onClick={onPay} full>
-          Unlock for $2.99
-        </Button>
         {canRevert ? (
-          <button
-            onClick={onRevert}
-            style={{
-              background: "transparent",
-              border: `1.5px solid ${C.border}`,
-              borderRadius: 8,
-              color: C.dark,
-              fontSize: 14,
-              fontWeight: 600,
-              padding: "11px 8px",
-              cursor: "pointer",
-              fontFamily: "inherit",
-            }}
-          >
-            Go back to my headshots
-          </button>
+          <>
+            {/* Primary action (Kristi 2026-08-17): keep the customer's most
+                recent headshots. The $2.99 unlock is the secondary option. */}
+            <Button onClick={onRevert} full>
+              Go back to my headshots
+            </Button>
+            <button
+              onClick={onPay}
+              style={{
+                background: "transparent",
+                border: `1.5px solid ${C.border}`,
+                borderRadius: 8,
+                color: C.dark,
+                fontSize: 14,
+                fontWeight: 600,
+                padding: "11px 8px",
+                cursor: "pointer",
+                fontFamily: "inherit",
+              }}
+            >
+              Unlock for $2.99
+            </button>
+          </>
         ) : (
-          <button
-            onClick={onClose}
-            style={{
-              background: "transparent",
-              border: "none",
-              color: C.mediumGrey,
-              fontSize: 13,
-              padding: 8,
-              cursor: "pointer",
-              fontFamily: "inherit",
-            }}
-          >
-            Not right now
-          </button>
+          <>
+            <Button onClick={onPay} full>
+              Unlock for $2.99
+            </Button>
+            <button
+              onClick={onClose}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: C.mediumGrey,
+                fontSize: 13,
+                padding: 8,
+                cursor: "pointer",
+                fontFamily: "inherit",
+              }}
+            >
+              Not right now
+            </button>
+          </>
         )}
       </div>
     </div>
