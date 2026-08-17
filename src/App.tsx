@@ -9304,7 +9304,7 @@ const GridScreen = ({
       >
         Regenerations used:{" "}
         {maxRegens >= 9999
-          ? `${regenCount} · unlimited`
+          ? `${regenCount}`
           : `${regenCount} / ${maxRegens}`}
       </div>
       {adminFixMode && (
@@ -9894,7 +9894,7 @@ const GridScreen = ({
                     Free Generations Used Up
                   </div>
                   <div style={{ fontSize: 11, color: C.mediumGrey, lineHeight: 1.4 }}>
-                    Unlock Unlimited Regens — $3.99
+                    Unlock More Generations — $3.99
                   </div>
                   <button
                     type="button"
@@ -13021,7 +13021,7 @@ const FreeRegenWarningModal = ({ onClose }: FreeRegenWarningModalProps) => (
         You're reaching your free regenerate limit
       </div>
       <div style={{ fontSize: 14, color: C.mediumGrey, marginTop: 12, lineHeight: 1.6 }}>
-        After one more single regenerate, you'll need to unlock unlimited regens for $3.99 to keep going.
+        After one more single regenerate, you'll need to unlock more generations for $3.99 to keep going.
       </div>
       <div style={{ marginTop: 24 }}>
         <Button onClick={onClose} full>
@@ -13059,14 +13059,17 @@ const FreeTierPaywallModal = ({ onClose, onPay, onRevert, canRevert }: FreeTierP
   >
     <div style={{ background: C.white, borderRadius: 8, padding: 32, maxWidth: 440 }}>
       <div style={{ fontSize: 18, fontWeight: 500, color: C.dark }}>
-        Unlock unlimited regens
+        Unlock more generations
       </div>
       <div style={{ fontSize: 14, color: C.mediumGrey, marginTop: 12, lineHeight: 1.6 }}>
         Thanks for trying out my app! I paid for your first round of generations
         to get you started. If you'd like to keep perfecting your look, the $3.99
-        covers the generation costs — it unlocks unlimited regenerates for the
+        covers the generation costs — it unlocks more generations for the
         rest of your session, and your saved headshots stay right where they are
         while you check out.
+      </div>
+      <div style={{ fontSize: 12, color: C.mediumGrey, marginTop: 8, lineHeight: 1.5 }}>
+        Up to 50 additional image creation credits.
       </div>
       <div style={{ marginTop: 24, display: "flex", gap: 8, flexDirection: "column" }}>
         {canRevert ? (
@@ -16161,7 +16164,7 @@ export default function App() {
         }
         // else: no earlier grid to restore (fresh tab, or a resume link, on an
         // out-of-free-generations IP). KEEP the per-slot blocked marks so all 6
-        // tiles render the "Free Generations Used Up — Unlock Unlimited Regens
+        // tiles render the "Free Generations Used Up — Unlock More Generations
         // $3.99" paywall card (with the Stripe button) instead of falling
         // through to the generic "Generation failed. Try regenerating."
         // placeholder — which wrongly reads as a system error to a customer who
