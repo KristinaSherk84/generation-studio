@@ -177,6 +177,26 @@
       })(window, document, "clarity", "script", "le4fbqvztl");
     </script>
 
+    <!-- Clarity session stitching (2026-08-18): give each visitor ONE stable
+         ID so Stripe redirects, resume links, and repeat visits show up as a
+         single user/session instead of fragmenting into chunks or duplicate
+         "users". Uses Clarity's Identify API; runs on every page load. The
+         email is still tagged separately (clarity "set" "email") so recordings
+         stay searchable by address. -->
+    <script type="text/javascript">
+      try {
+        var __cid = localStorage.getItem("clarity_uid");
+        if (!__cid) {
+          __cid =
+            "u-" +
+            Date.now().toString(36) +
+            Math.random().toString(36).slice(2, 10);
+          localStorage.setItem("clarity_uid", __cid);
+        }
+        window.clarity("identify", __cid);
+      } catch (e) {}
+    </script>
+
     <!-- Google Analytics 4 (added 2026-05-13) — dedicated GA4 property for
          generationheadshots.com (Property: GenerAItion Headshots,
          Measurement ID: G-4ZHCF8TYLX, Account: Kristina Sherk Analytics,
