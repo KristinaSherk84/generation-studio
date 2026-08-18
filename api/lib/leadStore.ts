@@ -327,9 +327,31 @@ export async function setLeadFoundVia(
 ): Promise<void> {
   if (!looksLikeEmail(email)) return;
   const key = recordKey(email);
+  const clean = foundVia.slice(0, 60);
   const existing = (await redis.get<LeadRecord>(key)) ?? null;
-  if (!existing) return;
-  await redis.set(key, { ...existing, foundVia: foundVia.slice(0, 60) });
+  if (existing) {
+    await redis.set(key, { ...existing, foundVia: clean });
+    return;
+  }
+  // UPSERT (2026-08-18): the "How did you find us?" answer is stashed during
+  // generation and flushed the moment the customer enters their email — which
+  // can beat the lead's recordLead write. Dropping it here (the old
+  // `if (!existing) return`) is exactly why so many leads landed as "unset".
+  // Create a minimal lead instead; a later recordLead spreads ...existing and
+  // preserves foundVia. Same fix already applied to setLeadResumeToken.
+  const now = new Date().toISOString();
+  await redis.set(key, {
+    email: email.trim(),
+    createdAt: now,
+    lastSeenAt: now,
+    generateCount: 0,
+    purchased: false,
+    purchasedAt: null,
+    followedUp: false,
+    source: "found-via",
+    foundVia: clean,
+  } as LeadRecord);
+  await redis.sadd(INDEX_KEY, email.trim().toLowerCase());
 }
 
 /**
