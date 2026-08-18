@@ -9248,6 +9248,35 @@ const GridScreen = ({
     setLoadedUrls((prev) => (prev.has(u) ? prev : new Set(prev).add(u)));
   };
 
+  // Broken-image protection (2026-08-18): if a photo fails to LOAD (a gray
+  // broken block — the image was made & saved fine, the browser just couldn't
+  // draw it), we show a "Problem loading / Try again" decal. "Try again"
+  // re-fetches the SAME saved photo (cache-busted URL) — NOT a regeneration, so
+  // no Gemini call, no cost, identical face.
+  const [failedUrls, setFailedUrls] = useState<Set<string>>(() => new Set());
+  const [imgReload, setImgReload] = useState<Record<string, number>>({});
+  const markFailed = (u: string | undefined) => {
+    if (!u) return;
+    setFailedUrls((prev) => (prev.has(u) ? prev : new Set(prev).add(u)));
+  };
+  const retryImage = (u: string | undefined) => {
+    if (!u) return;
+    setFailedUrls((prev) => {
+      if (!prev.has(u)) return prev;
+      const next = new Set(prev);
+      next.delete(u);
+      return next;
+    });
+    setImgReload((prev) => ({ ...prev, [u]: (prev[u] || 0) + 1 }));
+  };
+  // Append a cache-buster on retry so the browser re-fetches a real URL instead
+  // of re-serving the failed response. Base64/data URLs are returned unchanged.
+  const bustedSrc = (u: string) => {
+    const n = imgReload[u] || 0;
+    if (n <= 0 || !/^https?:\/\//.test(u)) return u;
+    return `${u}${u.includes("?") ? "&" : "?"}_r=${n}`;
+  };
+
   const toggle = (i: number) => {
     const src = images[i];
     if (!src) return; // empty / failed slot — nothing to add
@@ -9958,8 +9987,10 @@ const GridScreen = ({
               ) : src ? (
                 <>
                   {/* Loading shimmer/spinner shown until the image's onLoad
-                      fires; the <img> fades in over it (2026-08-06). */}
-                  {!loadedUrls.has(src) && (
+                      fires; the <img> fades in over it (2026-08-06). Hidden once
+                      the load has FAILED — the "Problem loading" decal below
+                      takes over so the spinner never spins forever. */}
+                  {!loadedUrls.has(src) && !failedUrls.has(src) && (
                     <div
                       style={{
                         position: "absolute",
@@ -9990,11 +10021,12 @@ const GridScreen = ({
                       object-fit:cover renders the 3:4 shot with no distortion —
                       same method the bonus tiles already use. */}
                   <img
-                    src={src}
+                    src={bustedSrc(src)}
                     alt={`Headshot variation ${i + 1}`}
                     draggable={false}
                     decoding="async"
                     onLoad={() => markLoaded(src)}
+                    onError={() => markFailed(src)}
                     onContextMenu={(e) => e.preventDefault()}
                     style={{
                       // Reveal only once fully loaded (see loadedUrls note).
@@ -10018,6 +10050,53 @@ const GridScreen = ({
                       userSelect: "none",
                     }}
                   />
+                  {/* Broken-image decal (2026-08-18): shown when the photo
+                      failed to LOAD. "Try again" re-fetches the SAME saved shot
+                      (cache-busted), never a regeneration. Sits above the img +
+                      watermark via zIndex so the customer isn't left staring at
+                      a spinner that never resolves. */}
+                  {failedUrls.has(src) && (
+                    <div
+                      onClick={(e) => e.stopPropagation()}
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        zIndex: 7,
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 10,
+                        padding: 12,
+                        textAlign: "center",
+                        background: C.lightGrey,
+                      }}
+                    >
+                      <div style={{ fontSize: 12, color: C.mediumGrey, lineHeight: 1.4 }}>
+                        Problem loading this photo
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          retryImage(src);
+                        }}
+                        style={{
+                          padding: "7px 14px",
+                          background: C.dark,
+                          color: C.buttonText,
+                          border: "none",
+                          borderRadius: 8,
+                          fontSize: 12,
+                          fontWeight: 600,
+                          cursor: "pointer",
+                          fontFamily: "inherit",
+                        }}
+                      >
+                        ↻ Try again
+                      </button>
+                    </div>
+                  )}
                   {/* Watermark overlay — two diagonal lines of thin text,
                       one at upper-third height and one at lower-third height.
                       Light enough not to drown the image, but placed across
