@@ -7184,13 +7184,10 @@ const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) 
             marginTop: 8,
           }}
         >
-          Crop tightly to your face, head, and torso for best results.
+          Crop tightly to your face, head, and torso for best results. Scroll
+          down for more tips.
         </div>
       </div>
-
-      <p style={{ fontSize: 15, color: C.mediumGrey, marginTop: 16, lineHeight: 1.6 }}>
-        5 to 8 photos works best. Faces clearly visible, varied angles and expressions.
-      </p>
 
       <div
         onDrop={onDrop}
@@ -7381,16 +7378,115 @@ const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) 
         </div>
       )}
 
-      <PhotogTip style={{ marginTop: 24 }}>
-        Good light beats everything. Face a window, keep shadows off the face, and skip heavy
-        filters — the AI reads what's actually there. Varied expressions give the generator room to
-        work.
-      </PhotogTip>
-
       <div style={{ marginTop: 32 }}>
         <Button onClick={onNext} disabled={!canContinue} full>
           {ctaLabel}
         </Button>
+      </div>
+
+      {/* Full upload tips, always visible at the bottom of the page
+          (Kristi 2026-08-19 — the pre-upload tips popup was easy to miss, so
+          the same guidance now lives permanently here). Reuses PHOTOG_TIPS so
+          this section and the PhotographerTipsModal never drift apart. */}
+      <div
+        style={{
+          marginTop: 40,
+          paddingTop: 28,
+          borderTop: `1px solid ${C.border}`,
+        }}
+      >
+        <div
+          style={{
+            fontSize: 11,
+            letterSpacing: 2,
+            color: C.mediumGrey,
+            textTransform: "uppercase",
+            fontWeight: 500,
+            marginBottom: 8,
+          }}
+        >
+          Photographer's tips
+        </div>
+        <h3
+          style={{
+            fontSize: 22,
+            fontWeight: 500,
+            color: C.dark,
+            margin: "0 0 6px",
+            letterSpacing: -0.4,
+          }}
+        >
+          Tips for uploading the best reference photos
+        </h3>
+        <p
+          style={{
+            fontSize: 14,
+            color: C.mediumGrey,
+            marginTop: 0,
+            marginBottom: 18,
+            lineHeight: 1.5,
+          }}
+        >
+          A few tips from the photographer/creator that will drastically improve
+          your generated shots.
+        </p>
+        <ol style={{ paddingLeft: 0, listStyle: "none", margin: 0 }}>
+          {PHOTOG_TIPS.map((tip, idx) => (
+            <li
+              key={idx}
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 14,
+                marginBottom: 12,
+                paddingBottom: 12,
+                borderBottom:
+                  idx < PHOTOG_TIPS.length - 1
+                    ? `1px solid ${C.border}`
+                    : "none",
+              }}
+            >
+              <div
+                style={{
+                  flexShrink: 0,
+                  width: 28,
+                  height: 28,
+                  borderRadius: "50%",
+                  background: C.dark,
+                  color: C.white,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 13,
+                  fontWeight: 500,
+                }}
+              >
+                {idx + 1}
+              </div>
+              <div>
+                <div
+                  style={{
+                    fontSize: 15,
+                    fontWeight: 500,
+                    color: C.dark,
+                    marginBottom: 2,
+                  }}
+                >
+                  {tip.title}
+                </div>
+                <div
+                  style={{
+                    fontSize: 13,
+                    color: C.mediumGrey,
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {tip.body}
+                </div>
+              </div>
+            </li>
+          ))}
+        </ol>
       </div>
     </div>
   );
@@ -10797,14 +10893,20 @@ const LoadingRetouchPreviewModal = ({
 // deliberately avoids implying headshots are emailed/delivered for free —
 // delivery only happens after purchase (see /api/deliver).
 type EmailCaptureModalProps = {
-  onSubmit: (email: string) => void;
+  onSubmit: (email: string, foundVia: string) => void;
   onClose: () => void;
 };
 const EmailCaptureModal = ({ onSubmit, onClose }: EmailCaptureModalProps) => {
   const [value, setValue] = useState("");
-  const valid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value.trim());
+  // Combined gate (2026-08-19, Kristi): the "How did you find us?" question now
+  // lives inside this email popup instead of firing separately during
+  // generation. "Generate my headshots" stays disabled until BOTH the email is
+  // valid AND a source has been picked.
+  const [foundVia, setFoundVia] = useState("");
+  const emailValid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value.trim());
+  const valid = emailValid && foundVia !== "";
   const submit = () => {
-    if (valid) onSubmit(value.trim());
+    if (valid) onSubmit(value.trim(), foundVia);
   };
   return (
     <div
@@ -10831,6 +10933,8 @@ const EmailCaptureModal = ({ onSubmit, onClose }: EmailCaptureModalProps) => {
           padding: "28px 24px",
           maxWidth: 420,
           width: "100%",
+          maxHeight: "90vh",
+          overflowY: "auto",
         }}
       >
         <button
@@ -10878,6 +10982,21 @@ const EmailCaptureModal = ({ onSubmit, onClose }: EmailCaptureModalProps) => {
           Input your email to see your results and save your session in case
           anything happens.
         </p>
+        {/* Two clearly separated steps (Kristi 2026-08-19): email first, then
+            the "How did you find us?" question as its own section below a
+            divider. */}
+        <div
+          style={{
+            fontSize: 11,
+            letterSpacing: 1.5,
+            textTransform: "uppercase",
+            fontWeight: 600,
+            color: C.mediumGrey,
+            marginBottom: 8,
+          }}
+        >
+          Step 1 · Your email
+        </div>
         <input
           type="email"
           value={value}
@@ -10893,11 +11012,77 @@ const EmailCaptureModal = ({ onSubmit, onClose }: EmailCaptureModalProps) => {
             fontSize: 15,
             border: `1px solid ${C.border}`,
             borderRadius: 8,
-            marginBottom: 14,
             boxSizing: "border-box",
             ...font,
           }}
         />
+
+        {/* Divider between the two steps */}
+        <div
+          style={{ height: 1, background: C.border, margin: "22px 0 18px" }}
+        />
+
+        {/* Step 2 — "How did you find us?" (single-select; one option must be
+            picked before Generate enables). */}
+        <div
+          style={{
+            fontSize: 11,
+            letterSpacing: 1.5,
+            textTransform: "uppercase",
+            fontWeight: 600,
+            color: C.mediumGrey,
+            marginBottom: 8,
+          }}
+        >
+          Step 2 · One quick question
+        </div>
+        <div
+          style={{
+            fontSize: 19,
+            fontWeight: 600,
+            color: C.dark,
+            margin: "0 0 14px",
+            lineHeight: 1.3,
+          }}
+        >
+          How did you find us?
+        </div>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 8,
+            marginBottom: 18,
+          }}
+        >
+          {FOUND_VIA_OPTIONS.map((o) => {
+            const picked = foundVia === o;
+            // Selected source = dark grey (Kristi 2026-08-19), distinct from
+            // the near-black Generate button.
+            const pickedGrey = "#57564F";
+            return (
+              <button
+                key={o}
+                type="button"
+                onClick={() => setFoundVia(o)}
+                style={{
+                  background: picked ? pickedGrey : C.white,
+                  color: picked ? C.white : C.dark,
+                  border: `1px solid ${picked ? pickedGrey : C.border}`,
+                  borderRadius: 10,
+                  padding: "12px 14px",
+                  fontSize: 14,
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  touchAction: "manipulation",
+                }}
+              >
+                {o}
+              </button>
+            );
+          })}
+        </div>
         <button
           onClick={submit}
           disabled={!valid}
@@ -15359,12 +15544,13 @@ export default function App() {
   // short delay so the "Generate" tap has fully lifted — a clean fresh tap
   // closes it, and it is nowhere near the results/cart.
   useEffect(() => {
+    // The "How did you find us?" question now lives in the up-front email gate
+    // (Kristi 2026-08-19), so it no longer auto-fires during generation. We
+    // still mark it "seen" for state consistency, but never open the standalone
+    // survey here. (To restore the mid-generation prompt, put back the
+    // setShowFoundViaSurvey(true) timeout that used to live in this effect.)
     if (screen !== "loading" || hasSeenFoundViaSurvey) return;
-    const t = setTimeout(() => {
-      setShowFoundViaSurvey(true);
-      setHasSeenFoundViaSurvey(true);
-    }, 700);
-    return () => clearTimeout(t);
+    setHasSeenFoundViaSurvey(true);
   }, [screen, hasSeenFoundViaSurvey]);
 
   // Retouch/glam heads-up popup fires once 3 of 6 headshots are visible (so it
@@ -15867,9 +16053,22 @@ export default function App() {
   // then re-invoke handleGenerate with the same selections (passing the
   // email through as an override so it doesn't re-trip the gate on the
   // stale `email` state this same tick).
-  const handleEmailGateSubmit = (enteredEmail: string) => {
+  const handleEmailGateSubmit = (enteredEmail: string, foundVia?: string) => {
     setEmail(enteredEmail);
     setShowEmailGate(false);
+    // Record the "How did you find us?" answer now captured in the same gate
+    // (Kristi 2026-08-19). Best-effort — attribution must never block the flow.
+    if (foundVia) {
+      try {
+        void fetch("/api/lead", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: enteredEmail, foundVia }),
+        }).catch(() => {});
+      } catch {
+        /* attribution capture must never block generation */
+      }
+    }
     // NOTE: the lead capture / batch count now happens inside handleGenerate
     // (once per actual batch, after the gates) so generateCount reflects real
     // generation activity and spend — see the ping there. (2026-08-03)
