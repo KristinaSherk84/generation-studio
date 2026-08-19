@@ -10572,6 +10572,7 @@ const FOUND_VIA_OPTIONS = [
   "Google Ad",
   "LinkedIn Ad",
   "Facebook",
+  "Email",
   "Referral",
 ] as const;
 
