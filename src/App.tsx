@@ -10880,7 +10880,7 @@ const LoadingRetouchPreviewModal = ({
           ...font,
         }}
       >
-        {retouchLocked ? `Please wait… ${retouchRemaining}s` : "Got it"}
+        {retouchLocked ? `The magic is happening… ${retouchRemaining}s` : "Got it"}
       </button>
     </div>
   </div>
@@ -12978,7 +12978,11 @@ const DownloadScreen = ({
               Intro paragraph removed (heading + cards carry the message),
               icon shrunk, padding + margins + font sizes tightened. */}
           <div
-            onClick={(e) => e.stopPropagation()}
+            // Click ANYWHERE on the card also dismisses (Kristi 2026-08-19):
+            // people were tapping the "On your phone" / "On your computer"
+            // boxes expecting to continue. Only the "Don't show this again"
+            // row stops propagation so it can be toggled without closing.
+            onClick={dismissInstructions}
             style={{
               background: C.white,
               borderRadius: 12,
@@ -13097,6 +13101,7 @@ const DownloadScreen = ({
                 the user dismisses with it ticked. Unticked by default so
                 first-time visitors always see the explanation. */}
             <label
+              onClick={(e) => e.stopPropagation()}
               style={{
                 display: "flex",
                 alignItems: "center",
