@@ -10743,11 +10743,24 @@ const LoadingRetouchPreviewModal = ({
     return () => window.clearTimeout(id);
   }, []);
   const retouchLocked = retouchRemaining > 0;
+  // Dedupe: a single tap can fire onPointerUp AND onClick AND bubble to the
+  // backdrop — only dismiss once. (2026-08-19) Root fix for customers getting
+  // STUCK on this popup: a plain onClick was being dropped on some mobile
+  // browsers, and clicking elsewhere did nothing, so people abandoned. Now the
+  // buttons respond to pointer-up too, and (once unlocked) tapping anywhere on
+  // the popup closes it.
+  const dismissedRef = useRef(false);
+  const finish = () => {
+    if (dismissedRef.current) return;
+    dismissedRef.current = true;
+    onDismiss();
+  };
   return (
   <div
     role="dialog"
     aria-modal="true"
     aria-label="Heads up — your retouch choice is coming next"
+    onClick={retouchLocked ? undefined : finish}
     style={{
       position: "fixed",
       inset: 0,
@@ -10800,7 +10813,8 @@ const LoadingRetouchPreviewModal = ({
         </div>
       ) : (
         <button
-          onClick={onDismiss}
+          onClick={finish}
+          onPointerUp={finish}
           aria-label="Close"
           style={{
             position: "absolute",
@@ -10864,7 +10878,8 @@ const LoadingRetouchPreviewModal = ({
         }}
       />
       <button
-        onClick={retouchLocked ? undefined : onDismiss}
+        onClick={retouchLocked ? undefined : finish}
+        onPointerUp={retouchLocked ? undefined : finish}
         disabled={retouchLocked}
         style={{
           width: "100%",
