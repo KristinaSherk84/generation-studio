@@ -16157,23 +16157,35 @@ export default function App() {
   // Last-chance upsell (2026-08-20). Clicking "Check out" with EXACTLY ONE
   // pick opens the add-more popup instead of advancing; any other cart size
   // goes straight to the retouch/checkout flow.
-  const handleGridCheckout = (selections: string[]) => {
-    if (selections.length === 1) {
+  // Fires from the RETOUCH screen's "Continue to checkout" (2026-08-20, moved
+  // here from the grid a screen earlier per Kristi — customers do their picking
+  // on the grid, so the last-chance offer belongs at the step AFTER picking).
+  // If exactly one photo is heading to checkout, open the add-more popup;
+  // otherwise go straight to the checkout screen.
+  const handleRetouchContinue = () => {
+    if (selectedImageUrls.length === 1) {
       setShowUpsell(true);
       return;
     }
-    handleAdvanceToRetouch(selections);
+    setScreen("checkout");
   };
-  // Add an unpicked shot from the upsell popup: into the cart, at the chosen
-  // tier, flagged for the 30% discount. Guarded against exceeding the cap.
+  // Add an unpicked shot from the upsell popup: into the checkout list AND the
+  // cart, at the chosen tier, flagged for the 30% discount. Guarded against
+  // exceeding the cap.
   const handleUpsellAdd = (url: string, tier: RetouchTier) => {
-    if (cart.length >= MAX_CART_SIZE || cart.includes(url)) return;
+    if (
+      selectedImageUrls.length >= MAX_CART_SIZE ||
+      selectedImageUrls.includes(url)
+    )
+      return;
     addToCart(url);
+    setSelectedImageUrls((prev) => (prev.includes(url) ? prev : [...prev, url]));
     setRetouchTiers((prev) => ({ ...prev, [url]: tier }));
     setDiscountedUrls((prev) => new Set(prev).add(url));
   };
   const handleUpsellRemove = (url: string) => {
     removeFromCart(url); // also clears the discount flag (see removeFromCart)
+    setSelectedImageUrls((prev) => prev.filter((u) => u !== url));
     setRetouchTiers((prev) => {
       if (!(url in prev)) return prev;
       const next = { ...prev };
@@ -16181,11 +16193,11 @@ export default function App() {
       return next;
     });
   };
-  // Both popup exits proceed to the normal checkout with whatever is now in
-  // the cart — "skip" simply means they added nothing.
+  // Both popup exits go on to the checkout screen with whatever is now in the
+  // checkout list — "skip" simply means they added nothing.
   const handleUpsellProceed = () => {
     setShowUpsell(false);
-    handleAdvanceToRetouch(cart);
+    setScreen("checkout");
   };
 
   // Regenerate a SINGLE thumbnail slot, reusing the most recently-submitted
@@ -17595,7 +17607,7 @@ export default function App() {
       {screen === "grid" && (
         <GridScreen
           images={generatedImages}
-          onDeliver={handleGridCheckout}
+          onDeliver={handleAdvanceToRetouch}
           onBack={() => setScreen("style")}
           onRegenerateSlot={handleRegenerateSlot}
           onRegenerateWildCard={handleRegenerateWildCard}
@@ -17617,13 +17629,16 @@ export default function App() {
           wildCards={wildCards}
         />
       )}
-      {/* Last-chance upsell popup — overlays the grid when it's open (2026-08-20). */}
+      {/* Last-chance upsell popup — overlays the retouch screen when it's open,
+          fired from that screen's "Continue to checkout" (2026-08-20). */}
       {showUpsell &&
         (() => {
-          // Pool = every generated shot EXCEPT the original grid pick(s).
+          // Pool = every generated shot EXCEPT the customer's original pick(s).
           // Added shots stay in the pool (shown as "Added") so they can be
-          // removed. The original pick = cart items NOT flagged discounted.
-          const original = new Set(cart.filter((u) => !discountedUrls.has(u)));
+          // removed. Original pick = checkout-list items NOT flagged discounted.
+          const original = new Set(
+            selectedImageUrls.filter((u) => !discountedUrls.has(u)),
+          );
           const seen = new Set<string>();
           const pool: string[] = [];
           for (const u of generatedImages) {
@@ -17648,7 +17663,7 @@ export default function App() {
               wildCardUrls={wildSet}
               discountedUrls={discountedUrls}
               addedTier={retouchTiers}
-              cartFull={cart.length >= MAX_CART_SIZE}
+              cartFull={selectedImageUrls.length >= MAX_CART_SIZE}
               onAdd={handleUpsellAdd}
               onRemove={handleUpsellRemove}
               onProceed={handleUpsellProceed}
@@ -17660,7 +17675,7 @@ export default function App() {
           selectedUrls={selectedImageUrls}
           retouchTiers={retouchTiers}
           setRetouchTiers={setRetouchTiers}
-          onContinue={() => setScreen("checkout")}
+          onContinue={handleRetouchContinue}
           onBack={() => setScreen("grid")}
           onRemovePick={(url) => {
             // Trash button on a retouch row (Phase 5, 2026-06-03).
