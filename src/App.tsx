@@ -17643,7 +17643,7 @@ export default function App() {
           adminFixMode={adminFixMode}
           adminRegensUsed={adminRegensUsed}
           regenCount={regenCount}
-          maxRegens={isUnlocked ? MAX_SINGLE_REGENS : resumedFromEmail ? 0 : !entryFeeEnabled ? MAX_FREE_REGENS : MAX_SINGLE_REGENS}
+          maxRegens={adminFixMode ? MAX_SINGLE_REGENS : isUnlocked ? MAX_SINGLE_REGENS : resumedFromEmail ? 0 : !entryFeeEnabled ? MAX_FREE_REGENS : MAX_SINGLE_REGENS}
           regeneratingSlots={regeneratingSlots}
           perfectingSlots={perfectingSlots}
           initialBatchInFlight={initialBatchInFlight}
