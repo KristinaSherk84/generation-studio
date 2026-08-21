@@ -38,12 +38,22 @@ export const maxDuration = 15;
 const PRICE_BASIC_CENTS = 1299;     // $12.99 — Realistic only, no retouching
 const PRICE_DELUXE_CENTS = 1799;   // $17.99 — Realistic + Polished + Glam
 
+// Last-chance upsell discount (2026-08-20): shots added in the post-"Check out"
+// popup are charged 30% off. The CLIENT only says WHICH photos are discounted
+// (the discounted[] flags); the server owns the 30% amount so it can't be
+// tampered with client-side.
+const UPSELL_DISCOUNT = 0.3;
+
 type RetouchTier = "basic" | "deluxe";
 
 type CreatePhotoCheckoutBody = {
   // One entry per picked photo, in the same order the photos were picked.
   // The length of this array determines the total photo count.
   retouchTiers: RetouchTier[];
+  // Optional per-photo 30%-off flags, same order/length as retouchTiers. True
+  // = added via the last-chance upsell popup → charged 30% off. Missing or
+  // shorter arrays are treated as full price for the unspecified photos.
+  discounted?: boolean[];
   // Optional — the email captured by Stripe during the Phase 1 entry
   // checkout. When present we pass it as `customer_email` on the Phase 2
   // session so the Stripe page shows it pre-filled AND so Stripe Link can
@@ -104,11 +114,22 @@ export default async function handler(
   const basicCount = tiers.filter((t) => t === "basic").length;
   const deluxeCount = tiers.filter((t) => t === "deluxe").length;
 
-  // Mixed total: Basic at $12.99 each + Deluxe at $17.99 each.
-  const totalCents = tiers.reduce(
-    (sum, t) => sum + priceCentsForTier(t),
-    0,
-  );
+  // Per-photo 30%-off flags from the upsell popup (optional). Coerce to a
+  // boolean array the same length as tiers; anything missing = full price.
+  const rawDiscounted = Array.isArray(body?.discounted) ? body.discounted : [];
+  const discounted: boolean[] = tiers.map((_, i) => rawDiscounted[i] === true);
+  const discountedCount = discounted.filter(Boolean).length;
+
+  // Mixed total: each photo at its tier price, minus 30% for any flagged as an
+  // upsell add. Rounded PER PHOTO so it matches the client's on-screen total
+  // exactly.
+  const totalCents = tiers.reduce((sum, t, i) => {
+    const base = priceCentsForTier(t);
+    const charged = discounted[i]
+      ? Math.round(base * (1 - UPSELL_DISCOUNT))
+      : base;
+    return sum + charged;
+  }, 0);
 
   const host = req.headers.host;
   if (!host) {
@@ -125,6 +146,9 @@ export default async function handler(
     itemName = `${deluxeCount} Glow Up Deluxe headshot${deluxeCount > 1 ? "s" : ""} (3 versions each)`;
   } else {
     itemName = `${basicCount} basic AI headshot${basicCount > 1 ? "s" : ""}`;
+  }
+  if (discountedCount > 0) {
+    itemName += ` (${discountedCount} at 30% off)`;
   }
 
   const formBody = new URLSearchParams();

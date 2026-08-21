@@ -10540,6 +10540,20 @@ const GridScreen = ({
 // before purchase.
 export type RetouchTier = "basic" | "deluxe";
 
+// Per-photo prices in cents — single source for the client's display math.
+// The SERVER (create-photo-checkout-session.ts) is the source of truth for the
+// actual charge; these must stay in sync with it. (2026-08-20)
+const PHOTO_BASIC_CENTS = 1299; // $12.99 Realistic
+const PHOTO_DELUXE_CENTS = 1799; // $17.99 Glow Up Bundle
+// Last-chance upsell discount: shots added in the post-"Check out" popup get
+// 30% off. Applied per-photo and rounded to match the server exactly.
+const UPSELL_DISCOUNT = 0.3;
+const centsForTier = (t: RetouchTier): number =>
+  t === "deluxe" ? PHOTO_DELUXE_CENTS : PHOTO_BASIC_CENTS;
+const centsAfterUpsell = (cents: number): number =>
+  Math.round(cents * (1 - UPSELL_DISCOUNT));
+const usdCents = (cents: number): string => `$${(cents / 100).toFixed(2)}`;
+
 // Per-tier copy used in both the intro popup AND inline on the
 // RetouchScreen — single source of truth so they don't drift.
 const RETOUCH_TIER_DESCRIPTIONS: {
@@ -11690,6 +11704,9 @@ type CheckoutScreenProps = {
   // appropriate Pro retouching pass per photo before sending the email.
   // "realistic" = no retouching; "polished" / "glam" = Pro retouch.
   retouchTiers: RetouchTier[];
+  // Per-photo 30%-off flag (same order as retouchTiers). True for shots added
+  // via the last-chance upsell popup. (2026-08-20)
+  discounted: boolean[];
   // On success: parent navigates to the download screen with the email the
   // user typed + the public Blob URLs for the delivered photos.
   onComplete: (args: {
@@ -11721,6 +11738,7 @@ const CheckoutScreen = ({
   referencePhotoUrls,
   selections,
   retouchTiers,
+  discounted,
   onComplete,
   onBack,
 }: CheckoutScreenProps) => {
@@ -11799,8 +11817,18 @@ const CheckoutScreen = ({
   const PRICE_DELUXE = 17.99;
   const basicCount = retouchTiers.filter((t) => t === "basic").length;
   const deluxeCount = retouchTiers.filter((t) => t === "deluxe").length;
+  // Full-price subtotal (before any last-chance upsell discount).
   const subtotal = PRICE_BASIC * basicCount + PRICE_DELUXE * deluxeCount;
-  const totalOwed = subtotal;
+  // Charged total in cents, applying the 30% upsell discount to any photo
+  // flagged in discounted[]. Computed per-photo in cents and rounded the same
+  // way the server does (create-photo-checkout-session.ts) so the on-screen
+  // total EXACTLY matches what Stripe charges.
+  const chargedCents = retouchTiers.reduce((sum, t, i) => {
+    const base = centsForTier(t);
+    return sum + (discounted[i] ? centsAfterUpsell(base) : base);
+  }, 0);
+  const totalOwed = chargedCents / 100;
+  const savings = Math.max(0, subtotal - totalOwed);
   const fmt = (n: number) => `$${n.toFixed(2)}`;
 
   const submit = async () => {
@@ -11945,6 +11973,10 @@ const CheckoutScreen = ({
             // Glow Up Deluxe pricing (2026-05-18): server computes the
             // mixed total from the tier array. Length = photo count.
             retouchTiers,
+            // Per-photo 30%-off flags for shots added via the last-chance
+            // upsell (2026-08-20). Same order as retouchTiers; the server
+            // applies the discount so it can't be tampered with client-side.
+            discounted,
             // Forward the email so Stripe pre-fills it on the Checkout page.
             // If Stripe Link has a saved card for this email, Link auto-fills
             // the payment method with one tap — effectively turning the
@@ -12052,6 +12084,20 @@ const CheckoutScreen = ({
             </span>
             <span>{fmt(subtotal)}</span>
           </div>
+          {savings > 0.005 && (
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                color: "#1B6B4C",
+                fontSize: 13,
+                marginTop: 6,
+              }}
+            >
+              <span>Last-chance discount (30% off add-ons)</span>
+              <span>−{fmt(savings)}</span>
+            </div>
+          )}
           <div
             style={{
               display: "flex",
@@ -13846,6 +13892,327 @@ function euclideanDistance(a: number[], b: number[]): number {
   return Math.sqrt(sum);
 }
 
+// -------------------- Last-chance upsell popup (2026-08-20) --------------------
+// Fires when the customer clicks "Check out" with EXACTLY ONE headshot picked.
+// Shows every UNPICKED generated shot (wild cards included) with two one-tap
+// add buttons, each 30% off, framed as a last chance because unpicked shots are
+// not stored after checkout. Added shots go into the cart at their chosen tier
+// + a discount flag and can be removed again. "Continue"/"Skip" both advance to
+// the normal checkout with whatever is in the cart.
+type UpsellModalProps = {
+  pool: string[]; // unpicked shot URLs (grid + wild cards); original pick excluded
+  wildCardUrls: Set<string>; // which pool URLs are wild cards (for the badge)
+  discountedUrls: Set<string>; // which pool URLs the customer has added
+  addedTier: Record<string, RetouchTier>; // tier chosen per added URL
+  cartFull: boolean; // cart at the per-order max — block further adds
+  onAdd: (url: string, tier: RetouchTier) => void;
+  onRemove: (url: string) => void;
+  onProceed: () => void;
+};
+const UpsellModal = ({
+  pool,
+  wildCardUrls,
+  discountedUrls,
+  addedTier,
+  cartFull,
+  onAdd,
+  onRemove,
+  onProceed,
+}: UpsellModalProps) => {
+  const addedCount = pool.filter((u) => discountedUrls.has(u)).length;
+  const totalPhotos = addedCount + 1; // the one original pick + the adds
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Add more headshots before checkout"
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.6)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 16,
+        zIndex: 1100,
+        ...font,
+      }}
+    >
+      <div
+        style={{
+          background: C.white,
+          borderRadius: 16,
+          maxWidth: 440,
+          width: "100%",
+          maxHeight: "92vh",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            padding: "20px 20px 14px",
+            textAlign: "center",
+            borderBottom: `1px solid ${C.border}`,
+          }}
+        >
+          <div
+            style={{
+              display: "inline-block",
+              background: "#1B6B4C",
+              color: "#fff",
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: 0.5,
+              padding: "4px 10px",
+              borderRadius: 20,
+              marginBottom: 8,
+            }}
+          >
+            LAST CHANCE — 30% OFF
+          </div>
+          <h2
+            style={{
+              fontSize: 18,
+              fontWeight: 600,
+              margin: "0 0 5px",
+              color: C.dark,
+              lineHeight: 1.3,
+            }}
+          >
+            ⚠️ Unchosen shots won't be saved ⚠️
+          </h2>
+          <p
+            style={{
+              fontSize: 12.5,
+              color: C.mediumGrey,
+              margin: 0,
+              lineHeight: 1.45,
+            }}
+          >
+            We don't keep the headshots you don't buy. After checkout, they're{" "}
+            <strong>gone for good</strong>.
+          </p>
+        </div>
+
+        {/* Shot list — sized to reveal ~3.5 rows so the scroll is obvious. */}
+        <div style={{ maxHeight: 372, overflowY: "auto", padding: "12px 12px 0" }}>
+          {pool.length === 0 && (
+            <div
+              style={{
+                textAlign: "center",
+                color: C.mediumGrey,
+                fontSize: 13,
+                padding: "24px 0",
+              }}
+            >
+              No other shots to add.
+            </div>
+          )}
+          {pool.map((url) => {
+            const added = discountedUrls.has(url);
+            const isWild = wildCardUrls.has(url);
+            return (
+              <div
+                key={url}
+                style={{
+                  display: "flex",
+                  gap: 10,
+                  padding: 8,
+                  border: `1px solid ${added ? "#1B6B4C" : C.border}`,
+                  background: added ? "#f2fbf6" : C.white,
+                  borderRadius: 10,
+                  marginBottom: 8,
+                  alignItems: "center",
+                }}
+              >
+                <div
+                  onContextMenu={(e) => e.preventDefault()}
+                  style={{
+                    position: "relative",
+                    width: 62,
+                    height: 82,
+                    borderRadius: 7,
+                    overflow: "hidden",
+                    flexShrink: 0,
+                    background: C.lightGrey,
+                  }}
+                >
+                  <img
+                    src={url}
+                    alt=""
+                    draggable={false}
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "cover",
+                      pointerEvents: "none",
+                      WebkitTouchCallout: "none",
+                    }}
+                  />
+                  {isWild && (
+                    <span
+                      style={{
+                        position: "absolute",
+                        top: 3,
+                        left: 3,
+                        background: "#C9A961",
+                        color: "#3a2f10",
+                        fontSize: 8,
+                        fontWeight: 700,
+                        padding: "1px 5px",
+                        borderRadius: 9,
+                      }}
+                    >
+                      WILD CARD
+                    </span>
+                  )}
+                </div>
+                <div
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 6,
+                    justifyContent: "center",
+                  }}
+                >
+                  {added ? (
+                    <>
+                      <div
+                        style={{ fontSize: 13, fontWeight: 700, color: "#1B6B4C" }}
+                      >
+                        ✓ Added —{" "}
+                        {addedTier[url] === "deluxe" ? "Glam bundle" : "Realistic"},{" "}
+                        {usdCents(
+                          centsAfterUpsell(centsForTier(addedTier[url] ?? "basic")),
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => onRemove(url)}
+                        style={{
+                          alignSelf: "flex-start",
+                          background: "transparent",
+                          border: "none",
+                          color: C.mediumGrey,
+                          fontSize: 12,
+                          textDecoration: "underline",
+                          cursor: "pointer",
+                          fontFamily: "inherit",
+                          padding: 0,
+                        }}
+                      >
+                        Remove
+                      </button>
+                    </>
+                  ) : (
+                    (
+                      [
+                        ["basic", "Realistic", PHOTO_BASIC_CENTS],
+                        ["deluxe", "Glam bundle", PHOTO_DELUXE_CENTS],
+                      ] as const
+                    ).map(([tier, label, cents]) => (
+                      <button
+                        key={tier}
+                        type="button"
+                        disabled={cartFull}
+                        onClick={() => onAdd(url, tier)}
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          border: `1px solid ${C.dark}`,
+                          background: tier === "deluxe" ? C.dark : C.white,
+                          color: tier === "deluxe" ? C.buttonText : C.dark,
+                          borderRadius: 8,
+                          padding: "7px 11px",
+                          cursor: cartFull ? "default" : "pointer",
+                          opacity: cartFull ? 0.45 : 1,
+                          fontFamily: "inherit",
+                        }}
+                      >
+                        <span style={{ fontSize: 12.5, fontWeight: 600 }}>
+                          {label}
+                        </span>
+                        <span style={{ fontSize: 12.5, fontWeight: 600 }}>
+                          <span
+                            style={{
+                              color: C.mediumGrey,
+                              textDecoration: "line-through",
+                              fontWeight: 400,
+                              fontSize: 11,
+                              marginRight: 6,
+                            }}
+                          >
+                            {usdCents(cents)}
+                          </span>
+                          <span
+                            style={{
+                              color: tier === "deluxe" ? "#8fe0b8" : "#1B6B4C",
+                            }}
+                          >
+                            {usdCents(centsAfterUpsell(cents))}
+                          </span>
+                        </span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div
+          style={{ padding: "14px 16px 18px", borderTop: `1px solid ${C.border}` }}
+        >
+          {cartFull && (
+            <div
+              style={{
+                fontSize: 12,
+                color: C.mediumGrey,
+                textAlign: "center",
+                marginBottom: 8,
+              }}
+            >
+              You've added the max number of headshots for one order.
+            </div>
+          )}
+          <Button onClick={onProceed} full>
+            {addedCount > 0
+              ? `Continue to checkout — ${totalPhotos} photos`
+              : "Continue to checkout →"}
+          </Button>
+          <button
+            type="button"
+            onClick={onProceed}
+            style={{
+              width: "100%",
+              background: "transparent",
+              border: "none",
+              color: C.mediumGrey,
+              fontSize: 13,
+              padding: "12px 0 2px",
+              cursor: "pointer",
+              fontFamily: "inherit",
+              textDecoration: "underline",
+            }}
+          >
+            {addedCount > 0
+              ? "Skip — check out without the extras"
+              : "No thanks, just my 1 headshot"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export default function App() {
   const [screen, setScreen] = useState<Screen>("landing");
 
@@ -14427,6 +14794,13 @@ export default function App() {
       // silently skip. The in-memory cart still works for this session.
     }
   }, [cart]);
+  // Last-chance upsell (2026-08-20): URLs added via the post-"Check out" popup
+  // are flagged here so their 30% discount rides through to the checkout total
+  // AND the pricing API. showUpsell toggles the popup itself.
+  const [discountedUrls, setDiscountedUrls] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [showUpsell, setShowUpsell] = useState(false);
   const addToCart = (url: string) => {
     setCart((prev) => {
       if (prev.includes(url)) return prev;
@@ -14436,6 +14810,13 @@ export default function App() {
   };
   const removeFromCart = (url: string) => {
     setCart((prev) => (prev.includes(url) ? prev.filter((u) => u !== url) : prev));
+    // Drop any last-chance upsell discount flag when the item leaves the cart.
+    setDiscountedUrls((prev) => {
+      if (!prev.has(url)) return prev;
+      const next = new Set(prev);
+      next.delete(url);
+      return next;
+    });
   };
   // Photographer's tips modal: shown the first time the user arrives at the
   // Upload screen in a given session. Resets when reset() fires so starting
@@ -15354,6 +15735,9 @@ export default function App() {
     // Clear cart (Phase 1, 2026-06-03). Reset means new session, new source
     // photos — prior cart URLs no longer reference anything meaningful.
     setCart([]);
+    // Clear last-chance upsell state along with the cart (2026-08-20).
+    setDiscountedUrls(new Set());
+    setShowUpsell(false);
     // Reset batch counter (Phase 4, 2026-06-03). Fresh session, fresh
     // budget. Also clear any leftover gating modal state.
     setBatchesUsed(0);
@@ -15768,6 +16152,40 @@ export default function App() {
     // thinking they're the actual tier-pick buttons. The inline radio
     // rows on RetouchScreen now carry the tier descriptions themselves,
     // so the popup is redundant friction.
+  };
+
+  // Last-chance upsell (2026-08-20). Clicking "Check out" with EXACTLY ONE
+  // pick opens the add-more popup instead of advancing; any other cart size
+  // goes straight to the retouch/checkout flow.
+  const handleGridCheckout = (selections: string[]) => {
+    if (selections.length === 1) {
+      setShowUpsell(true);
+      return;
+    }
+    handleAdvanceToRetouch(selections);
+  };
+  // Add an unpicked shot from the upsell popup: into the cart, at the chosen
+  // tier, flagged for the 30% discount. Guarded against exceeding the cap.
+  const handleUpsellAdd = (url: string, tier: RetouchTier) => {
+    if (cart.length >= MAX_CART_SIZE || cart.includes(url)) return;
+    addToCart(url);
+    setRetouchTiers((prev) => ({ ...prev, [url]: tier }));
+    setDiscountedUrls((prev) => new Set(prev).add(url));
+  };
+  const handleUpsellRemove = (url: string) => {
+    removeFromCart(url); // also clears the discount flag (see removeFromCart)
+    setRetouchTiers((prev) => {
+      if (!(url in prev)) return prev;
+      const next = { ...prev };
+      delete next[url];
+      return next;
+    });
+  };
+  // Both popup exits proceed to the normal checkout with whatever is now in
+  // the cart — "skip" simply means they added nothing.
+  const handleUpsellProceed = () => {
+    setShowUpsell(false);
+    handleAdvanceToRetouch(cart);
   };
 
   // Regenerate a SINGLE thumbnail slot, reusing the most recently-submitted
@@ -17177,7 +17595,7 @@ export default function App() {
       {screen === "grid" && (
         <GridScreen
           images={generatedImages}
-          onDeliver={handleAdvanceToRetouch}
+          onDeliver={handleGridCheckout}
           onBack={() => setScreen("style")}
           onRegenerateSlot={handleRegenerateSlot}
           onRegenerateWildCard={handleRegenerateWildCard}
@@ -17199,6 +17617,44 @@ export default function App() {
           wildCards={wildCards}
         />
       )}
+      {/* Last-chance upsell popup — overlays the grid when it's open (2026-08-20). */}
+      {showUpsell &&
+        (() => {
+          // Pool = every generated shot EXCEPT the original grid pick(s).
+          // Added shots stay in the pool (shown as "Added") so they can be
+          // removed. The original pick = cart items NOT flagged discounted.
+          const original = new Set(cart.filter((u) => !discountedUrls.has(u)));
+          const seen = new Set<string>();
+          const pool: string[] = [];
+          for (const u of generatedImages) {
+            if (u && !original.has(u) && !seen.has(u)) {
+              seen.add(u);
+              pool.push(u);
+            }
+          }
+          for (const w of wildCards) {
+            const u = w.image;
+            if (u && !w.failed && !original.has(u) && !seen.has(u)) {
+              seen.add(u);
+              pool.push(u);
+            }
+          }
+          const wildSet = new Set(
+            wildCards.map((w) => w.image).filter((u): u is string => !!u),
+          );
+          return (
+            <UpsellModal
+              pool={pool}
+              wildCardUrls={wildSet}
+              discountedUrls={discountedUrls}
+              addedTier={retouchTiers}
+              cartFull={cart.length >= MAX_CART_SIZE}
+              onAdd={handleUpsellAdd}
+              onRemove={handleUpsellRemove}
+              onProceed={handleUpsellProceed}
+            />
+          );
+        })()}
       {screen === "retouch" && (
         <RetouchScreen
           selectedUrls={selectedImageUrls}
@@ -17232,6 +17688,9 @@ export default function App() {
           retouchTiers={selectedImageUrls.map(
             (url) => retouchTiers[url] ?? "basic",
           )}
+          // Per-photo 30%-off flags (same order) for shots added via the
+          // last-chance upsell popup. (2026-08-20)
+          discounted={selectedImageUrls.map((url) => discountedUrls.has(url))}
           onComplete={({ email: submittedEmail, photoUrls, shareGraphicUrls }) => {
             setEmail(submittedEmail);
             setDeliveredPhotoUrls(photoUrls);
