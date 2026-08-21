@@ -11316,6 +11316,10 @@ type RetouchScreenProps = {
   // per-photo trash icon — lets a customer drop a pick from the retouch
   // step without backing out to the grid. Added 2026-06-03 per Kristi.
   onRemovePick: (url: string) => void;
+  // URLs added via the last-chance upsell popup — shown at 30% off on their
+  // per-photo tier rows so the screen behind the popup reflects the discount
+  // (old price struck through). (2026-08-20)
+  discountedUrls: Set<string>;
 };
 
 const RetouchScreen = ({
@@ -11325,6 +11329,7 @@ const RetouchScreen = ({
   onContinue,
   onBack,
   onRemovePick,
+  discountedUrls,
 }: RetouchScreenProps) => {
   // Defensive: if no photos somehow made it here, hand the user back to
   // the grid so they can pick favorites again rather than locking them
@@ -11611,7 +11616,29 @@ const RetouchScreen = ({
                             whiteSpace: "nowrap",
                           }}
                         >
-                          {t.price}
+                          {discountedUrls.has(url) ? (
+                            <>
+                              <span
+                                style={{
+                                  textDecoration: "line-through",
+                                  color: C.mediumGrey,
+                                  fontWeight: 400,
+                                  marginRight: 6,
+                                }}
+                              >
+                                {t.price}
+                              </span>
+                              <span
+                                style={{ color: "#1B6B4C", fontWeight: 600 }}
+                              >
+                                {usdCents(
+                                  centsAfterUpsell(centsForTier(t.tier)),
+                                )}
+                              </span>
+                            </>
+                          ) : (
+                            t.price
+                          )}
                         </div>
                       </div>
                     </label>
@@ -17675,6 +17702,7 @@ export default function App() {
           selectedUrls={selectedImageUrls}
           retouchTiers={retouchTiers}
           setRetouchTiers={setRetouchTiers}
+          discountedUrls={discountedUrls}
           onContinue={handleRetouchContinue}
           onBack={() => setScreen("grid")}
           onRemovePick={(url) => {
