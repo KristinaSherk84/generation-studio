@@ -72,6 +72,40 @@ export async function checkGenHardCap(
   }
 }
 
+// Free-user TOTAL-call cap (2026-08-24, per Kristi). The batch guard above
+// limits distinct BATCHES, but regens/wild cards reuse the batchId, so within a
+// single batch a free user can rack up unlimited image calls — and the "2 free
+// regens" limit is only enforced in the browser (it resets on a new tab,
+// incognito, another device, or the resume-session link). This caps the TOTAL
+// billable image calls a NON-paying user can make per IP, so free-tier cost per
+// person is bounded. Budget: 6 initial + 2 wild cards + up to 1 auto identity
+// redo + a few manual regens = 12 calls ≈ $1.20. Counts every call the same way
+// the leads dashboard does. Applied ONLY to non-exempt free-tier callers
+// (paid / promo / post-purchase skip it and stay bounded by the 40 HARD_CAP).
+// Fail-open. Tunable live in Vercel with no redeploy: FREE_CALLS_PER_IP
+// (default 12), FREE_CALLS_WINDOW_HOURS (default 24).
+const FREE_CALL_CAP = Math.max(1, Number(process.env.FREE_CALLS_PER_IP ?? "12"));
+const FREE_CALL_WINDOW_SECONDS =
+  Math.max(1, Number(process.env.FREE_CALLS_WINDOW_HOURS ?? "24")) * 3600;
+const freeCallKey = (ip: string) => `freecalls:${ip}`;
+
+export async function checkFreeCallCap(
+  ip: string | undefined,
+): Promise<{ allowed: boolean; count: number }> {
+  if (!ip) return { allowed: true, count: 0 };
+  try {
+    const k = freeCallKey(ip);
+    const count = await redis.incr(k);
+    // Fixed window: set the TTL only on the first call so the counter decays on
+    // its own after the window rather than sliding forever.
+    if (count === 1) await redis.expire(k, FREE_CALL_WINDOW_SECONDS);
+    return { allowed: count <= FREE_CALL_CAP, count };
+  } catch {
+    // Redis unreachable → never block generation on this guard.
+    return { allowed: true, count: 0 };
+  }
+}
+
 export async function checkFreeBatchLimit(
   ip: string | undefined,
   batchId: string | undefined,

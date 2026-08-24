@@ -32,6 +32,7 @@ import {
   checkFreeBatchLimit,
   checkPurchaseBatchCredit,
   checkGenHardCap,
+  checkFreeCallCap,
 } from "./lib/freeGenLimit.js";
 import { bumpApiCall } from "./lib/dailyStats.js";
 import { bumpLeadCalls } from "./lib/leadStore.js";
@@ -1757,6 +1758,14 @@ async function verifyUnlock(
     if (!exempt) {
       const { allowed } = await checkFreeBatchLimit(ip, batchId);
       if (!allowed) {
+        return { ok: false, reason: "free_limit" };
+      }
+      // Total free-call cap (2026-08-24, per Kristi): even within one batch, a
+      // non-paying user cannot exceed FREE_CALLS_PER_IP (default 12 ≈ $1.20)
+      // billable image calls per IP. Beyond that → the same "free_limit"
+      // paywall the batch cap uses, so the ceiling doubles as a sales moment.
+      const callCap = await checkFreeCallCap(ip);
+      if (!callCap.allowed) {
         return { ok: false, reason: "free_limit" };
       }
     }
