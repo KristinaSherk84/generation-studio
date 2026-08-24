@@ -102,7 +102,10 @@ export async function updateSessionSlot(
   url: string,
 ): Promise<boolean> {
   if (!token || !/^[A-Za-z0-9]{16,48}$/.test(token)) return false;
-  if (!Number.isInteger(index) || index < 0 || index > 7) return false;
+  // Cap raised from 7 to 63 (2026-08-24) so accumulated multi-batch grids can
+  // persist a per-slot regen beyond the first 8 shots. The real bound is the
+  // `index >= rec.generatedUrls.length` guard below.
+  if (!Number.isInteger(index) || index < 0 || index > 63) return false;
   if (typeof url !== "string" || !/^https?:\/\//.test(url)) return false;
   let rec: SavedSession | null;
   try {
@@ -134,16 +137,27 @@ export async function setSessionWildCards(
     return false;
   }
   if (!rec) return false;
-  const clean = (Array.isArray(wildCards) ? wildCards : [])
+  const incoming = (Array.isArray(wildCards) ? wildCards : [])
     .filter(
       (w) => w && typeof w.url === "string" && /^https?:\/\//.test(w.url),
     )
-    .slice(0, 4)
     .map((w) => ({
       url: w.url,
       label: typeof w.label === "string" ? w.label.slice(0, 160) : "",
     }));
-  rec.wildCards = clean;
+  // Merge with wild cards already saved from earlier batches (accumulate,
+  // 2026-08-24) instead of replacing — a multi-batch customer keeps ALL their
+  // bonus shots on the one growing resume grid. Dedupe by URL (newest kept,
+  // in first-seen order), capped so the record stays bounded.
+  const priorWc = Array.isArray(rec.wildCards) ? rec.wildCards : [];
+  const seenWc = new Set<string>();
+  const mergedWc: { url: string; label: string }[] = [];
+  for (const w of [...priorWc, ...incoming]) {
+    if (seenWc.has(w.url)) continue;
+    seenWc.add(w.url);
+    mergedWc.push(w);
+  }
+  rec.wildCards = mergedWc.slice(0, 24);
   await redis.set(key(token), rec, { ex: TTL_SECONDS });
   return true;
 }

@@ -70,24 +70,55 @@ export default async function handler(
       selections: body.selections ?? null,
       hasWideAngle: body.hasWideAngle === true,
     };
-    // One stable resume link per email (2026-08-17). If this email already has
-    // a LIVE saved session, overwrite it in place and REUSE its token instead
-    // of minting a new one — so a customer who generates more than one batch
-    // keeps a single link that always shows their latest shots (plus the wild
-    // cards and any likeness regen, which patch whatever token is current).
-    // Fixes the divergent-snapshot bug where two "ready" emails pointed at two
-    // different grids and only one collected the wild cards / likeness fix.
+    // One resume link per email that ACCUMULATES every batch (2026-08-24).
+    // If this email already has a LIVE saved session, APPEND this batch's shots
+    // to it (keeping the SAME token) instead of overwriting — so a customer who
+    // generates more than one batch keeps ALL their shots on one growing link,
+    // not just the latest six. `offset` is where THIS batch's shots start in the
+    // merged grid; the client uses it so a later per-slot regen patches the
+    // right photo. Wild cards from earlier batches are carried forward here
+    // (replaceSession would otherwise wipe them) and merged again when this
+    // batch's own wild cards land via /api/session-wildcards.
+    //
+    // Supersedes the 2026-08-17 "overwrite in place" behavior, which fixed a
+    // divergent-snapshot bug (two emails, two grids, wild cards on only one) by
+    // collapsing to the latest batch — but that erased a paying customer's
+    // earlier batches. Accumulating keeps ONE token (so no divergence) AND all
+    // the shots.
     let token: string | null = null;
+    let offset = 0;
     try {
       const existing = await getEmailResumeToken(email);
-      if (existing && (await getSession(existing))) {
-        const ok = await replaceSession(existing, payload);
+      const prior = existing ? await getSession(existing) : null;
+      if (existing && prior) {
+        const priorUrls = Array.isArray(prior.generatedUrls)
+          ? prior.generatedUrls
+          : [];
+        const priorSet = new Set(priorUrls);
+        // Batch blob keys are unique, so normally nothing is filtered; the
+        // dedupe only guards against an accidental double-save of one batch.
+        const appended = (payload.generatedUrls as string[]).filter(
+          (u) => !priorSet.has(u),
+        );
+        offset = priorUrls.length;
+        const mergedRefs = Array.from(
+          new Set([...(prior.referencePhotoUrls ?? []), ...referencePhotoUrls]),
+        );
+        const ok = await replaceSession(existing, {
+          email,
+          generatedUrls: [...priorUrls, ...appended],
+          referencePhotoUrls: mergedRefs,
+          selections: payload.selections ?? prior.selections ?? null,
+          hasWideAngle: payload.hasWideAngle || prior.hasWideAngle === true,
+          wildCards: prior.wildCards,
+        });
         if (ok) token = existing;
       }
     } catch {
       /* fall through to a fresh save below */
     }
     if (!token) {
+      offset = 0;
       token = await saveSession(payload);
     }
     // Link this session's resume token to the lead so the 12-hour win-back
@@ -109,7 +140,7 @@ export default async function handler(
     } catch {
       /* don't fail the save if a lead write hiccups */
     }
-    res.status(200).json({ ok: true, token });
+    res.status(200).json({ ok: true, token, offset });
   } catch (err) {
     console.warn(
       "[save-session] failed:",

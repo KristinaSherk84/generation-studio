@@ -14609,6 +14609,12 @@ export default function App() {
   // email link, so a per-slot regen can be persisted back onto the saved grid
   // (see handleRegenerateSlot) and thus STICK when the link is reopened.
   const resumeTokenRef = useRef<string | null>(null);
+  // Where the CURRENT batch's shots start inside the accumulated saved grid
+  // (2026-08-24). 0 for a resume-link session (the on-screen grid IS the full
+  // saved grid) or a first batch; set to the server-returned offset after each
+  // additional batch is appended. Added to a per-slot regen's index so the
+  // patch lands on the right photo in the growing grid, not an earlier batch's.
+  const batchOffsetRef = useRef(0);
 
   // Admin "damage-control" fix mode (2026-08-10). Turns on when Kristi opens a
   // customer's resume link with her admin password appended (&fix=<pw>),
@@ -15045,6 +15051,7 @@ export default function App() {
         // Remember the token so a damage-control regen can be written back to
         // this same saved grid (below).
         resumeTokenRef.current = token;
+        batchOffsetRef.current = 0;
         // Admin damage-control fix mode. Turns on when EITHER the link carries
         // a valid admin password (&fix=<pw>) OR this device was previously
         // "armed" — the password is remembered in this browser's localStorage
@@ -16131,11 +16138,18 @@ export default function App() {
             }),
           });
           if (resp.ok) {
-            const d = (await resp.json()) as { token?: string };
+            const d = (await resp.json()) as {
+              token?: string;
+              offset?: number;
+            };
             if (d.token) {
               resumeToken = d.token;
-              // Enable regen + wild-card persistence for this fresh session.
+              // Enable regen + wild-card persistence for this session.
               resumeTokenRef.current = d.token;
+              // Where this batch landed in the accumulated grid, so a later
+              // per-slot regen patches the correct photo (2026-08-24).
+              batchOffsetRef.current =
+                typeof d.offset === "number" && d.offset >= 0 ? d.offset : 0;
               void flushWildCardPersist();
             }
           }
@@ -16377,7 +16391,11 @@ export default function App() {
             await fetch("/api/update-session", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ token: tok, index, url }),
+              body: JSON.stringify({
+                token: tok,
+                index: batchOffsetRef.current + index,
+                url,
+              }),
             });
           } catch {
             /* best-effort — the customer still sees the new shot on screen */
