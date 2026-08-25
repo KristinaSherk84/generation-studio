@@ -306,14 +306,22 @@ ${womensPolished}`;
   }
   if (subTier === "glam") {
     // Gender routing (added 2026-07-16), mirroring the Polished routing above.
-    // Men get RETOUCH_GLAM_MALE (female Glam minus contouring); women get
-    // RETOUCH_GLAM. Gemini picks the matching section from the photo.
+    // 2026-08-25 per Kristi: the purpose-built male Glam prompt was failing in
+    // production (the Glam pass returned no usable image for men, so delivery
+    // silently fell back to the un-retouched Realistic photo — "male Glam looked
+    // identical to Realistic on every delivery"). Kristi gets great male results
+    // from the FEMALE POLISHED prompt, so the MAN section of the Glam pass now
+    // uses that text (retouch_polished_female) instead of RETOUCH_GLAM_MALE.
+    // Women still get the female Glam prompt. RETOUCH_GLAM_MALE is left defined
+    // (and still editable in the prompt editor) but is no longer wired in here.
+    // NOTE: this couples male Glam to the Female Polished prompt — editing
+    // "Retouch · Polished — female" in the prompt editor also changes male Glam.
     return `SUBJECT GENDER ROUTING — evaluate this FIRST, before reading any directive below. Look at the input photo and determine the subject's apparent gender. Then follow ONLY the single matching section below and COMPLETELY IGNORE the other section — do not blend them.
 
 ============================================================
 IF THE SUBJECT APPEARS TO BE A MAN — follow ONLY this section, ignore the WOMAN section entirely:
 ============================================================
-${rseg("retouch_glam_male", RETOUCH_GLAM_MALE)}
+${rseg("retouch_polished_female", RETOUCH_POLISHED_MATURE)}
 
 ============================================================
 IF THE SUBJECT APPEARS TO BE A WOMAN — follow ONLY this section, ignore the MAN section entirely:
