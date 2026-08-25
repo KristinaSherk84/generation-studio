@@ -9,15 +9,28 @@
  *
  * Body: { email: string }
  * Best-effort: any failure returns { ok: false } and never blocks the UI.
- * De-duplication is handled client-side (a localStorage flag) so a given
- * browser only triggers one send per finished batch.
+ * De-duplication (2026-08-25): a multi-batch session fires this once per batch,
+ * and since all batches now share ONE accumulating resume link, those repeats
+ * are identical — customers were getting several copies. We claim an atomic
+ * per-token (per-email fallback) key so only the FIRST send goes out within the
+ * link's lifetime. Fail-OPEN on any Redis error.
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { looksLikeEmail } from "./lib/leadStore.js";
 import { bumpGeneratedEmail } from "./lib/dailyStats.js";
+import { Redis } from "@upstash/redis";
 
 export const maxDuration = 10;
+
+const redis = new Redis({
+  url: process.env.KV_REST_API_URL ?? "",
+  token: process.env.KV_REST_API_TOKEN ?? "",
+});
+
+// One "ready to view" email per gallery link. Matches the resume-link TTL so a
+// genuinely-new session (fresh token) later still gets its own email.
+const READY_EMAIL_DEDUPE_TTL_SEC = 4 * 24 * 60 * 60;
 
 const SITE_URL = "https://generationheadshots.com";
 
@@ -110,6 +123,37 @@ export default async function handler(
     return;
   }
 
+  // De-dupe the repeat sends one person triggers (see note at top). Keyed by
+  // EMAIL ADDRESS, not the token: the client re-fires this endpoint on reloads
+  // and — the common case — whenever a CAPPED free user re-clicks "generate"
+  // (each blocked attempt re-arms the client's one-per-batch guard, restores
+  // the same 6 shots, and re-sends). Those attempts can carry different/again
+  // the same token, so only an email-keyed claim reliably collapses them to a
+  // single send. One "ready to view" email per person per link-lifetime window.
+  const dedupeKey = `readyemail:addr:${email.toLowerCase()}`;
+  let claimedDedupe = false;
+  // Only dedupe sends that carry a real gallery link (resumeToken). A tokenless
+  // send happens when save-session failed and the email links to the bare site;
+  // it must NOT claim the slot, or it could suppress the true gallery email a
+  // later batch sends. The reported repeats all carry a token, so this still
+  // collapses them to one.
+  if (resumeToken) {
+    try {
+      const claim = await redis.set(dedupeKey, "1", {
+        nx: true,
+        ex: READY_EMAIL_DEDUPE_TTL_SEC,
+      });
+      if (claim === null) {
+        // Already sent for this person's gallery — this call is the duplicate.
+        res.status(200).json({ ok: true, reason: "deduped" });
+        return;
+      }
+      claimedDedupe = true;
+    } catch {
+      /* Redis unreachable → skip dedupe and send anyway (fail-open). */
+    }
+  }
+
   try {
     const { subject, html, text } = buildEmail(resumeUrl);
     const resp = await fetch("https://api.resend.com/emails", {
@@ -134,6 +178,14 @@ export default async function handler(
     if (!resp.ok) {
       const t = await resp.text().catch(() => "");
       console.warn("[ready-email] resend failed:", resp.status, t.slice(0, 120));
+      // Release the dedupe claim so a later batch/retry can still send.
+      if (claimedDedupe) {
+        try {
+          await redis.del(dedupeKey);
+        } catch {
+          /* ignore */
+        }
+      }
       res.status(200).json({ ok: false, reason: "send_failed" });
       return;
     }
@@ -146,6 +198,14 @@ export default async function handler(
       "[ready-email] error:",
       err instanceof Error ? err.message : String(err),
     );
+    // Release the dedupe claim so a later batch/retry can still send.
+    if (claimedDedupe) {
+      try {
+        await redis.del(dedupeKey);
+      } catch {
+        /* ignore */
+      }
+    }
     res.status(200).json({ ok: false, reason: "error" });
   }
 }
