@@ -41,7 +41,7 @@ const INTERNAL_EMAILS = new Set(
   ),
 );
 
-const SUBJECT = "A note from the photographer behind the app 💛";
+const SUBJECT = "a quick note about your headshots";
 
 // Kristi's copy — edit here if you want to change the message.
 const BODY_PARAGRAPHS: string[] = [
@@ -77,50 +77,36 @@ function safeEquals(a: string, b: string): boolean {
 }
 
 function buildEmail(): { subject: string; html: string; text: string } {
+  // Deliberately plain — no wrapper card, no branded background, no CTA
+  // button. Just paragraphs in the default email font so it reads like a
+  // note Kristi typed in Gmail rather than a marketing template. The only
+  // link is the site URL at the very bottom of her signature, styled to
+  // match Gmail-default link color.
+  const paraStyle = "margin:0 0 12px;";
   const paragraphsHtml = BODY_PARAGRAPHS.map(
-    (p) =>
-      `<p style="font-size:15px;line-height:1.65;margin:0 0 14px;">${p}</p>`,
-  ).join("\n    ");
+    (p) => `<p style="${paraStyle}">${p}</p>`,
+  ).join("\n");
 
   const bulletsHtml = BODY_BULLETS.map(
-    (b) =>
-      `<p style="font-size:15px;line-height:1.65;margin:0 0 14px;"><b>${b.lead}</b> ${b.body}</p>`,
-  ).join("\n    ");
+    (b) => `<p style="${paraStyle}"><b>${b.lead}</b> ${b.body}</p>`,
+  ).join("\n");
 
   const closingHtml = BODY_CLOSING.map(
-    (p) => `<p style="font-size:15px;line-height:1.65;margin:0 0 6px;">${p}</p>`,
-  ).join("\n    ");
+    (p) => `<p style="margin:0 0 4px;">${p}</p>`,
+  ).join("\n");
 
-  const html = `<!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1"></head>
-<body style="margin:0;background:#FAF8F4;padding:24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:#2A2A2A;">
-  <div style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #E8E4DB;border-radius:14px;padding:28px 26px;">
-    ${paragraphsHtml}
-    ${bulletsHtml}
-    ${closingHtml}
-    <div style="text-align:center;margin:22px 0 6px;">
-      <a href="${SITE_URL}"
-         style="display:inline-block;background:#1B4332;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:13px 28px;border-radius:999px;">
-        Come back &amp; try again &rarr;
-      </a>
-    </div>
-  </div>
-  <p style="max-width:560px;margin:14px auto 0;font-size:12px;color:#9A968D;text-align:center;line-height:1.5;">
-    <a href="${SITE_URL}" style="color:#6E6E6A;font-weight:600;">generationheadshots.com</a><br>
-    You&rsquo;re getting this because you tried GenerAItion Headshots. Just reply to this email with any feedback &mdash; it comes straight to me.
-  </p>
-</body></html>`;
+  const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#222;">
+${paragraphsHtml}
+${bulletsHtml}
+${closingHtml}
+<p style="margin:0;"><a href="${SITE_URL}" style="color:#1155cc;">www.generationheadshots.com</a></p>
+</div>`;
 
   const textLines: string[] = [];
-  BODY_PARAGRAPHS.forEach((p) => {
-    textLines.push(p, "");
-  });
-  BODY_BULLETS.forEach((b) => {
-    textLines.push(`${b.lead} ${b.body}`, "");
-  });
+  BODY_PARAGRAPHS.forEach((p) => textLines.push(p, ""));
+  BODY_BULLETS.forEach((b) => textLines.push(`${b.lead} ${b.body}`, ""));
   BODY_CLOSING.forEach((p) => textLines.push(p));
-  textLines.push("", SITE_URL);
+  textLines.push("www.generationheadshots.com");
 
   return { subject: SUBJECT, html, text: textLines.join("\n") };
 }
@@ -205,7 +191,7 @@ export default async function handler(
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          from: "Kristi at GenerAItion Headshots <kristi@kristinasherk.com>",
+          from: "Kristi Sherk <kristi@kristinasherk.com>",
           to: [to],
           bcc: [TEST_ADDRESS],
           reply_to: TEST_ADDRESS,
