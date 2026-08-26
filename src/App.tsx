@@ -360,6 +360,7 @@ function getStepFromScreen(
   screen:
     | "landing"
     | "healthcare"
+    | "teams"
     | "how-it-works"
     | "gallery"
     | "upload"
@@ -4970,6 +4971,647 @@ const HealthcareScreen = ({
           animation-play-state: paused;
         }
       `}</style>
+    </div>
+  );
+};
+
+// -------------------- Screen 1b2: /teams marketing page --------------------
+//
+// /teams — pure marketing page for companies buying headshots for their
+// whole team. Modeled on HealthcareScreen's URL-driven mount pattern.
+// Ports the mockup from `03 Prompts/teams-page-mockup.html` — iterated
+// with Kristi 2026-08-25 through 2026-08-26. Example images live at
+// /public/marketing/teams/*.jpg (down-rez'd to 800px, ~100 KB each,
+// SEO filenames). No state, no forms — just content + mailto CTAs.
+
+type TeamsScreenProps = {
+  onStart: () => void;
+  onBackToHome: () => void;
+};
+
+const TeamsScreen = ({ onStart, onBackToHome }: TeamsScreenProps) => {
+  // Local color aliases so JSX stays readable — pull from BRAND.
+  const cream = BRAND.cream;
+  const white = BRAND.white;
+  const charcoal = BRAND.charcoal;
+  const forest = BRAND.forestGreen;
+  const forestHover = BRAND.forestGreenHover;
+  const gold = BRAND.gold;
+  const bodyText = BRAND.bodyText;
+  const subText = BRAND.subText;
+  const border = "#E8E4DA";
+
+  const heroBtnPrimary: React.CSSProperties = {
+    display: "inline-block",
+    background: forest,
+    color: white,
+    padding: "16px 32px",
+    borderRadius: 999,
+    fontSize: 15,
+    fontWeight: 500,
+    letterSpacing: 0.3,
+    textDecoration: "none",
+    border: "none",
+    cursor: "pointer",
+    fontFamily: SANS_STACK,
+  };
+
+  const heroBtnSecondary: React.CSSProperties = {
+    display: "inline-block",
+    background: "transparent",
+    color: charcoal,
+    padding: "14px 28px",
+    borderRadius: 999,
+    fontSize: 14,
+    border: `1.5px solid ${charcoal}`,
+    textDecoration: "none",
+    cursor: "pointer",
+    fontFamily: SANS_STACK,
+  };
+
+  // Reusable card styles.
+  const cardBase: React.CSSProperties = {
+    background: white,
+    border: `1px solid ${border}`,
+    borderRadius: 12,
+    padding: "clamp(24px, 4vw, 40px)",
+    marginBottom: 32,
+    position: "relative",
+  };
+  const cardRecommended: React.CSSProperties = {
+    ...cardBase,
+    border: `2px solid ${gold}`,
+  };
+  const cardH3: React.CSSProperties = {
+    fontFamily: SERIF_STACK,
+    fontSize: 26,
+    color: charcoal,
+    fontWeight: 400,
+    margin: "0 0 14px",
+  };
+  const cardP: React.CSSProperties = {
+    color: bodyText,
+    fontSize: 15,
+    lineHeight: 1.7,
+    marginBottom: 20,
+  };
+  const recommendedBadge: React.CSSProperties = {
+    position: "absolute",
+    top: -12,
+    left: 24,
+    background: gold,
+    color: white,
+    padding: "4px 12px",
+    borderRadius: 4,
+    fontSize: 11,
+    fontWeight: 600,
+    letterSpacing: 1,
+  };
+
+  // Image tile — matches the mockup's .example-img class. object-position
+  // "top" keeps the top of the head in-frame; only bottoms crop.
+  const exampleImg: React.CSSProperties = {
+    aspectRatio: "4/5",
+    borderRadius: 8,
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
+    objectPosition: "top",
+    display: "block",
+    background: "#EDE7DA",
+  };
+
+  // Coming-soon placeholder tile — used where Kristi hasn't sent real
+  // headshots yet. Neutral cream box with a small label; reads as
+  // intentional rather than broken.
+  const comingSoonTile: React.CSSProperties = {
+    aspectRatio: "4/5",
+    background: "linear-gradient(135deg, #F5F0E6 0%, #E8E2D2 100%)",
+    borderRadius: 8,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    color: subText,
+    fontSize: 11,
+    textAlign: "center",
+    padding: 12,
+    lineHeight: 1.4,
+    fontStyle: "italic",
+  };
+
+  const gridThree: React.CSSProperties = {
+    display: "grid",
+    gridTemplateColumns: "repeat(3, 1fr)",
+    gap: 12,
+    marginTop: 20,
+  };
+  const gridFour: React.CSSProperties = {
+    display: "grid",
+    gridTemplateColumns: "repeat(4, 1fr)",
+    gap: 12,
+    marginTop: 8,
+  };
+  const subLabel: React.CSSProperties = {
+    marginBottom: 8,
+    fontSize: 12,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+    color: subText,
+    fontWeight: 600,
+  };
+
+  // Polo swatches match the actual POLO_COLOR_SWATCHES list in the app.
+  const poloSwatches = [
+    { hex: "#1A1A1A", label: "Black" },
+    { hex: "#FFFFFF", label: "White" },
+    { hex: "#1B2D4F", label: "Navy blue" },
+    { hex: "#2F52C9", label: "Royal blue" },
+    { hex: "#3A3D42", label: "Charcoal grey" },
+    { hex: "#9BA0A6", label: "Heather grey" },
+    { hex: "#CE2029", label: "Firetruck red" },
+  ];
+
+  return (
+    <div
+      style={{
+        background: cream,
+        color: bodyText,
+        fontFamily: SANS_STACK,
+        lineHeight: 1.55,
+        minHeight: "100vh",
+      }}
+    >
+      <style>{`
+        @media (max-width: 640px) {
+          .teams-grid-three, .teams-grid-four { grid-template-columns: repeat(2, 1fr) !important; }
+          .teams-nav-links { display: none !important; }
+        }
+      `}</style>
+
+      {/* NAV */}
+      <nav
+        style={{
+          background: cream,
+          borderBottom: `1px solid ${border}`,
+          padding: "18px clamp(16px, 4vw, 56px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          position: "sticky",
+          top: 0,
+          zIndex: 20,
+        }}
+      >
+        <button
+          onClick={onBackToHome}
+          style={{
+            background: "transparent",
+            border: "none",
+            padding: 0,
+            cursor: "pointer",
+            fontFamily: SERIF_STACK,
+            fontSize: 22,
+            color: charcoal,
+            letterSpacing: -0.3,
+          }}
+          aria-label="Home"
+        >
+          Gener<span style={{ color: gold, fontStyle: "italic", fontWeight: 600 }}>AI</span>tion Headshots
+        </button>
+        <div
+          className="teams-nav-links"
+          style={{ display: "flex", gap: 28, alignItems: "center", fontSize: 14 }}
+        >
+          <button
+            onClick={onBackToHome}
+            style={{ background: "transparent", border: "none", color: charcoal, cursor: "pointer", fontSize: 14, fontFamily: SANS_STACK }}
+          >
+            Home
+          </button>
+          <span style={{ color: gold, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, fontSize: 12 }}>
+            Teams
+          </span>
+          <button onClick={onStart} style={{ ...heroBtnPrimary, padding: "10px 20px", fontSize: 13 }}>
+            Try it now
+          </button>
+        </div>
+      </nav>
+
+      {/* HERO */}
+      <section style={{ textAlign: "center", padding: "clamp(56px, 10vw, 120px) clamp(20px, 5vw, 80px) clamp(48px, 8vw, 96px)" }}>
+        <div style={{ color: gold, fontSize: 12, fontWeight: 600, letterSpacing: 1.8, textTransform: "uppercase", marginBottom: 20 }}>
+          For Companies &amp; Teams
+        </div>
+        <h1
+          style={{
+            fontFamily: SERIF_STACK,
+            fontSize: "clamp(18px, 2.8vw, 30px)",
+            lineHeight: 1.15,
+            letterSpacing: 0.5,
+            color: charcoal,
+            fontWeight: 500,
+            margin: "0 auto 20px",
+            maxWidth: 640,
+            textTransform: "uppercase",
+          }}
+        >
+          AI Headshots for Teams and Companies
+        </h1>
+        <p style={{ fontSize: "clamp(16px, 2vw, 19px)", color: subText, maxWidth: 640, margin: "0 auto 32px", lineHeight: 1.6 }}>
+          Getting the most consistent headshot results from Generation Headshots.
+        </p>
+        <button onClick={onStart} style={heroBtnPrimary}>
+          Try it yourself first →
+        </button>
+      </section>
+
+      {/* CREDIBILITY BAND */}
+      <section
+        style={{
+          background: white,
+          borderTop: `1px solid ${border}`,
+          borderBottom: `1px solid ${border}`,
+          padding: "clamp(48px, 8vw, 96px) clamp(20px, 5vw, 80px)",
+        }}
+      >
+        <div style={{ maxWidth: 760, margin: "0 auto" }}>
+          <p style={{ fontSize: 18, lineHeight: 1.7, color: charcoal, textAlign: "center", margin: 0 }}>
+            I've spent 20 years photographing actual teams in person. The most important rule:{" "}
+            <strong>consistency is key.</strong> A random mix of headshot crops and styles across your
+            "people page" makes teams look extremely unprofessional. While this tool is made for individuals
+            (and a full-fledged teams engine is in the works) there are some really helpful settings you can
+            use to create the appearance of consistency when your team members generate their own headshots.
+          </p>
+        </div>
+      </section>
+
+      {/* RECOMMENDED SETTINGS */}
+      <section style={{ padding: "clamp(48px, 8vw, 96px) clamp(20px, 5vw, 80px)" }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+          <h2
+            style={{
+              fontFamily: SERIF_STACK,
+              fontSize: "clamp(28px, 4vw, 42px)",
+              lineHeight: 1.15,
+              color: charcoal,
+              fontWeight: 400,
+              letterSpacing: -0.3,
+              margin: "0 0 16px",
+              textAlign: "center",
+            }}
+          >
+            How to get the most consistent look across your team
+          </h2>
+          <p style={{ fontStyle: "italic", color: subText, textAlign: "center", maxWidth: 640, margin: "0 auto 48px", fontSize: 16 }}>
+            These are the settings I recommend when I want teams to end up with headshots that feel visually unified — not a mishmash of styles.
+          </p>
+
+          {/* Paper Color (RECOMMENDED) */}
+          <div style={cardRecommended}>
+            <div style={recommendedBadge}>★ RECOMMENDED</div>
+            <h3 style={cardH3}>Background option 1: Paper Color</h3>
+            <p style={cardP}>
+              The single strongest choice for team consistency. If everyone on your team picks the{" "}
+              <strong>SAME background color</strong> from the paper color options, you'll get a matched set of
+              headshots that look like they were shot in the same studio on the same day. This is the closest
+              AI equivalent to what happens when I book a whole company for a day of in-person headshots.
+            </p>
+            {/* Off white subhead — placeholders only until Kristi sends images */}
+            <div style={subLabel}>Off white paper</div>
+            <div className="teams-grid-four" style={gridFour}>
+              <div style={comingSoonTile}>Off white<br />(examples coming soon)</div>
+              <div style={comingSoonTile}>Off white<br />(examples coming soon)</div>
+              <div style={comingSoonTile}>Off white<br />(examples coming soon)</div>
+              <div style={comingSoonTile}>Off white<br />(examples coming soon)</div>
+            </div>
+            {/* Dark spot grey — 2 real, 2 coming */}
+            <div style={{ ...subLabel, marginTop: 24 }}>Dark spot grey paper</div>
+            <div className="teams-grid-four" style={gridFour}>
+              <img
+                style={exampleImg}
+                loading="lazy"
+                src="/marketing/teams/ai-headshot-dark-grey-paper-background-1.jpg"
+                alt="AI headshot on a dark spot grey paper seamless studio background"
+              />
+              <img
+                style={exampleImg}
+                loading="lazy"
+                src="/marketing/teams/ai-headshot-charcoal-studio-backdrop-2.jpg"
+                alt="AI headshot on a charcoal grey studio backdrop with spot lighting"
+              />
+              <div style={comingSoonTile}>Dark spot grey<br />(more coming)</div>
+              <div style={comingSoonTile}>Dark spot grey<br />(more coming)</div>
+            </div>
+            <div style={{ marginTop: 20, textAlign: "center" }}>
+              <button
+                onClick={onStart}
+                style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: 14, letterSpacing: 0.3, color: forest, fontWeight: 500, fontFamily: SANS_STACK }}
+              >
+                Preview all paper background colors →
+              </button>
+            </div>
+          </div>
+
+          {/* Natural Blurry */}
+          <div style={cardBase}>
+            <h3 style={cardH3}>Background option 2: Natural Blurry</h3>
+            <p style={cardP}>
+              The nature blur background is my second recommendation for team consistency. Every team member
+              ends up with a soft, natural, outdoor-looking backdrop — different in exact detail but visually
+              cohesive at a glance. Great for companies with a warmer, less corporate feel (nonprofits,
+              wellness, education).
+            </p>
+            <div className="teams-grid-three" style={gridThree}>
+              <img style={exampleImg} loading="lazy" src="/marketing/teams/ai-headshot-nature-outdoor-professional-1.jpg" alt="AI headshot of a professional against a soft-focus warm-toned nature blur background" />
+              <img style={exampleImg} loading="lazy" src="/marketing/teams/ai-headshot-natural-blur-executive-2.jpg" alt="AI headshot of an executive against an out-of-focus fall foliage background" />
+              <img style={exampleImg} loading="lazy" src="/marketing/teams/ai-headshot-natural-outdoor-portrait-3.jpg" alt="AI headshot with a soft outdoor bokeh background" />
+            </div>
+          </div>
+
+          {/* Tech / IT */}
+          <div style={cardBase}>
+            <h3 style={cardH3}>Background option 3: Tech/IT</h3>
+            <p style={cardP}>
+              The IT background produces a dark server room with out-of-focus server lights. Slight variation,
+              but consistent enough for teams at software or tech companies.
+            </p>
+            <div className="teams-grid-three" style={gridThree}>
+              <img style={exampleImg} loading="lazy" src="/marketing/teams/ai-headshot-tech-professional-server-room-1.jpg" alt="AI headshot of a tech professional against a dark server room background" />
+              <img style={exampleImg} loading="lazy" src="/marketing/teams/ai-headshot-it-engineer-server-room-2.jpg" alt="AI headshot of an IT engineer against an out-of-focus server room" />
+              <img style={exampleImg} loading="lazy" src="/marketing/teams/ai-headshot-software-executive-server-room-3.jpg" alt="AI headshot of a software executive against a dark server room" />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* CUSTOM BACKGROUND BAND */}
+      <section style={{ background: cream, textAlign: "center", padding: "clamp(36px, 6vw, 64px) 20px" }}>
+        <div style={{ maxWidth: 760, margin: "0 auto" }}>
+          <div style={{ color: gold, fontSize: 12, fontWeight: 600, letterSpacing: 1.8, textTransform: "uppercase", marginBottom: 14 }}>
+            Need something bespoke?
+          </div>
+          <h2 style={{ fontFamily: SERIF_STACK, fontSize: "clamp(24px, 3.5vw, 36px)", lineHeight: 1.2, color: charcoal, fontWeight: 400, letterSpacing: -0.3, margin: "0 0 20px" }}>
+            Work with Kristina directly to code your team's perfect, custom background.
+          </h2>
+          <a href="mailto:kristi@kristinasherk.com" style={heroBtnPrimary}>
+            Email Kristi
+          </a>
+        </div>
+      </section>
+
+      {/* WARDROBE OPTIONS */}
+      <section
+        style={{
+          background: white,
+          borderTop: `1px solid ${border}`,
+          borderBottom: `1px solid ${border}`,
+          padding: "clamp(48px, 8vw, 96px) clamp(20px, 5vw, 80px)",
+        }}
+      >
+        <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+          <h2
+            style={{
+              fontFamily: SERIF_STACK,
+              fontSize: "clamp(28px, 4vw, 42px)",
+              lineHeight: 1.15,
+              color: charcoal,
+              fontWeight: 400,
+              letterSpacing: -0.3,
+              margin: "0 0 16px",
+              textAlign: "center",
+            }}
+          >
+            Consistent Wardrobe Options
+          </h2>
+          <p style={{ fontStyle: "italic", color: subText, textAlign: "center", maxWidth: 640, margin: "0 auto 48px", fontSize: 16 }}>
+            Pick one wardrobe direction and have your whole team use the same option — that's the shortcut to a unified look.
+          </p>
+
+          {/* Keep My Outfit — RECOMMENDED */}
+          <div style={cardRecommended}>
+            <div style={recommendedBadge}>★ RECOMMENDED</div>
+            <h3 style={cardH3}>Keep My Outfit</h3>
+            <p style={{ ...cardP, marginBottom: 0 }}>
+              Selecting "Keep My Outfit" tells the AI to use whatever your team member is wearing in the FIRST
+              photo they uploaded. This lets each person's headshot feel authentic to their personal style — and
+              if your team is already dressing in a similar professional register, the outputs stay visually
+              cohesive without forcing a uniform.
+            </p>
+          </div>
+
+          {/* Polo */}
+          <div style={cardBase}>
+            <h3 style={cardH3}>Polo</h3>
+            <p style={cardP}>
+              If your team needs to look truly uniform — like a coordinated staff photo — have everyone select
+              the "Polo" option and pick the same color. This is the AI equivalent of "the company gave everyone
+              a matching polo for the photoshoot." Great for retail, hospitality, sales teams, and any
+              customer-facing group.
+            </p>
+            <div style={subLabel}>Polo color picker</div>
+            <div
+              style={{
+                display: "flex",
+                gap: 10,
+                flexWrap: "wrap",
+                alignItems: "center",
+                padding: "12px 16px",
+                background: cream,
+                borderRadius: 8,
+                border: `1px solid ${border}`,
+              }}
+            >
+              {poloSwatches.map((s) => (
+                <span
+                  key={s.label}
+                  title={s.label}
+                  style={{
+                    width: 28,
+                    height: 28,
+                    borderRadius: "50%",
+                    background: s.hex,
+                    border: `2px solid ${white}`,
+                    boxShadow: `0 0 0 1px ${border}, 0 2px 4px rgba(0,0,0,0.08)`,
+                    display: "inline-block",
+                    cursor: "pointer",
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Other wardrobe options */}
+          <div style={cardBase}>
+            <h3 style={cardH3}>Other wardrobe options</h3>
+            <p style={{ ...cardP, marginBottom: 0 }}>
+              Business Suit, Business Casual, and industry-specific options (like Medical scrubs) are all
+              available. For maximum team consistency, pick <strong>one</strong> of these and have everyone use
+              the same option.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* TEAM WORKFLOW */}
+      <section style={{ padding: "clamp(48px, 8vw, 96px) clamp(20px, 5vw, 80px)" }}>
+        <div style={{ maxWidth: 760, margin: "0 auto" }}>
+          <h2
+            style={{
+              fontFamily: SERIF_STACK,
+              fontSize: "clamp(28px, 4vw, 42px)",
+              lineHeight: 1.15,
+              color: charcoal,
+              fontWeight: 400,
+              letterSpacing: -0.3,
+              margin: "0 0 24px",
+              textAlign: "center",
+            }}
+          >
+            Every team member generates their own — within the parameters you set
+          </h2>
+          <p style={{ fontSize: 17, lineHeight: 1.75, color: bodyText, marginBottom: 20 }}>
+            Here's the important part: even after you set the recommended background and wardrobe for your team,{" "}
+            <strong>each team member should still generate their OWN headshots to find the one that best captures
+            their likeness.</strong> AI doesn't get every face right on the first try — different reference
+            photos produce different levels of "that really looks like me." And after 20 years behind the lens,
+            I'm not making another AI headshot app that "doesn't look anything like me." So that's why I suggest
+            each team member use the settings you choose and pick the one that looks most like them.
+          </p>
+          <p style={{ fontSize: 17, lineHeight: 1.75, color: bodyText, marginTop: 20 }}>
+            The workflow I recommend for teams:
+          </p>
+          <ol style={{ listStyle: "none", counterReset: "workflow", padding: 0, marginTop: 24 }}>
+            {[
+              <><strong>Company sets the parameters</strong> — background color, wardrobe style — and shares them with the team.</>,
+              <><strong>Each team member generates their own headshots</strong> using those exact settings.</>,
+              <><strong>Each person picks the headshot that most looks like them</strong> from their own outputs.</>,
+              <><strong>Result:</strong> a team of headshots that are visually consistent AND each individually look like the real person.</>,
+            ].map((content, i) => (
+              <li
+                key={i}
+                style={{
+                  padding: "20px 24px 20px 68px",
+                  background: white,
+                  border: `1px solid ${border}`,
+                  borderRadius: 10,
+                  marginBottom: 12,
+                  position: "relative",
+                  fontSize: 15,
+                  lineHeight: 1.6,
+                }}
+              >
+                <span
+                  style={{
+                    position: "absolute",
+                    left: 20,
+                    top: 20,
+                    width: 32,
+                    height: 32,
+                    background: gold,
+                    color: white,
+                    borderRadius: "50%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontWeight: 700,
+                    fontFamily: SERIF_STACK,
+                    fontSize: 14,
+                  }}
+                >
+                  {i + 1}
+                </span>
+                {content}
+              </li>
+            ))}
+          </ol>
+        </div>
+      </section>
+
+      {/* CLOSING CTA — forest green band */}
+      <section
+        style={{
+          background: forest,
+          color: white,
+          textAlign: "center",
+          padding: "clamp(48px, 8vw, 96px) clamp(20px, 5vw, 80px)",
+        }}
+      >
+        <div style={{ maxWidth: 760, margin: "0 auto" }}>
+          <h2
+            style={{
+              fontFamily: SERIF_STACK,
+              fontSize: "clamp(28px, 4vw, 42px)",
+              lineHeight: 1.15,
+              color: white,
+              fontWeight: 400,
+              letterSpacing: -0.3,
+              margin: "0 0 16px",
+            }}
+          >
+            Ready to roll this out to your team?
+          </h2>
+          <p style={{ color: "rgba(255,255,255,0.85)", maxWidth: 640, margin: "0 auto 32px", fontSize: 17, lineHeight: 1.7 }}>
+            Email me at{" "}
+            <a href="mailto:kristi@kristinasherk.com" style={{ color: white, textDecoration: "underline" }}>
+              kristi@kristinasherk.com
+            </a>{" "}
+            — I'll help you settle on the exact background and wardrobe combination that fits your brand, and
+            can code you a fully custom background if you have specific brand colors you want matched.
+          </p>
+          <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
+            <a href="mailto:kristi@kristinasherk.com" style={{ ...heroBtnPrimary, background: white, color: forest }}>
+              Email Kristi
+            </a>
+            <button onClick={onStart} style={{ ...heroBtnSecondary, borderColor: "rgba(255,255,255,0.5)", color: white }}>
+              Try it yourself first →
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* CAUTION DISCLAIMER */}
+      <section style={{ background: cream, padding: "24px 20px", borderTop: `1px solid ${border}` }}>
+        <div style={{ maxWidth: 760, margin: "0 auto", display: "flex", gap: 14, alignItems: "flex-start", fontSize: 13, lineHeight: 1.6, color: subText }}>
+          <div
+            style={{
+              flexShrink: 0,
+              width: 22,
+              height: 22,
+              borderRadius: "50%",
+              background: gold,
+              color: white,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontWeight: 700,
+              fontSize: 14,
+              fontFamily: SERIF_STACK,
+              marginTop: 2,
+            }}
+          >
+            !
+          </div>
+          <div>
+            <strong style={{ color: charcoal }}>Heads up:</strong> Slight inconsistencies will occur from generation to generation — that's the nature of AI. If you aren't happy with what you get,{" "}
+            <a href="mailto:kristi@kristinasherk.com" style={{ color: forest, fontWeight: 500 }}>
+              email Kristina
+            </a>{" "}
+            and she'll make it right.
+          </div>
+        </div>
+      </section>
+
+      {/* FOOTER */}
+      <footer style={{ background: charcoal, color: "rgba(255,255,255,0.7)", padding: "40px 20px", textAlign: "center", fontSize: 13 }}>
+        Gener<span style={{ color: gold, fontStyle: "italic", fontWeight: 600 }}>AI</span>tion Headshots · Built by{" "}
+        <a href="https://kristinasherk.com" target="_blank" rel="noreferrer" style={{ color: "rgba(255,255,255,0.9)" }}>
+          Kristina Sherk
+        </a>{" "}
+        ·{" "}
+        <a href="mailto:kristi@kristinasherk.com" style={{ color: "rgba(255,255,255,0.9)" }}>
+          kristi@kristinasherk.com
+        </a>
+      </footer>
     </div>
   );
 };
@@ -13821,6 +14463,8 @@ type Screen =
   | "landing"
   | "healthcare" // /healthcare vertical landing — reached via URL path, see App's
                  // pathname-on-mount + popstate effects below
+  | "teams" // /teams landing — marketing page for companies/team-buyers.
+            // Same URL-driven mount pattern as /healthcare.
   | "how-it-works" // /how-it-works dedicated explainer page — same 3-step section
                    // from the home page + a FAQ block below. Reached via the
                    // "How it works" nav link or by direct URL.
@@ -14313,6 +14957,7 @@ export default function App() {
 
     const screenForPath = (path: string): { screen: Screen; faqSlug?: string } | null => {
       if (path === "/healthcare" || path === "/healthcare/") return { screen: "healthcare" };
+      if (path === "/teams" || path === "/teams/") return { screen: "teams" };
       if (path === "/how-it-works" || path === "/how-it-works/") return { screen: "how-it-works" };
       const faqDetailMatch = path.match(FAQ_DETAIL_RE);
       if (faqDetailMatch) return { screen: "faq-detail", faqSlug: faqDetailMatch[1] };
@@ -17584,6 +18229,23 @@ export default function App() {
             setEntrySpecialty(null);
             // Sync the URL so browser back works and refreshing lands them
             // on the right page.
+            if (window.location.pathname !== "/") {
+              window.history.pushState({}, "", "/");
+            }
+          }}
+        />
+      )}
+      {screen === "teams" && (
+        <TeamsScreen
+          onStart={() => {
+            // CTA on /teams drops the visitor into the same upload flow as
+            // the home page. URL stays at /teams while they're in the flow.
+            requestStart(() => {
+              handleStart();
+            });
+          }}
+          onBackToHome={() => {
+            setScreen("landing");
             if (window.location.pathname !== "/") {
               window.history.pushState({}, "", "/");
             }
