@@ -359,6 +359,105 @@ export default async function handler(
     }
   }
 
+  // ---- backfillFromResend: authoritative recovery. Ask Resend which
+  // addresses it accepted for delivery in the last N hours (default 24) with
+  // this exact subject, intersect with the current recipient list, mark them
+  // all as sent. Doesn't rely on the caller knowing the first-failed address.
+  // ----
+  if (mode === "backfillFromResend") {
+    if (!apiKey) {
+      res.status(500).json({ error: "RESEND_API_KEY not configured" });
+      return;
+    }
+    const hours = Math.max(
+      1,
+      Math.min(72, Number(req.query.hours ?? "24") || 24),
+    );
+    const cutoffMs = Date.now() - hours * 3600 * 1000;
+    // Resend's list endpoint is paginated; we pull up to 1000 in a single
+    // pass, which is plenty for one day's send.
+    const recipSet = new Set(recipients.map((r) => r.toLowerCase()));
+    const matched: string[] = [];
+    let pagesScanned = 0;
+    let totalScanned = 0;
+    try {
+      // Resend: GET /emails?limit=100 with pagination via ?after=<id>.
+      let after: string | undefined;
+      for (let page = 0; page < 10; page++) {
+        pagesScanned++;
+        const url = new URL("https://api.resend.com/emails");
+        url.searchParams.set("limit", "100");
+        if (after) url.searchParams.set("after", after);
+        const rr = await fetch(url.toString(), {
+          headers: { Authorization: `Bearer ${apiKey}` },
+        });
+        if (!rr.ok) {
+          const body = await rr.text().catch(() => "");
+          res.status(500).json({
+            error: `Resend list failed: ${rr.status} ${body.slice(0, 200)}`,
+            note:
+              "Resend's /emails list endpoint requires the 'Full access' API key scope. If your key is 'Sending access' only, generate a new key with full access.",
+          });
+          return;
+        }
+        const data = (await rr.json()) as {
+          data?: Array<{
+            id?: string;
+            to?: string[] | null;
+            subject?: string | null;
+            created_at?: string | null;
+            last_event?: string | null;
+          }>;
+        };
+        const rows = data.data ?? [];
+        if (rows.length === 0) break;
+        totalScanned += rows.length;
+        let hitOlderThanCutoff = false;
+        for (const row of rows) {
+          const ts = row.created_at ? Date.parse(row.created_at) : NaN;
+          if (Number.isFinite(ts) && ts < cutoffMs) {
+            hitOlderThanCutoff = true;
+            continue;
+          }
+          if (row.subject !== SUBJECT) continue;
+          for (const to of row.to ?? []) {
+            const addr = (to || "").trim().toLowerCase();
+            if (addr && recipSet.has(addr)) matched.push(addr);
+          }
+        }
+        after = rows[rows.length - 1]?.id;
+        if (!after || hitOlderThanCutoff) break;
+      }
+    } catch (err) {
+      res
+        .status(500)
+        .json({ error: err instanceof Error ? err.message : String(err) });
+      return;
+    }
+    const uniq = Array.from(new Set(matched));
+    if (uniq.length > 0) {
+      try {
+        await redis.sadd(SENT_SET_KEY, ...uniq);
+        await redis.expire(SENT_SET_KEY, 90 * 24 * 3600);
+      } catch (err) {
+        res
+          .status(500)
+          .json({ error: err instanceof Error ? err.message : String(err) });
+        return;
+      }
+    }
+    res.setHeader("Cache-Control", "no-store");
+    res.status(200).json({
+      mode: "backfillFromResend",
+      windowHours: hours,
+      pagesScanned,
+      totalScanned,
+      matchedInRecipientList: uniq.length,
+      sample: uniq.slice(0, 10),
+    });
+    return;
+  }
+
   // ---- backfill: mark everyone in the current recipient list BEFORE the
   // first-failed address as already sent. Use this after a run that hit the
   // Resend daily quota — recipients are processed in list order, so every
