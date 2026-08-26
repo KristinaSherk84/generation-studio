@@ -433,7 +433,40 @@ export default async function handler(
       (a, b) => b[1] - a[1],
     );
     const foundViaAnswered = foundViaEntries.reduce((s, [, n]) => s + n, 0);
-    const foundViaHtml = foundViaEntries.length
+
+    // Purchases-per-source bar chart (2026-08-26) — Kristi wants to see which
+    // referral sources actually convert, not just which get visits. Buckets
+    // paying leads (Stripe or entry unlock) by foundVia, plus "(no answer)"
+    // for buyers who didn't tell us. Pure CSS/divs, no chart library needed.
+    const purchasesBySource: Record<string, number> = {};
+    for (const l of leads) {
+      if (paidShown(l) <= 0) continue;
+      const src =
+        l.foundVia && l.foundVia.trim() ? l.foundVia.trim() : "(no answer)";
+      purchasesBySource[src] = (purchasesBySource[src] ?? 0) + 1;
+    }
+    const purchaseEntries = Object.entries(purchasesBySource).sort(
+      (a, b) => b[1] - a[1],
+    );
+    const purchaseMax = purchaseEntries.reduce((m, [, n]) => Math.max(m, n), 0);
+    const totalPurchasers = purchaseEntries.reduce((s, [, n]) => s + n, 0);
+    const purchasesBarsHtml = purchaseEntries.length
+      ? `<div class="fvh" style="margin-top:14px">Purchases by source <span style="font-weight:400;color:var(--sub)">(${totalPurchasers} paying)</span></div>
+        <div class="pbars">
+          ${purchaseEntries
+            .map(([k, n]) => {
+              const pct = purchaseMax > 0 ? (n / purchaseMax) * 100 : 0;
+              return `<div class="pbar">
+                <div class="pblabel">${esc(k)}</div>
+                <div class="pbtrack"><div class="pbfill" style="width:${pct.toFixed(1)}%"></div></div>
+                <div class="pbval"><b>${n}</b></div>
+              </div>`;
+            })
+            .join("")}
+        </div>`
+      : "";
+
+    const foundViaHtml = foundViaEntries.length || purchaseEntries.length
       ? `<div class="fv">
         <div class="fvh">How they found us <span style="font-weight:400;color:var(--sub)">(${foundViaAnswered} answered)</span></div>
         <div class="fvpills">${foundViaEntries
@@ -442,6 +475,7 @@ export default async function handler(
               `<span class="fvpill">${esc(k)} <b>${n}</b></span>`,
           )
           .join("")}</div>
+        ${purchasesBarsHtml}
       </div>`
       : "";
 
@@ -601,6 +635,13 @@ export default async function handler(
   .fvpills{display:flex;flex-wrap:wrap;gap:8px;}
   .fvpill{background:var(--amber);border:1px solid var(--line);border-radius:20px;padding:5px 12px;font-size:12.5px;color:var(--ink);}
   .fvpill b{color:var(--forest);margin-left:2px;}
+  .pbars{display:flex;flex-direction:column;gap:6px;margin-top:6px;}
+  .pbar{display:grid;grid-template-columns:150px 1fr 34px;align-items:center;gap:10px;font-size:12.5px;}
+  .pblabel{color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .pbtrack{background:var(--amber);border:1px solid var(--line);border-radius:6px;height:16px;overflow:hidden;}
+  .pbfill{background:var(--forest);height:100%;border-radius:5px;transition:width .3s ease;}
+  .pbval{text-align:right;color:var(--ink);}
+  .pbval b{color:var(--forest);}
 </style>
 </head>
 <body>
