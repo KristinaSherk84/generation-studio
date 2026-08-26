@@ -111,12 +111,15 @@ ${closingHtml}
   return { subject: SUBJECT, html, text: textLines.join("\n") };
 }
 
-// Send-lock: keeps a real "?mode=send" from firing twice unless ?force=1.
+// Per-recipient send log. A Redis SET of every address we've successfully
+// delivered to, so re-runs (e.g. after hitting Resend's daily quota) auto-skip
+// people who already got the email. No duplicate sends, no manual tracking.
 const redis = new Redis({
   url: process.env.KV_REST_API_URL ?? "",
   token: process.env.KV_REST_API_TOKEN ?? "",
 });
-const SEND_LOCK_KEY = "apology-blast:sent";
+const SENT_SET_KEY = "apology-blast:sent-addresses";
+const RUN_LOG_KEY = "apology-blast:last-run";
 
 export default async function handler(
   req: VercelRequest,
@@ -229,46 +232,71 @@ export default async function handler(
 
   // ---- send: the real thing ----
   if (mode === "send") {
-    // Idempotency guard. Refuse a second real send unless ?force=1 is passed.
+    // Pull the set of addresses already delivered on prior runs (empty on
+    // first run). Skip them so a re-run only hits people who never got it.
+    // "?force=1" bypasses the skip and re-sends to everyone.
+    let alreadySent = new Set<string>();
     if (!force) {
       try {
-        const prev = await redis.get<{ at: string; count: number }>(
-          SEND_LOCK_KEY,
-        );
-        if (prev) {
-          res.status(409).json({
-            error: "Already sent",
-            note:
-              "This blast has already been fired. Pass &force=1 to send AGAIN (risk: recipients get a duplicate).",
-            previous: prev,
-          });
-          return;
-        }
+        const arr = (await redis.smembers(SENT_SET_KEY)) as string[] | null;
+        if (arr) alreadySent = new Set(arr.map((a) => a.toLowerCase()));
       } catch {
-        // Redis unreachable → fall through and send. The lock is a convenience,
-        // not a hard guarantee.
+        // Redis unreachable → treat as first run rather than block.
       }
     }
 
+    const toSend = recipients.filter(
+      (r) => !alreadySent.has(r.toLowerCase()),
+    );
+    const skippedAlreadySent = recipients.length - toSend.length;
+
     let sent = 0;
     let failed = 0;
+    let quotaHit = false;
     const errors: string[] = [];
-    for (const to of recipients) {
+    const newlySentLower: string[] = [];
+    for (const to of toSend) {
       const r = await sendOne(to);
-      if (r.ok) sent++;
-      else {
+      if (r.ok) {
+        sent++;
+        newlySentLower.push(to.toLowerCase());
+      } else {
         failed++;
         if (errors.length < 20) errors.push(`${to}: ${r.err ?? "unknown"}`);
+        // Detect Resend daily-quota errors and stop early — no point wasting
+        // the remaining calls when every one will 429 the same way.
+        if (r.err && /429|daily_quota_exceeded|quota/i.test(r.err)) {
+          quotaHit = true;
+          break;
+        }
       }
       // Tiny pacing — well under Resend's 10 req/sec free-tier limit.
       await new Promise((r) => setTimeout(r, 120));
     }
 
+    // Persist which addresses actually got the email so the next run skips them.
+    if (newlySentLower.length > 0) {
+      try {
+        await redis.sadd(SENT_SET_KEY, ...newlySentLower);
+        // Keep the record around for a long time — 90 days is plenty for any
+        // realistic backfill campaign. Reset it manually (see mode=reset).
+        await redis.expire(SENT_SET_KEY, 90 * 24 * 3600);
+      } catch {
+        /* best-effort */
+      }
+    }
     try {
       await redis.set(
-        SEND_LOCK_KEY,
-        { at: new Date().toISOString(), count: sent },
-        { ex: 30 * 24 * 3600 },
+        RUN_LOG_KEY,
+        {
+          at: new Date().toISOString(),
+          attempted: toSend.length,
+          sent,
+          failed,
+          skippedAlreadySent,
+          quotaHit,
+        },
+        { ex: 90 * 24 * 3600 },
       );
     } catch {
       /* best-effort */
@@ -277,21 +305,133 @@ export default async function handler(
     console.log(
       JSON.stringify({
         type: "apology_blast_send",
-        attempted: recipients.length,
+        recipientsTotal: recipients.length,
+        skippedAlreadySent,
+        attempted: toSend.length,
         sent,
         failed,
+        quotaHit,
         forced: force,
       }),
     );
 
     res.status(200).json({
       mode: "send",
-      attempted: recipients.length,
+      recipientsTotal: recipients.length,
+      skippedAlreadySent,
+      attempted: toSend.length,
       sent,
       failed,
+      quotaHit,
+      remainingUnsent: Math.max(0, toSend.length - sent),
+      note: quotaHit
+        ? "Stopped early: Resend daily quota reached. Re-run this URL after the quota resets (24h from your first send today) and it will pick up only the people who haven't been emailed yet."
+        : undefined,
       errors,
     });
     return;
+  }
+
+  // ---- status: see how many addresses have been sent so far ----
+  if (mode === "status") {
+    try {
+      const arr = (await redis.smembers(SENT_SET_KEY)) as string[] | null;
+      const last = await redis.get<Record<string, unknown>>(RUN_LOG_KEY);
+      const sentSoFar = new Set((arr ?? []).map((a) => a.toLowerCase()));
+      const remaining = recipients.filter(
+        (r) => !sentSoFar.has(r.toLowerCase()),
+      );
+      res.setHeader("Cache-Control", "no-store");
+      res.status(200).json({
+        mode: "status",
+        totalNonBuyers: recipients.length,
+        alreadySent: sentSoFar.size,
+        remaining: remaining.length,
+        lastRun: last ?? null,
+        remainingPreview: remaining.slice(0, 20),
+      });
+      return;
+    } catch (err) {
+      res
+        .status(500)
+        .json({ error: err instanceof Error ? err.message : String(err) });
+      return;
+    }
+  }
+
+  // ---- backfill: mark everyone in the current recipient list BEFORE the
+  // first-failed address as already sent. Use this after a run that hit the
+  // Resend daily quota — recipients are processed in list order, so every
+  // address ahead of the first failure did go out. Idempotent. ----
+  if (mode === "backfill") {
+    const firstFailed =
+      typeof req.query.firstFailed === "string"
+        ? req.query.firstFailed.trim().toLowerCase()
+        : "";
+    if (!firstFailed) {
+      res.status(400).json({
+        error:
+          "Pass &firstFailed=email@example.com — the first address that got a 429/failure in the send response.",
+      });
+      return;
+    }
+    const idx = recipients.findIndex(
+      (r) => r.toLowerCase() === firstFailed,
+    );
+    if (idx < 0) {
+      res.status(404).json({
+        error:
+          "firstFailed address not found in the current recipient list. Double-check the address.",
+        recipientsPreview: recipients.slice(0, 10),
+      });
+      return;
+    }
+    const alreadyDone = recipients.slice(0, idx).map((r) => r.toLowerCase());
+    if (alreadyDone.length === 0) {
+      res.status(200).json({
+        mode: "backfill",
+        markedSent: 0,
+        note: "firstFailed is the first recipient, nothing to backfill.",
+      });
+      return;
+    }
+    try {
+      await redis.sadd(SENT_SET_KEY, ...alreadyDone);
+      await redis.expire(SENT_SET_KEY, 90 * 24 * 3600);
+      res.status(200).json({
+        mode: "backfill",
+        markedSent: alreadyDone.length,
+        firstMarked: alreadyDone[0],
+        lastMarked: alreadyDone[alreadyDone.length - 1],
+      });
+      return;
+    } catch (err) {
+      res
+        .status(500)
+        .json({ error: err instanceof Error ? err.message : String(err) });
+      return;
+    }
+  }
+
+  // ---- reset: clear the "already sent" record (rare, deliberate) ----
+  if (mode === "reset") {
+    if (!force) {
+      res.status(400).json({
+        error:
+          "reset wipes the record of who has been emailed. Add &force=1 to confirm.",
+      });
+      return;
+    }
+    try {
+      await redis.del(SENT_SET_KEY);
+      res.status(200).json({ mode: "reset", ok: true });
+      return;
+    } catch (err) {
+      res
+        .status(500)
+        .json({ error: err instanceof Error ? err.message : String(err) });
+      return;
+    }
   }
 
   res.status(400).json({
