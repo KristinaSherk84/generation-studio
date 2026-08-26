@@ -4995,7 +4995,6 @@ const TeamsScreen = ({ onStart, onBackToHome }: TeamsScreenProps) => {
   const white = BRAND.white;
   const charcoal = BRAND.charcoal;
   const forest = BRAND.forestGreen;
-  const forestHover = BRAND.forestGreenHover;
   const gold = BRAND.gold;
   const bodyText = BRAND.bodyText;
   const subText = BRAND.subText;
