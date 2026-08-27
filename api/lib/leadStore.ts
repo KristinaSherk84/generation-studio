@@ -373,6 +373,41 @@ export async function markLeadEntryUnlock(
   await redis.set(key, { ...existing, entryUnlockUsd: Math.max(prev, usd) });
 }
 
+// ---- Email aliases (2026-08-27) ----
+// When a customer generates under email A but checks out with email B (a
+// different alias of the same address — .com vs .com.au, a work vs personal
+// account), Stripe-by-email match strands the payment. This tiny map lets
+// Kristi record "email B is really email A" from the admin page; the leads
+// page then credits any Stripe payment on B to A's lead row (and sums both).
+// Single Redis hash keyed by alias → canonical, both lower-cased.
+const ALIAS_HASH_KEY = "lead-aliases";
+
+/** Point one alt email at a canonical lead. Both are lower-cased for lookup.
+ *  Idempotent; overwrites the alias's target if it was already mapped. */
+export async function addLeadAlias(
+  canonicalEmail: string,
+  aliasEmail: string,
+): Promise<void> {
+  if (!looksLikeEmail(canonicalEmail) || !looksLikeEmail(aliasEmail)) return;
+  const c = canonicalEmail.trim().toLowerCase();
+  const a = aliasEmail.trim().toLowerCase();
+  if (c === a) return; // an email can't alias itself
+  await redis.hset(ALIAS_HASH_KEY, { [a]: c });
+}
+
+/** Remove one alias mapping. */
+export async function removeLeadAlias(aliasEmail: string): Promise<void> {
+  if (!looksLikeEmail(aliasEmail)) return;
+  await redis.hdel(ALIAS_HASH_KEY, aliasEmail.trim().toLowerCase());
+}
+
+/** Full alias → canonical map. Small (one hash), fine to read on each admin
+ *  page render. Returns {} when the hash doesn't exist. */
+export async function getEmailAliasMap(): Promise<Record<string, string>> {
+  const raw = await redis.hgetall<Record<string, string>>(ALIAS_HASH_KEY);
+  return raw ?? {};
+}
+
 /** Return every lead record, newest-first. Used by the admin export. */
 export async function listLeads(): Promise<LeadRecord[]> {
   const emails = (await redis.smembers(INDEX_KEY)) ?? [];

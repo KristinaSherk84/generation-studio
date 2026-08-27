@@ -19,6 +19,9 @@ import {
   recordPurchase,
   setLeadFoundVia,
   getLeadCallCounts,
+  addLeadAlias,
+  removeLeadAlias,
+  getEmailAliasMap,
 } from "../lib/leadStore.js";
 import {
   getDailyStats,
@@ -212,6 +215,38 @@ export default async function handler(
       }
       return;
     }
+    if (
+      body.action === "addAlias" &&
+      typeof body.email === "string" &&
+      typeof (body as { alias?: unknown }).alias === "string"
+    ) {
+      const alias = ((body as { alias: string }).alias || "").trim();
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(alias)) {
+        res.status(400).json({ ok: false, error: "Invalid alias email" });
+        return;
+      }
+      try {
+        await addLeadAlias(body.email, alias);
+        res.status(200).json({ ok: true });
+      } catch (err) {
+        console.error("[admin/leads] addAlias failed:", err);
+        res.status(500).json({ ok: false, error: "Failed to add alias" });
+      }
+      return;
+    }
+    if (
+      body.action === "removeAlias" &&
+      typeof (body as { alias?: unknown }).alias === "string"
+    ) {
+      try {
+        await removeLeadAlias((body as { alias: string }).alias);
+        res.status(200).json({ ok: true });
+      } catch (err) {
+        console.error("[admin/leads] removeAlias failed:", err);
+        res.status(500).json({ ok: false, error: "Failed to remove alias" });
+      }
+      return;
+    }
     if (body.action === "setFoundVia" && typeof body.email === "string") {
       const fv = typeof body.foundVia === "string" ? body.foundVia : "";
       try {
@@ -300,8 +335,26 @@ export default async function handler(
     // Live Stripe payments keyed by checkout email — powers the per-lead
     // "Paid" column, the CSV amountPaidUsd, and the Total revenue card.
     const stripePayments = await fetchStripePayments();
-    const paidByEmail = stripePayments ? stripePayments.byEmail : {};
+    const rawPaidByEmail = stripePayments ? stripePayments.byEmail : {};
     const revenueUsd = stripePayments ? stripePayments.total : null;
+
+    // Fold aliased checkout emails back onto their canonical lead so that a
+    // customer who generated as A@x.com but paid as A@x.com.au shows the full
+    // paid amount on A's row. Sums Stripe amounts across primary + aliases;
+    // never drops revenue from the total. (2026-08-27)
+    const aliasMap = await getEmailAliasMap();
+    const paidByEmail: Record<string, number> = {};
+    for (const [email, usd] of Object.entries(rawPaidByEmail)) {
+      const key = (aliasMap[email] ?? email).toLowerCase();
+      paidByEmail[key] = (paidByEmail[key] ?? 0) + usd;
+    }
+    // Inverse map for the UI: canonical → [alias, alias, …].
+    const aliasesByCanonical: Record<string, string[]> = {};
+    for (const [alias, canonical] of Object.entries(aliasMap)) {
+      const c = canonical.toLowerCase();
+      if (!aliasesByCanonical[c]) aliasesByCanonical[c] = [];
+      aliasesByCanonical[c].push(alias);
+    }
 
     // Daily activity (2026-08-14): API calls (Gemini image calls) + distinct
     // people who generated, per ET day, plus the Google spend Kristi types in.
@@ -479,10 +532,22 @@ export default async function handler(
       </div>`
       : "";
 
+    const aliasCellHtml = (email: string): string => {
+      const canonical = email.trim().toLowerCase();
+      const aliases = aliasesByCanonical[canonical] ?? [];
+      const chips = aliases
+        .map(
+          (a) =>
+            `<span class="aliaschip" title="Alias email">${esc(a)} <a class="aliasrm" data-alias="${esc(a)}" title="Remove alias">×</a></span>`,
+        )
+        .join(" ");
+      return `<div class="aliascell">${chips}<button class="aliasadd" data-email="${esc(email)}" title="Add an alt email that pays under this lead">+ alt</button></div>`;
+    };
+
     const rowsHtml = leads
       .map(
         (l) => `<tr class="${l.purchased ? "bought" : "aband"}">
-        <td class="email">${esc(l.email)}</td>
+        <td class="email">${esc(l.email)}${aliasCellHtml(l.email)}</td>
         <td>${esc(formatET(l.createdAt))}</td>
         <td>${esc(formatET(l.lastSeenAt))}</td>
         <td class="num">${esc(shownCalls(l))}</td>
@@ -642,6 +707,11 @@ export default async function handler(
   .pbfill{background:var(--forest);height:100%;border-radius:5px;transition:width .3s ease;}
   .pbval{text-align:right;color:var(--ink);}
   .pbval b{color:var(--forest);}
+  .aliascell{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;align-items:center;}
+  .aliaschip{background:var(--amber);border:1px solid var(--line);border-radius:12px;font-size:11px;font-weight:500;padding:1px 8px;color:var(--ink);white-space:nowrap;}
+  .aliasrm{color:#B00020;cursor:pointer;font-weight:700;margin-left:3px;text-decoration:none;}
+  .aliasadd{background:none;border:1px dashed var(--line);border-radius:12px;font-size:11px;color:var(--sub);padding:1px 8px;cursor:pointer;font-weight:500;}
+  .aliasadd:hover{color:var(--forest);border-color:var(--forest);}
 </style>
 </head>
 <body>
@@ -774,6 +844,44 @@ export default async function handler(
         .catch(function () { addBtn.disabled = false; addBtn.textContent = 'Add as purchased'; alert('Network error'); });
     });
   }
+  document.querySelectorAll('.aliasadd').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var canonical = btn.dataset.email;
+      var alias = prompt('Alt email that pays under ' + canonical + ':\\n(e.g. their .com.au version, work email, etc.)', '');
+      if (!alias) return;
+      alias = alias.trim();
+      if (!/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(alias)) { alert('Not a valid email address.'); return; }
+      btn.disabled = true; btn.textContent = 'Saving…';
+      fetch('/api/admin/leads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'addAlias', pw: PW, email: canonical, alias: alias }),
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d && d.ok) { location.reload(); }
+          else { btn.disabled = false; btn.textContent = '+ alt'; alert('Failed: ' + ((d && d.error) || 'unknown')); }
+        })
+        .catch(function () { btn.disabled = false; btn.textContent = '+ alt'; alert('Network error'); });
+    });
+  });
+  document.querySelectorAll('.aliasrm').forEach(function (a) {
+    a.addEventListener('click', function () {
+      var alias = a.dataset.alias;
+      if (!confirm('Remove alias ' + alias + '? Stripe payments to this address will no longer be credited to the canonical lead.')) return;
+      fetch('/api/admin/leads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'removeAlias', pw: PW, alias: alias }),
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d && d.ok) { location.reload(); }
+          else { alert('Failed: ' + ((d && d.error) || 'unknown')); }
+        })
+        .catch(function () { alert('Network error'); });
+    });
+  });
   document.querySelectorAll('.peopleinput').forEach(function (inp) {
     var prev = inp.value;
     inp.addEventListener('change', function () {
