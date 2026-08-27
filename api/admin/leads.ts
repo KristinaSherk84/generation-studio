@@ -168,7 +168,7 @@ function formatET(iso: string | null): string {
   if (Number.isNaN(d.getTime())) return iso;
   return new Intl.DateTimeFormat("en-US", {
     timeZone: "America/New_York",
-    year: "numeric",
+    year: "2-digit",
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
@@ -532,7 +532,7 @@ export default async function handler(
       </div>`
       : "";
 
-    const aliasCellHtml = (email: string): string => {
+    const aliasInlineHtml = (email: string): string => {
       const canonical = email.trim().toLowerCase();
       const aliases = aliasesByCanonical[canonical] ?? [];
       const chips = aliases
@@ -540,14 +540,14 @@ export default async function handler(
           (a) =>
             `<span class="aliaschip" title="Alias email">${esc(a)} <a class="aliasrm" data-alias="${esc(a)}" title="Remove alias">×</a></span>`,
         )
-        .join(" ");
-      return `<div class="aliascell">${chips}<button class="aliasadd" data-email="${esc(email)}" title="Add an alt email that pays under this lead">+ alt</button></div>`;
+        .join("");
+      return `${chips}<button class="aliasadd" data-email="${esc(email)}" title="Add an alt email that pays under this lead">+ alt</button>`;
     };
 
     const rowsHtml = leads
       .map(
         (l) => `<tr class="${l.purchased ? "bought" : "aband"}">
-        <td class="email">${esc(l.email)}${aliasCellHtml(l.email)}</td>
+        <td class="email"><span class="emailtxt">${esc(l.email)}</span> ${aliasInlineHtml(l.email)}</td>
         <td>${esc(formatET(l.createdAt))}</td>
         <td>${esc(formatET(l.lastSeenAt))}</td>
         <td class="num">${esc(shownCalls(l))}</td>
@@ -707,10 +707,10 @@ export default async function handler(
   .pbfill{background:var(--forest);height:100%;border-radius:5px;transition:width .3s ease;}
   .pbval{text-align:right;color:var(--ink);}
   .pbval b{color:var(--forest);}
-  .aliascell{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;align-items:center;}
-  .aliaschip{background:var(--amber);border:1px solid var(--line);border-radius:12px;font-size:11px;font-weight:500;padding:1px 8px;color:var(--ink);white-space:nowrap;}
+  td.email .emailtxt{margin-right:6px;}
+  .aliaschip{background:var(--amber);border:1px solid var(--line);border-radius:12px;font-size:11px;font-weight:500;padding:1px 8px;color:var(--ink);white-space:nowrap;margin-right:4px;display:inline-block;vertical-align:middle;}
   .aliasrm{color:#B00020;cursor:pointer;font-weight:700;margin-left:3px;text-decoration:none;}
-  .aliasadd{background:none;border:1px dashed var(--line);border-radius:12px;font-size:11px;color:var(--sub);padding:1px 8px;cursor:pointer;font-weight:500;}
+  .aliasadd{background:none;border:1px dashed var(--line);border-radius:12px;font-size:11px;color:var(--sub);padding:1px 8px;cursor:pointer;font-weight:500;vertical-align:middle;}
   .aliasadd:hover{color:var(--forest);border-color:var(--forest);}
 </style>
 </head>
