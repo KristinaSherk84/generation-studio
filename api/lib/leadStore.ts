@@ -373,6 +373,41 @@ export async function markLeadEntryUnlock(
   await redis.set(key, { ...existing, entryUnlockUsd: Math.max(prev, usd) });
 }
 
+// ---- Email blacklist (2026-08-28) ----
+// Emails Kristi has flagged as abusers. /api/generate checks this set before
+// spending any compute; a match returns 403 with a generic "unavailable"
+// message so the abuser can't tell it's a personal ban. Stored as a Redis
+// SET of lowercase email strings.
+const BLACKLIST_KEY = "email-blacklist";
+
+/** Add one email to the blacklist. Lowercased. Idempotent. */
+export async function blacklistEmail(email: string): Promise<void> {
+  if (!looksLikeEmail(email)) return;
+  await redis.sadd(BLACKLIST_KEY, email.trim().toLowerCase());
+}
+
+/** Remove one email from the blacklist. */
+export async function unblacklistEmail(email: string): Promise<void> {
+  if (!looksLikeEmail(email)) return;
+  await redis.srem(BLACKLIST_KEY, email.trim().toLowerCase());
+}
+
+/** True if this exact address is blacklisted. Case-insensitive. */
+export async function isEmailBlacklisted(email: string): Promise<boolean> {
+  if (!looksLikeEmail(email)) return false;
+  const r = await redis.sismember(
+    BLACKLIST_KEY,
+    email.trim().toLowerCase(),
+  );
+  return r === 1;
+}
+
+/** Full set of blacklisted addresses for the admin UI. */
+export async function listBlacklistedEmails(): Promise<string[]> {
+  const arr = (await redis.smembers(BLACKLIST_KEY)) as string[] | null;
+  return arr ?? [];
+}
+
 // ---- Email aliases (2026-08-27) ----
 // When a customer generates under email A but checks out with email B (a
 // different alias of the same address — .com vs .com.au, a work vs personal

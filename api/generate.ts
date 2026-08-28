@@ -35,7 +35,7 @@ import {
   checkFreeCallCap,
 } from "./lib/freeGenLimit.js";
 import { bumpApiCall } from "./lib/dailyStats.js";
-import { bumpLeadCalls } from "./lib/leadStore.js";
+import { bumpLeadCalls, isEmailBlacklisted } from "./lib/leadStore.js";
 import { put } from "@vercel/blob";
 import { recordBatchImage } from "./lib/batchStore.js";
 import {
@@ -1953,7 +1953,62 @@ export default async function handler(
   // real per-person image-call total (not just rounds started). bumpLeadCalls
   // validates the address itself and no-ops on anything invalid. Best-effort.
   if (typeof body.email === "string") {
+    // Blacklist check (2026-08-28) — Kristi flags abuser emails from the
+    // admin/leads page. Fail-open on Redis errors so a legitimate customer is
+    // never blocked by an infra hiccup.
+    try {
+      if (await isEmailBlacklisted(body.email)) {
+        console.log(
+          JSON.stringify({
+            type: "blacklist_hit",
+            email: body.email.trim().toLowerCase(),
+            ip: clientIp,
+          }),
+        );
+        return res.status(403).json({
+          error:
+            "This email address is temporarily unable to generate. Please contact kristi@kristinasherk.com if you believe this is a mistake.",
+        });
+      }
+    } catch {
+      /* fail open */
+    }
     await bumpLeadCalls(body.email);
+  }
+
+  // Per-generation audit log (2026-08-28) — one structured line per /api/generate
+  // call with IP, email, batchId, style, attire, variation index. Vercel keeps
+  // these searchable for 24h on Pro; enough to spot abuse patterns FAST next
+  // time (rotate-IP + fake-emails from one person, unusually high call rate,
+  // etc.). Never blocks generation.
+  try {
+    console.log(
+      JSON.stringify({
+        type: "generate_call",
+        ip: clientIp,
+        email:
+          typeof body.email === "string"
+            ? body.email.trim().toLowerCase()
+            : null,
+        batchId: typeof body.batchId === "string" ? body.batchId : null,
+        purchaseSessionId:
+          typeof body.purchaseSessionId === "string"
+            ? body.purchaseSessionId
+            : null,
+        unlockSessionId:
+          typeof body.stripeSessionId === "string"
+            ? body.stripeSessionId
+            : null,
+        promoUsed:
+          typeof body.promoCode === "string" && body.promoCode.length > 0,
+        style: typeof body.style === "string" ? body.style : null,
+        attire: typeof body.attire === "string" ? body.attire : null,
+        variationIndex:
+          typeof body.variationIndex === "number" ? body.variationIndex : null,
+      }),
+    );
+  } catch {
+    /* logging must never fail the request */
   }
 
   if (

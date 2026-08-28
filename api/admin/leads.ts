@@ -22,6 +22,9 @@ import {
   addLeadAlias,
   removeLeadAlias,
   getEmailAliasMap,
+  blacklistEmail,
+  unblacklistEmail,
+  listBlacklistedEmails,
 } from "../lib/leadStore.js";
 import {
   getDailyStats,
@@ -247,6 +250,26 @@ export default async function handler(
       }
       return;
     }
+    if (body.action === "blacklist" && typeof body.email === "string") {
+      try {
+        await blacklistEmail(body.email);
+        res.status(200).json({ ok: true });
+      } catch (err) {
+        console.error("[admin/leads] blacklist failed:", err);
+        res.status(500).json({ ok: false, error: "Failed to blacklist" });
+      }
+      return;
+    }
+    if (body.action === "unblacklist" && typeof body.email === "string") {
+      try {
+        await unblacklistEmail(body.email);
+        res.status(200).json({ ok: true });
+      } catch (err) {
+        console.error("[admin/leads] unblacklist failed:", err);
+        res.status(500).json({ ok: false, error: "Failed to unblacklist" });
+      }
+      return;
+    }
     if (body.action === "setFoundVia" && typeof body.email === "string") {
       const fv = typeof body.foundVia === "string" ? body.foundVia : "";
       try {
@@ -355,6 +378,11 @@ export default async function handler(
       if (!aliasesByCanonical[c]) aliasesByCanonical[c] = [];
       aliasesByCanonical[c].push(alias);
     }
+
+    // Blacklisted emails set — used to render the "unblock" state per row and
+    // to show a small banner at the top with the current blacklist. (2026-08-28)
+    const blacklistedArr = await listBlacklistedEmails();
+    const blacklistedSet = new Set(blacklistedArr.map((e) => e.toLowerCase()));
 
     // Daily activity (2026-08-14): API calls (Gemini image calls) + distinct
     // people who generated, per ET day, plus the Google spend Kristi types in.
@@ -541,7 +569,11 @@ export default async function handler(
             `<span class="aliaschip" title="Alias email">${esc(a)} <a class="aliasrm" data-alias="${esc(a)}" title="Remove alias">×</a></span>`,
         )
         .join("");
-      return `${chips}<button class="aliasadd" data-email="${esc(email)}" title="Add an alt email that pays under this lead">+ alt</button>`;
+      const blocked = blacklistedSet.has(canonical);
+      const banBtn = blocked
+        ? `<button class="unblockbtn" data-email="${esc(email)}" title="Currently BLOCKED from generating. Click to unblock.">🚫 unblock</button>`
+        : `<button class="blockbtn" data-email="${esc(email)}" title="Block this email from generating any more headshots.">block</button>`;
+      return `${chips}<button class="aliasadd" data-email="${esc(email)}" title="Add an alt email that pays under this lead">+ alt</button>${banBtn}`;
     };
 
     const rowsHtml = leads
@@ -712,6 +744,12 @@ export default async function handler(
   .aliasrm{color:#B00020;cursor:pointer;font-weight:700;margin-left:3px;text-decoration:none;}
   .aliasadd{background:none;border:1px dashed var(--line);border-radius:12px;font-size:11px;color:var(--sub);padding:1px 8px;cursor:pointer;font-weight:500;vertical-align:middle;}
   .aliasadd:hover{color:var(--forest);border-color:var(--forest);}
+  .blockbtn{background:none;border:1px dashed #B00020;border-radius:12px;font-size:11px;color:#B00020;padding:1px 8px;margin-left:4px;cursor:pointer;font-weight:500;vertical-align:middle;}
+  .blockbtn:hover{background:#B00020;color:#fff;}
+  .unblockbtn{background:#B00020;color:#fff;border:1px solid #B00020;border-radius:12px;font-size:11px;padding:1px 8px;margin-left:4px;cursor:pointer;font-weight:600;vertical-align:middle;}
+  .unblockbtn:hover{background:#fff;color:#B00020;}
+  .blbanner{background:#FCE8E6;border:1px solid #B00020;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:#2C2C2A;}
+  .blbanner b{color:#B00020;}
 </style>
 </head>
 <body>
@@ -733,6 +771,12 @@ export default async function handler(
     }</div><div class="l">Est. cost / purchase</div></div>
   </div>
   <p class="meta" style="margin:-10px 0 18px">Est. spend = batches × ~$0.60 (6 images at 2K). Rough — excludes per-slot regens, identity auto-regen, and the post-purchase retouch pass, so real spend runs higher.</p>
+
+  ${
+    blacklistedArr.length
+      ? `<div class="blbanner"><b>${blacklistedArr.length} blocked email${blacklistedArr.length === 1 ? "" : "s"}:</b> ${blacklistedArr.map((e) => esc(e)).join(", ")}</div>`
+      : ""
+  }
 
   ${winbackHtml}
   ${dailyTableHtml}
@@ -844,6 +888,42 @@ export default async function handler(
         .catch(function () { addBtn.disabled = false; addBtn.textContent = 'Add as purchased'; alert('Network error'); });
     });
   }
+  document.querySelectorAll('.blockbtn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var em = btn.dataset.email;
+      if (!confirm('Block ' + em + ' from generating any more headshots?\\nThey will see a generic "unavailable" message. You can unblock any time.')) return;
+      btn.disabled = true; btn.textContent = 'Saving…';
+      fetch('/api/admin/leads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'blacklist', pw: PW, email: em }),
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d && d.ok) { location.reload(); }
+          else { btn.disabled = false; btn.textContent = 'block'; alert('Failed: ' + ((d && d.error) || 'unknown')); }
+        })
+        .catch(function () { btn.disabled = false; btn.textContent = 'block'; alert('Network error'); });
+    });
+  });
+  document.querySelectorAll('.unblockbtn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var em = btn.dataset.email;
+      if (!confirm('Unblock ' + em + '? They will be able to generate again.')) return;
+      btn.disabled = true;
+      fetch('/api/admin/leads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'unblacklist', pw: PW, email: em }),
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d && d.ok) { location.reload(); }
+          else { btn.disabled = false; alert('Failed: ' + ((d && d.error) || 'unknown')); }
+        })
+        .catch(function () { btn.disabled = false; alert('Network error'); });
+    });
+  });
   document.querySelectorAll('.aliasadd').forEach(function (btn) {
     btn.addEventListener('click', function () {
       var canonical = btn.dataset.email;
