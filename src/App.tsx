@@ -2196,6 +2196,9 @@ type LandingV2Props = LandingProps & {
   // stale entry-specialty so the healthcare flow starts clean. Added
   // 2026-05-27 alongside the Specialty nav dropdown.
   onNavigateHealthcare: () => void;
+  // Navigate to the /teams marketing page (companies / team buyers).
+  // Same pattern as Healthcare — pushes /teams URL + sets screen. (2026-08-28)
+  onNavigateTeams: () => void;
   onShowGallery: () => void;
   // Navigate to the /how-it-works dedicated explainer page. Added
   // 2026-06-02 alongside the home-page filmstrip → HowItWorks swap; the
@@ -2215,6 +2218,7 @@ const LandingV2 = ({
   onPromoUnlock,
   onShowGallery,
   onNavigateHealthcare,
+  onNavigateTeams,
   onNavigateHowItWorks,
   onNavigateFAQ,
   entryFeeEnabled,
@@ -2501,6 +2505,29 @@ const LandingV2 = ({
                   role="menuitem"
                   onClick={() => {
                     setMobileMenuOpen(false);
+                    onNavigateTeams();
+                  }}
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    textAlign: "left",
+                    background: "transparent",
+                    border: "none",
+                    padding: "10px 12px",
+                    fontSize: 14,
+                    color: BRAND.charcoal,
+                    fontFamily: SANS_STACK,
+                    cursor: "pointer",
+                    borderRadius: 4,
+                  }}
+                >
+                  Teams
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
                     onNavigateHowItWorks();
                   }}
                   style={{
@@ -2689,6 +2716,22 @@ const LandingV2 = ({
                 </div>
               )}
             </div>
+            <button
+              onClick={onNavigateTeams}
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                fontSize: 14,
+                color: BRAND.charcoal,
+                borderBottom: `1px solid ${BRAND.gold}`,
+                paddingBottom: 2,
+                fontFamily: SANS_STACK,
+                padding: 0,
+              }}
+            >
+              Teams
+            </button>
             <button
               onClick={onNavigateHowItWorks}
               style={{
@@ -14957,6 +15000,7 @@ export default function App() {
     const screenForPath = (path: string): { screen: Screen; faqSlug?: string } | null => {
       if (path === "/healthcare" || path === "/healthcare/") return { screen: "healthcare" };
       if (path === "/teams" || path === "/teams/") return { screen: "teams" };
+      if (path === "/headshot-generator-gallery" || path === "/headshot-generator-gallery/") return { screen: "gallery" };
       if (path === "/how-it-works" || path === "/how-it-works/") return { screen: "how-it-works" };
       const faqDetailMatch = path.match(FAQ_DETAIL_RE);
       if (faqDetailMatch) return { screen: "faq-detail", faqSlug: faqDetailMatch[1] };
@@ -18124,7 +18168,12 @@ export default function App() {
           entryFeeEnabled={entryFeeEnabled}
           onStart={() => requestStart(handleStart)}
           onPromoUnlock={handlePromoUnlock}
-          onShowGallery={() => setScreen("gallery")}
+          onShowGallery={() => {
+            if (window.location.pathname !== "/headshot-generator-gallery") {
+              window.history.pushState({}, "", "/headshot-generator-gallery");
+            }
+            setScreen("gallery");
+          }}
           onNavigateHowItWorks={() => {
             // Sync URL + screen so direct refresh + bookmarks land on
             // /how-it-works. Mirrors the healthcare navigation pattern.
@@ -18149,6 +18198,12 @@ export default function App() {
               window.history.pushState({}, "", "/healthcare");
             }
             setScreen("healthcare");
+          }}
+          onNavigateTeams={() => {
+            if (window.location.pathname !== "/teams") {
+              window.history.pushState({}, "", "/teams");
+            }
+            setScreen("teams");
           }}
         />
       )}
@@ -18254,7 +18309,12 @@ export default function App() {
       {screen === "gallery" && (
         <GalleryScreen
           entryFeeEnabled={entryFeeEnabled}
-          onBack={() => setScreen("landing")}
+          onBack={() => {
+            setScreen("landing");
+            if (window.location.pathname !== "/") {
+              window.history.pushState({}, "", "/");
+            }
+          }}
           onStart={handleStart}
         />
       )}
