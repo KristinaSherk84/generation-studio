@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
-import { Upload, Check, X, ArrowLeft, RefreshCw, Loader2, Download, Maximize2, ChevronDown, User, Sparkles, CircleUser, ArrowDown, ArrowRight, Menu, Plus, ShoppingBag, Trash2, Lock } from "lucide-react";
+import { Upload, Check, X, ArrowLeft, RefreshCw, Loader2, Download, Maximize2, ChevronDown, User, Sparkles, CircleUser, ArrowDown, ArrowRight, Menu, Plus, ShoppingBag, Trash2, Lock, Undo2, Redo2 } from "lucide-react";
 import { upload } from "@vercel/blob/client";
 import exifr from "exifr";
 
@@ -9915,6 +9915,14 @@ const LoadingScreen = ({
 
 type GridScreenProps = {
   images: string[]; // base64 data URIs returned from /api/generate, one per card
+  // Per-slot undo history (2026-08-31). A non-null value in slot N means the
+  // customer can revert that tile back to its previous image (before the
+  // last regen or identity redo). Drives the ↶ / ↷ toggle button on the tile.
+  previousImages: (string | null)[];
+  // Slots currently showing the PREVIOUS version (customer hit undo). Drives
+  // the icon direction: ↷ (forward) if in this set, ↶ (back) if not.
+  revertedSlots: Set<number>;
+  onRevertSlot: (index: number) => void;
   // Called when the user clicks "Check out" — passes the cart's URLs forward
   // to the retouch + checkout flow. Cart is URL-keyed, not index-keyed, so a
   // pick from a prior style/regen round is preserved even after Generate
@@ -9966,6 +9974,9 @@ type GridScreenProps = {
 
 const GridScreen = ({
   images,
+  previousImages,
+  revertedSlots,
+  onRevertSlot,
   onDeliver,
   onBack,
   onRegenerateSlot,
@@ -11035,6 +11046,59 @@ const GridScreen = ({
                   }}
                 >
                   <RefreshCw size={16} />
+                </button>
+              )}
+              {/* Revert / redo toggle button — top-LEFT corner. Shows only
+                  when this slot has an OTHER version stashed (from a prior
+                  regen or identity redo). Icon direction depends on which
+                  version is currently shown: ↶ (Undo2) when viewing the
+                  newest and can go back, ↷ (Redo2) when viewing the previous
+                  and can go forward. Zero-cost swap either way. (2026-08-31) */}
+              {src && previousImages[i] && !regenerating && !perfecting && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRevertSlot(i);
+                  }}
+                  title={
+                    revertedSlots.has(i)
+                      ? "Go forward — the newer shot"
+                      : "Undo — go back to the previous shot"
+                  }
+                  aria-label={
+                    revertedSlots.has(i)
+                      ? "Go forward — the newer shot"
+                      : "Undo — go back to the previous shot"
+                  }
+                  style={{
+                    position: "absolute",
+                    top: 10,
+                    left: 10,
+                    background: "rgba(255, 255, 255, 0.92)",
+                    color: C.dark,
+                    border: "none",
+                    borderRadius: "50%",
+                    width: 32,
+                    height: 32,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: "pointer",
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+                    padding: 0,
+                    zIndex: 4,
+                    transition: "background 0.15s, transform 0.15s",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = C.white;
+                    e.currentTarget.style.transform = "scale(1.08)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "rgba(255, 255, 255, 0.92)";
+                    e.currentTarget.style.transform = "scale(1)";
+                  }}
+                >
+                  {revertedSlots.has(i) ? <Redo2 size={16} /> : <Undo2 size={16} />}
                 </button>
               )}
               {/* View-larger (expand) button — bottom-LEFT corner. Persistent
@@ -15406,6 +15470,25 @@ export default function App() {
   // particular API call failed — GridScreen renders missing slots as
   // "generation failed" placeholders rather than hiding them.
   const [generatedImages, setGeneratedImages] = useState<string[]>([]);
+  // Per-slot undo history (2026-08-31). When a slot's image is replaced by a
+  // regen or an identity auto-redo, the OLD URL is stashed here. If it's
+  // non-null for a slot, the grid shows a small ↶ button that lets the
+  // customer swap the previous shot back — no new generation, no cost.
+  // Keeps ONE level of history per slot (the last overwritten value); any
+  // subsequent regen replaces this slot's stashed URL too. Cleared on new
+  // batch (see handleGenerate reset below). Memory-only for now — a page
+  // refresh loses the undo history. A future follow-up could persist it
+  // via /api/save-session for cross-refresh recovery. (See
+  // [[project_regen_revert]] in Kristi's memory for full spec.)
+  const [previousImages, setPreviousImages] = useState<(string | null)[]>([]);
+  // Which slots are currently showing the PREVIOUS version (i.e., the
+  // customer hit undo). Drives the direction of the corner arrow: if the
+  // slot is in this set, show ↷ (forward — "go back to the newer shot").
+  // Otherwise show ↶ (back — "revert to the older shot"). Cleared on new
+  // batch. (2026-08-31 toggle version — replaces the earlier one-way revert.)
+  const [revertedSlots, setRevertedSlots] = useState<Set<number>>(
+    () => new Set(),
+  );
   // Wild Card bonus previews shown below the main grid (2026-08-04).
   const [wildCards, setWildCards] = useState<WildCardShot[]>([]);
   const [wildCardRegenerating, setWildCardRegenerating] = useState<Set<number>>(
@@ -17266,9 +17349,28 @@ export default function App() {
       }
       const data = (await response.json()) as { image: string };
       setGeneratedImages((prev) => {
+        // Stash the OLD URL as the undoable "previous" for this slot before
+        // we overwrite it (2026-08-31 revert feature). Only stash a truthy
+        // URL — never stash an empty slot as a "previous."
+        const prevUrl = prev[index];
+        if (prevUrl) {
+          setPreviousImages((pp) => {
+            const nn = [...pp];
+            nn[index] = prevUrl;
+            return nn;
+          });
+        }
         const next = [...prev];
         next[index] = data.image;
         return next;
+      });
+      // A fresh regen lands on the NEW version, so clear any prior "reverted"
+      // flag for this slot — they're no longer viewing the older shot.
+      setRevertedSlots((s) => {
+        if (!s.has(index)) return s;
+        const n = new Set(s);
+        n.delete(index);
+        return n;
       });
       // Make the regen STICK on the saved "ready to view" grid. Only for
       // resume-link sessions (that's the only time we hold a token). The
@@ -17630,6 +17732,8 @@ export default function App() {
     const priorGrid = generatedImages;
     setBatchesUsed((n) => n + 1);
     setGeneratedImages([]);
+    setPreviousImages([]); // fresh batch → drop undo history from prior batch
+    setRevertedSlots(new Set());
     setReadyCount(0);
     setGenerationError(null);
     setRegenCount(0);
@@ -18193,9 +18297,26 @@ export default function App() {
       // original.
       if (newDist < oldDist) {
         setGeneratedImages((prev) => {
+          // Stash the old shot as an undoable "previous" (2026-08-31) so
+          // the customer can revert an auto-identity redo they don't like.
+          const prevUrl = prev[index];
+          if (prevUrl) {
+            setPreviousImages((pp) => {
+              const nn = [...pp];
+              nn[index] = prevUrl;
+              return nn;
+            });
+          }
           const next = [...prev];
           next[index] = data.image as string;
           return next;
+        });
+        // Identity redo landed on the NEW shot — clear any prior reverted flag.
+        setRevertedSlots((s) => {
+          if (!s.has(index)) return s;
+          const n = new Set(s);
+          n.delete(index);
+          return n;
         });
         slotDescriptorsRef.current[index] = data.faceDescriptor ?? oldDesc;
       }
@@ -18585,6 +18706,34 @@ export default function App() {
       {screen === "grid" && (
         <GridScreen
           images={generatedImages}
+          previousImages={previousImages}
+          revertedSlots={revertedSlots}
+          onRevertSlot={(index) => {
+            // SWAP current ↔ previous for this slot (no destruction), so the
+            // customer can toggle back-and-forth between the two versions.
+            // Updates revertedSlots so the tile icon flips between ↶ (back)
+            // and ↷ (forward) depending on which version is currently shown.
+            // Zero cost, zero Gemini calls. (2026-08-31 toggle version.)
+            setGeneratedImages((prev) => {
+              const current = prev[index];
+              const stashed = previousImages[index];
+              if (!stashed) return prev; // nothing to swap with
+              const next = [...prev];
+              next[index] = stashed;
+              setPreviousImages((pp) => {
+                const nn = [...pp];
+                nn[index] = current ?? null;
+                return nn;
+              });
+              return next;
+            });
+            setRevertedSlots((s) => {
+              const n = new Set(s);
+              if (n.has(index)) n.delete(index);
+              else n.add(index);
+              return n;
+            });
+          }}
           onDeliver={handleAdvanceToRetouch}
           onBack={() => setScreen("style")}
           onRegenerateSlot={handleRegenerateSlot}
