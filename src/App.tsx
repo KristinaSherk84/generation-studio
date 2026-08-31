@@ -1112,11 +1112,6 @@ const Navbar = ({
   </div>
 );
 
-type PhotogTipProps = {
-  children: ReactNode;
-  style?: CSSProperties;
-};
-
 // Full-screen modal shown the first time the user lands on the Upload screen
 // in a session. Shows photographer's fundamentals before they start uploading
 // so their source photos lead to better generations. Dismiss closes the modal;
@@ -1306,34 +1301,9 @@ const PhotographerTipsModal = ({ onDismiss }: PhotographerTipsModalProps) => (
   </div>
 );
 
-const PhotogTip = ({ children, style = {} }: PhotogTipProps) => (
-  <div
-    style={{
-      borderLeft: `3px solid ${C.mediumGrey}`,
-      padding: "12px 16px",
-      background: C.white,
-      color: C.dark,
-      fontSize: 13,
-      lineHeight: 1.5,
-      ...font,
-      ...style,
-    }}
-  >
-    <div
-      style={{
-        fontSize: 11,
-        color: C.mediumGrey,
-        textTransform: "uppercase",
-        letterSpacing: 1,
-        marginBottom: 4,
-        fontWeight: 500,
-      }}
-    >
-      Photographer's tip
-    </div>
-    {children}
-  </div>
-);
+// PhotogTip component removed 2026-08-31 — the last usage on the grid screen
+// was replaced by the new instructional icon-key card. If a "photographer's
+// tip" note is needed again in the future, restore it from git history.
 
 type ButtonProps = {
   children: ReactNode;
