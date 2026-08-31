@@ -10043,6 +10043,12 @@ const GridScreen = ({
     setLoadedUrls((prev) => (prev.has(u) ? prev : new Set(prev).add(u)));
   };
 
+  // Lightbox for "view larger" (2026-08-31). Same anti-theft pattern the
+  // LoadingScreen preview uses — the image is an <img> with pointer-events
+  // disabled and a watermark overlay so a right-click / long-press save is
+  // still blocked in the expanded view. Backdrop click or X closes.
+  const [previewSrc, setPreviewSrc] = useState<string | null>(null);
+
   // Broken-image protection (2026-08-18): if a photo fails to LOAD (a gray
   // broken block — the image was made & saved fine, the browser just couldn't
   // draw it), we show a "Problem loading / Try again" decal. "Try again"
@@ -11061,6 +11067,50 @@ const GridScreen = ({
                   <RefreshCw size={16} />
                 </button>
               )}
+              {/* View-larger (expand) button — bottom-LEFT corner. Persistent
+                  on every filled tile so customers can inspect the shot without
+                  hunting for the affordance. Opens a fullscreen lightbox with
+                  the same anti-theft treatment as the LoadingScreen preview.
+                  (2026-08-31 per Kristi.) */}
+              {src && !regenerating && !perfecting && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPreviewSrc(src);
+                  }}
+                  title="View larger"
+                  aria-label="View larger"
+                  style={{
+                    position: "absolute",
+                    bottom: 10,
+                    left: 10,
+                    background: "rgba(255, 255, 255, 0.85)",
+                    color: C.dark,
+                    border: "none",
+                    borderRadius: "50%",
+                    width: 32,
+                    height: 32,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: "pointer",
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+                    padding: 0,
+                    zIndex: 4,
+                    transition: "background 0.15s, transform 0.15s",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = C.white;
+                    e.currentTarget.style.transform = "scale(1.08)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "rgba(255, 255, 255, 0.85)";
+                    e.currentTarget.style.transform = "scale(1)";
+                  }}
+                >
+                  <Maximize2 size={16} />
+                </button>
+              )}
               {/* Loading overlay while this specific slot is regenerating.
                   Dims the old image and shows a spinner so the user knows
                   their click was received and this one card is working. */}
@@ -11143,10 +11193,96 @@ const GridScreen = ({
         })}
       </div>
 
-      <PhotogTip style={{ marginTop: 24 }}>
-        Look for the eyes first. If the eyes feel like you, the rest of the frame will usually
-        follow.
-      </PhotogTip>
+      {/* Icon key + regen prompt (2026-08-31). Replaces the older
+          "Photographer's tip" beneath the grid. Explains the three tile
+          affordances at a glance and gives customers a nudge to hit refresh
+          on shots that don't look like them. Camera glyph keeps the
+          photographer's-voice feel. */}
+      <div
+        style={{
+          marginTop: 24,
+          background: "#FBF8F0",
+          border: `1px solid ${C.border}`,
+          borderRadius: 10,
+          padding: "20px 22px",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-around",
+            gap: 20,
+            flexWrap: "wrap",
+          }}
+        >
+          {[
+            { icon: <Maximize2 size={24} />, label: "View larger" },
+            { icon: <Plus size={26} strokeWidth={2.2} />, label: "Add to cart" },
+            { icon: <RefreshCw size={24} />, label: "Regenerate" },
+          ].map((item) => (
+            <div
+              key={item.label}
+              style={{ display: "flex", alignItems: "center", gap: 12 }}
+            >
+              <div
+                style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: "50%",
+                  background: C.white,
+                  border: `1px solid ${C.border}`,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: C.dark,
+                  flexShrink: 0,
+                }}
+              >
+                {item.icon}
+              </div>
+              <span
+                style={{ fontSize: 14, color: C.dark, fontWeight: 500 }}
+              >
+                {item.label}
+              </span>
+            </div>
+          ))}
+        </div>
+        <div
+          style={{
+            borderTop: `1px solid ${C.border}`,
+            marginTop: 18,
+            paddingTop: 14,
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 10,
+          }}
+        >
+          <span
+            style={{
+              fontSize: 16,
+              color: "#C9A961",
+              lineHeight: 1,
+              marginTop: 2,
+            }}
+            aria-hidden="true"
+          >
+            ✎
+          </span>
+          <div style={{ fontSize: 13, color: "#444", lineHeight: 1.55 }}>
+            <span style={{ fontWeight: 500, color: C.dark }}>
+              Doesn't look like you?
+            </span>{" "}
+            Tap the{" "}
+            <RefreshCw
+              size={13}
+              style={{ verticalAlign: "-2px", display: "inline" }}
+            />{" "}
+            icon on that photo to regenerate it. Free for your first 2 tries.
+          </div>
+        </div>
+      </div>
 
       <div
         style={{
@@ -11189,6 +11325,114 @@ const GridScreen = ({
           to { transform: rotate(360deg); }
         }
       `}</style>
+
+      {/* View-larger lightbox (2026-08-31). Same anti-theft treatment as the
+          LoadingScreen preview: img has pointer-events disabled, watermark
+          overlay on top, right-click / long-press save blocked. Backdrop
+          click or X closes. */}
+      {previewSrc && (
+        <div
+          onClick={() => setPreviewSrc(null)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.92)",
+            zIndex: 1000,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 20,
+            cursor: "zoom-out",
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: "relative",
+              width: "min(90vw, 70vh)",
+              aspectRatio: "3/4",
+            }}
+          >
+            <img
+              src={previewSrc}
+              alt="Headshot preview"
+              draggable={false}
+              onContextMenu={(e) => e.preventDefault()}
+              style={{
+                position: "absolute",
+                inset: 0,
+                width: "100%",
+                height: "100%",
+                objectFit: "contain",
+                objectPosition: "center",
+                display: "block",
+                borderRadius: 12,
+                WebkitTouchCallout: "none",
+                WebkitUserSelect: "none",
+                userSelect: "none",
+                pointerEvents: "none",
+                cursor: "default",
+              }}
+            />
+            {/* Watermark overlay scaled up so screenshots of the lightbox
+                are still defaced. Three diagonal bands = same density the
+                LoadingScreen lightbox uses. */}
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                pointerEvents: "none",
+                overflow: "hidden",
+                borderRadius: 12,
+              }}
+            >
+              {[25, 50, 75].map((topPercent, row) => (
+                <div
+                  key={row}
+                  style={{
+                    position: "absolute",
+                    top: `${topPercent}%`,
+                    left: "50%",
+                    transform: "translate(-50%, -50%) rotate(-30deg)",
+                    fontSize: 22,
+                    letterSpacing: 8,
+                    color: "rgba(255,255,255,0.35)",
+                    whiteSpace: "nowrap",
+                    fontWeight: 700,
+                    textShadow: "0 1px 2px rgba(0,0,0,0.35)",
+                  }}
+                >
+                  WATERMARK · WATERMARK · WATERMARK
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => setPreviewSrc(null)}
+              aria-label="Close preview"
+              style={{
+                position: "absolute",
+                top: -14,
+                right: -14,
+                width: 36,
+                height: 36,
+                borderRadius: "50%",
+                background: C.white,
+                border: "none",
+                color: C.dark,
+                fontSize: 18,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.35)",
+                padding: 0,
+              }}
+            >
+              <X size={20} />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
