@@ -17614,20 +17614,27 @@ export default function App() {
         }
         const data = (await response.json()) as {
           image: string;
+          url?: string | null;
           faceDescriptor?: number[] | null;
         };
         // Stash this slot's descriptor for the identity pass below.
         slotDescriptorsRef.current[index] = data.faceDescriptor ?? null;
+        // Prefer the https Blob URL over the base64 payload. Keeps the DOM
+        // tiny (bytes vs megabytes) so Clarity's per-session snapshot budget
+        // isn't blown by the 6 images accumulating on the loading screen —
+        // that's the fix for recordings cutting off at the "Realism first"
+        // popup. (2026-08-28)
+        const imgOut = data.url ?? data.image;
         // Write this image into its fixed slot AND bump the counter. Using
         // functional setState so the six overlapping callbacks compose cleanly.
         setGeneratedImages((prev) => {
           const next = [...prev];
-          next[index] = data.image;
+          next[index] = imgOut;
           return next;
         });
         setReadyCount((n) => n + 1);
         countBatchOnce(); // count the batch only now that a real image landed
-        return data.image;
+        return imgOut;
       } catch {
         // Swallow per-call errors — we'll surface them only if ALL 6 fail.
         return null;
