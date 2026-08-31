@@ -18773,6 +18773,53 @@ export default function App() {
         />
       )}
 
+      {/* Persistent cart pill (2026-08-31). Fixed top-right on any screen
+          that would otherwise HIDE the cart from the customer. Screens that
+          already surface the cart natively (grid / retouch / checkout /
+          download) are excluded so we don't double-render. Tap → jump back
+          to the grid where the cart items live. Prevents the "she backed out
+          and thought her cart was lost" abandonment case. */}
+      {cart.length > 0 &&
+        (screen === "landing" ||
+          screen === "upload" ||
+          screen === "style" ||
+          screen === "loading" ||
+          screen === "how-it-works" ||
+          screen === "healthcare" ||
+          screen === "teams" ||
+          screen === "faq" ||
+          screen === "faq-detail" ||
+          screen === "gallery") && (
+          <button
+            onClick={() => setScreen("grid")}
+            aria-label={`Return to your cart — ${cart.length} shot${cart.length === 1 ? "" : "s"}`}
+            style={{
+              position: "fixed",
+              top: 68,
+              right: 16,
+              background: C.dark,
+              color: C.white,
+              border: "none",
+              borderRadius: 999,
+              padding: "10px 18px 10px 14px",
+              fontSize: 14,
+              fontWeight: 500,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              boxShadow: "0 4px 14px rgba(0, 0, 0, 0.18)",
+              zIndex: 90,
+              ...font,
+            }}
+          >
+            <ShoppingBag size={16} />
+            <span>
+              {cart.length} in cart · <span style={{ textDecoration: "underline" }}>return</span>
+            </span>
+          </button>
+        )}
+
       {/* Photographer's tips modal — shown once per session on Landing→Upload.
           Overlays the Upload screen until the user clicks "Got it." */}
       {/* Welcome popup with the 2-hour countdown — fires the moment a
