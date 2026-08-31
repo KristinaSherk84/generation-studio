@@ -37,6 +37,16 @@ export type SavedSession = {
   // instead of vanishing with the live tab. Added post-save via a patch, since
   // they usually finish generating after the main grid is saved. (2026-08-10)
   wildCards?: { url: string; label: string }[];
+  // Per-slot undo history (2026-08-31). If a slot was regenerated, the URL of
+  // the OLD shot lives here at the same index. The tile's revert (↶/↷) button
+  // swaps between generatedUrls[i] and previousUrls[i]. Two-version toggle
+  // only — subsequent regens overwrite what was stored. Null when the slot has
+  // no undoable history.
+  previousUrls?: (string | null)[];
+  // Slots the customer has toggled to their "previous" version. Persisted so
+  // the toggle direction survives the resume-link round-trip. Indexes into the
+  // (already-merged) generatedUrls array.
+  revertedSlots?: number[];
 };
 
 const TTL_SECONDS = 4 * 24 * 60 * 60; // 4 days (safe cushion; win-back fires ~12h after generation, so the resume link is always alive)
@@ -100,6 +110,14 @@ export async function updateSessionSlot(
   token: string,
   index: number,
   url: string,
+  /**
+   * Optional (2026-08-31): the OLD url that lived in this slot before the
+   * regen. When provided, we stash it in previousUrls[index] so the
+   * customer can toggle back to it via the ↶ / ↷ button — even after
+   * reopening their resume-email link. Also clears any stale "reverted"
+   * flag for this slot (a fresh regen puts the tile on the NEW shot).
+   */
+  previousUrl?: string | null,
 ): Promise<boolean> {
   if (!token || !/^[A-Za-z0-9]{16,48}$/.test(token)) return false;
   // Cap raised from 7 to 63 (2026-08-24) so accumulated multi-batch grids can
@@ -116,8 +134,65 @@ export async function updateSessionSlot(
   if (!rec || !Array.isArray(rec.generatedUrls)) return false;
   if (index >= rec.generatedUrls.length) return false;
   rec.generatedUrls[index] = url;
+  if (typeof previousUrl === "string" && /^https?:\/\//.test(previousUrl)) {
+    const arr = Array.isArray(rec.previousUrls)
+      ? [...rec.previousUrls]
+      : (Array.from({ length: rec.generatedUrls.length }, () => null) as (string | null)[]);
+    // Pad if needed (accumulated batches may have extended the grid past
+    // whatever previousUrls length existed before).
+    while (arr.length < rec.generatedUrls.length) arr.push(null);
+    arr[index] = previousUrl;
+    rec.previousUrls = arr;
+  }
+  // A fresh regen ALWAYS puts the tile on the NEW shot — clear any prior
+  // reverted flag for this index so the toggle icon starts as ↶ (undo).
+  if (Array.isArray(rec.revertedSlots) && rec.revertedSlots.includes(index)) {
+    rec.revertedSlots = rec.revertedSlots.filter((i) => i !== index);
+  }
   await redis.set(key(token), rec, { ex: TTL_SECONDS });
   return true;
+}
+
+/**
+ * Toggle the "reverted" flag for one slot and swap its URL with its stashed
+ * previous URL. This is what the ↶ / ↷ tile button calls through to when the
+ * customer flips between the new and previous version of a shot. No new
+ * generation, no cost — just a swap that persists across resume-link loads.
+ * (2026-08-31)
+ */
+export async function revertSessionSlot(
+  token: string,
+  index: number,
+): Promise<{ ok: boolean; reason?: string }> {
+  if (!token || !/^[A-Za-z0-9]{16,48}$/.test(token))
+    return { ok: false, reason: "bad_token" };
+  if (!Number.isInteger(index) || index < 0 || index > 63)
+    return { ok: false, reason: "bad_index" };
+  let rec: SavedSession | null;
+  try {
+    rec = (await redis.get<SavedSession>(key(token))) ?? null;
+  } catch {
+    return { ok: false, reason: "read_error" };
+  }
+  if (!rec || !Array.isArray(rec.generatedUrls))
+    return { ok: false, reason: "no_session" };
+  if (index >= rec.generatedUrls.length)
+    return { ok: false, reason: "index_oob" };
+  const prev = Array.isArray(rec.previousUrls) ? [...rec.previousUrls] : [];
+  while (prev.length < rec.generatedUrls.length) prev.push(null);
+  const stashed = prev[index];
+  if (!stashed) return { ok: false, reason: "no_undo_available" };
+  // Swap current ↔ previous.
+  const current = rec.generatedUrls[index];
+  rec.generatedUrls[index] = stashed;
+  prev[index] = current;
+  rec.previousUrls = prev;
+  // Toggle the reverted flag.
+  const flags = Array.isArray(rec.revertedSlots) ? [...rec.revertedSlots] : [];
+  if (flags.includes(index)) rec.revertedSlots = flags.filter((i) => i !== index);
+  else rec.revertedSlots = [...flags, index];
+  await redis.set(key(token), rec, { ex: TTL_SECONDS });
+  return { ok: true };
 }
 
 /**

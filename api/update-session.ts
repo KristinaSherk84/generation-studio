@@ -14,7 +14,7 @@
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { updateSessionSlot } from "./lib/sessionStore.js";
+import { updateSessionSlot, revertSessionSlot } from "./lib/sessionStore.js";
 
 export const maxDuration = 10;
 
@@ -30,16 +30,48 @@ export default async function handler(
     token?: unknown;
     index?: unknown;
     url?: unknown;
+    previousUrl?: unknown;
+    action?: unknown;
   };
   const token = typeof body.token === "string" ? body.token : "";
   const index = typeof body.index === "number" ? body.index : -1;
-  const url = typeof body.url === "string" ? body.url : "";
-  if (!token || !Number.isInteger(index) || !/^https?:\/\//.test(url)) {
+  const action = typeof body.action === "string" ? body.action : "patch";
+  if (!token || !Number.isInteger(index)) {
     res.status(400).json({ ok: false, reason: "bad_input" });
     return;
   }
+
+  // Toggle-revert branch (2026-08-31): the customer tapped the ↶ / ↷ button
+  // on a tile. Swap current ↔ previous for that slot in the saved session so
+  // the toggle direction survives a resume-link reload.
+  if (action === "revert") {
+    try {
+      const result = await revertSessionSlot(token, index);
+      res.status(200).json(result);
+    } catch (err) {
+      console.warn(
+        "[update-session] revert failed:",
+        err instanceof Error ? err.message : String(err),
+      );
+      res.status(200).json({ ok: false, reason: "store_error" });
+    }
+    return;
+  }
+
+  // Default: patch this slot's URL to a new value (existing per-slot regen
+  // persistence). Optionally accepts the OLD url so it can be stashed as the
+  // undoable "previous" for later toggle. (2026-08-31)
+  const url = typeof body.url === "string" ? body.url : "";
+  if (!/^https?:\/\//.test(url)) {
+    res.status(400).json({ ok: false, reason: "bad_input" });
+    return;
+  }
+  const previousUrl =
+    typeof body.previousUrl === "string" && /^https?:\/\//.test(body.previousUrl)
+      ? body.previousUrl
+      : null;
   try {
-    const ok = await updateSessionSlot(token, index, url);
+    const ok = await updateSessionSlot(token, index, url, previousUrl);
     res.status(200).json({ ok });
   } catch (err) {
     console.warn(

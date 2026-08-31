@@ -104,6 +104,19 @@ export default async function handler(
         const mergedRefs = Array.from(
           new Set([...(prior.referencePhotoUrls ?? []), ...referencePhotoUrls]),
         );
+        // Extend the per-slot undo history to cover the new (accumulated)
+        // grid length. Prior slots keep their existing previousUrls; the
+        // newly appended slots have no undo history yet, so they get null.
+        // (2026-08-31 Phase 2 — regen revert persistence.)
+        const priorPreviousUrls = Array.isArray(prior.previousUrls)
+          ? prior.previousUrls
+          : [];
+        const extendedPreviousUrls: (string | null)[] = [
+          ...priorPreviousUrls,
+        ];
+        while (extendedPreviousUrls.length < priorUrls.length + appended.length) {
+          extendedPreviousUrls.push(null);
+        }
         const ok = await replaceSession(existing, {
           email,
           generatedUrls: [...priorUrls, ...appended],
@@ -111,6 +124,8 @@ export default async function handler(
           selections: payload.selections ?? prior.selections ?? null,
           hasWideAngle: payload.hasWideAngle || prior.hasWideAngle === true,
           wildCards: prior.wildCards,
+          previousUrls: extendedPreviousUrls,
+          revertedSlots: prior.revertedSlots,
         });
         if (ok) token = existing;
       }

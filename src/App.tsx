@@ -10069,6 +10069,20 @@ const GridScreen = ({
     // they need to remove one before adding another.
   };
 
+  // Mobile detection for the icon-key sizing (2026-08-31). The 48px circles
+  // read fine on desktop but consume too much vertical space on phones where
+  // each row wraps to its own line. Shrink on ≤640px.
+  const [isMobileGrid, setIsMobileGrid] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia("(max-width: 640px)").matches;
+  });
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 640px)");
+    const handler = (e: MediaQueryListEvent) => setIsMobileGrid(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+
   return (
     <div style={{ maxWidth: 1100, margin: "0 auto", padding: "64px 32px", ...font }}>
       <button
@@ -11238,7 +11252,7 @@ const GridScreen = ({
           background: "#FBF8F0",
           border: `1px solid ${C.border}`,
           borderRadius: 10,
-          padding: "20px 22px",
+          padding: isMobileGrid ? "12px 14px" : "20px 22px",
         }}
       >
         <div
@@ -11246,23 +11260,43 @@ const GridScreen = ({
             display: "flex",
             alignItems: "center",
             justifyContent: "space-around",
-            gap: 20,
+            gap: isMobileGrid ? 8 : 20,
             flexWrap: "wrap",
           }}
         >
           {[
-            { icon: <Maximize2 size={24} />, label: "View larger" },
-            { icon: <Plus size={26} strokeWidth={2.2} />, label: "Add to cart" },
-            { icon: <RefreshCw size={24} />, label: "Regenerate" },
+            {
+              icon: (
+                <Maximize2 size={isMobileGrid ? 16 : 24} />
+              ),
+              label: "View larger",
+            },
+            {
+              icon: (
+                <Plus
+                  size={isMobileGrid ? 18 : 26}
+                  strokeWidth={2.2}
+                />
+              ),
+              label: "Add to cart",
+            },
+            {
+              icon: <RefreshCw size={isMobileGrid ? 16 : 24} />,
+              label: "Regenerate",
+            },
           ].map((item) => (
             <div
               key={item.label}
-              style={{ display: "flex", alignItems: "center", gap: 12 }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: isMobileGrid ? 8 : 12,
+              }}
             >
               <div
                 style={{
-                  width: 48,
-                  height: 48,
+                  width: isMobileGrid ? 32 : 48,
+                  height: isMobileGrid ? 32 : 48,
                   borderRadius: "50%",
                   background: C.white,
                   border: `1px solid ${C.border}`,
@@ -11276,7 +11310,11 @@ const GridScreen = ({
                 {item.icon}
               </div>
               <span
-                style={{ fontSize: 14, color: C.dark, fontWeight: 500 }}
+                style={{
+                  fontSize: isMobileGrid ? 12 : 14,
+                  color: C.dark,
+                  fontWeight: 500,
+                }}
               >
                 {item.label}
               </span>
@@ -11286,16 +11324,16 @@ const GridScreen = ({
         <div
           style={{
             borderTop: `1px solid ${C.border}`,
-            marginTop: 18,
-            paddingTop: 14,
+            marginTop: isMobileGrid ? 12 : 18,
+            paddingTop: isMobileGrid ? 10 : 14,
             display: "flex",
             alignItems: "flex-start",
-            gap: 10,
+            gap: 8,
           }}
         >
           <span
             style={{
-              fontSize: 16,
+              fontSize: isMobileGrid ? 14 : 16,
               color: "#C9A961",
               lineHeight: 1,
               marginTop: 2,
@@ -11304,13 +11342,19 @@ const GridScreen = ({
           >
             ✎
           </span>
-          <div style={{ fontSize: 13, color: "#444", lineHeight: 1.55 }}>
+          <div
+            style={{
+              fontSize: isMobileGrid ? 12 : 13,
+              color: "#444",
+              lineHeight: 1.5,
+            }}
+          >
             <span style={{ fontWeight: 500, color: C.dark }}>
               Doesn't look like you?
             </span>{" "}
             Tap the{" "}
             <RefreshCw
-              size={13}
+              size={isMobileGrid ? 12 : 13}
               style={{ verticalAlign: "-2px", display: "inline" }}
             />{" "}
             icon on that photo to regenerate it. Free for your first 2 tries.
@@ -16016,6 +16060,8 @@ export default function App() {
           selections?: StyleSelections | null;
           hasWideAngle?: boolean;
           wildCards?: { url: string; label: string }[];
+          previousUrls?: (string | null)[];
+          revertedSlots?: number[];
         };
         if (!d.generatedUrls || d.generatedUrls.length === 0) return;
         setGeneratedImages(d.generatedUrls);
@@ -16023,6 +16069,14 @@ export default function App() {
         if (d.referencePhotoUrls) setLastPhotoUrls(d.referencePhotoUrls);
         if (d.selections) setLastSelections(d.selections);
         setLastHasWideAngle(!!d.hasWideAngle);
+        // Restore per-slot undo history so the ↶ / ↷ toggle survives across
+        // resume-email visits. (2026-08-31)
+        if (Array.isArray(d.previousUrls)) {
+          setPreviousImages(d.previousUrls);
+        }
+        if (Array.isArray(d.revertedSlots)) {
+          setRevertedSlots(new Set(d.revertedSlots.filter((i) => Number.isInteger(i))));
+        }
         // Restore the saved Wild Card previews so the email link shows them too.
         if (Array.isArray(d.wildCards) && d.wildCards.length > 0) {
           setWildCards(
@@ -17285,6 +17339,12 @@ export default function App() {
       return; // already in flight for this slot
     }
 
+    // Capture the URL currently in this slot BEFORE we fire the regen. If it
+    // is an https URL (i.e., already persisted), we'll send it as
+    // `previousUrl` to /api/update-session so the toggle-undo works across
+    // resume-link reloads. (2026-08-31)
+    const preRegenUrl = generatedImages[index];
+
     // Clear any prior error and burn one regen — we'll refund this if the
     // call fails so the user doesn't lose budget on a server-side problem.
     setRegenError(null);
@@ -17400,6 +17460,13 @@ export default function App() {
                 token: tok,
                 index: batchOffsetRef.current + index,
                 url,
+                // Send the pre-regen URL as the undoable "previous" so the
+                // toggle button works after a resume-link reload. Only pass
+                // it if it's already an https URL (server rejects data URIs).
+                previousUrl:
+                  typeof preRegenUrl === "string" && /^https?:\/\//.test(preRegenUrl)
+                    ? preRegenUrl
+                    : undefined,
               }),
             });
           } catch {
@@ -18733,6 +18800,23 @@ export default function App() {
               else n.add(index);
               return n;
             });
+            // Persist the swap to the saved session so the toggle survives a
+            // resume-link reload (2026-08-31 Phase 2). Best-effort — only
+            // fires when we hold a token; the on-screen swap already happened.
+            if (resumeTokenRef.current) {
+              const tok = resumeTokenRef.current;
+              void fetch("/api/update-session", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  token: tok,
+                  index: batchOffsetRef.current + index,
+                  action: "revert",
+                }),
+              }).catch(() => {
+                /* best-effort — swap still worked in-session */
+              });
+            }
           }}
           onDeliver={handleAdvanceToRetouch}
           onBack={() => setScreen("style")}

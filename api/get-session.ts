@@ -39,5 +39,10 @@ export default async function handler(
     selections: session.selections,
     hasWideAngle: session.hasWideAngle,
     wildCards: session.wildCards ?? [],
+    // Per-slot undo history (2026-08-31). Restores the ↶ / ↷ toggle state
+    // on a resume-link visit so the customer can flip between their
+    // regenerated shot and the older one across devices.
+    previousUrls: session.previousUrls ?? [],
+    revertedSlots: session.revertedSlots ?? [],
   });
 }
