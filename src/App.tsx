@@ -17900,35 +17900,25 @@ export default function App() {
 
     const descs = slotDescriptorsRef.current;
     // Score every slot against the reference face. A slot is a redo candidate
-    // when its distance is over the threshold. Slot 0 — the HERO image, the
-    // first thing the customer sees — gets special handling (2026-08-07):
-    //   • a STRICTER threshold, and
-    //   • it's a candidate even when we couldn't score it (a null descriptor
-    //     is exactly the unverifiable case we must not ship as the first shot).
+    // when its distance is over the threshold. Slot 0 (the HERO image) is
+    // NOW SKIPPED entirely (2026-08-31, Kristi): the earlier "aggressive hero
+    // treatment" (stricter threshold + forced-redo-when-unscored + always in
+    // the redo list) was regenerating first shots that already looked like
+    // the customer — a real cost + customer-experience issue. If a hero slot
+    // truly needs a redo, the customer can trigger it manually via the
+    // per-slot regen button.
     const candidates: { index: number; dist: number }[] = [];
-    for (let i = 0; i < TOTAL_HEADSHOTS; i++) {
+    for (let i = 1; i < TOTAL_HEADSHOTS; i++) {
       const d = descs[i];
-      const threshold =
-        i === 0 ? IDENTITY_HERO_THRESHOLD : IDENTITY_DISTANCE_THRESHOLD;
-      if (!d || d.length !== 128) {
-        // Unverifiable. Only the hero earns a defensive redo; other slots
-        // stay as-is (no score => no confident action).
-        if (i === 0) candidates.push({ index: 0, dist: Infinity });
-        continue;
-      }
+      if (!d || d.length !== 128) continue; // unverifiable → no confident action
       const dist = euclideanDistance(ref, d);
-      if (dist > threshold) candidates.push({ index: i, dist });
+      if (dist > IDENTITY_DISTANCE_THRESHOLD) candidates.push({ index: i, dist });
     }
     if (candidates.length === 0) return;
 
-    // Worst matches first, capped so cost stays bounded — but the hero (slot
-    // 0) is ALWAYS kept if it's a candidate, even if it isn't among the worst.
+    // Worst matches first, capped so cost stays bounded.
     candidates.sort((a, b) => b.dist - a.dist);
-    let toRedo = candidates.slice(0, IDENTITY_MAX_REDOS);
-    const heroCandidate = candidates.find((c) => c.index === 0);
-    if (heroCandidate && !toRedo.some((c) => c.index === 0)) {
-      toRedo = [heroCandidate, ...toRedo].slice(0, IDENTITY_MAX_REDOS);
-    }
+    const toRedo = candidates.slice(0, IDENTITY_MAX_REDOS);
     await Promise.all(
       toRedo.map(({ index }) =>
         perfectSlotIdentity(index, ref, selections, photoUrls, hasWideAngle),
