@@ -477,10 +477,10 @@ export async function sendCustomerDeliveryEmail(args: {
         </div>
       </div>
 
-      <!-- Heartstrings card FIRST — sets the tone (gratitude + share ask)
-           before the share-graphic download. New title 'Help me spread the
-           word!' and new opening 'Thanks for purchasing...' per Kristi
-           2026-05-04 (was 'A note from Kristi' / 'Let's face it'). -->
+      <!-- Heartstrings card FIRST — sets the tone (gratitude) before the
+           share-graphic ask below. Referral-code line removed 2026-08-30
+           when the "Post & I'll refund $5" offer replaced it as the primary
+           share incentive; keeping two competing asks was diluting both. -->
       <div style="margin: 32px 0; padding: 28px 24px; background: #FFFFFF; border: 1px solid #E8E5DD; border-top: 3px solid #C9A961; border-radius: 8px;">
         <h2 style="font-family: Georgia, 'Times New Roman', serif; font-size: 24px; font-weight: 400; font-style: italic; color: #C9A961; margin: 0 0 18px; text-align: center;">
           A note from me
@@ -488,24 +488,45 @@ export async function sendCustomerDeliveryEmail(args: {
         <p style="font-size: 15px; line-height: 1.7; color: #2A2A2A; margin: 0 0 14px;">
           Thank you — really. I'm a portrait photographer reinventing how I do headshots instead of getting left behind by all this, and you buying these is the whole reason I get to keep going. It means a lot.
         </p>
-        <p style="font-size: 15px; line-height: 1.7; color: #2A2A2A; margin: 0 0 14px;">
-          If anything about the experience could be better, I'd love to hear it — just hit reply. It's only me back here, and I read <strong>EVERY</strong> email.
-        </p>
         <p style="font-size: 15px; line-height: 1.7; color: #2A2A2A; margin: 0;">
-          And one small favor, if you're up for it: tell a friend or two about your new headshots and what it was like making them. No marketing team, no ad budget here — just word of mouth from people like you, up against the big AI headshot companies. If you share, reply with a screenshot and I'll send you a <strong>free code for a few more headshots</strong>, as a thank you.
+          If anything about the experience could be better, I'd love to hear it — just hit reply. It's only me back here, and I read <strong>EVERY</strong> email.
         </p>
       </div>
 
       ${
         hasShareGraphics
           ? `
-        <h1 style="font-family: Georgia, 'Times New Roman', serif; font-size: 24px; font-weight: 400; color: #2A2A2A; margin: 36px 0 10px; text-align: center;">
-          Your sharable headshot graphic
-        </h1>
-        <p style="font-size: 14px; line-height: 1.6; color: #555; margin: 0 0 24px; text-align: center; max-width: 480px; margin-left: auto; margin-right: auto;">
-          Ready-to-post before/after with a QR code linking back to me. If a friend scans, they'll land at the same generator.
-        </p>
+        <!-- Share-for-refund CTA (2026-08-30, per Kristi). Bold headline, then
+             a small requirements line, then the graphic itself. The download
+             pill under each graphic becomes the "grab your image" step;
+             the "Post to LinkedIn" pill jumps into LinkedIn's share dialog
+             pre-loaded with the site URL — the customer still uploads the
+             downloaded image manually in the LinkedIn composer (LinkedIn
+             doesn't accept an image via URL param). Refund is manual: they
+             reply to this email with a screenshot; Kristi refunds $5 via
+             Stripe. -->
+        <div style="margin: 40px 0 10px; padding: 24px 20px; background: #FBF8F0; border: 2px solid #C9A961; border-radius: 12px; text-align: center;">
+          <h1 style="font-family: Georgia, 'Times New Roman', serif; font-size: 30px; font-weight: 500; color: #1B4332; margin: 0 0 10px; line-height: 1.2;">
+            Post this, and I'll refund $5 for your headshot.
+          </h1>
+          <p style="font-size: 13.5px; line-height: 1.55; color: #555; margin: 12px auto 6px; max-width: 460px;">
+            <strong>How it works:</strong> download your before/after graphic below, post it publicly on <strong>LinkedIn</strong>, tag <strong>Generation Headshots</strong>, then reply to this email with a screenshot of your post. I'll refund <strong>$5</strong> to your card within 24 hours.
+          </p>
+          <p style="font-size: 12px; line-height: 1.55; color: #888; margin: 4px auto 0; max-width: 460px;">
+            LinkedIn only. Must be a public post (not a private message or story). One refund per customer.
+          </p>
+        </div>
+
         ${shareTable}
+
+        <div style="text-align: center; margin: 8px 0 24px;">
+          <a href="https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent("https://generationheadshots.com")}" target="_blank" rel="noopener" style="display: inline-block; background: #0A66C2; color: #FFFFFF; padding: 14px 28px; border-radius: 999px; text-decoration: none; font-size: 15px; font-weight: 600; letter-spacing: 0.3px;">
+            Open LinkedIn to post →
+          </a>
+          <p style="font-size: 11.5px; color: #888; margin: 8px 0 0;">
+            Opens LinkedIn's share window — attach the graphic you downloaded above.
+          </p>
+        </div>
       `
           : `
         <p style="font-size: 14px; line-height: 1.6; color: #555; margin: 32px 0; text-align: center;">
