@@ -14587,10 +14587,11 @@ const WILDCARD_ATTIRE_LABELS: Record<string, string> = {
 //     that falls below the bar. Set to 1 (2026-08-16, Kristi) - one redo,
 //     hero-prioritized - down from 2 to cut per-session cost further.
 const IDENTITY_DISTANCE_THRESHOLD = 0.45;
-// The HERO image (slot 0) is the first thing the customer sees, so it is held
-// to a stricter match bar, is redone even when it can't be scored, and is
-// never dropped by the redo cap. (2026-08-07 per Kristi)
-const IDENTITY_HERO_THRESHOLD = 0.42;
+// Slot 0 (the HERO image) is deliberately EXCLUDED from the auto-check.
+// The earlier hero-special-case (stricter threshold + forced redo when
+// unscored + always-in-redo-list) was regenerating first shots that already
+// looked like the customer. Removed 2026-08-31 per Kristi. The
+// IDENTITY_HERO_THRESHOLD constant was retired at the same time.
 const IDENTITY_MAX_REDOS = 1;
 
 // Standard Euclidean distance between two equal-length numeric vectors
