@@ -7041,6 +7041,18 @@ const AdminScreen = () => {
   // applies as the admin types.
   const [searchQuery, setSearchQuery] = useState("");
 
+  // Bulk-mint team codes (2026-09-01). Company pays Kristi via manual Stripe
+  // invoice, then she comes here to mint N single-use codes for their team.
+  // Each code carries a note like "Acme Inc — seat 3 of 25" so the promos
+  // table shows which company each code belongs to at a glance.
+  const [bulkCompany, setBulkCompany] = useState("");
+  const [bulkCount, setBulkCount] = useState<string>("25");
+  const [bulkMinting, setBulkMinting] = useState(false);
+  const [bulkResult, setBulkResult] = useState<{
+    company: string;
+    codes: string[];
+  } | null>(null);
+
   const isAuthed = adminPassword.length > 0;
 
   // Fetch codes on mount (if authed) and after every mutation. The
@@ -7129,6 +7141,55 @@ const AdminScreen = () => {
       setActionError(err instanceof Error ? err.message : "Failed to create");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleBulkCreate = async () => {
+    const company = bulkCompany.trim();
+    const count = parseInt(bulkCount, 10);
+    if (!company || !Number.isInteger(count) || count < 1 || count > 500) {
+      setActionError("Enter a company name and a seat count between 1 and 500.");
+      return;
+    }
+    setBulkMinting(true);
+    setActionError(null);
+    setBulkResult(null);
+    try {
+      const r = await fetch("/api/admin/promos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "bulkCreate",
+          adminPassword,
+          company,
+          count,
+          kind: "full",
+        }),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const data = (await r.json()) as {
+        minted: PromoRecordClient[];
+        count: number;
+        requested: number;
+        company: string;
+        errors: string[];
+      };
+      const codes = (data.minted ?? []).map((c) => c.code);
+      setBulkResult({ company: data.company, codes });
+      // Splice into the visible list so they show up in the codes table
+      // without a full refetch.
+      setCodes((prev) => [...(data.minted ?? []), ...prev]);
+      if (data.errors && data.errors.length > 0) {
+        setActionError(
+          `Minted ${data.count} of ${data.requested}. Some errors: ${data.errors.join("; ")}`,
+        );
+      }
+    } catch (err) {
+      setActionError(
+        err instanceof Error ? err.message : "Failed to bulk-create codes",
+      );
+    } finally {
+      setBulkMinting(false);
     }
   };
 
@@ -7461,6 +7522,153 @@ const AdminScreen = () => {
               ? "free generations only (they pay to download)"
               : "free everything, incl. downloads"}
             . Share with one person.
+          </div>
+        )}
+      </div>
+
+      {/* Bulk-mint team codes panel (2026-09-01). Company pays Kristi $39.99
+          per seat via manual Stripe invoice; she comes here to mint N codes
+          and emails them the list. Each code is a full-unlock single-use
+          code with a note like "Acme Inc — seat 3 of 25" for easy tracking. */}
+      <div
+        style={{
+          background: C.white,
+          border: `1px solid ${C.border}`,
+          borderRadius: 10,
+          padding: 18,
+          marginBottom: 22,
+        }}
+      >
+        <div
+          style={{
+            fontSize: 13,
+            fontWeight: 500,
+            color: C.dark,
+            marginBottom: 4,
+          }}
+        >
+          Bulk-mint team codes
+        </div>
+        <div
+          style={{
+            fontSize: 12,
+            color: C.mediumGrey,
+            marginBottom: 12,
+            lineHeight: 1.5,
+          }}
+        >
+          Mint N unique single-use codes for a company after they pay their
+          invoice ($39.99/seat). Each code is a full unlock. The company gets
+          the code list to distribute internally.
+        </div>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <input
+            type="text"
+            placeholder="Company name — e.g. Acme Inc"
+            value={bulkCompany}
+            onChange={(e) => setBulkCompany(e.target.value)}
+            style={{
+              flex: "2 1 260px",
+              minWidth: 220,
+              padding: "10px 12px",
+              fontSize: 13,
+              border: `1px solid ${C.border}`,
+              borderRadius: 8,
+              outline: "none",
+              ...font,
+            }}
+          />
+          <input
+            type="number"
+            min="1"
+            max="500"
+            placeholder="Seats"
+            value={bulkCount}
+            onChange={(e) => setBulkCount(e.target.value)}
+            style={{
+              width: 90,
+              padding: "10px 12px",
+              fontSize: 13,
+              border: `1px solid ${C.border}`,
+              borderRadius: 8,
+              outline: "none",
+              textAlign: "right",
+              ...font,
+            }}
+          />
+          <button
+            onClick={handleBulkCreate}
+            disabled={bulkMinting}
+            style={{
+              padding: "10px 18px",
+              fontSize: 13,
+              fontWeight: 500,
+              background: C.dark,
+              color: C.white,
+              border: "none",
+              borderRadius: 8,
+              cursor: bulkMinting ? "not-allowed" : "pointer",
+              opacity: bulkMinting ? 0.6 : 1,
+              ...font,
+            }}
+          >
+            {bulkMinting ? "Minting…" : "Mint codes"}
+          </button>
+        </div>
+        {bulkResult && (
+          <div
+            style={{
+              marginTop: 14,
+              padding: "12px 14px",
+              background: "#F1FAEC",
+              border: "1px solid #C8E5B8",
+              borderRadius: 8,
+            }}
+          >
+            <div style={{ fontSize: 13, color: "#1F5A20", marginBottom: 8 }}>
+              Minted <strong>{bulkResult.codes.length}</strong> codes for{" "}
+              <strong>{bulkResult.company}</strong>. Copy the list below and
+              email it to the company admin.
+            </div>
+            <textarea
+              readOnly
+              value={bulkResult.codes.join("\n")}
+              rows={Math.min(12, Math.max(4, bulkResult.codes.length))}
+              onFocus={(e) => e.currentTarget.select()}
+              style={{
+                width: "100%",
+                padding: 10,
+                fontFamily: "ui-monospace, Menlo, monospace",
+                fontSize: 12,
+                border: `1px solid ${C.border}`,
+                borderRadius: 6,
+                background: C.white,
+                color: C.dark,
+                resize: "vertical",
+                outline: "none",
+              }}
+            />
+            <button
+              onClick={() => {
+                void navigator.clipboard.writeText(
+                  bulkResult.codes.join("\n"),
+                );
+              }}
+              style={{
+                marginTop: 8,
+                padding: "8px 14px",
+                fontSize: 12,
+                fontWeight: 500,
+                background: C.white,
+                color: C.dark,
+                border: `1px solid ${C.border}`,
+                borderRadius: 6,
+                cursor: "pointer",
+                ...font,
+              }}
+            >
+              Copy all codes
+            </button>
           </div>
         )}
       </div>
@@ -14328,9 +14536,16 @@ const DownloadScreen = ({
           >
             {wildCardImages[0] && renderBonusWildCard(wildCardImages[0], "wc-left")}
 
+            {/* Post-purchase "another round unlocked" card (2026-09-01).
+                Replaces the earlier "Upload your pet" card per Kristi — the
+                pet nudge was pretty but converted worse than steering happy
+                customers straight into a second-batch attempt in a fresh
+                style. onNewStyle fires the same handler as the "Try a
+                different style" section below but this is more prominent
+                (flanked by their wild-card previews). */}
             <button
               type="button"
-              onClick={onHome}
+              onClick={onNewStyle}
               style={{
                 background: C.white,
                 border: `1px solid ${C.border}`,
@@ -14347,40 +14562,67 @@ const DownloadScreen = ({
               <div
                 style={{
                   aspectRatio: "4/5",
-                  background: C.lightGrey,
+                  background:
+                    "linear-gradient(135deg, #1B4332 0%, #2B5F49 45%, #C9A961 100%)",
                   overflow: "hidden",
                   position: "relative",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: 20,
                 }}
               >
-                <img
-                  src="/ai-headshot-generator-pet-example.jpg"
-                  alt="AI headshot generator example — dog in a suit and tie"
-                  style={{
-                    width: "100%",
-                    height: "100%",
-                    objectFit: "cover",
-                    display: "block",
-                  }}
-                  draggable={false}
-                />
-                {/* PETS badge top-left to match the style badge on the sibling
-                    human-preview card. */}
+                {/* "UNLOCKED" badge top-left, same style as the sibling wild
+                    card badges. */}
                 <div
                   style={{
                     position: "absolute",
                     top: 10,
                     left: 10,
-                    background: "rgba(44, 44, 42, 0.82)",
-                    color: C.white,
+                    background: "rgba(255, 255, 255, 0.92)",
+                    color: "#1B4332",
                     fontSize: 11,
-                    fontWeight: 500,
+                    fontWeight: 600,
                     letterSpacing: 0.5,
                     padding: "4px 10px",
                     borderRadius: 999,
                     textTransform: "uppercase",
                   }}
                 >
-                  Pets
+                  Unlocked
+                </div>
+                <div style={{ textAlign: "center", color: C.white }}>
+                  <div
+                    style={{
+                      fontSize: 34,
+                      lineHeight: 1,
+                      marginBottom: 12,
+                    }}
+                    aria-hidden="true"
+                  >
+                    ✦
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 14,
+                      fontWeight: 600,
+                      lineHeight: 1.35,
+                      marginBottom: 8,
+                    }}
+                  >
+                    Thanks for your purchase!
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 12.5,
+                      fontWeight: 400,
+                      lineHeight: 1.5,
+                      color: "rgba(255,255,255,0.92)",
+                    }}
+                  >
+                    You've unlocked another round of generations in a different
+                    style.
+                  </div>
                 </div>
               </div>
               <div
@@ -14396,8 +14638,8 @@ const DownloadScreen = ({
                   gap: 8,
                 }}
               >
-                <Upload size={16} />
-                <span>Upload your pet</span>
+                <Sparkles size={16} />
+                <span>Try it now</span>
               </div>
             </button>
 

@@ -48,9 +48,16 @@ type CreateReq = {
   // "full" (default) = free everything; "generation" = free generations only.
   kind?: PromoKind;
 };
+type BulkCreateReq = {
+  action: "bulkCreate";
+  adminPassword: string;
+  company: string; // e.g. "Acme Inc" — stamped into each code's notes
+  count: number; // number of seats (1-500)
+  kind?: PromoKind;
+};
 type RevokeReq = { action: "revoke"; adminPassword: string; code: string };
 type DeleteReq = { action: "delete"; adminPassword: string; code: string };
-type AdminReq = ListReq | CreateReq | RevokeReq | DeleteReq;
+type AdminReq = ListReq | CreateReq | BulkCreateReq | RevokeReq | DeleteReq;
 
 function isAdminReq(body: unknown): body is AdminReq {
   if (!body || typeof body !== "object") return false;
@@ -59,6 +66,7 @@ function isAdminReq(body: unknown): body is AdminReq {
   return (
     b.action === "list" ||
     b.action === "create" ||
+    b.action === "bulkCreate" ||
     b.action === "revoke" ||
     b.action === "delete"
   );
@@ -121,6 +129,53 @@ export default async function handler(
         }
       }
       return res.status(200).json({ code: attempt });
+    }
+
+    if (body.action === "bulkCreate") {
+      // Mint N single-use codes for a company at once (2026-09-01). Each
+      // code carries a note like "Acme Inc — seat 3 of 25" so it's obvious
+      // which team purchase it belongs to on the promos list. Returns the
+      // full array of minted PromoRecords so the admin dashboard can copy
+      // the codes into an email/CSV for the company.
+      const company =
+        typeof body.company === "string" ? body.company.trim().slice(0, 80) : "";
+      const count = Number(body.count);
+      if (!company || !Number.isInteger(count) || count < 1 || count > 500) {
+        return res
+          .status(400)
+          .json({ error: "Company required, count must be 1-500" });
+      }
+      const kind: PromoKind =
+        body.kind === "generation" ? "generation" : "full";
+      const minted: PromoRecord[] = [];
+      const errors: string[] = [];
+      for (let seat = 1; seat <= count; seat++) {
+        let attempt: PromoRecord | null = null;
+        for (let i = 0; i < 5 && !attempt; i++) {
+          try {
+            attempt = await createCode({
+              code: generateCode(),
+              createdBy: "admin",
+              notes: `${company} — seat ${seat} of ${count}`,
+              kind,
+            });
+          } catch (e) {
+            if (i === 4) {
+              errors.push(
+                `seat ${seat}: ${e instanceof Error ? e.message : String(e)}`,
+              );
+            }
+          }
+        }
+        if (attempt) minted.push(attempt);
+      }
+      return res.status(200).json({
+        minted,
+        count: minted.length,
+        requested: count,
+        company,
+        errors: errors.slice(0, 20),
+      });
     }
 
     if (body.action === "revoke") {
