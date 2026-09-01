@@ -11616,7 +11616,7 @@ const GridScreen = ({
                 marginTop: 6,
               }}
             >
-              1 free per batch · 2 wider-crop versions
+              1 free per batch · 2 versions (wider crop + expression change)
             </div>
           </div>
         )
@@ -11659,10 +11659,11 @@ const GridScreen = ({
                 fontWeight: 500,
               }}
             >
-              Versions of your source shot · wider crops
+              Versions of your source shot
               {versionsSourceIndex !== null
                 ? ` · from photo ${versionsSourceIndex + 1}`
                 : ""}
+              {" · wider crop + expression"}
             </span>
           </div>
           <div

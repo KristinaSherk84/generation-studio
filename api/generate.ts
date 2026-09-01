@@ -2139,9 +2139,20 @@ export default async function handler(
     // one. Kept at the END of the prompt so it OVERRIDES the composition and
     // per-slot crop guidance from the earlier blocks — this generation is a
     // variation of a specific target, not a free-composition slot fill.
+    //
+    // Two flavors, keyed off variationIndex (client fires 0 and 1):
+    //   0 = "wider crop, everything else identical" — the extra breathing
+    //       room the customer asked for
+    //   1 = "same crop, expression variation" — a different smile (more or
+    //       less than the source) drawn from the customer's own reference
+    //       photos, so it looks like an authentic alternate expression
     if (similarImage) {
-      const similarSuffix = `\n\nGENERATE VERSIONS OVERRIDE (2026-09-01): The FIRST image in this request is a TARGET REFERENCE — a finished professional headshot the customer already loves. All OTHER images are the customer's identity reference photos. Your job is to generate a NEW professional headshot that:\n1. IDENTITY: comes entirely from the identity reference photos (images 2+). Preserve their face with high fidelity — the SAME person, unmistakably.\n2. COMPOSITION, OUTFIT, HAIR, EXPRESSION, BACKGROUND, LIGHTING: match the TARGET REFERENCE (image 1) as closely as possible. Same outfit style + color, same hair style + color, same expression + mood, same background environment + color palette, same lighting direction + quality.\n3. FRAMING: apply a SLIGHTLY WIDER crop than the target — pull the camera back by roughly 5–15% so more of the upper body and background is visible than in the target. Do NOT crop tighter than the target; wider only.\n4. VARIATION: micro-variation in expression, head-angle, and body pose is welcome — this is a NEW shot, not a copy — but stay within the same overall mood and framing as the target.\n\nOverride any conflicting composition guidance from earlier blocks. Do NOT change the outfit style, hair color, or background type. Do NOT tighten the crop.`;
-      prompt = prompt + similarSuffix;
+      const isExpressionVariant = body.variationIndex === 1;
+      const commonPreamble = `\n\nGENERATE VERSIONS OVERRIDE (2026-09-01): The FIRST image in this request is a TARGET REFERENCE — a finished professional headshot the customer already loves. All OTHER images are the customer's identity reference photos. Your job is to generate a NEW professional headshot that:\n1. IDENTITY: comes entirely from the identity reference photos (images 2+). Preserve their face with high fidelity — the SAME person, unmistakably.\n2. OUTFIT, HAIR, BACKGROUND, LIGHTING: match the TARGET REFERENCE (image 1) exactly. Same outfit style + color, same hair style + color, same background environment + color palette, same lighting direction + quality. Do NOT swap the outfit. Do NOT change the background.`;
+      const wideSuffix = commonPreamble + `\n3. EXPRESSION: match the target reference's expression closely.\n4. FRAMING (CRITICAL — this is the whole point of this variation): apply a MEANINGFULLY WIDER crop than the target. Pull the camera back by roughly 20–30% so noticeably more of the upper body, shoulders, and background environment is visible than in the target. Under NO circumstances crop as tightly as the target — it must be visibly wider. If the target ends at mid-chest, this new shot must end at the waist or lower.\n5. VARIATION: subtle only, other than the wider crop.`;
+      const expressionSuffix = commonPreamble + `\n3. FRAMING: match the target reference's crop (do NOT widen, do NOT tighten).\n4. EXPRESSION (CRITICAL — this is the whole point of this variation): give a NOTICEABLY DIFFERENT expression from the target. Pull the exact smile intensity and eye energy from the customer's own reference photos (images 2+), NOT from the target. If the target has a broad open-mouth smile, produce a softer, closed-lip smile or a warm-eyes-only expression. If the target has a subtle closed smile, produce a brighter, teeth-showing smile. Either direction is fine — the goal is a distinctly different mood while still being unmistakably the same person, dressed the same, in the same setting.\n5. VARIATION: keep everything else identical to the target.`;
+      const chosenSuffix = isExpressionVariant ? expressionSuffix : wideSuffix;
+      prompt = prompt + chosenSuffix + `\n\nOverride any conflicting composition, crop, or expression guidance from earlier blocks in this prompt.`;
     }
 
     // ---- Generate ONE headshot. The frontend calls this six times in
