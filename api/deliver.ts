@@ -505,27 +505,29 @@ export async function sendCustomerDeliveryEmail(args: {
              doesn't accept an image via URL param). Refund is manual: they
              reply to this email with a screenshot; Kristi refunds $5 via
              Stripe. -->
-        <div style="margin: 40px 0 10px; padding: 24px 20px; background: #FBF8F0; border: 2px solid #C9A961; border-radius: 12px; text-align: center;">
+        <div style="margin: 40px 0 24px; padding: 24px 20px; background: #FBF8F0; border: 2px solid #C9A961; border-radius: 12px; text-align: center;">
           <h1 style="font-family: Georgia, 'Times New Roman', serif; font-size: 30px; font-weight: 500; color: #1B4332; margin: 0 0 10px; line-height: 1.2;">
-            Post this, and I'll refund $5 for your headshot.
+            I give refunds for social posts!
           </h1>
           <p style="font-size: 13.5px; line-height: 1.55; color: #555; margin: 12px auto 6px; max-width: 460px;">
             <strong>How it works:</strong> download your before/after graphic below, post it publicly on <strong>LinkedIn</strong>, tag <strong>Generation Headshots</strong>, then reply to this email with a screenshot of your post. I'll refund <strong>$5</strong> to your card within 24 hours.
           </p>
-          <p style="font-size: 12px; line-height: 1.55; color: #888; margin: 4px auto 0; max-width: 460px;">
+          <p style="font-size: 12px; line-height: 1.55; color: #888; margin: 4px auto 18px; max-width: 460px;">
             LinkedIn only. Must be a public post (not a private message or story). One refund per customer.
           </p>
-        </div>
 
-        ${shareTable}
+          <!-- Graphic + download pill(s), now inside the cream card. -->
+          <div style="margin: 0 auto;">${shareTable}</div>
 
-        <div style="text-align: center; margin: 8px 0 24px;">
-          <a href="https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent("https://generationheadshots.com")}" target="_blank" rel="noopener" style="display: inline-block; background: #0A66C2; color: #FFFFFF; padding: 14px 28px; border-radius: 999px; text-decoration: none; font-size: 15px; font-weight: 600; letter-spacing: 0.3px;">
-            Open LinkedIn to post →
-          </a>
-          <p style="font-size: 11.5px; color: #888; margin: 8px 0 0;">
-            Opens LinkedIn's share window — attach the graphic you downloaded above.
-          </p>
+          <!-- LinkedIn CTA sits inside the same card, directly below the graphic. -->
+          <div style="text-align: center; margin: 14px 0 4px;">
+            <a href="https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent("https://generationheadshots.com")}" target="_blank" rel="noopener" style="display: inline-block; background: #0A66C2; color: #FFFFFF; padding: 14px 28px; border-radius: 999px; text-decoration: none; font-size: 15px; font-weight: 600; letter-spacing: 0.3px;">
+              Open LinkedIn to post &rarr;
+            </a>
+            <p style="font-size: 11.5px; color: #888; margin: 8px 0 0;">
+              Opens LinkedIn's share window &mdash; attach the graphic you downloaded above.
+            </p>
+          </div>
         </div>
       `
           : `
