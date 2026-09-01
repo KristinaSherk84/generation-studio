@@ -11248,40 +11248,58 @@ const GridScreen = ({
           photographer's-voice feel. */}
       <div
         style={{
-          marginTop: 24,
+          marginTop: 20,
           background: "#FBF8F0",
           border: `1px solid ${C.border}`,
           borderRadius: 10,
-          padding: isMobileGrid ? "12px 14px" : "20px 22px",
+          padding: isMobileGrid ? "10px 12px" : "14px 18px",
         }}
       >
+        {/* Small cap-label at the top so customers understand these icons
+            live ON each photo tile (not action buttons that fire here).
+            Users were tapping the ↻ in this legend expecting it to
+            regenerate all images. (2026-08-31, Kristi) */}
+        <div
+          style={{
+            fontSize: 10,
+            letterSpacing: 1.2,
+            color: C.mediumGrey,
+            textTransform: "uppercase",
+            fontWeight: 500,
+            marginBottom: isMobileGrid ? 8 : 10,
+            textAlign: "center",
+          }}
+        >
+          Per photo actions
+        </div>
         <div
           style={{
             display: "flex",
             alignItems: "center",
             justifyContent: "space-around",
-            gap: isMobileGrid ? 8 : 20,
+            gap: isMobileGrid ? 6 : 16,
             flexWrap: "wrap",
+            // Kill the "clickable" affordance so the whole row reads as a
+            // reference legend, not tappable controls.
+            pointerEvents: "none",
           }}
         >
           {[
             {
-              icon: (
-                <Maximize2 size={isMobileGrid ? 16 : 24} />
-              ),
+              icon: <Maximize2 size={isMobileGrid ? 14 : 18} />,
               label: "View larger",
             },
             {
               icon: (
                 <Plus
-                  size={isMobileGrid ? 18 : 26}
+                  size={isMobileGrid ? 15 : 20}
                   strokeWidth={2.2}
                 />
               ),
               label: "Add to cart",
             },
             {
-              icon: <RefreshCw size={isMobileGrid ? 16 : 24} />,
+              icon: <RefreshCw size={isMobileGrid ? 14 : 18} />,
               label: "Regenerate",
             },
           ].map((item) => (
@@ -11290,13 +11308,13 @@ const GridScreen = ({
               style={{
                 display: "flex",
                 alignItems: "center",
-                gap: isMobileGrid ? 8 : 12,
+                gap: isMobileGrid ? 6 : 10,
               }}
             >
               <div
                 style={{
-                  width: isMobileGrid ? 32 : 48,
-                  height: isMobileGrid ? 32 : 48,
+                  width: isMobileGrid ? 26 : 34,
+                  height: isMobileGrid ? 26 : 34,
                   borderRadius: "50%",
                   background: C.white,
                   border: `1px solid ${C.border}`,
@@ -11311,7 +11329,7 @@ const GridScreen = ({
               </div>
               <span
                 style={{
-                  fontSize: isMobileGrid ? 12 : 14,
+                  fontSize: isMobileGrid ? 11 : 13,
                   color: C.dark,
                   fontWeight: 500,
                 }}
@@ -11324,8 +11342,8 @@ const GridScreen = ({
         <div
           style={{
             borderTop: `1px solid ${C.border}`,
-            marginTop: isMobileGrid ? 12 : 18,
-            paddingTop: isMobileGrid ? 10 : 14,
+            marginTop: isMobileGrid ? 10 : 12,
+            paddingTop: isMobileGrid ? 8 : 10,
             display: "flex",
             alignItems: "flex-start",
             gap: 8,
@@ -11464,7 +11482,8 @@ const GridScreen = ({
                 borderRadius: 12,
               }}
             >
-              {[25, 50, 75].map((topPercent, row) => (
+              {/* Four evenly-spaced watermark bands on the expanded view. */}
+              {[20, 40, 60, 80].map((topPercent, row) => (
                 <div
                   key={row}
                   style={{
@@ -11474,13 +11493,13 @@ const GridScreen = ({
                     transform: "translate(-50%, -50%) rotate(-30deg)",
                     fontSize: 22,
                     letterSpacing: 8,
-                    color: "rgba(255,255,255,0.35)",
+                    color: "rgba(255,255,255,0.4)",
                     whiteSpace: "nowrap",
                     fontWeight: 700,
-                    textShadow: "0 1px 2px rgba(0,0,0,0.35)",
+                    textShadow: "0 1px 2px rgba(0,0,0,0.4)",
                   }}
                 >
-                  WATERMARK · WATERMARK · WATERMARK
+                  WATERMARK · WATERMARK · WATERMARK · WATERMARK
                 </div>
               ))}
             </div>
