@@ -8408,6 +8408,7 @@ const BG_EXAMPLES: { id: string; name: string; slug: string }[] = [
   { id: "creative", name: "Creative Natural", slug: "creative-natural" },
   { id: "executive", name: "Executive", slug: "executive" },
   { id: "healthcare", name: "Healthcare", slug: "healthcare" },
+  { id: "tech", name: "IT/Tech", slug: "tech" },
 ];
 type BackgroundExamplesModalProps = { open: boolean; onClose: () => void };
 const BackgroundExamplesModal = ({ open, onClose }: BackgroundExamplesModalProps) => {
