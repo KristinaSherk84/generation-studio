@@ -10202,6 +10202,40 @@ const GridScreen = ({
         </div>
       )}
 
+      {/* Regen-budget spent banner (2026-09-01). Appears when the customer
+          has used all their per-photo regens for this batch. Explains why the
+          ↻ icon on each tile is greyed out with a strikethrough — the
+          affordance stays visible on the tiles so users know it existed, but
+          this banner tells them why it's off. Only shows on real budgets
+          (skip in admin fix mode / unlimited). */}
+      {!adminFixMode && maxRegens < 9999 && regenCount >= maxRegens && (
+        <div
+          style={{
+            margin: "12px 0",
+            padding: "10px 14px",
+            background: "#FFF7E5",
+            border: "1px solid #F3D593",
+            borderRadius: 8,
+            fontSize: 13,
+            color: "#5A3E0A",
+            lineHeight: 1.5,
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+          }}
+        >
+          <RefreshCw
+            size={14}
+            style={{ flexShrink: 0, color: "#8A6E1F" }}
+          />
+          <span>
+            <strong>You've used all {maxRegens} free regenerations for
+            this batch.</strong> The refresh icon on each photo is now
+            greyed out.
+          </span>
+        </div>
+      )}
+
       {/* Inline error banner — appears when a per-slot regenerate API call
           fails. Budget is automatically refunded by the App handler before
           this renders, so the user can try again immediately. */}
@@ -11045,49 +11079,86 @@ const GridScreen = ({
                   {picked ? <Check size={17} /> : <Plus size={17} strokeWidth={2.4} />}
                 </div>
               )}
-              {/* Per-slot regenerate button — bottom-right corner. Lets users
-                  swap just this one photo instead of burning a bulk regeneration
-                  on all 6. Hidden when budget is exhausted so there's no
-                  confusing disabled state. Also rendered on FAILED slots so
-                  users can retry slots that didn't come back on the first
-                  pass — previously those slots only showed "Generation
-                  failed" with no action affordance. Hidden on slots still
-                  in flight from the initial batch so the user doesn't burn
-                  a regen on a slot that's about to populate naturally. */}
-              {regenCount < maxRegens && !regenerating && !perfecting && !stillLoadingFromInitial && (
-                <button
-                  onClick={handleRegenClick}
-                  title="Regenerate this photo"
-                  aria-label="Regenerate this photo"
-                  style={{
-                    position: "absolute",
-                    bottom: 10,
-                    right: 10,
-                    background: "rgba(255, 255, 255, 0.85)",
-                    color: C.dark,
-                    border: "none",
-                    borderRadius: "50%",
-                    width: 32,
-                    height: 32,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    cursor: "pointer",
-                    boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
-                    padding: 0,
-                    transition: "background 0.15s, transform 0.15s",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = C.white;
-                    e.currentTarget.style.transform = "scale(1.08)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = "rgba(255, 255, 255, 0.85)";
-                    e.currentTarget.style.transform = "scale(1)";
-                  }}
-                >
-                  <RefreshCw size={16} />
-                </button>
+              {/* Per-slot regenerate button — bottom-right corner. Always
+                  visible on filled tiles (per Kristi 2026-09-01) so customers
+                  know the affordance exists. When the regen budget is spent,
+                  the button dims + shows a strike-through and taps do nothing
+                  (the persistent "used up" banner near the top of the grid
+                  explains why). Hidden on slots still loading from the initial
+                  batch so the user doesn't burn a regen on a slot that's about
+                  to populate naturally. */}
+              {src && !regenerating && !perfecting && !stillLoadingFromInitial && (
+                (() => {
+                  const regenSpent = regenCount >= maxRegens;
+                  return (
+                    <button
+                      onClick={regenSpent ? (e) => e.stopPropagation() : handleRegenClick}
+                      title={
+                        regenSpent
+                          ? "You've used all your free regens for this batch"
+                          : "Regenerate this photo"
+                      }
+                      aria-label={
+                        regenSpent
+                          ? "Regens used up"
+                          : "Regenerate this photo"
+                      }
+                      disabled={regenSpent}
+                      style={{
+                        position: "absolute",
+                        bottom: 10,
+                        right: 10,
+                        background: regenSpent
+                          ? "rgba(255, 255, 255, 0.55)"
+                          : "rgba(255, 255, 255, 0.85)",
+                        color: regenSpent ? C.mediumGrey : C.dark,
+                        border: "none",
+                        borderRadius: "50%",
+                        width: 32,
+                        height: 32,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        cursor: regenSpent ? "not-allowed" : "pointer",
+                        boxShadow: regenSpent
+                          ? "0 1px 2px rgba(0,0,0,0.15)"
+                          : "0 1px 3px rgba(0,0,0,0.3)",
+                        padding: 0,
+                        opacity: regenSpent ? 0.55 : 1,
+                        transition: "background 0.15s, transform 0.15s",
+                      }}
+                      onMouseEnter={(e) => {
+                        if (regenSpent) return;
+                        e.currentTarget.style.background = C.white;
+                        e.currentTarget.style.transform = "scale(1.08)";
+                      }}
+                      onMouseLeave={(e) => {
+                        if (regenSpent) return;
+                        e.currentTarget.style.background =
+                          "rgba(255, 255, 255, 0.85)";
+                        e.currentTarget.style.transform = "scale(1)";
+                      }}
+                    >
+                      <RefreshCw size={16} />
+                      {regenSpent && (
+                        <span
+                          aria-hidden="true"
+                          style={{
+                            position: "absolute",
+                            top: "50%",
+                            left: "50%",
+                            width: 22,
+                            height: 2,
+                            background: C.mediumGrey,
+                            transform: "translate(-50%, -50%) rotate(45deg)",
+                            borderRadius: 1,
+                            pointerEvents: "none",
+                          }}
+                        />
+                      )}
+                    </button>
+                  );
+                })()
               )}
               {/* Revert / redo toggle button — top-LEFT corner. Shows only
                   when this slot has an OTHER version stashed (from a prior
@@ -15844,9 +15915,6 @@ export default function App() {
   // preserving identity from the standard reference set, with a slightly
   // wider crop. Full spec: [[project_generate_similar]].
   const [versionShots, setVersionShots] = useState<(string | null)[]>([]);
-  const [versionsSourceUrl, setVersionsSourceUrl] = useState<string | null>(
-    null,
-  );
   const [versionsSourceIndex, setVersionsSourceIndex] = useState<number | null>(
     null,
   );
@@ -17622,7 +17690,6 @@ export default function App() {
     }
     setPickingVersionSource(false);
     setVersionsSourceIndex(sourceIndex);
-    setVersionsSourceUrl(sourceUrl);
     setVersionsGenerating(true);
     setVersionShots([null, null]);
     setRegenError(null);
@@ -18209,7 +18276,6 @@ export default function App() {
     // Fresh batch → clear Generate Versions state so the customer gets their
     // one free "make versions" use back.
     setVersionShots([]);
-    setVersionsSourceUrl(null);
     setVersionsSourceIndex(null);
     setVersionsUsedThisBatch(false);
     setPickingVersionSource(false);
