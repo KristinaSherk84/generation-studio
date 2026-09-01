@@ -9971,6 +9971,15 @@ type GridScreenProps = {
   maxCartSize: number;
   // Wild Card bonus previews rendered below the main 6 (2026-08-04).
   wildCards: WildCardShot[];
+  // Generate Versions state (2026-09-01). See handleGenerateVersionsFor in App.
+  versionShots: (string | null)[];
+  versionsSourceIndex: number | null;
+  versionsUsedThisBatch: boolean;
+  pickingVersionSource: boolean;
+  versionsGenerating: boolean;
+  onStartPickVersionSource: () => void;
+  onCancelPickVersionSource: () => void;
+  onPickVersionSource: (sourceIndex: number) => void;
 };
 
 const GridScreen = ({
@@ -9998,6 +10007,14 @@ const GridScreen = ({
   onRemoveFromCart,
   maxCartSize,
   wildCards,
+  versionShots,
+  versionsSourceIndex,
+  versionsUsedThisBatch,
+  pickingVersionSource,
+  versionsGenerating,
+  onStartPickVersionSource,
+  onCancelPickVersionSource,
+  onPickVersionSource,
 }: GridScreenProps) => {
   // Cart is App-level URLs (Phase 1, 2026-06-03 revised) — lifted out of
   // GridScreen's useState so it survives the user backing out to the Style
@@ -10718,6 +10735,15 @@ const GridScreen = ({
                   onBlockedSlotClick();
                   return;
                 }
+                // Pick-a-source mode for Generate Versions (2026-09-01): tap
+                // on any filled tile picks it as the source instead of
+                // toggling cart. Empty or in-flight slots ignore the tap.
+                if (pickingVersionSource) {
+                  if (src && !regenerating && !perfecting) {
+                    onPickVersionSource(i);
+                  }
+                  return;
+                }
                 if (src && !regenerating && !perfecting) toggle(i);
               }}
               style={{
@@ -11241,6 +11267,263 @@ const GridScreen = ({
           );
         })}
       </div>
+
+      {/* Generate Versions block (2026-09-01). Three states:
+          1. Idle (default): show the "Love one? Make more versions of it"
+             button below the grid.
+          2. Picking: show a banner asking the customer to tap the shot they
+             love, with a Cancel option.
+          3. Generating / rendered: hide the button and render the versions
+             strip (below).
+          Cap: one use per initial batch. After the customer generates their
+          versions, the button hides for the rest of this batch. */}
+      {!versionsUsedThisBatch && !versionsGenerating && (
+        pickingVersionSource ? (
+          <div
+            style={{
+              marginTop: 20,
+              padding: "14px 18px",
+              background: "#FBF8F0",
+              border: `2px dashed #C9A961`,
+              borderRadius: 10,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              flexWrap: "wrap",
+            }}
+          >
+            <div style={{ fontSize: 14, color: C.dark, fontWeight: 500 }}>
+              Tap the shot you love — I'll make 2 more versions of it.
+            </div>
+            <button
+              onClick={onCancelPickVersionSource}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: C.mediumGrey,
+                fontSize: 13,
+                cursor: "pointer",
+                padding: "6px 10px",
+                fontFamily: "inherit",
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <div style={{ marginTop: 20, textAlign: "center" }}>
+            <button
+              onClick={onStartPickVersionSource}
+              style={{
+                background: "transparent",
+                border: `1px solid #C9A961`,
+                color: "#8A6E1F",
+                borderRadius: 999,
+                padding: "12px 24px",
+                fontSize: 14,
+                fontWeight: 500,
+                cursor: "pointer",
+                fontFamily: "inherit",
+                letterSpacing: 0.3,
+              }}
+            >
+              Love one? Make more versions of it →
+            </button>
+            <div
+              style={{
+                fontSize: 12,
+                color: C.mediumGrey,
+                marginTop: 6,
+              }}
+            >
+              1 free per batch · 2 wider-crop versions
+            </div>
+          </div>
+        )
+      )}
+
+      {/* Versions strip — appears below the grid once the customer has picked
+          a source and 2 versions have been generated (or are generating). */}
+      {(versionsGenerating || versionShots.some((u) => !!u)) && (
+        <div
+          style={{
+            marginTop: 20,
+            borderLeft: `3px solid #C9A961`,
+            paddingLeft: 14,
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              marginBottom: 10,
+            }}
+          >
+            <span
+              style={{
+                fontSize: 14,
+                color: "#C9A961",
+                lineHeight: 1,
+              }}
+              aria-hidden="true"
+            >
+              ⎘
+            </span>
+            <span
+              style={{
+                fontSize: 11,
+                letterSpacing: 1.2,
+                color: C.mediumGrey,
+                textTransform: "uppercase",
+                fontWeight: 500,
+              }}
+            >
+              Versions of your source shot · wider crops
+              {versionsSourceIndex !== null
+                ? ` · from photo ${versionsSourceIndex + 1}`
+                : ""}
+            </span>
+          </div>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              gap: 14,
+              marginBottom: 6,
+            }}
+          >
+            {[0, 1].map((vi) => {
+              const vsrc = versionShots[vi];
+              const isCarted = !!vsrc && cartSet.has(vsrc);
+              return (
+                <div
+                  key={vi}
+                  style={{
+                    position: "relative",
+                    width: "22%",
+                    aspectRatio: "3/4",
+                    borderRadius: 8,
+                    overflow: "hidden",
+                    background: C.lightGrey,
+                    border: `1px solid ${C.border}`,
+                  }}
+                >
+                  {vsrc ? (
+                    <>
+                      <img
+                        src={vsrc}
+                        alt={`Version ${vi + 1}`}
+                        draggable={false}
+                        decoding="async"
+                        onContextMenu={(e) => e.preventDefault()}
+                        style={{
+                          position: "absolute",
+                          inset: 0,
+                          width: "100%",
+                          height: "100%",
+                          objectFit: "cover",
+                          objectPosition: "center",
+                          display: "block",
+                          pointerEvents: "none",
+                          WebkitTouchCallout: "none",
+                          WebkitUserSelect: "none",
+                          userSelect: "none",
+                        }}
+                      />
+                      {/* Add-to-cart pill in the corner. Uses the same cart
+                          mechanism (URL-based), so version shots move into
+                          the same cart as main-grid shots. */}
+                      {!cartIsFull || isCarted ? (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (isCarted) onRemoveFromCart(vsrc);
+                            else onAddToCart(vsrc);
+                          }}
+                          aria-label={isCarted ? "Remove from cart" : "Add to cart"}
+                          style={{
+                            position: "absolute",
+                            top: 6,
+                            right: 6,
+                            width: 26,
+                            height: 26,
+                            borderRadius: "50%",
+                            background: isCarted ? C.dark : "rgba(255,255,255,0.92)",
+                            color: isCarted ? C.white : C.dark,
+                            border: "none",
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            padding: 0,
+                            boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+                          }}
+                        >
+                          {isCarted ? (
+                            <Check size={14} />
+                          ) : (
+                            <Plus size={15} strokeWidth={2.4} />
+                          )}
+                        </button>
+                      ) : null}
+                      {/* Expand button, bottom-left, reuses the same
+                          lightbox state as main tiles. */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPreviewSrc(vsrc);
+                        }}
+                        aria-label="View larger"
+                        style={{
+                          position: "absolute",
+                          bottom: 6,
+                          left: 6,
+                          width: 26,
+                          height: 26,
+                          borderRadius: "50%",
+                          background: "rgba(255,255,255,0.92)",
+                          color: C.dark,
+                          border: "none",
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          padding: 0,
+                          boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+                        }}
+                      >
+                        <Maximize2 size={14} />
+                      </button>
+                    </>
+                  ) : (
+                    <div
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: C.mediumGrey,
+                      }}
+                    >
+                      {versionsGenerating ? (
+                        <Loader2
+                          size={22}
+                          style={{ animation: "spin 1s linear infinite" }}
+                        />
+                      ) : (
+                        <span style={{ fontSize: 11 }}>—</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Icon key + regen prompt (2026-08-31). Replaces the older
           "Photographer's tip" beneath the grid. Explains the three tile
@@ -15553,6 +15836,23 @@ export default function App() {
   const [revertedSlots, setRevertedSlots] = useState<Set<number>>(
     () => new Set(),
   );
+
+  // Generate Versions (2026-09-01). One-shot per batch: the customer taps
+  // "Love one? Make more versions of it", picks a source shot, and we fire
+  // 2 parallel /api/generate calls with `similarToUrl` set to the source's
+  // URL. Server matches the source's composition/outfit/expression/hair while
+  // preserving identity from the standard reference set, with a slightly
+  // wider crop. Full spec: [[project_generate_similar]].
+  const [versionShots, setVersionShots] = useState<(string | null)[]>([]);
+  const [versionsSourceUrl, setVersionsSourceUrl] = useState<string | null>(
+    null,
+  );
+  const [versionsSourceIndex, setVersionsSourceIndex] = useState<number | null>(
+    null,
+  );
+  const [versionsUsedThisBatch, setVersionsUsedThisBatch] = useState(false);
+  const [pickingVersionSource, setPickingVersionSource] = useState(false);
+  const [versionsGenerating, setVersionsGenerating] = useState(false);
   // Wild Card bonus previews shown below the main grid (2026-08-04).
   const [wildCards, setWildCards] = useState<WildCardShot[]>([]);
   const [wildCardRegenerating, setWildCardRegenerating] = useState<Set<number>>(
@@ -17301,6 +17601,91 @@ export default function App() {
     setScreen("checkout");
   };
 
+  // Generate Versions (2026-09-01). Fires 2 parallel /api/generate calls with
+  // similarToUrl set to the source shot's URL. Server prepends the source as
+  // an additional reference image + appends a directive to match its
+  // composition/outfit/hair/etc with a slightly wider crop. Reuses the
+  // current batchId so this counts as part of the ongoing batch (won't trip
+  // the per-IP fresh-batch cap). Once per batch, cleared on new full batch.
+  const handleGenerateVersionsFor = async (sourceIndex: number) => {
+    if (versionsUsedThisBatch || versionsGenerating) return;
+    if (!lastSelections || lastPhotoUrls.length < 5) return;
+    const sourceUrl = generatedImages[sourceIndex];
+    if (!sourceUrl || !/^https?:\/\//.test(sourceUrl)) {
+      // We need an https URL to pass to the server as similarToUrl. Base64
+      // won't work — the server needs to fetch it. Should be rare given the
+      // client already prefers Blob URLs for initial batches.
+      setRegenError(
+        "This shot isn't ready to make versions of yet. Try again in a moment.",
+      );
+      return;
+    }
+    setPickingVersionSource(false);
+    setVersionsSourceIndex(sourceIndex);
+    setVersionsSourceUrl(sourceUrl);
+    setVersionsGenerating(true);
+    setVersionShots([null, null]);
+    setRegenError(null);
+
+    const buildBody = (variationIndex: number) => ({
+      photoUrls: lastPhotoUrls,
+      style: lastSelections.style,
+      attire: lastSelections.attire,
+      lighting: lastSelections.lighting,
+      background: lastSelections.background,
+      variationIndex,
+      hasWideAngle: lastHasWideAngle,
+      skin: lastSelections.skin,
+      scrubColor: lastSelections.scrubColor,
+      poloColor: lastSelections.poloColor,
+      gender: lastGender,
+      similarToUrl: sourceUrl,
+      ...readUnlockRequestFields(),
+    });
+
+    const settled = await Promise.allSettled([
+      fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildBody(0)),
+      }),
+      fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildBody(1)),
+      }),
+    ]);
+
+    const outputs: (string | null)[] = [null, null];
+    let anyOk = false;
+    for (let i = 0; i < settled.length; i++) {
+      const r = settled[i];
+      if (r.status !== "fulfilled") continue;
+      const response = r.value;
+      if (!response.ok) continue;
+      try {
+        const data = (await response.json()) as {
+          image?: string;
+          url?: string | null;
+        };
+        if (!data.image) continue;
+        outputs[i] = data.url ?? data.image;
+        anyOk = true;
+      } catch {
+        /* skip this one */
+      }
+    }
+    setVersionShots(outputs);
+    setVersionsGenerating(false);
+    // Only "spend" the one-per-batch allowance if AT LEAST ONE version came
+    // back. If both failed (network / server), let the customer try again.
+    if (anyOk) setVersionsUsedThisBatch(true);
+    else
+      setRegenError(
+        "Couldn't generate versions right now. Please try again in a moment.",
+      );
+  };
+
   // Regenerate a SINGLE thumbnail slot, reusing the most recently-submitted
   // Style/Attire/Lighting/Background + photo URLs. Fires one /api/generate call
   // with the slot's variationIndex, and on success overwrites that slot only —
@@ -17821,6 +18206,14 @@ export default function App() {
     setGeneratedImages([]);
     setPreviousImages([]); // fresh batch → drop undo history from prior batch
     setRevertedSlots(new Set());
+    // Fresh batch → clear Generate Versions state so the customer gets their
+    // one free "make versions" use back.
+    setVersionShots([]);
+    setVersionsSourceUrl(null);
+    setVersionsSourceIndex(null);
+    setVersionsUsedThisBatch(false);
+    setPickingVersionSource(false);
+    setVersionsGenerating(false);
     setReadyCount(0);
     setGenerationError(null);
     setRegenCount(0);
@@ -18858,6 +19251,16 @@ export default function App() {
           onRemoveFromCart={removeFromCart}
           maxCartSize={MAX_CART_SIZE}
           wildCards={wildCards}
+          versionShots={versionShots}
+          versionsSourceIndex={versionsSourceIndex}
+          versionsUsedThisBatch={versionsUsedThisBatch}
+          pickingVersionSource={pickingVersionSource}
+          versionsGenerating={versionsGenerating}
+          onStartPickVersionSource={() => setPickingVersionSource(true)}
+          onCancelPickVersionSource={() => setPickingVersionSource(false)}
+          onPickVersionSource={(sourceIndex) => {
+            void handleGenerateVersionsFor(sourceIndex);
+          }}
         />
       )}
       {/* Last-chance upsell popup — overlays the retouch screen when it's open,

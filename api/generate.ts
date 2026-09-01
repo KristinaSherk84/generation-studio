@@ -271,6 +271,14 @@ type GenerateRequest = {
   // purchase so the server can grant the post-purchase free-batch credit
   // (2 more batches) even though their IP already used its free batch. (2026-08-11)
   purchaseSessionId?: string;
+  // Generate Versions (2026-09-01). When present, the customer tapped
+  // "Love one? Make more versions of it" and picked a source shot from the
+  // grid. This URL is that source shot. The server includes it as an ADDITIONAL
+  // reference image (prepended to the identity references) and adjusts the
+  // prompt to match its composition/outfit/expression/hair/background/lighting
+  // with a slightly WIDER crop. Identity still comes from the standard
+  // reference photo set. See [[project_generate_similar]] roadmap for spec.
+  similarToUrl?: string;
 };
 
 type InlineImage = { mimeType: string; data: string };
@@ -2086,6 +2094,32 @@ export default async function handler(
       body.photoUrls.map((url) => fetchPhotoAsInlineData(url, body.skin)),
     );
 
+    // Generate Versions (2026-09-01): if a similarToUrl was passed, prepend
+    // the source shot to the images array so it's the FIRST image Gemini sees.
+    // The prompt (see similarSuffix below) tells Gemini to treat that first
+    // image as the target composition/outfit/vibe and the rest as identity
+    // references. No skin filter on the source shot — it's already a finished
+    // headshot, not a reference photo, so smoothing would corrupt it.
+    let similarImage: InlineImage | null = null;
+    if (
+      typeof body.similarToUrl === "string" &&
+      /^https?:\/\//.test(body.similarToUrl)
+    ) {
+      try {
+        similarImage = await fetchPhotoAsInlineData(body.similarToUrl);
+      } catch (err) {
+        // Fetch failed → fall through to a regular generation. Never fail the
+        // request over an optional similar-to reference.
+        console.warn(
+          "[generate] similarToUrl fetch failed, continuing without it:",
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+    }
+    const imagesToSend: InlineImage[] = similarImage
+      ? [similarImage, ...photos]
+      : photos;
+
     // ---- Assemble the prompt from Kristi's v2 framework ----
     try {
       activeOverrides = await getPromptOverrides();
@@ -2100,13 +2134,21 @@ export default async function handler(
         new Date().toISOString(),
       );
     }
-    const prompt = assemblePrompt(body as GenerateRequest);
+    let prompt = assemblePrompt(body as GenerateRequest);
+    // Append the "match this specific source shot" directive when we have
+    // one. Kept at the END of the prompt so it OVERRIDES the composition and
+    // per-slot crop guidance from the earlier blocks — this generation is a
+    // variation of a specific target, not a free-composition slot fill.
+    if (similarImage) {
+      const similarSuffix = `\n\nGENERATE VERSIONS OVERRIDE (2026-09-01): The FIRST image in this request is a TARGET REFERENCE — a finished professional headshot the customer already loves. All OTHER images are the customer's identity reference photos. Your job is to generate a NEW professional headshot that:\n1. IDENTITY: comes entirely from the identity reference photos (images 2+). Preserve their face with high fidelity — the SAME person, unmistakably.\n2. COMPOSITION, OUTFIT, HAIR, EXPRESSION, BACKGROUND, LIGHTING: match the TARGET REFERENCE (image 1) as closely as possible. Same outfit style + color, same hair style + color, same expression + mood, same background environment + color palette, same lighting direction + quality.\n3. FRAMING: apply a SLIGHTLY WIDER crop than the target — pull the camera back by roughly 5–15% so more of the upper body and background is visible than in the target. Do NOT crop tighter than the target; wider only.\n4. VARIATION: micro-variation in expression, head-angle, and body pose is welcome — this is a NEW shot, not a copy — but stay within the same overall mood and framing as the target.\n\nOverride any conflicting composition guidance from earlier blocks. Do NOT change the outfit style, hair color, or background type. Do NOT tighten the crop.`;
+      prompt = prompt + similarSuffix;
+    }
 
     // ---- Generate ONE headshot. The frontend calls this six times in
     //      parallel so it can show real per-image progress to the user. The
     //      retry wrapper absorbs transient 503/429 hiccups from Google. ----
     const ai = new GoogleGenAI({ apiKey });
-    const image = await generateOneHeadshotWithRetry(ai, prompt, photos);
+    const image = await generateOneHeadshotWithRetry(ai, prompt, imagesToSend);
 
     // Never lose a generated shot to a dropped browser connection (Phase A,
     // 2026-08-17): save it server-side the instant it's made, keyed to the
