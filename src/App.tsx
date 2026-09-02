@@ -10298,6 +10298,12 @@ const GridScreen = ({
   // Mobile detection for the icon-key sizing (2026-08-31). The 48px circles
   // read fine on desktop but consume too much vertical space on phones where
   // each row wraps to its own line. Shrink on ≤640px.
+  // Legend collapse state (2026-09-01). Default collapsed — just the LEGEND
+  // cap + three icons close together. Tap to expand into the full "Per photo
+  // actions" card with labels + the "Doesn't look like you?" note. Keeps the
+  // grid page visually tight for returning customers while still letting a
+  // first-timer discover what each icon does with one tap.
+  const [legendExpanded, setLegendExpanded] = useState(false);
   const [isMobileGrid, setIsMobileGrid] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     return window.matchMedia("(max-width: 640px)").matches;
@@ -10820,7 +10826,8 @@ const GridScreen = ({
                         </div>
                         {wc.image &&
                           wc.variationIndex !== undefined &&
-                          regenCount < maxRegens &&
+                          (regenCount < maxRegens ||
+                            (adminFixMode && adminRegensUsed < 2)) &&
                           !wildCardRegenerating.has(i) && (
                             <button
                               type="button"
@@ -11573,7 +11580,7 @@ const GridScreen = ({
             }}
           >
             <div style={{ fontSize: 14, color: C.dark, fontWeight: 500 }}>
-              Tap the shot you love — I'll make 2 more versions of it.
+              Tap the shot you love — I'll make 2 more variations of it.
             </div>
             <button
               onClick={onCancelPickVersionSource}
@@ -11607,7 +11614,7 @@ const GridScreen = ({
                 letterSpacing: 0.3,
               }}
             >
-              Love one? Make more versions of it →
+              Love one? Click here to make more variations of the headshot →
             </button>
             <div
               style={{
@@ -11616,7 +11623,7 @@ const GridScreen = ({
                 marginTop: 6,
               }}
             >
-              1 free per batch · 2 versions (wider crop + expression change)
+              1 free per batch · 2 variations (wider crop + expression change)
             </div>
           </div>
         )
@@ -11659,7 +11666,7 @@ const GridScreen = ({
                 fontWeight: 500,
               }}
             >
-              Versions of your source shot
+              Variations of your source shot
               {versionsSourceIndex !== null
                 ? ` · from photo ${versionsSourceIndex + 1}`
                 : ""}
@@ -11810,19 +11817,32 @@ const GridScreen = ({
           affordances at a glance and gives customers a nudge to hit refresh
           on shots that don't look like them. Camera glyph keeps the
           photographer's-voice feel. */}
+      {/* Collapsible legend (2026-09-01, Kristi). Default: just the three
+          icons close together with a "LEGEND" cap above — quiet, small,
+          non-distracting. Tap the group to expand into the labeled version +
+          the "Doesn't look like you?" note. Returning customers see the
+          tight version; first-timers can pop it open when they need labels. */}
       <div
+        onClick={() => setLegendExpanded((v) => !v)}
+        role="button"
+        aria-expanded={legendExpanded}
+        aria-label={
+          legendExpanded ? "Collapse legend" : "Expand legend to see labels"
+        }
         style={{
           marginTop: 20,
           background: "#FBF8F0",
           border: `1px solid ${C.border}`,
           borderRadius: 10,
-          padding: isMobileGrid ? "10px 12px" : "14px 18px",
+          padding: legendExpanded
+            ? isMobileGrid
+              ? "10px 12px"
+              : "14px 18px"
+            : "8px 12px",
+          cursor: "pointer",
+          transition: "padding 0.15s",
         }}
       >
-        {/* Small cap-label at the top so customers understand these icons
-            live ON each photo tile (not action buttons that fire here).
-            Users were tapping the ↻ in this legend expecting it to
-            regenerate all images. (2026-08-31, Kristi) */}
         <div
           style={{
             fontSize: 10,
@@ -11830,21 +11850,25 @@ const GridScreen = ({
             color: C.mediumGrey,
             textTransform: "uppercase",
             fontWeight: 500,
-            marginBottom: isMobileGrid ? 8 : 10,
+            marginBottom: legendExpanded ? (isMobileGrid ? 8 : 10) : 4,
             textAlign: "center",
           }}
         >
-          Per photo actions
+          Legend
         </div>
         <div
           style={{
             display: "flex",
             alignItems: "center",
-            justifyContent: "space-around",
-            gap: isMobileGrid ? 6 : 16,
+            justifyContent: "center",
+            gap: legendExpanded
+              ? isMobileGrid
+                ? 6
+                : 16
+              : isMobileGrid
+                ? 10
+                : 14,
             flexWrap: "wrap",
-            // Kill the "clickable" affordance so the whole row reads as a
-            // reference legend, not tappable controls.
             pointerEvents: "none",
           }}
         >
@@ -11872,13 +11896,13 @@ const GridScreen = ({
               style={{
                 display: "flex",
                 alignItems: "center",
-                gap: isMobileGrid ? 6 : 10,
+                gap: legendExpanded ? (isMobileGrid ? 6 : 10) : 0,
               }}
             >
               <div
                 style={{
-                  width: isMobileGrid ? 26 : 34,
-                  height: isMobileGrid ? 26 : 34,
+                  width: isMobileGrid ? 26 : 30,
+                  height: isMobileGrid ? 26 : 30,
                   borderRadius: "50%",
                   background: C.white,
                   border: `1px solid ${C.border}`,
@@ -11891,57 +11915,61 @@ const GridScreen = ({
               >
                 {item.icon}
               </div>
-              <span
-                style={{
-                  fontSize: isMobileGrid ? 11 : 13,
-                  color: C.dark,
-                  fontWeight: 500,
-                }}
-              >
-                {item.label}
-              </span>
+              {legendExpanded && (
+                <span
+                  style={{
+                    fontSize: isMobileGrid ? 11 : 13,
+                    color: C.dark,
+                    fontWeight: 500,
+                  }}
+                >
+                  {item.label}
+                </span>
+              )}
             </div>
           ))}
         </div>
-        <div
-          style={{
-            borderTop: `1px solid ${C.border}`,
-            marginTop: isMobileGrid ? 10 : 12,
-            paddingTop: isMobileGrid ? 8 : 10,
-            display: "flex",
-            alignItems: "flex-start",
-            gap: 8,
-          }}
-        >
-          <span
-            style={{
-              fontSize: isMobileGrid ? 14 : 16,
-              color: "#C9A961",
-              lineHeight: 1,
-              marginTop: 2,
-            }}
-            aria-hidden="true"
-          >
-            ✎
-          </span>
+        {legendExpanded && (
           <div
             style={{
-              fontSize: isMobileGrid ? 12 : 13,
-              color: "#444",
-              lineHeight: 1.5,
+              borderTop: `1px solid ${C.border}`,
+              marginTop: isMobileGrid ? 10 : 12,
+              paddingTop: isMobileGrid ? 8 : 10,
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 8,
             }}
           >
-            <span style={{ fontWeight: 500, color: C.dark }}>
-              Doesn't look like you?
-            </span>{" "}
-            Tap the{" "}
-            <RefreshCw
-              size={isMobileGrid ? 12 : 13}
-              style={{ verticalAlign: "-2px", display: "inline" }}
+            <span
+              style={{
+                fontSize: isMobileGrid ? 14 : 16,
+                color: "#C9A961",
+                lineHeight: 1,
+                marginTop: 2,
+              }}
+              aria-hidden="true"
+            >
+              ✎
+            </span>
+            <div
+              style={{
+                fontSize: isMobileGrid ? 12 : 13,
+                color: "#444",
+                lineHeight: 1.5,
+              }}
+            >
+              <span style={{ fontWeight: 500, color: C.dark }}>
+                Doesn't look like you?
+              </span>{" "}
+              Tap the{" "}
+              <RefreshCw
+                size={isMobileGrid ? 12 : 13}
+                style={{ verticalAlign: "-2px", display: "inline" }}
             />{" "}
             icon on that photo to regenerate it. Free for your first 2 tries.
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       <div
@@ -18251,26 +18279,44 @@ export default function App() {
     }
     if (wildCardRegenerating.has(index)) return;
     if (!lastSelections || lastPhotoUrls.length < 1) return;
-    // Budget gate — identical to handleRegenerateSlot's caps so wild card
-    // regens behave exactly like main-grid regens.
-    const singleCap = postPurchaseGrant ? 3 : MAX_FREE_REGENS;
-    // Resumed-from-email + NOT paid: ZERO free regens (reset-leak fix, same as
-    // handleRegenerateSlot). regenCount resets on the resume page load, so gate
-    // on payment, not the counter. Paid users fall through to normal budget.
-    if (resumedFromEmail && !isUnlocked) {
-      setShowFreeTierPaywall(true);
-      return;
-    }
-    if (!entryFeeEnabled && !isUnlocked) {
-      if (regenCount >= singleCap) {
+    const admin = adminFixMode;
+    if (admin) {
+      // Admin damage-control (2026-09-01): same 2 dedicated identity regens as
+      // handleRegenerateSlot. Bypasses customer paywall gates entirely so
+      // Kristi can fix a bad wild card before the customer sees it.
+      if (adminRegenCountRef.current >= 2) {
+        setRegenError(
+          "You've used both admin identity regens for this link. Reload the link to reset them.",
+        );
+        return;
+      }
+    } else {
+      // Budget gate — identical to handleRegenerateSlot's caps so wild card
+      // regens behave exactly like main-grid regens.
+      const singleCap = postPurchaseGrant ? 3 : MAX_FREE_REGENS;
+      // Resumed-from-email + NOT paid: ZERO free regens (reset-leak fix, same as
+      // handleRegenerateSlot). regenCount resets on the resume page load, so gate
+      // on payment, not the counter. Paid users fall through to normal budget.
+      if (resumedFromEmail && !isUnlocked) {
         setShowFreeTierPaywall(true);
         return;
       }
-    } else if (regenCount >= MAX_SINGLE_REGENS) {
-      setShowPaywall(true);
-      return;
+      if (!entryFeeEnabled && !isUnlocked) {
+        if (regenCount >= singleCap) {
+          setShowFreeTierPaywall(true);
+          return;
+        }
+      } else if (regenCount >= MAX_SINGLE_REGENS) {
+        setShowPaywall(true);
+        return;
+      }
     }
-    setRegenCount((n) => n + 1);
+    if (admin) {
+      adminRegenCountRef.current += 1;
+      setAdminRegensUsed(adminRegenCountRef.current);
+    } else {
+      setRegenCount((n) => n + 1);
+    }
     setWildCardRegenerating((prev) => {
       const next = new Set(prev);
       next.add(index);
@@ -18325,7 +18371,12 @@ export default function App() {
     } catch (err) {
       // Refund — a failed or paywalled attempt shouldn't burn a regen. The old
       // image stays (we never cleared it), so nothing is lost on failure.
-      setRegenCount((n) => Math.max(0, n - 1));
+      if (admin) {
+        adminRegenCountRef.current = Math.max(0, adminRegenCountRef.current - 1);
+        setAdminRegensUsed(adminRegenCountRef.current);
+      } else {
+        setRegenCount((n) => Math.max(0, n - 1));
+      }
       if (err instanceof Error && err.message === "free_limit") {
         setShowFreeTierPaywall(true);
       }
