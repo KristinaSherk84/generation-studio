@@ -13834,7 +13834,82 @@ const CheckoutScreen = ({
         </div>
       )}
 
-      <div style={{ marginTop: 24 }}>
+      {/* Trust bar — sits directly above the pay button at the moment of
+          maximum hesitation. Clarity data (2026-09-02) showed 80% of
+          "begin checkout" sessions never completing payment. Money-back
+          guarantee lead + Stripe padlock + reviews + "pay for shots you
+          love" reassurance are the standard four bars that raise
+          checkout completion. Hidden for promo unlocks — those users
+          aren't paying so trust markers are noise. */}
+      {!isPromoUnlock && (
+        <div
+          style={{
+            marginTop: 24,
+            padding: "14px 18px",
+            background: "#FBF8F0",
+            border: "1px solid #E8E4DB",
+            borderRadius: 10,
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              marginBottom: 10,
+              paddingBottom: 10,
+              borderBottom: "1px solid #EFEAE0",
+            }}
+          >
+            <div
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: "50%",
+                background: "#1B4332",
+                color: "#fff",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 15,
+                flexShrink: 0,
+              }}
+              aria-hidden="true"
+            >
+              ✓
+            </div>
+            <div style={{ fontSize: 14, color: C.dark, lineHeight: 1.4 }}>
+              <strong style={{ color: "#1B4332" }}>100% money-back guarantee.</strong>{" "}
+              If none of your headshots look like you, reply to your delivery
+              email — I'll refund every cent, no questions asked.
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              gap: 16,
+              flexWrap: "wrap",
+              fontSize: 12,
+              color: C.mediumGrey,
+              lineHeight: 1.5,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 6, flex: "1 1 auto" }}>
+              <Lock size={13} style={{ color: "#635BFF", flexShrink: 0 }} />
+              <span>Secured by Stripe · industry-standard encrypted checkout</span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, flex: "1 1 auto" }}>
+              <span style={{ color: "#C9A961", fontSize: 13, flexShrink: 0 }} aria-hidden="true">
+                ★★★★★
+              </span>
+              <span>400+ 5-star Google reviews for Kristina Sherk</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div style={{ marginTop: 16 }}>
         <Button onClick={submit} disabled={!emailLooksValid || !nameLooksValid || processing} full>
           {processing
             ? progressLabel || "Preparing your download…"
@@ -13842,6 +13917,21 @@ const CheckoutScreen = ({
               ? "Take me to my photos"
               : `Pay ${fmt(totalOwed)} → unlock downloads`}
         </Button>
+        {!isPromoUnlock && !processing && (
+          <div
+            style={{
+              marginTop: 8,
+              textAlign: "center",
+              fontSize: 11.5,
+              color: C.mediumGrey,
+              lineHeight: 1.4,
+            }}
+          >
+            You'll be redirected to Stripe's secure checkout.
+            <br />
+            You only pay for the ones you love.
+          </div>
+        )}
       </div>
     </div>
   );
