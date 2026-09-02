@@ -13879,9 +13879,7 @@ const CheckoutScreen = ({
               ✓
             </div>
             <div style={{ fontSize: 14, color: C.dark, lineHeight: 1.4 }}>
-              <strong style={{ color: "#1B4332" }}>100% money-back guarantee.</strong>{" "}
-              If none of your headshots look like you, reply to your delivery
-              email — I'll refund every cent, no questions asked.
+              <strong style={{ color: "#1B4332" }}>100% money-back guarantee.</strong>
             </div>
           </div>
 
