@@ -560,6 +560,22 @@ export async function sendCustomerDeliveryEmail(args: {
           : ""
       }
 
+      <!-- Google review ask (2026-09-03, per Kristi). Sits just above the
+           footer. Different ask than the LinkedIn-refund CTA higher up:
+           this one is unpaid, 30-second, and specifically for her Google
+           Business Profile — a review here compounds SEO + local search
+           trust for Generation Headshots, which is exactly the growth
+           lever she can't buy. Small-business voice: honest, low-pressure,
+           opt-out framing (don't do it if it takes more than 30 seconds). -->
+      <div style="margin: 32px 0 0; padding: 24px 20px; background: #FFFFFF; border: 1px solid #E8E5DD; border-radius: 10px; text-align: center;">
+        <p style="font-size: 14px; line-height: 1.65; color: #2A2A2A; margin: 0 0 14px;">
+          The best way to help me grow is to add some stars to my Google business page — don't do it if it takes more than 30 seconds. But if you like your headshots, please consider helping out my small business:
+        </p>
+        <a href="https://g.page/r/CS8xkzyHzYuGEBM/review" target="_blank" rel="noopener" style="display: inline-block; background: #C9A961; color: #FFFFFF; padding: 12px 24px; border-radius: 999px; text-decoration: none; font-size: 14px; font-weight: 500; letter-spacing: 0.3px;">
+          Leave a Google review &rarr;
+        </a>
+      </div>
+
       <!-- Footer -->
       <div style="margin-top: 40px; padding-top: 24px; border-top: 1px solid #EFEAE0; text-align: center; font-size: 12px; color: #888;">
         Questions? Just reply to this email — I read every one.<br/>
