@@ -11442,6 +11442,7 @@ const GridScreen = ({
                   onClick={(e) => {
                     e.stopPropagation();
                     setPreviewSrc(src);
+                    setPreviewIndex(i);
                   }}
                   title="View larger"
                   aria-label="View larger"
@@ -11765,6 +11766,7 @@ const GridScreen = ({
                         onClick={(e) => {
                           e.stopPropagation();
                           setPreviewSrc(vsrc);
+                          setPreviewIndex(null); // version tiles don't cycle
                         }}
                         aria-label="View larger"
                         style={{
@@ -12021,10 +12023,43 @@ const GridScreen = ({
       {/* View-larger lightbox (2026-08-31). Same anti-theft treatment as the
           LoadingScreen preview: img has pointer-events disabled, watermark
           overlay on top, right-click / long-press save blocked. Backdrop
-          click or X closes. */}
+          click or X closes. Left/right arrows cycle through main-grid shots
+          when opened from a main tile; keyboard ArrowLeft/ArrowRight also
+          work. Version-tile expansions don't cycle (previewIndex === null).
+          (2026-09-02 cycling per Kristi.) */}
       {previewSrc && (
         <div
-          onClick={() => setPreviewSrc(null)}
+          onClick={() => {
+            setPreviewSrc(null);
+            setPreviewIndex(null);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+              e.preventDefault();
+              e.stopPropagation();
+              // Recompute cyclable list here since it can shift as regens land.
+              const cy: number[] = [];
+              for (let ii = 0; ii < images.length; ii++) {
+                if (images[ii]) cy.push(ii);
+              }
+              if (previewIndex === null || cy.length < 2) return;
+              const pos = cy.indexOf(previewIndex);
+              if (pos < 0) return;
+              const delta = e.key === "ArrowRight" ? 1 : -1;
+              const nextIdx = cy[(pos + delta + cy.length) % cy.length];
+              setPreviewIndex(nextIdx);
+              setPreviewSrc(images[nextIdx]);
+            } else if (e.key === "Escape") {
+              setPreviewSrc(null);
+              setPreviewIndex(null);
+            }
+          }}
+          tabIndex={-1}
+          ref={(el) => {
+            // Auto-focus the lightbox so keyboard arrows work immediately
+            // without the user having to click first.
+            if (el && document.activeElement !== el) el.focus();
+          }}
           style={{
             position: "fixed",
             inset: 0,
@@ -12035,6 +12070,7 @@ const GridScreen = ({
             justifyContent: "center",
             padding: 20,
             cursor: "zoom-out",
+            outline: "none",
           }}
         >
           <div
@@ -12100,7 +12136,10 @@ const GridScreen = ({
               ))}
             </div>
             <button
-              onClick={() => setPreviewSrc(null)}
+              onClick={() => {
+                setPreviewSrc(null);
+                setPreviewIndex(null);
+              }}
               aria-label="Close preview"
               style={{
                 position: "absolute",
@@ -12123,6 +12162,83 @@ const GridScreen = ({
             >
               <X size={20} />
             </button>
+            {/* Left/right arrows + counter — only when the lightbox was opened
+                from a main-grid tile (previewIndex !== null) AND there is more
+                than one filled tile to cycle through. Version-tile expansions
+                skip this. (2026-09-02 per Kristi.) */}
+            {previewIndex !== null &&
+              (() => {
+                const cyclable: number[] = [];
+                for (let ii = 0; ii < images.length; ii++) {
+                  if (images[ii]) cyclable.push(ii);
+                }
+                if (cyclable.length < 2) return null;
+                const pos = cyclable.indexOf(previewIndex);
+                if (pos < 0) return null;
+                const go = (delta: 1 | -1) => (e: MouseEvent) => {
+                  e.stopPropagation();
+                  const next = cyclable[(pos + delta + cyclable.length) % cyclable.length];
+                  setPreviewIndex(next);
+                  setPreviewSrc(images[next]);
+                };
+                const arrowBtn = (
+                  side: "left" | "right",
+                  onClickFn: (e: MouseEvent) => void,
+                ) => (
+                  <button
+                    onClick={onClickFn}
+                    aria-label={side === "left" ? "Previous photo" : "Next photo"}
+                    style={{
+                      position: "absolute",
+                      top: "50%",
+                      [side]: -70,
+                      transform: "translateY(-50%)",
+                      width: 52,
+                      height: 52,
+                      borderRadius: "50%",
+                      background: "rgba(255,255,255,0.92)",
+                      color: C.dark,
+                      border: "none",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      padding: 0,
+                      boxShadow: "0 2px 8px rgba(0,0,0,0.35)",
+                    } as CSSProperties}
+                  >
+                    {side === "left" ? (
+                      <ArrowLeft size={22} />
+                    ) : (
+                      <ArrowRight size={22} />
+                    )}
+                  </button>
+                );
+                return (
+                  <>
+                    {arrowBtn("left", go(-1))}
+                    {arrowBtn("right", go(1))}
+                    {/* Counter pill anchored below the image */}
+                    <div
+                      style={{
+                        position: "absolute",
+                        bottom: -40,
+                        left: "50%",
+                        transform: "translateX(-50%)",
+                        background: "rgba(255,255,255,0.92)",
+                        color: C.dark,
+                        fontSize: 13,
+                        fontWeight: 500,
+                        padding: "6px 14px",
+                        borderRadius: 999,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {pos + 1} of {cyclable.length}
+                    </div>
+                  </>
+                );
+              })()}
           </div>
         </div>
       )}
