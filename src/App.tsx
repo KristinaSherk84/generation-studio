@@ -10255,6 +10255,10 @@ const GridScreen = ({
   // disabled and a watermark overlay so a right-click / long-press save is
   // still blocked in the expanded view. Backdrop click or X closes.
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
+  // Index into the main-grid images array when the lightbox was opened from
+  // a main-grid tile. null when opened from a version tile (those don't
+  // cycle). Drives the left/right arrows + keyboard cycling. (2026-09-02)
+  const [previewIndex, setPreviewIndex] = useState<number | null>(null);
 
   // Broken-image protection (2026-08-18): if a photo fails to LOAD (a gray
   // broken block — the image was made & saved fine, the browser just couldn't
@@ -17874,7 +17878,13 @@ export default function App() {
     if (resumedFromEmail) return;
     // Wait for every initial call to return before snapshotting.
     if (initialBatchInFlight.size > 0) return;
-    if (readyCount < TOTAL_HEADSHOTS - 1) return;
+    // Save whenever AT LEAST ONE shot came through (2026-09-02, per Kristi).
+    // Previously required 5+ shots which meant partial batches — specifically
+    // a 2nd batch where some slots hit the free-limit paywall and returned as
+    // blocked instead of images — never persisted. Customer received an RTV
+    // email link that only had the FIRST batch's shots, silently losing the
+    // 2nd batch's completed images.
+    if (readyCount === 0) return;
     const addr = email.trim();
     if (!addr) return;
     // Fire ONCE PER BATCH (Kristi 2026-08-12): every generation with an entered
