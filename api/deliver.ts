@@ -493,49 +493,54 @@ export async function sendCustomerDeliveryEmail(args: {
         </p>
       </div>
 
-      ${
-        hasShareGraphics
-          ? `
-        <!-- Share-for-refund CTA (2026-08-30, per Kristi). Bold headline, then
-             a small requirements line, then the graphic itself. The download
-             pill under each graphic becomes the "grab your image" step;
-             the "Post to LinkedIn" pill jumps into LinkedIn's share dialog
-             pre-loaded with the site URL — the customer still uploads the
-             downloaded image manually in the LinkedIn composer (LinkedIn
-             doesn't accept an image via URL param). Refund is manual: they
-             reply to this email with a screenshot; Kristi refunds $5 via
-             Stripe. -->
-        <div style="margin: 40px 0 24px; padding: 24px 20px; background: #FBF8F0; border: 2px solid #C9A961; border-radius: 12px; text-align: center;">
-          <h1 style="font-family: Georgia, 'Times New Roman', serif; font-size: 30px; font-weight: 500; color: #1B4332; margin: 0 0 10px; line-height: 1.2;">
-            I give refunds for social posts!
-          </h1>
-          <p style="font-size: 13.5px; line-height: 1.55; color: #555; margin: 12px auto 6px; max-width: 460px;">
-            <strong>How it works:</strong> download your before/after graphic below, post it publicly on <strong>LinkedIn</strong>, tag <strong>Generation Headshots</strong>, then reply to this email with a screenshot of your post. I'll refund <strong>$5</strong> to your card within 24 hours.
-          </p>
-          <p style="font-size: 12px; line-height: 1.55; color: #888; margin: 4px auto 18px; max-width: 460px;">
-            LinkedIn only. Must be a public post (not a private message or story). One refund per customer.
-          </p>
-
-          <!-- Graphic + download pill(s), now inside the cream card. -->
-          <div style="margin: 0 auto;">${shareTable}</div>
-
-          <!-- LinkedIn CTA sits inside the same card, directly below the graphic. -->
-          <div style="text-align: center; margin: 14px 0 4px;">
-            <a href="https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent("https://generationheadshots.com")}" target="_blank" rel="noopener" style="display: inline-block; background: #0A66C2; color: #FFFFFF; padding: 14px 28px; border-radius: 999px; text-decoration: none; font-size: 15px; font-weight: 600; letter-spacing: 0.3px;">
-              Open LinkedIn to post &rarr;
-            </a>
-            <p style="font-size: 11.5px; color: #888; margin: 8px 0 0;">
-              Opens LinkedIn's share window &mdash; attach the graphic you downloaded above.
-            </p>
-          </div>
-        </div>
-      `
-          : `
-        <p style="font-size: 14px; line-height: 1.6; color: #555; margin: 32px 0; text-align: center;">
-          (Your share graphic didn't generate this time — Kristi has been notified and will follow up.)
+      <!-- Share-for-refund CTA (2026-08-30, per Kristi). Bold headline, then
+           a small requirements line, then the graphic itself. The download
+           pill under each graphic becomes the "grab your image" step;
+           the "Post to LinkedIn" pill jumps into LinkedIn's share dialog
+           pre-loaded with the site URL — the customer still uploads the
+           downloaded image manually in the LinkedIn composer (LinkedIn
+           doesn't accept an image via URL param). Refund is manual: they
+           reply to this email with a screenshot; Kristi refunds $5 via
+           Stripe.
+           2026-09-03: the ENTIRE offer (headline, instructions, LinkedIn
+           button) now shows unconditionally — only the graphic itself is
+           gated on hasShareGraphics. Previously the whole card was hidden
+           when the composite failed, so the customer never learned about
+           the refund at all. Now they always see the offer + can reply for
+           a hand-made graphic if the auto one didn't render. -->
+      <div style="margin: 40px 0 24px; padding: 24px 20px; background: #FBF8F0; border: 2px solid #C9A961; border-radius: 12px; text-align: center;">
+        <h1 style="font-family: Georgia, 'Times New Roman', serif; font-size: 30px; font-weight: 500; color: #1B4332; margin: 0 0 10px; line-height: 1.2;">
+          I give refunds for social posts!
+        </h1>
+        <p style="font-size: 13.5px; line-height: 1.55; color: #555; margin: 12px auto 6px; max-width: 460px;">
+          <strong>How it works:</strong> download your before/after graphic below, post it publicly on <strong>LinkedIn</strong>, tag <strong>Generation Headshots</strong>, then reply to this email with a screenshot of your post. I'll refund <strong>$5</strong> to your card within 24 hours.
         </p>
-      `
-      }
+        <p style="font-size: 12px; line-height: 1.55; color: #888; margin: 4px auto 18px; max-width: 460px;">
+          LinkedIn only. Must be a public post (not a private message or story). One refund per customer.
+        </p>
+
+        ${
+          hasShareGraphics
+            ? `<!-- Graphic + download pill(s), now inside the cream card. -->
+        <div style="margin: 0 auto;">${shareTable}</div>`
+            : `<!-- Auto-composite failed. Tell the customer what to do instead. -->
+        <div style="margin: 0 auto 8px; padding: 14px 16px; background: #FFFFFF; border: 1px dashed #C9A961; border-radius: 8px; max-width: 460px;">
+          <p style="font-size: 13px; line-height: 1.6; color: #555; margin: 0;">
+            Your auto-generated before/after graphic didn't build this time — just <strong>reply to this email</strong> and I'll hand-make one for you (usually within a day). The refund offer still stands.
+          </p>
+        </div>`
+        }
+
+        <!-- LinkedIn CTA sits inside the same card, directly below the graphic. -->
+        <div style="text-align: center; margin: 14px 0 4px;">
+          <a href="https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent("https://generationheadshots.com")}" target="_blank" rel="noopener" style="display: inline-block; background: #0A66C2; color: #FFFFFF; padding: 14px 28px; border-radius: 999px; text-decoration: none; font-size: 15px; font-weight: 600; letter-spacing: 0.3px;">
+            Open LinkedIn to post &rarr;
+          </a>
+          <p style="font-size: 11.5px; color: #888; margin: 8px 0 0;">
+            ${hasShareGraphics ? "Opens LinkedIn's share window &mdash; attach the graphic you downloaded above." : "Opens LinkedIn's share window &mdash; attach your favorite headshot (or the graphic once I send it)."}
+          </p>
+        </div>
+      </div>
 
       <!-- High-res photo backup links — secondary section so customers who
            lose their downloads (cleared cache, switched devices, etc.) can

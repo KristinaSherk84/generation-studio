@@ -36,7 +36,19 @@ export type SavedSession = {
   // they survive a reload and show on the "your headshots are ready" email link
   // instead of vanishing with the live tab. Added post-save via a patch, since
   // they usually finish generating after the main grid is saved. (2026-08-10)
-  wildCards?: { url: string; label: string }[];
+  //
+  // 2026-09-03: added optional style/lighting/variationIndex so a resumed
+  // session (or admin fix-mode session) has enough metadata to REGENERATE a
+  // wild card via /api/generate. Older records saved before this change won't
+  // have these fields; the client falls back to a label-parser that
+  // reconstructs them from the known 4 wildcard configs.
+  wildCards?: {
+    url: string;
+    label: string;
+    style?: string;
+    lighting?: string;
+    variationIndex?: number;
+  }[];
   // Per-slot undo history (2026-08-31). If a slot was regenerated, the URL of
   // the OLD shot lives here at the same index. The tile's revert (↶/↷) button
   // swaps between generatedUrls[i] and previousUrls[i]. Two-version toggle
@@ -202,7 +214,13 @@ export async function revertSessionSlot(
  */
 export async function setSessionWildCards(
   token: string,
-  wildCards: { url: string; label: string }[],
+  wildCards: {
+    url: string;
+    label: string;
+    style?: string;
+    lighting?: string;
+    variationIndex?: number;
+  }[],
 ): Promise<boolean> {
   if (!token || !/^[A-Za-z0-9]{16,48}$/.test(token)) return false;
   let rec: SavedSession | null;
@@ -219,6 +237,15 @@ export async function setSessionWildCards(
     .map((w) => ({
       url: w.url,
       label: typeof w.label === "string" ? w.label.slice(0, 160) : "",
+      // Optional regen metadata (2026-09-03) — persisted only if present,
+      // so a resumed session can fire a regen against /api/generate.
+      style: typeof w.style === "string" ? w.style : undefined,
+      lighting: typeof w.lighting === "string" ? w.lighting : undefined,
+      variationIndex:
+        typeof w.variationIndex === "number" &&
+        Number.isFinite(w.variationIndex)
+          ? w.variationIndex
+          : undefined,
     }));
   // Merge with wild cards already saved from earlier batches (accumulate,
   // 2026-08-24) instead of replacing — a multi-batch customer keeps ALL their
@@ -226,7 +253,13 @@ export async function setSessionWildCards(
   // in first-seen order), capped so the record stays bounded.
   const priorWc = Array.isArray(rec.wildCards) ? rec.wildCards : [];
   const seenWc = new Set<string>();
-  const mergedWc: { url: string; label: string }[] = [];
+  const mergedWc: {
+    url: string;
+    label: string;
+    style?: string;
+    lighting?: string;
+    variationIndex?: number;
+  }[] = [];
   for (const w of [...priorWc, ...incoming]) {
     if (seenWc.has(w.url)) continue;
     seenWc.add(w.url);

@@ -21,7 +21,13 @@ export default async function handler(
   const body = (req.body ?? {}) as { token?: unknown; wildCards?: unknown };
   const token = typeof body.token === "string" ? body.token : "";
   const wildCards = Array.isArray(body.wildCards)
-    ? (body.wildCards as { url?: unknown; label?: unknown }[])
+    ? (body.wildCards as {
+        url?: unknown;
+        label?: unknown;
+        style?: unknown;
+        lighting?: unknown;
+        variationIndex?: unknown;
+      }[])
         .filter(
           (w) =>
             w &&
@@ -31,6 +37,18 @@ export default async function handler(
         .map((w) => ({
           url: w.url as string,
           label: typeof w.label === "string" ? w.label : "",
+          // Optional regen metadata (2026-09-03). Persisted only when
+          // present so a resumed session can re-fire /api/generate for the
+          // correct style/lighting/variationIndex combo. Older clients
+          // that don't send these fields still work — they just save
+          // records without the metadata (same as before).
+          style: typeof w.style === "string" ? w.style : undefined,
+          lighting: typeof w.lighting === "string" ? w.lighting : undefined,
+          variationIndex:
+            typeof w.variationIndex === "number" &&
+            Number.isFinite(w.variationIndex)
+              ? w.variationIndex
+              : undefined,
         }))
     : [];
   if (!token || wildCards.length === 0) {

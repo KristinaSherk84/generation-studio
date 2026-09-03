@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": { "types": ["node"], "noUnusedLocals": false, "noUnusedParameters": false, "noEmit": true },
+  "include": ["api"]
+}
