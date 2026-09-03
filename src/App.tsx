@@ -10420,40 +10420,6 @@ const GridScreen = ({
         </div>
       )}
 
-      {/* Regen-budget spent banner (2026-09-01). Appears when the customer
-          has used all their per-photo regens for this batch. Explains why the
-          ↻ icon on each tile is greyed out with a strikethrough — the
-          affordance stays visible on the tiles so users know it existed, but
-          this banner tells them why it's off. Only shows on real budgets
-          (skip in admin fix mode / unlimited). */}
-      {!adminFixMode && maxRegens < 9999 && regenCount >= maxRegens && (
-        <div
-          style={{
-            margin: "12px 0",
-            padding: "10px 14px",
-            background: "#FFF7E5",
-            border: "1px solid #F3D593",
-            borderRadius: 8,
-            fontSize: 13,
-            color: "#5A3E0A",
-            lineHeight: 1.5,
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-          }}
-        >
-          <RefreshCw
-            size={14}
-            style={{ flexShrink: 0, color: "#8A6E1F" }}
-          />
-          <span>
-            <strong>You've used all {maxRegens} free regenerations for
-            this batch.</strong> The refresh icon on each photo is now
-            greyed out.
-          </span>
-        </div>
-      )}
-
       {/* Inline error banner — appears when a per-slot regenerate API call
           fails. Budget is automatically refunded by the App handler before
           this renders, so the user can try again immediately. */}
@@ -10477,22 +10443,65 @@ const GridScreen = ({
       {/* Hint above the grid so users discover per-photo regeneration.
           It's a soft one-liner, not a button — the actual affordance lives
           on each tile as the refresh icon. */}
-      <div
-        style={{
-          marginTop: 24,
-          padding: "12px 16px",
-          borderRadius: 8,
-          background: C.lightGrey,
-          color: C.dark,
-          fontSize: 13,
-          lineHeight: 1.6,
-          textAlign: "center",
-        }}
-      >
-        <span style={{ fontWeight: 500 }}>Don't love one?</span>{" "}
-        Tap the <RefreshCw size={12} style={{ display: "inline", verticalAlign: "middle", marginBottom: 2 }} />{" "}
-        icon on any photo to regenerate just that one.
-      </div>
+      {/* Single dynamic regen hint (2026-09-03, per Kristi). Merges the old
+          "Don't love one?" grey bar with the amber "used up" banner —
+          previously both rendered simultaneously with conflicting messages.
+          Now flips between encouraging + amber-warning based on state. */}
+      {(() => {
+        const regensSpent =
+          !adminFixMode && maxRegens < 9999 && regenCount >= maxRegens;
+        return (
+          <div
+            style={{
+              marginTop: 24,
+              padding: "12px 16px",
+              borderRadius: 8,
+              background: regensSpent ? "#FFF7E5" : C.lightGrey,
+              border: regensSpent
+                ? "1px solid #F3D593"
+                : `1px solid transparent`,
+              color: regensSpent ? "#5A3E0A" : C.dark,
+              fontSize: 13,
+              lineHeight: 1.6,
+              textAlign: "center",
+            }}
+          >
+            {regensSpent ? (
+              <>
+                <RefreshCw
+                  size={13}
+                  style={{
+                    display: "inline",
+                    verticalAlign: "middle",
+                    marginRight: 6,
+                    marginBottom: 2,
+                    color: "#8A6E1F",
+                  }}
+                />
+                <span style={{ fontWeight: 500 }}>
+                  You've used all {maxRegens} free regenerations for this
+                  batch.
+                </span>{" "}
+                The refresh icon on each photo is now greyed out.
+              </>
+            ) : (
+              <>
+                <span style={{ fontWeight: 500 }}>Don't love one?</span>{" "}
+                Tap the{" "}
+                <RefreshCw
+                  size={12}
+                  style={{
+                    display: "inline",
+                    verticalAlign: "middle",
+                    marginBottom: 2,
+                  }}
+                />{" "}
+                icon on any photo to regenerate just that one.
+              </>
+            )}
+          </div>
+        );
+      })()}
 
       {/* CART STRIP (Phase 1, 2026-06-03). Renders horizontally above the
           main grid whenever the cart has 1+ items. Each thumbnail shows
