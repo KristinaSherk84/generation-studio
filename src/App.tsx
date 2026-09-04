@@ -9943,7 +9943,7 @@ const LoadingScreen = ({
                               fontWeight: 400,
                             }}
                           >
-                            WATERMARK · WATERMARK · WATERMARK
+                            INVISIBLE WATERMARKS APPLIED TO PROTECT ARTIST
                           </div>
                         ))}
                       </div>
@@ -10070,7 +10070,7 @@ const LoadingScreen = ({
                     fontWeight: 400,
                   }}
                 >
-                  WATERMARK · WATERMARK · WATERMARK
+                  INVISIBLE WATERMARKS APPLIED TO PROTECT ARTIST
                 </div>
               ))}
             </div>
@@ -10575,8 +10575,9 @@ const GridScreen = ({
               You've hit the generation limit.
             </div>
             <div style={{ fontSize: 13, marginBottom: 12 }}>
-              Take a look at everything you've already made, or unlock more
-              generations to keep going.
+              {images.length > 6
+                ? "Take a look at everything you've already made, or unlock more generations to keep going."
+                : "Pick from what's on the grid, or unlock more generations to keep going."}
             </div>
             <div
               style={{
@@ -10585,14 +10586,23 @@ const GridScreen = ({
                 flexWrap: "wrap",
               }}
             >
+              {/* "Review all" is now ALWAYS visible in the over-limit
+                  state. The onClick fires an App-level handler that (a)
+                  pulls the customer's accumulated session from the server
+                  (which holds every shot from every batch this session,
+                  even ones not currently in client state), (b) merges
+                  those into images, then (c) expands the extras section
+                  so they see everything at once. Users often generate
+                  40+ shots across batches — the client state only holds
+                  the CURRENT batch's 6, but the server has the rest.
+                  (2026-09-04 fix per Kristi: previously the button was
+                  gated on client-state length and did nothing for a
+                  customer whose accumulated shots hadn't loaded.) */}
               <button
                 type="button"
                 onClick={() => {
-                  // Expand extras (owned by GridScreen state) + scroll to the
-                  // top so the customer sees the main grid + wild cards +
-                  // extras in one view. Then hand off to any App-level
-                  // handler in case there's additional coordination to do
-                  // (analytics, unblock a scroll lock, etc.).
+                  // Local view actions first (immediate visual feedback),
+                  // then let the App handler hydrate from server.
                   setExtrasExpanded(true);
                   if (typeof window !== "undefined") {
                     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -11012,7 +11022,7 @@ const GridScreen = ({
                                 fontWeight: 400,
                               }}
                             >
-                              WATERMARK · WATERMARK · WATERMARK
+                              INVISIBLE WATERMARKS APPLIED TO PROTECT ARTIST
                             </div>
                           ))}
                         </div>
@@ -11488,7 +11498,7 @@ const GridScreen = ({
                           fontWeight: 400,
                         }}
                       >
-                        WATERMARK · WATERMARK · WATERMARK
+                        INVISIBLE WATERMARKS APPLIED TO PROTECT ARTIST
                       </div>
                     ))}
                   </div>
@@ -12375,7 +12385,7 @@ const GridScreen = ({
                             fontWeight: 400,
                           }}
                         >
-                          WATERMARK · WATERMARK · WATERMARK
+                          INVISIBLE WATERMARKS APPLIED TO PROTECT ARTIST
                         </div>
                       ))}
                     </div>
@@ -12764,7 +12774,7 @@ const GridScreen = ({
                     textShadow: "0 1px 2px rgba(0,0,0,0.4)",
                   }}
                 >
-                  WATERMARK · WATERMARK · WATERMARK · WATERMARK
+                  INVISIBLE WATERMARKS APPLIED TO PROTECT ARTIST
                 </div>
               ))}
             </div>
@@ -14214,7 +14224,7 @@ const RetouchScreen = ({
                         fontWeight: 400,
                       }}
                     >
-                      WATERMARK · WATERMARK
+                      INVISIBLE WATERMARKS APPLIED TO PROTECT ARTIST
                     </div>
                   ))}
                 </div>
@@ -20923,6 +20933,80 @@ export default function App() {
           // generation attempt even after the second payment — if that
           // shows up in logs, the server cap check needs to accept a
           // "second unlock" marker.
+          onReviewAllShots={() => {
+            // Fetch the customer's accumulated server session and merge any
+            // shots not already in local state. Customers often generate
+            // 30+ shots across multiple in-session batches — but the client
+            // only keeps the CURRENT batch's 6 slots in generatedImages, so
+            // "Review all" needs to hydrate the rest from the saved
+            // session before expanding extras is meaningful.
+            // (2026-09-04 fix per Kristi: customer had 31+ shots on the
+            // server but the button did nothing because client state
+            // hadn't loaded them.)
+            const token = resumeTokenRef.current;
+            if (!token) return; // no session token yet — nothing to hydrate
+            void (async () => {
+              try {
+                const r = await fetch(
+                  `/api/get-session?token=${encodeURIComponent(token)}`,
+                );
+                if (!r.ok) return;
+                const d = (await r.json()) as {
+                  generatedUrls?: string[];
+                  wildCards?: {
+                    url: string;
+                    label: string;
+                    style?: string;
+                    lighting?: string;
+                    variationIndex?: number;
+                  }[];
+                };
+                if (Array.isArray(d.generatedUrls) && d.generatedUrls.length > 0) {
+                  setGeneratedImages((prev) => {
+                    const seen = new Set(prev.filter(Boolean));
+                    const merged = [...prev];
+                    for (const url of d.generatedUrls!) {
+                      if (!seen.has(url)) {
+                        merged.push(url);
+                        seen.add(url);
+                      }
+                    }
+                    return merged;
+                  });
+                }
+                // Also hydrate wild cards if the server has more than we
+                // currently show in state.
+                if (Array.isArray(d.wildCards) && d.wildCards.length > 0) {
+                  setWildCards((prev) => {
+                    const seenUrls = new Set(
+                      prev.map((w) => w.image).filter(Boolean),
+                    );
+                    const merged = [...prev];
+                    for (const w of d.wildCards!) {
+                      if (!seenUrls.has(w.url)) {
+                        const inferred = inferWildCardConfig(w.label);
+                        merged.push({
+                          image: w.url,
+                          label: w.label,
+                          failed: false,
+                          style: w.style ?? inferred?.style,
+                          lighting: w.lighting ?? inferred?.lighting,
+                          variationIndex:
+                            typeof w.variationIndex === "number"
+                              ? w.variationIndex
+                              : inferred?.variationIndex,
+                        });
+                        seenUrls.add(w.url);
+                      }
+                    }
+                    return merged;
+                  });
+                }
+              } catch {
+                /* best-effort — silent fail */
+              }
+            })();
+          }}
           onUnlockMoreGenerations={() => {
             // Reuses the existing $3.99 free-tier unlock flow — stashes the
             // grid to IndexedDB, sets the marker, redirects to Stripe. On
