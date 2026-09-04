@@ -283,19 +283,116 @@ function staggerDelay(ms: number): Promise<void> {
   });
 }
 
+// Browser fingerprint (2026-09-03, abuse defense).
+//
+// Combines a handful of low-entropy but stable browser properties into a
+// stable hex string. Not cryptographic — a determined actor can spoof any
+// single component — but a VPN doesn't change canvas/WebGL/timezone, so a
+// user who cycles emails from Estonia → Germany → Netherlands looks like
+// the same fingerprint. Sent with /api/generate; the server checks it
+// against blacklisted fingerprints and blocks a match regardless of
+// email/IP.
+//
+// Deliberately synchronous + fast + memoized: computes once per page load
+// and cached. Silent-fail on any browser API we can't read (returns
+// undefined and the server treats the request as unfingerprinted).
+let __browserFingerprintCache: string | undefined;
+function browserFingerprint(): string | undefined {
+  if (__browserFingerprintCache) return __browserFingerprintCache;
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return undefined;
+  }
+  try {
+    const parts: string[] = [];
+    // Canvas 2D fingerprint: draw the same text and read a stable slice of
+    // the pixel data. Reads consistently across sessions on the same device,
+    // differs across GPUs / font stacks / rendering pipelines.
+    try {
+      const cnv = document.createElement("canvas");
+      cnv.width = 220;
+      cnv.height = 30;
+      const ctx = cnv.getContext("2d");
+      if (ctx) {
+        ctx.textBaseline = "top";
+        ctx.font = "14px 'Arial'";
+        ctx.fillStyle = "#f60";
+        ctx.fillRect(125, 1, 62, 20);
+        ctx.fillStyle = "#069";
+        ctx.fillText("fp-check-\u{1F600}", 2, 15);
+        parts.push(cnv.toDataURL().slice(-96));
+      }
+    } catch {
+      /* no canvas — omit this component */
+    }
+    // WebGL renderer + vendor via UNMASKED_RENDERER_WEBGL (survives VPN,
+    // survives incognito, differs per physical GPU).
+    try {
+      const gl = document
+        .createElement("canvas")
+        .getContext("webgl") as WebGLRenderingContext | null;
+      if (gl) {
+        const dbg = gl.getExtension("WEBGL_debug_renderer_info");
+        if (dbg) {
+          parts.push(
+            String(gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL) ?? ""),
+          );
+          parts.push(
+            String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) ?? ""),
+          );
+        }
+      }
+    } catch {
+      /* no WebGL — omit */
+    }
+    parts.push(String(window.screen?.width ?? ""));
+    parts.push(String(window.screen?.height ?? ""));
+    parts.push(String(window.screen?.colorDepth ?? ""));
+    parts.push(String(window.devicePixelRatio ?? ""));
+    parts.push(String(new Date().getTimezoneOffset()));
+    parts.push(navigator.language ?? "");
+    parts.push(navigator.platform ?? "");
+    parts.push(navigator.hardwareConcurrency ? String(navigator.hardwareConcurrency) : "");
+    // Concatenate and hash with FNV-1a 32-bit (fast, stable, deterministic).
+    // Truncated to 12 hex chars = 48 bits of address space; collisions are
+    // acceptable because we ONLY use fp to match KNOWN-BAD fingerprints,
+    // never to identify legitimate customers.
+    const source = parts.join("|");
+    // FNV-1a
+    let h = 0x811c9dc5;
+    for (let i = 0; i < source.length; i++) {
+      h ^= source.charCodeAt(i);
+      h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
+    }
+    // Add source length for a bit more differentiation on short inputs.
+    const lenPad = source.length.toString(16).padStart(4, "0");
+    __browserFingerprintCache =
+      h.toString(16).padStart(8, "0") + lenPad;
+    return __browserFingerprintCache;
+  } catch {
+    return undefined;
+  }
+}
+
 function readUnlockRequestFields(): {
   stripeSessionId?: string;
   promoCode?: string;
   batchId?: string;
   purchaseSessionId?: string;
   email?: string;
+  fp?: string;
 } {
   const batch: {
     batchId?: string;
     purchaseSessionId?: string;
     email?: string;
+    fp?: string;
   } = currentBatchId ? { batchId: currentBatchId } : {};
   if (typeof window === "undefined") return batch;
+  // Attach the browser fingerprint on every request. Server stores it per
+  // lead + checks it against the fingerprint blacklist before spending
+  // compute. See browserFingerprint() above for what goes into the hash.
+  const fp = browserFingerprint();
+  if (fp) batch.fp = fp;
   try {
     // Per-person image-call attribution (2026-08-14): the email the customer
     // generated under, merged into EVERY /api/generate body so the server can

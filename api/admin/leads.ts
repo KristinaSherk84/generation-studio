@@ -27,6 +27,11 @@ import {
   blacklistPattern,
   unblacklistPattern,
   listBlacklistedPatterns,
+  blacklistFingerprint,
+  unblacklistFingerprint,
+  listBlacklistedFingerprints,
+  listFingerprintsForLead,
+  listEmailsForFingerprint,
   listBlacklistedEmails,
 } from "../lib/leadStore.js";
 import {
@@ -290,6 +295,62 @@ export default async function handler(
       } catch (err) {
         console.error("[admin/leads] unblacklistPattern failed:", err);
         res.status(500).json({ ok: false, error: "Failed to remove pattern" });
+      }
+      return;
+    }
+    if (body.action === "blacklistFingerprint" && typeof body.fp === "string") {
+      try {
+        await blacklistFingerprint(body.fp);
+        res.status(200).json({ ok: true });
+      } catch (err) {
+        console.error("[admin/leads] blacklistFingerprint failed:", err);
+        res.status(500).json({ ok: false, error: "Failed to blacklist fp" });
+      }
+      return;
+    }
+    if (body.action === "unblacklistFingerprint" && typeof body.fp === "string") {
+      try {
+        await unblacklistFingerprint(body.fp);
+        res.status(200).json({ ok: true });
+      } catch (err) {
+        console.error("[admin/leads] unblacklistFingerprint failed:", err);
+        res.status(500).json({ ok: false, error: "Failed to remove fp" });
+      }
+      return;
+    }
+    if (body.action === "lookupFingerprint" && typeof body.fp === "string") {
+      // Returns every email seen on this fp so Kristi can preview what
+      // blacklisting the fp would additionally catch before she commits.
+      try {
+        const emails = await listEmailsForFingerprint(body.fp);
+        const blacklistedFps = await listBlacklistedFingerprints();
+        res.status(200).json({
+          ok: true,
+          emails,
+          isBlacklisted: blacklistedFps.includes(body.fp),
+        });
+      } catch (err) {
+        console.error("[admin/leads] lookupFingerprint failed:", err);
+        res.status(500).json({ ok: false, error: "Failed to look up fp" });
+      }
+      return;
+    }
+    if (body.action === "lookupLeadFingerprints" && typeof body.email === "string") {
+      // Returns every fp ever seen for this email so Kristi can see the
+      // device(s) an abuser used and blacklist any of them.
+      try {
+        const fps = await listFingerprintsForLead(body.email);
+        const blacklistedFps = new Set(await listBlacklistedFingerprints());
+        res.status(200).json({
+          ok: true,
+          fingerprints: fps.map((fp) => ({
+            fp,
+            isBlacklisted: blacklistedFps.has(fp),
+          })),
+        });
+      } catch (err) {
+        console.error("[admin/leads] lookupLeadFingerprints failed:", err);
+        res.status(500).json({ ok: false, error: "Failed to look up fps" });
       }
       return;
     }

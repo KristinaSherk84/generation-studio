@@ -490,6 +490,88 @@ export async function listBlacklistedEmails(): Promise<string[]> {
   return arr ?? [];
 }
 
+// ---- Browser fingerprint tracking + blacklist (2026-09-03) ----
+// Sent by the client on every /api/generate call (see browserFingerprint()
+// in App.tsx). Two independent uses:
+//   1. Record ALL fingerprints seen for a given lead — the admin page shows
+//      "email X was seen from devices [a, b, c]" so Kristi can spot the
+//      same physical device behind different emails.
+//   2. Blacklist a fingerprint — every future request with that fp is
+//      blocked, even from a fresh email + new IP (VPN). Because canvas +
+//      WebGL + timezone + screen size don't change with a VPN, this is the
+//      strongest defense against a rotating-email + rotating-IP abuser.
+const FP_BLACKLIST_KEY = "fingerprint-blacklist";
+const FP_LEAD_KEY_PREFIX = "lead-fp:"; // lead-fp:{emailLower} → SET of fps
+const FP_TO_EMAILS_KEY_PREFIX = "fp-emails:"; // fp-emails:{fp} → SET of emails seen with this fp
+
+/** Store a fingerprint against a lead + track which emails a fingerprint
+ *  has been seen on (both directions of the mapping for the admin UI). */
+export async function recordFingerprint(
+  email: string,
+  fp: string,
+): Promise<void> {
+  if (!looksLikeEmail(email) || !fp || fp.length > 64) return;
+  const lower = email.trim().toLowerCase();
+  await Promise.all([
+    redis.sadd(`${FP_LEAD_KEY_PREFIX}${lower}`, fp),
+    redis.sadd(`${FP_TO_EMAILS_KEY_PREFIX}${fp}`, lower),
+  ]);
+}
+
+/** Every fingerprint ever seen for this email. Admin UI shows these as
+ *  chips next to the lead row so Kristi can blacklist one with a click. */
+export async function listFingerprintsForLead(
+  email: string,
+): Promise<string[]> {
+  if (!looksLikeEmail(email)) return [];
+  const arr = (await redis.smembers(
+    `${FP_LEAD_KEY_PREFIX}${email.trim().toLowerCase()}`,
+  )) as string[] | null;
+  return arr ?? [];
+}
+
+/** Every email ever seen on this fingerprint. When Kristi clicks
+ *  "blacklist this fingerprint" the admin page can show her: "this will
+ *  also block all these emails you might not have caught yet." */
+export async function listEmailsForFingerprint(
+  fp: string,
+): Promise<string[]> {
+  if (!fp || fp.length > 64) return [];
+  const arr = (await redis.smembers(
+    `${FP_TO_EMAILS_KEY_PREFIX}${fp}`,
+  )) as string[] | null;
+  return arr ?? [];
+}
+
+/** Add one fingerprint to the blacklist. Idempotent. */
+export async function blacklistFingerprint(fp: string): Promise<void> {
+  if (!fp || fp.length > 64) return;
+  await redis.sadd(FP_BLACKLIST_KEY, fp);
+}
+
+/** Remove one fingerprint from the blacklist. */
+export async function unblacklistFingerprint(fp: string): Promise<void> {
+  if (!fp || fp.length > 64) return;
+  await redis.srem(FP_BLACKLIST_KEY, fp);
+}
+
+/** True if this fingerprint is blacklisted. Fail-open on Redis errors. */
+export async function isFingerprintBlacklisted(fp: string): Promise<boolean> {
+  if (!fp || fp.length > 64) return false;
+  try {
+    const r = await redis.sismember(FP_BLACKLIST_KEY, fp);
+    return r === 1;
+  } catch {
+    return false;
+  }
+}
+
+/** Full list of blacklisted fingerprints for the admin UI. */
+export async function listBlacklistedFingerprints(): Promise<string[]> {
+  const arr = (await redis.smembers(FP_BLACKLIST_KEY)) as string[] | null;
+  return arr ?? [];
+}
+
 // ---- Email aliases (2026-08-27) ----
 // When a customer generates under email A but checks out with email B (a
 // different alias of the same address — .com vs .com.au, a work vs personal

@@ -35,7 +35,12 @@ import {
   checkFreeCallCap,
 } from "./lib/freeGenLimit.js";
 import { bumpApiCall } from "./lib/dailyStats.js";
-import { bumpLeadCalls, isEmailBlacklisted } from "./lib/leadStore.js";
+import {
+  bumpLeadCalls,
+  isEmailBlacklisted,
+  isFingerprintBlacklisted,
+  recordFingerprint,
+} from "./lib/leadStore.js";
 import { put } from "@vercel/blob";
 import { recordBatchImage } from "./lib/batchStore.js";
 import {
@@ -1960,6 +1965,40 @@ export default async function handler(
   // against the email the customer generated under, so the leads form shows a
   // real per-person image-call total (not just rounds started). bumpLeadCalls
   // validates the address itself and no-ops on anything invalid. Best-effort.
+  // Browser fingerprint (2026-09-03). Sent by the client on every request
+  // to identify the physical device even when the abuser rotates emails +
+  // IPs (VPN). If it matches a blacklisted fingerprint, block regardless of
+  // email/IP. Record the fingerprint on the lead too so the admin page can
+  // see "email X was seen on device fp Y" and blacklist the fingerprint
+  // manually. Fail-open on Redis errors.
+  const clientFp =
+    typeof body.fp === "string" && body.fp.length > 0 && body.fp.length <= 64
+      ? body.fp
+      : null;
+  if (clientFp) {
+    try {
+      if (await isFingerprintBlacklisted(clientFp)) {
+        console.log(
+          JSON.stringify({
+            type: "blacklist_hit",
+            reason: "fingerprint",
+            fp: clientFp,
+            email:
+              typeof body.email === "string"
+                ? body.email.trim().toLowerCase()
+                : null,
+            ip: clientIp,
+          }),
+        );
+        return res.status(403).json({
+          error:
+            "This device is temporarily unable to generate. Please contact kristi@kristinasherk.com if you believe this is a mistake.",
+        });
+      }
+    } catch {
+      /* fail open */
+    }
+  }
   if (typeof body.email === "string") {
     // Blacklist check (2026-08-28) — Kristi flags abuser emails from the
     // admin/leads page. Fail-open on Redis errors so a legitimate customer is
@@ -1982,6 +2021,15 @@ export default async function handler(
       /* fail open */
     }
     await bumpLeadCalls(body.email);
+    // Record the fp against this email lead so Kristi can trace all
+    // sessions from the same device across email variants. Best-effort.
+    if (clientFp) {
+      try {
+        await recordFingerprint(body.email, clientFp);
+      } catch {
+        /* ignore */
+      }
+    }
   }
 
   // Per-generation audit log (2026-08-28) — one structured line per /api/generate

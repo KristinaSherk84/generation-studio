@@ -39,8 +39,19 @@ export default async function handler(
   }
   const email =
     typeof req.query.email === "string" ? req.query.email.trim().toLowerCase() : "";
-  if (!email) {
-    res.status(400).json({ ok: false, error: "pass ?email=" });
+  // 2026-09-03: also support substring search so Kristi can pull every
+  // session whose email CONTAINS a pattern (e.g. "kusuma" to catch every
+  // variant of an abuser). Either ?email=exact OR ?emailContains=substring.
+  const emailContains =
+    typeof req.query.emailContains === "string"
+      ? req.query.emailContains.trim().toLowerCase()
+      : "";
+  if (!email && !emailContains) {
+    res.status(400).json({ ok: false, error: "pass ?email= OR ?emailContains=" });
+    return;
+  }
+  if (emailContains && emailContains.length < 2) {
+    res.status(400).json({ ok: false, error: "emailContains must be 2+ chars" });
     return;
   }
 
@@ -72,7 +83,10 @@ export default async function handler(
         } catch {
           continue;
         }
-        if (!rec?.email || rec.email.trim().toLowerCase() !== email) continue;
+        if (!rec?.email) continue;
+        const recEmailLower = rec.email.trim().toLowerCase();
+        if (email && recEmailLower !== email) continue;
+        if (emailContains && !recEmailLower.includes(emailContains)) continue;
         const token = k.slice("session:".length);
         matches.push({
           token,
@@ -101,7 +115,8 @@ export default async function handler(
 
   res.status(200).json({
     ok: true,
-    email,
+    email: email || null,
+    emailContains: emailContains || null,
     sessionsScanned: scanned,
     found: matches.length,
     matches,
