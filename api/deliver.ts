@@ -679,11 +679,19 @@ async function generateShareGraphics(args: {
   if (referencePhotoUrls.length === 0) {
     return deliveredPhotoUrls.map(() => "");
   }
-  let pool = [...referencePhotoUrls];
+  // Filter out HEIC uploads for the FIRST-try assignment (2026-09-04). Sharp
+  // on Vercel serverless doesn't have libheif support built in — a HEIC
+  // reference photo throws "Support for this compression format has not
+  // been built in" and nukes the composite. Prefer non-HEIC in the pool;
+  // fall back to the full pool only if every photo is HEIC.
+  const isHeic = (url: string) => /\.hei[cf](\?|$)/i.test(url);
+  const nonHeic = referencePhotoUrls.filter((u) => !isHeic(u));
+  const preferPool = nonHeic.length > 0 ? nonHeic : referencePhotoUrls;
+  let pool = [...preferPool];
   shuffleArrayInPlace(pool);
   const beforeAssignments: string[] = deliveredPhotoUrls.map(() => {
     if (pool.length === 0) {
-      pool = [...referencePhotoUrls];
+      pool = [...preferPool];
       shuffleArrayInPlace(pool);
     }
     return pool.shift() as string;
@@ -692,30 +700,48 @@ async function generateShareGraphics(args: {
   // Composite all in parallel and upload to Blob.
   const results = await Promise.all(
     deliveredPhotoUrls.map(async (afterUrl, index) => {
-      try {
-        const buf = await buildShareGraphic({
-          beforeUrl: beforeAssignments[index],
-          afterUrl,
-          qrTargetUrl: SHARE_QR_URL,
-        });
-        const key = `deliveries/${deliveryId}/share-${index + 1}.jpg`;
-        const blob = await put(key, buf, {
-          access: "public",
-          contentType: "image/jpeg",
-          addRandomSuffix: false,
-        });
-        return blob.url;
-      } catch (error) {
-        console.error(
-          JSON.stringify({
-            type: "share_graphic_failed",
-            index,
-            deliveryId,
-            error: error instanceof Error ? error.message : String(error),
-          }),
-        );
-        return "";
+      // Try the initial assignment; if that throws (usually HEIC or a
+      // corrupt reference), retry with every OTHER non-HEIC reference photo
+      // in order before giving up. Better one working graphic than none.
+      const tried = new Set<string>();
+      const candidates = [
+        beforeAssignments[index],
+        ...preferPool,
+      ];
+      let lastError: unknown = null;
+      for (const beforeUrl of candidates) {
+        if (!beforeUrl || tried.has(beforeUrl)) continue;
+        tried.add(beforeUrl);
+        try {
+          const buf = await buildShareGraphic({
+            beforeUrl,
+            afterUrl,
+            qrTargetUrl: SHARE_QR_URL,
+          });
+          const key = `deliveries/${deliveryId}/share-${index + 1}.jpg`;
+          const blob = await put(key, buf, {
+            access: "public",
+            contentType: "image/jpeg",
+            addRandomSuffix: false,
+          });
+          return blob.url;
+        } catch (error) {
+          lastError = error;
+          // Try the next candidate. Only log at warning level per attempt;
+          // we'll log the final failure below.
+        }
       }
+      console.error(
+        JSON.stringify({
+          type: "share_graphic_failed",
+          index,
+          deliveryId,
+          triedCount: tried.size,
+          error:
+            lastError instanceof Error ? lastError.message : String(lastError),
+        }),
+      );
+      return "";
     }),
   );
 

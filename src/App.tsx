@@ -11060,6 +11060,46 @@ const GridScreen = ({
                             <Plus size={17} strokeWidth={2.4} />
                           )}
                         </div>
+                        {/* Expand-to-lightbox button on wild card tiles
+                            (2026-09-04, per Kristi). Opens the same 450px-
+                            capped lightbox the main grid tiles use so
+                            customers can see the wild card larger before
+                            deciding to add to cart / regenerate. Bottom-
+                            LEFT so it doesn't conflict with the regen
+                            button (bottom-right) or the +/check pill
+                            (top-right). previewIndex=null because wild
+                            cards aren't part of the arrow-cycle set. */}
+                        {wc.image && !wildCardRegenerating.has(i) && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPreviewSrc(wc.image!);
+                              setPreviewIndex(null);
+                            }}
+                            title="View larger"
+                            aria-label="View larger"
+                            style={{
+                              position: "absolute",
+                              bottom: 10,
+                              left: 10,
+                              background: "rgba(255, 255, 255, 0.85)",
+                              color: C.dark,
+                              border: "none",
+                              borderRadius: "50%",
+                              width: 32,
+                              height: 32,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              cursor: "pointer",
+                              boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+                              padding: 0,
+                            }}
+                          >
+                            <Maximize2 size={16} />
+                          </button>
+                        )}
                         {wc.image &&
                           wc.variationIndex !== undefined &&
                           (regenCount < maxRegens ||
@@ -12842,10 +12882,16 @@ const GridScreen = ({
                     style={{
                       position: "absolute",
                       top: "50%",
-                      [side]: -70,
+                      // Arrows sit INSIDE the image now (10px from each
+                      // edge) so they render on every viewport. Previously
+                      // -70 pushed them outside the image; on mobile with
+                      // the 450px cap + 20px page padding they fell off-
+                      // screen and users tapped where nothing was.
+                      // (2026-09-04 mobile-fix per Kristi.)
+                      [side]: 10,
                       transform: "translateY(-50%)",
-                      width: 52,
-                      height: 52,
+                      width: 46,
+                      height: 46,
                       borderRadius: "50%",
                       background: "rgba(255,255,255,0.92)",
                       color: C.dark,
