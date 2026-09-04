@@ -10016,7 +10016,11 @@ const LoadingScreen = ({
             onClick={(e) => e.stopPropagation()}
             style={{
               position: "relative",
-              width: "min(90vw, 70vh)",
+              // Hard cap at 450px wide (2026-09-04, per Kristi) so a
+              // screenshot of the lightbox never yields a print-usable
+              // image regardless of the customer's monitor size. Takes the
+              // smallest of viewport-relative sizing and the 450px cap.
+              width: "min(90vw, 70vh, 450px)",
               aspectRatio: "3/4",
             }}
           >
@@ -12720,7 +12724,11 @@ const GridScreen = ({
             onClick={(e) => e.stopPropagation()}
             style={{
               position: "relative",
-              width: "min(90vw, 70vh)",
+              // Hard cap at 450px wide (2026-09-04, per Kristi) so a
+              // screenshot of the lightbox never yields a print-usable
+              // image regardless of the customer's monitor size. Takes the
+              // smallest of viewport-relative sizing and the 450px cap.
+              width: "min(90vw, 70vh, 450px)",
               aspectRatio: "3/4",
             }}
           >
