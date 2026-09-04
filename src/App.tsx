@@ -10183,6 +10183,13 @@ type GridScreenProps = {
   onStartPickVersionSource: () => void;
   onCancelPickVersionSource: () => void;
   onPickVersionSource: (sourceIndex: number) => void;
+  // Default state for the "extras from earlier today" section (2026-09-03).
+  // True when the customer landed via an RTV email link — extras open by
+  // default so they see the full history without having to notice the small
+  // "Expand" pill. Fresh in-session generations pass false so a normal 6-shot
+  // batch doesn't render a spurious empty section (`images.length > 6` also
+  // gates rendering, so this only matters when there ARE extras).
+  extrasExpandedByDefault?: boolean;
 };
 
 const GridScreen = ({
@@ -10218,6 +10225,7 @@ const GridScreen = ({
   onStartPickVersionSource,
   onCancelPickVersionSource,
   onPickVersionSource,
+  extrasExpandedByDefault = false,
 }: GridScreenProps) => {
   // Cart is App-level URLs (Phase 1, 2026-06-03 revised) — lifted out of
   // GridScreen's useState so it survives the user backing out to the Style
@@ -10310,7 +10318,7 @@ const GridScreen = ({
   // shots on the resume link. This is the "Expand to see more headshots"
   // section that appears below the grid + wild cards when there ARE extras.
   // Collapsed by default so the page doesn't feel overwhelming.
-  const [extrasExpanded, setExtrasExpanded] = useState(false);
+  const [extrasExpanded, setExtrasExpanded] = useState(extrasExpandedByDefault);
   const [isMobileGrid, setIsMobileGrid] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     return window.matchMedia("(max-width: 640px)").matches;
@@ -11844,37 +11852,160 @@ const GridScreen = ({
           and avoids touching the main-grid regen paths. */}
       {images.length > 6 && (
         <div style={{ marginTop: 18 }}>
-          <button
-            type="button"
-            onClick={() => setExtrasExpanded((v) => !v)}
-            aria-expanded={extrasExpanded}
-            aria-controls="extras-grid"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 8,
-              width: "100%",
-              padding: "12px 18px",
-              background: extrasExpanded ? C.dark : "#FBF8F0",
-              color: extrasExpanded ? C.buttonText : C.dark,
-              border: `1px solid ${C.border}`,
-              borderRadius: 10,
-              fontSize: 13,
-              fontWeight: 500,
-              letterSpacing: 0.2,
-              cursor: "pointer",
-              fontFamily: "inherit",
-              transition: "background 0.15s, color 0.15s",
-            }}
-          >
-            <span style={{ fontSize: 12 }}>
-              {extrasExpanded ? "▾" : "▸"}
-            </span>
-            {extrasExpanded
-              ? `Hide the ${images.length - 6} extra headshot${images.length - 6 === 1 ? "" : "s"} from earlier`
-              : `Expand to see ${images.length - 6} more headshot${images.length - 6 === 1 ? "" : "s"} you generated today`}
-          </button>
+          {/* Collapsed pill (2026-09-03 v2, per Kristi): three faded/blurry
+              preview thumbnails from the actual extras behind the label,
+              with a cream gradient that dissolves them into the pill's
+              background — customers see there ARE more shots without them
+              being fully revealed. Two downward arrows telegraph "click to
+              open below." When expanded the pill collapses back to a plain
+              "Hide" button so nothing competes with the real grid. */}
+          {extrasExpanded ? (
+            <button
+              type="button"
+              onClick={() => setExtrasExpanded(false)}
+              aria-expanded={true}
+              aria-controls="extras-grid"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+                width: "100%",
+                padding: "12px 18px",
+                background: C.dark,
+                color: C.buttonText,
+                border: `1px solid ${C.border}`,
+                borderRadius: 10,
+                fontSize: 13,
+                fontWeight: 500,
+                letterSpacing: 0.2,
+                cursor: "pointer",
+                fontFamily: "inherit",
+              }}
+            >
+              <span style={{ fontSize: 12 }}>▾</span>
+              Hide the {images.length - 6} extra headshot
+              {images.length - 6 === 1 ? "" : "s"} from earlier
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setExtrasExpanded(true)}
+              aria-expanded={false}
+              aria-controls="extras-grid"
+              aria-label={`Expand to see ${images.length - 6} more headshots you generated today`}
+              style={{
+                position: "relative",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                width: "100%",
+                padding: "10px 12px 14px",
+                background: "#FBF8F0",
+                border: `1px solid ${C.border}`,
+                borderRadius: 10,
+                cursor: "pointer",
+                fontFamily: "inherit",
+                gap: 10,
+              }}
+            >
+              {/* Preview strip: 4 PORTRAIT (3:4) thumbnails of actual extras,
+                  matching the aspect ratio of every headshot the app
+                  generates (2026-09-03 v3, per Kristi). Same-size mini
+                  rectangles in a 4-column row above the label — the strip
+                  is small so it teases the extras without dominating the
+                  grid layout. Each thumbnail fades to transparent at its
+                  own bottom edge via mask-image so the rectangles dissolve
+                  into the pill background together (no left/right fade). */}
+              <div
+                aria-hidden="true"
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(4, minmax(0, 68px))",
+                  gap: 8,
+                  width: "100%",
+                  maxWidth: 320,
+                  justifyContent: "center",
+                }}
+              >
+                {[0, 1, 2, 3].map((n) => {
+                  const filled = images
+                    .slice(6)
+                    .filter((u): u is string => !!u);
+                  const src = filled[n] ?? filled[n % Math.max(filled.length, 1)];
+                  return (
+                    <div
+                      key={n}
+                      style={{
+                        position: "relative",
+                        aspectRatio: "3 / 4",
+                        overflow: "hidden",
+                        borderRadius: 6,
+                        background: "#EFECE3",
+                      }}
+                    >
+                      {src && (
+                        <img
+                          src={src}
+                          alt=""
+                          draggable={false}
+                          onContextMenu={(e) => e.preventDefault()}
+                          style={{
+                            position: "absolute",
+                            inset: 0,
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "cover",
+                            objectPosition: "center 20%",
+                            opacity: 0.85,
+                            maskImage:
+                              "linear-gradient(180deg, #000 0%, #000 55%, transparent 100%)",
+                            WebkitMaskImage:
+                              "linear-gradient(180deg, #000 0%, #000 55%, transparent 100%)",
+                            pointerEvents: "none",
+                            userSelect: "none",
+                          }}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              {/* Label + double-down-arrow cue, sitting BELOW the thumbnail
+                  strip. Cleaner than overlaying now that the pill has room
+                  to breathe. */}
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: 2,
+                  color: C.dark,
+                  fontSize: 13,
+                  fontWeight: 500,
+                  letterSpacing: 0.2,
+                  textAlign: "center",
+                }}
+              >
+                <span>
+                  Expand to see {images.length - 6} more headshot
+                  {images.length - 6 === 1 ? "" : "s"} you generated today
+                </span>
+                <span
+                  aria-hidden="true"
+                  style={{
+                    fontSize: 16,
+                    lineHeight: 1,
+                    letterSpacing: 3,
+                    color: C.dark,
+                    opacity: 0.7,
+                  }}
+                >
+                  ↓ ↓
+                </span>
+              </div>
+            </button>
+          )}
 
           {extrasExpanded && (
             <div
@@ -12704,7 +12835,12 @@ const RetouchBeforeAfterSlider = ({
   beforeLabel,
   afterLabel,
 }: RetouchBeforeAfterSliderProps) => {
-  const [pos, setPos] = useState(50); // 0-100 percentage
+  // Initial position: 66% clips the top layer (AFTER / retouched) so the
+  // divider sits 2/3 from the left — customer sees mostly Realistic with a
+  // strip of the retouched version on the right, so the "before" is the
+  // dominant view. (2026-09-03 per Kristi — teaches "these look real, and
+  // here's a peek at what retouching does".)
+  const [pos, setPos] = useState(66); // 0-100 percentage
   const containerRef = useRef<HTMLDivElement | null>(null);
   const draggingRef = useRef(false);
 
@@ -12972,17 +13108,49 @@ type LoadingRetouchPreviewModalProps = {
   onDismiss: () => void;
 };
 
-// 2026-09-03: ALL timed auto-behaviors removed at Kristi's request. Previously
-// this popup had (1) a 5-second lock that disabled X + Got it while the rest
-// of the batch finished generating, and (2) a 20-second auto-close safety
-// net. Both are gone — the popup now opens instantly interactive, with X and
-// Got it enabled from the start, and only dismisses on an explicit customer
-// action (X, Got it, or a backdrop tap). Now that the popup contains an
-// interactive slider the customer is meant to play with, arbitrary time
-// limits fought the interaction more than they helped.
+// 2026-09-03 (v2): brought the 5-second lock BACK per Kristi so customers
+// don't blow past the popup before the rest of the batch finishes. The
+// button reads "The magic is happening… Ns" while locked; X and backdrop
+// tap are inert until the countdown hits 0. The 20-second auto-close is
+// still gone — arbitrary auto-dismiss fought the slider interaction.
+const RETOUCH_POPUP_LOCK_SECONDS = 5;
 const LoadingRetouchPreviewModal = ({
   onDismiss,
 }: LoadingRetouchPreviewModalProps) => {
+  // Wall-clock unlock (originally 2026-08-10). A plain setTimeout throttles
+  // in a background tab, so if the customer tabs away while the batch
+  // finishes the countdown freezes and the popup stays locked past its 5s.
+  // Ticking against Date.now() (plus a visibilitychange catch-up) unlocks
+  // on real time no matter how long the tab was hidden.
+  const [retouchRemaining, setRetouchRemaining] = useState(
+    RETOUCH_POPUP_LOCK_SECONDS,
+  );
+  const unlockAtRef = useRef<number>(
+    Date.now() + RETOUCH_POPUP_LOCK_SECONDS * 1000,
+  );
+  useEffect(() => {
+    const tick = () => {
+      const rem = Math.max(
+        0,
+        Math.ceil((unlockAtRef.current - Date.now()) / 1000),
+      );
+      setRetouchRemaining(rem);
+      return rem;
+    };
+    tick();
+    const id = window.setInterval(() => {
+      if (tick() <= 0) window.clearInterval(id);
+    }, 250);
+    const onVis = () => {
+      if (document.visibilityState === "visible") tick();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, []);
+  const retouchLocked = retouchRemaining > 0;
   // Dedupe: a single tap can fire onPointerUp AND onClick — only dismiss
   // once. (2026-08-19) The buttons respond to pointer-up too so a plain
   // onClick that's dropped on some mobile browsers still closes the popup.
@@ -13007,9 +13175,13 @@ const LoadingRetouchPreviewModal = ({
     // mouse/touch handlers don't stopPropagation. Guarding on
     // e.target === e.currentTarget keeps the tap-outside-to-close UX intact
     // AND lets the customer drag the slider without accidentally dismissing.
-    onClick={(e) => {
-      if (e.target === e.currentTarget) finish();
-    }}
+    onClick={
+      retouchLocked
+        ? undefined
+        : (e) => {
+            if (e.target === e.currentTarget) finish();
+          }
+    }
     style={{
       position: "fixed",
       inset: 0,
@@ -13032,44 +13204,68 @@ const LoadingRetouchPreviewModal = ({
         position: "relative",
         background: C.white,
         borderRadius: 12,
-        // 2026-09-03 (v2): tighter padding + smaller title/paragraph so the
-        // whole popup (including the tall portrait slider) fits an iPhone SE
-        // 375×667 viewport without needing to scroll. Slider width is
-        // capped smaller below for the same reason.
+        // 2026-09-03 (v3): tighter padding + smaller title/paragraph +
+        // cropped slider images (515×676) so the whole popup fits on an
+        // iPhone SE without needing to scroll. maxHeight + overflowY
+        // dropped per Kristi so no scrollbar ever appears — if a future
+        // change makes the popup taller than the viewport this will need
+        // to come back.
         padding: "20px 20px",
         maxWidth: 440,
         width: "100%",
-        maxHeight: "90vh",
-        overflowY: "auto",
       }}
     >
-      {/* Top-right close button. 2026-09-03: previously a 5-second countdown
-          badge blocked the X while the rest of the batch generated in the
-          background. Removed at Kristi's request so the popup is instantly
-          dismissible — the slider now IS the interaction, and a lock fights
-          the point of it. Customer can close whenever they're ready. */}
-      <button
-        onClick={finish}
-        onPointerUp={finish}
-        aria-label="Close"
-        style={{
-          position: "absolute",
-          top: 8,
-          right: 12,
-          width: 34,
-          height: 34,
-          border: "none",
-          background: "transparent",
-          color: C.mediumGrey,
-          fontSize: 26,
-          lineHeight: 1,
-          cursor: "pointer",
-          padding: 0,
-          ...font,
-        }}
-      >
-        ×
-      </button>
+      {/* Top-right corner: 5s countdown badge while the rest of the batch
+          finishes generating; turns into the close X at 0. Prevents the
+          customer from X-ing out before their headshots have populated.
+          (2026-09-03 v2: lock brought back per Kristi.) */}
+      {retouchLocked ? (
+        <div
+          aria-label={`You can close this in ${retouchRemaining} seconds`}
+          style={{
+            position: "absolute",
+            top: 8,
+            right: 12,
+            minWidth: 34,
+            height: 34,
+            borderRadius: 17,
+            background: "#F1EEE6",
+            color: C.mediumGrey,
+            fontSize: 14,
+            fontWeight: 600,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "0 10px",
+            ...font,
+          }}
+        >
+          {retouchRemaining}
+        </div>
+      ) : (
+        <button
+          onClick={finish}
+          onPointerUp={finish}
+          aria-label="Close"
+          style={{
+            position: "absolute",
+            top: 8,
+            right: 12,
+            width: 34,
+            height: 34,
+            border: "none",
+            background: "transparent",
+            color: C.mediumGrey,
+            fontSize: 26,
+            lineHeight: 1,
+            cursor: "pointer",
+            padding: 0,
+            ...font,
+          }}
+        >
+          ×
+        </button>
+      )}
       {/* Title: 🛑 Don't Self-Judge! 🛑 — stop emojis flank the title to
           interrupt the customer's "am I really this wrinkly?" reaction
           BEFORE they read the body. Per Kristi 2026-05-22 after recurring
@@ -13113,8 +13309,9 @@ const LoadingRetouchPreviewModal = ({
           to the slider so the whole popup is more compact. */}
       <div style={{ height: 8 }} />
       <button
-        onClick={finish}
-        onPointerUp={finish}
+        onClick={retouchLocked ? undefined : finish}
+        onPointerUp={retouchLocked ? undefined : finish}
+        disabled={retouchLocked}
         style={{
           width: "100%",
           padding: "11px 22px",
@@ -13124,11 +13321,12 @@ const LoadingRetouchPreviewModal = ({
           borderRadius: 8,
           fontSize: 14,
           fontWeight: 500,
-          cursor: "pointer",
+          cursor: retouchLocked ? "default" : "pointer",
+          opacity: retouchLocked ? 0.55 : 1,
           ...font,
         }}
       >
-        Got it
+        {retouchLocked ? `The magic is happening… ${retouchRemaining}s` : "Got it"}
       </button>
     </div>
   </div>
@@ -20435,6 +20633,12 @@ export default function App() {
           onPickVersionSource={(sourceIndex) => {
             void handleGenerateVersionsFor(sourceIndex);
           }}
+          // Open the extras section by default when the customer arrived via
+          // an RTV email link (2026-09-03, per Kristi). Fresh in-session
+          // batches keep the default-collapsed behavior; only resume-link
+          // visits — the case where the customer NEEDS to see all their
+          // accumulated shots — auto-expand.
+          extrasExpandedByDefault={resumedFromEmail}
         />
       )}
       {/* Last-chance upsell popup — overlays the retouch screen when it's open,
