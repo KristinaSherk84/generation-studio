@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
-import { Upload, Check, X, ArrowLeft, RefreshCw, Loader2, Download, Maximize2, ChevronDown, User, Sparkles, CircleUser, ArrowDown, ArrowRight, Menu, Plus, ShoppingBag, Trash2, Lock, Undo2, Redo2 } from "lucide-react";
+import { Upload, Check, X, ArrowLeft, RefreshCw, Loader2, Download, Maximize2, ChevronDown, User, Sparkles, CircleUser, ArrowDown, ArrowRight, Menu, Plus, ShoppingBag, Trash2, Lock, Unlock, Undo2, Redo2 } from "lucide-react";
 import { upload } from "@vercel/blob/client";
 import exifr from "exifr";
 
@@ -10162,6 +10162,11 @@ type GridScreenProps = {
   // Slots blocked on a free "taster" 2nd batch (2026-08-12): render a
   // "Blocked by free generations limit" placeholder; tapping opens the paywall.
   blockedSlots: Set<number>;
+  // True when the customer has paid the $3.99 unlock (or promo-unlocked).
+  // If a slot is BLOCKED (empty from a mid-batch paywall) AND the customer
+  // is now unlocked, we swap the "Free Generations Used Up / Check out" UI
+  // for a "🔓 You can now generate this" CTA on that tile. (2026-09-03)
+  isUnlocked: boolean;
   onBlockedSlotClick: () => void;
   // CART (Phase 1, 2026-06-03). URLs the user has added. Lifted to App so
   // it survives unmount-on-back-to-style — the whole point of the cart is
@@ -10190,6 +10195,14 @@ type GridScreenProps = {
   // batch doesn't render a spurious empty section (`images.length > 6` also
   // gates rendering, so this only matters when there ARE extras).
   extrasExpandedByDefault?: boolean;
+  // 2026-09-03: when regenError is the specific over-limit case (server
+  // refused because the customer hit the generation cap), the red banner
+  // becomes a two-choice CTA — "Review all images you've created" vs
+  // "Unlock more generations $3.99" — instead of a dead-end message.
+  // These callbacks fire when the customer picks. Optional so the grid
+  // still renders safely if the App forgets to wire them.
+  onReviewAllShots?: () => void;
+  onUnlockMoreGenerations?: () => void;
 };
 
 const GridScreen = ({
@@ -10211,6 +10224,7 @@ const GridScreen = ({
   adminRegensUsed,
   initialBatchInFlight,
   blockedSlots,
+  isUnlocked,
   onBlockedSlotClick,
   cart,
   onAddToCart,
@@ -10226,6 +10240,8 @@ const GridScreen = ({
   onCancelPickVersionSource,
   onPickVersionSource,
   extrasExpandedByDefault = false,
+  onReviewAllShots,
+  onUnlockMoreGenerations,
 }: GridScreenProps) => {
   // Cart is App-level URLs (Phase 1, 2026-06-03 revised) — lifted out of
   // GridScreen's useState so it survives the user backing out to the Style
@@ -10433,23 +10449,108 @@ const GridScreen = ({
 
       {/* Inline error banner — appears when a per-slot regenerate API call
           fails. Budget is automatically refunded by the App handler before
-          this renders, so the user can try again immediately. */}
-      {regenError && (
-        <div
-          style={{
-            margin: "12px 0",
-            padding: "10px 14px",
-            background: "#FDECEC",
-            border: "1px solid #F5C7C5",
-            borderRadius: 8,
-            fontSize: 13,
-            color: "#7A1F1B",
-            lineHeight: 1.5,
-          }}
-        >
-          {regenError}
-        </div>
-      )}
+          this renders, so the user can try again immediately.
+          2026-09-03: if the error is the SPECIFIC over-limit case ("You've
+          reached the generation limit for now..."), render a two-choice
+          CTA instead of a dead-end message: "Review all images you've
+          created" (expand extras + scroll) vs "Unlock more generations
+          · $3.99" (triggers a second checkout). */}
+      {regenError &&
+        (regenError.startsWith("You've reached the generation limit") ? (
+          <div
+            style={{
+              margin: "12px 0",
+              padding: "16px 18px",
+              background: "#FDECEC",
+              border: "1px solid #F5C7C5",
+              borderRadius: 10,
+              color: "#7A1F1B",
+              lineHeight: 1.5,
+            }}
+          >
+            <div
+              style={{
+                fontSize: 14,
+                fontWeight: 600,
+                marginBottom: 4,
+              }}
+            >
+              You've hit the generation limit.
+            </div>
+            <div style={{ fontSize: 13, marginBottom: 12 }}>
+              Take a look at everything you've already made, or unlock more
+              generations to keep going.
+            </div>
+            <div
+              style={{
+                display: "flex",
+                gap: 10,
+                flexWrap: "wrap",
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  // Expand extras (owned by GridScreen state) + scroll to the
+                  // top so the customer sees the main grid + wild cards +
+                  // extras in one view. Then hand off to any App-level
+                  // handler in case there's additional coordination to do
+                  // (analytics, unblock a scroll lock, etc.).
+                  setExtrasExpanded(true);
+                  if (typeof window !== "undefined") {
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  }
+                  onReviewAllShots?.();
+                }}
+                style={{
+                  padding: "10px 16px",
+                  background: "#FFFFFF",
+                  color: "#7A1F1B",
+                  border: "1px solid #F5C7C5",
+                  borderRadius: 999,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
+                Review all images you've created
+              </button>
+              <button
+                type="button"
+                onClick={() => onUnlockMoreGenerations?.()}
+                style={{
+                  padding: "10px 16px",
+                  background: "#7A1F1B",
+                  color: "#FFFFFF",
+                  border: "none",
+                  borderRadius: 999,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
+                Unlock more generations · $3.99
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div
+            style={{
+              margin: "12px 0",
+              padding: "10px 14px",
+              background: "#FDECEC",
+              border: "1px solid #F5C7C5",
+              borderRadius: 8,
+              fontSize: 13,
+              color: "#7A1F1B",
+              lineHeight: 1.5,
+            }}
+          >
+            {regenError}
+          </div>
+        ))}
 
       {/* Hint above the grid so users discover per-photo regeneration.
           It's a soft one-liner, not a button — the actual affordance lives
@@ -11035,51 +11136,117 @@ const GridScreen = ({
               }}
             >
               {blocked ? (
-                <div
-                  style={{
-                    position: "absolute",
-                    inset: 0,
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 8,
-                    padding: 16,
-                    textAlign: "center",
-                    background: C.lightGrey,
-                    cursor: "pointer",
-                  }}
-                >
-                  <Lock size={22} style={{ color: C.mediumGrey }} />
-                  <div style={{ fontSize: 12.5, fontWeight: 600, color: C.dark, lineHeight: 1.4 }}>
-                    Free Generations Used Up
-                  </div>
-                  <div style={{ fontSize: 11, color: C.mediumGrey, lineHeight: 1.4 }}>
-                    Unlock More Generations — $3.99
-                  </div>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onBlockedSlotClick();
-                    }}
+                isUnlocked ? (
+                  // Blocked-but-now-unlocked: customer paid the $3.99 and came
+                  // back. Instead of the paywall CTA, show a green "🔓 You can
+                  // now generate this" state with a small regenerate button.
+                  // Tap fires the standard per-slot regen (which will use the
+                  // slot's variationIndex + the customer's last selections to
+                  // fill THIS empty tile). Costs one of their regen budget
+                  // slots — acceptable; they got the unlock, this is the
+                  // action they came back for. (2026-09-03, per Kristi.)
+                  <div
                     style={{
-                      marginTop: 4,
-                      padding: "9px 14px",
-                      background: C.dark,
-                      color: C.buttonText,
-                      border: "none",
+                      position: "absolute",
+                      inset: 0,
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 6,
+                      padding: 14,
+                      textAlign: "center",
+                      background: "#F0F5EE",
+                      border: "1px dashed #1B4332",
                       borderRadius: 8,
-                      fontSize: 12,
-                      fontWeight: 600,
                       cursor: "pointer",
-                      lineHeight: 1.2,
-                      fontFamily: "inherit",
                     }}
                   >
-                    Check out · $3.99
-                  </button>
-                </div>
+                    <Unlock size={22} style={{ color: "#1B4332" }} />
+                    <div
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 600,
+                        color: "#1B4332",
+                        lineHeight: 1.35,
+                      }}
+                    >
+                      You can now generate this
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onRegenerateSlot(i);
+                      }}
+                      style={{
+                        marginTop: 2,
+                        padding: "8px 14px",
+                        background: "#1B4332",
+                        color: "#FFFFFF",
+                        border: "none",
+                        borderRadius: 999,
+                        fontSize: 12,
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        lineHeight: 1.2,
+                        fontFamily: "inherit",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      <RefreshCw size={13} />
+                      Generate
+                    </button>
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
+                      padding: 16,
+                      textAlign: "center",
+                      background: C.lightGrey,
+                      cursor: "pointer",
+                    }}
+                  >
+                    <Lock size={22} style={{ color: C.mediumGrey }} />
+                    <div style={{ fontSize: 12.5, fontWeight: 600, color: C.dark, lineHeight: 1.4 }}>
+                      Free Generations Used Up
+                    </div>
+                    <div style={{ fontSize: 11, color: C.mediumGrey, lineHeight: 1.4 }}>
+                      Unlock More Generations — $3.99
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onBlockedSlotClick();
+                      }}
+                      style={{
+                        marginTop: 4,
+                        padding: "9px 14px",
+                        background: C.dark,
+                        color: C.buttonText,
+                        border: "none",
+                        borderRadius: 8,
+                        fontSize: 12,
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        lineHeight: 1.2,
+                        fontFamily: "inherit",
+                      }}
+                    >
+                      Check out · $3.99
+                    </button>
+                  </div>
+                )
               ) : src ? (
                 <>
                   {/* Loading shimmer/spinner shown until the image's onLoad
@@ -17833,7 +18000,15 @@ export default function App() {
             setRegenCount(stash.regenCount);
           if (typeof stash.batchesUsed === "number")
             setBatchesUsed(stash.batchesUsed);
-          if (stash.cart) setCart(stash.cart);
+          // Only overwrite the mount-hydrated cart (from localStorage) if
+          // the IndexedDB stash actually has items. Empty array is truthy in
+          // JS, so the old `if (stash.cart)` clobbered a good localStorage
+          // cart with an empty one — customers came back from Stripe and
+          // saw an empty cart even though localStorage still had their pick
+          // (2026-09-03 fix, per Kristi report).
+          if (Array.isArray(stash.cart) && stash.cart.length > 0) {
+            setCart(stash.cart);
+          }
           // Rebuild the uploaded-photos list so the reference-photo area still
           // renders after the Stripe page reload, AND so a "generate in a
           // different style" second batch has usable photos (2026-07-31 fix).
@@ -20617,6 +20792,7 @@ export default function App() {
           perfectingSlots={perfectingSlots}
           initialBatchInFlight={initialBatchInFlight}
           blockedSlots={blockedSlots}
+          isUnlocked={isUnlocked}
           onBlockedSlotClick={() => setShowFreeTierPaywall(true)}
           cart={cart}
           onAddToCart={addToCart}
@@ -20639,6 +20815,27 @@ export default function App() {
           // visits — the case where the customer NEEDS to see all their
           // accumulated shots — auto-expand.
           extrasExpandedByDefault={resumedFromEmail}
+          // Two-choice CTA on the over-limit red banner (2026-09-03).
+          // "Review all images you've created": auto-expands the extras
+          // section + smooth-scrolls to the top of the grid so the
+          // customer sees everything they've made and remembers why they
+          // liked what they liked.
+          // "Unlock more generations · $3.99": reuses the existing free-
+          // tier unlock flow so a customer at the cap can top up and keep
+          // going. Note: server-side per-IP cap may still block the next
+          // generation attempt even after the second payment — if that
+          // shows up in logs, the server cap check needs to accept a
+          // "second unlock" marker.
+          onUnlockMoreGenerations={() => {
+            // Reuses the existing $3.99 free-tier unlock flow — stashes the
+            // grid to IndexedDB, sets the marker, redirects to Stripe. On
+            // return the mount-time restore hydrates everything and the
+            // customer keeps generating. NOTE: if the server-side per-IP
+            // cap is what triggered the over-limit, a second unlock alone
+            // won't reset it — that check may need a "second unlock"
+            // marker later.
+            void handleFreeTierUnlockPay();
+          }}
         />
       )}
       {/* Last-chance upsell popup — overlays the retouch screen when it's open,

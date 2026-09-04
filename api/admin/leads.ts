@@ -24,6 +24,9 @@ import {
   getEmailAliasMap,
   blacklistEmail,
   unblacklistEmail,
+  blacklistPattern,
+  unblacklistPattern,
+  listBlacklistedPatterns,
   listBlacklistedEmails,
 } from "../lib/leadStore.js";
 import {
@@ -270,6 +273,36 @@ export default async function handler(
       }
       return;
     }
+    if (body.action === "blacklistPattern" && typeof body.pattern === "string") {
+      try {
+        await blacklistPattern(body.pattern);
+        res.status(200).json({ ok: true });
+      } catch (err) {
+        console.error("[admin/leads] blacklistPattern failed:", err);
+        res.status(500).json({ ok: false, error: "Failed to add pattern" });
+      }
+      return;
+    }
+    if (body.action === "unblacklistPattern" && typeof body.pattern === "string") {
+      try {
+        await unblacklistPattern(body.pattern);
+        res.status(200).json({ ok: true });
+      } catch (err) {
+        console.error("[admin/leads] unblacklistPattern failed:", err);
+        res.status(500).json({ ok: false, error: "Failed to remove pattern" });
+      }
+      return;
+    }
+    if (body.action === "listBlacklistPatterns") {
+      try {
+        const patterns = await listBlacklistedPatterns();
+        res.status(200).json({ ok: true, patterns });
+      } catch (err) {
+        console.error("[admin/leads] listBlacklistPatterns failed:", err);
+        res.status(500).json({ ok: false, error: "Failed to load patterns" });
+      }
+      return;
+    }
     if (body.action === "setFoundVia" && typeof body.email === "string") {
       const fv = typeof body.foundVia === "string" ? body.foundVia : "";
       try {
@@ -383,6 +416,11 @@ export default async function handler(
     // to show a small banner at the top with the current blacklist. (2026-08-28)
     const blacklistedArr = await listBlacklistedEmails();
     const blacklistedSet = new Set(blacklistedArr.map((e) => e.toLowerCase()));
+    // Substring pattern blacklist (2026-09-03). Rendered in the banner + a
+    // small "Block by pattern" input so Kristi can add a substring like
+    // "kusuma" that catches every current + future email containing it —
+    // Gmail alias tricks and fresh @domain arrangements alike.
+    const blacklistedPatterns = await listBlacklistedPatterns();
 
     // Daily activity (2026-08-14): API calls (Gemini image calls) + distinct
     // people who generated, per ET day, plus the Google spend Kristi types in.
@@ -778,6 +816,27 @@ export default async function handler(
       : ""
   }
 
+  <!-- Substring pattern blacklist (2026-09-03). Any email that contains one
+       of these patterns is blocked — catches every current + future variant
+       an abuser can register, not just the exact address. -->
+  <div class="blbanner" style="background:#FFF7E5;border-color:#F3D593;color:#5A3E0A;">
+    <b>Block by pattern:</b> Any email that CONTAINS one of these gets blocked (e.g. add "kusuma" and every arrangement is blocked).
+    <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <input id="patternInput" type="text" placeholder="e.g. kusuma" style="padding:6px 10px;border:1px solid #D6C89A;border-radius:6px;font-size:13px;min-width:180px;" />
+      <button id="patternAddBtn" class="btn">Add pattern</button>
+      ${
+        blacklistedPatterns.length
+          ? `<div style="margin-top:6px;width:100%">Active: ${blacklistedPatterns
+              .map(
+                (p) =>
+                  `<span style="display:inline-block;margin:3px 4px 3px 0;padding:3px 8px;background:#fff;border:1px solid #D6C89A;border-radius:999px;font-size:12px;">${esc(p)} <a href="#" class="patternRm" data-pattern="${esc(p)}" style="color:#7A1F1B;text-decoration:none;font-weight:600;margin-left:6px;">×</a></span>`,
+              )
+              .join("")}</div>`
+          : `<div style="margin-top:6px;width:100%;color:#8a7241;font-size:12px;">No patterns yet.</div>`
+      }
+    </div>
+  </div>
+
   ${winbackHtml}
   ${dailyTableHtml}
 
@@ -953,6 +1012,46 @@ export default async function handler(
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'removeAlias', pw: PW, alias: alias }),
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d && d.ok) { location.reload(); }
+          else { alert('Failed: ' + ((d && d.error) || 'unknown')); }
+        })
+        .catch(function () { alert('Network error'); });
+    });
+  });
+  // Pattern-blacklist add + remove (2026-09-03).
+  var patternAddBtn = document.getElementById('patternAddBtn');
+  var patternInput = document.getElementById('patternInput');
+  if (patternAddBtn && patternInput) {
+    patternAddBtn.addEventListener('click', function () {
+      var p = (patternInput.value || '').trim().toLowerCase();
+      if (!p || p.length < 2) { alert('Enter at least 2 characters.'); return; }
+      if (!confirm('Add "' + p + '" as a blocked pattern?\\nEvery email that contains this substring will be blocked from generating.')) return;
+      patternAddBtn.disabled = true; patternAddBtn.textContent = 'Saving…';
+      fetch('/api/admin/leads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'blacklistPattern', pw: PW, pattern: p }),
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d && d.ok) { location.reload(); }
+          else { patternAddBtn.disabled = false; patternAddBtn.textContent = 'Add pattern'; alert('Failed: ' + ((d && d.error) || 'unknown')); }
+        })
+        .catch(function () { patternAddBtn.disabled = false; patternAddBtn.textContent = 'Add pattern'; alert('Network error'); });
+    });
+  }
+  document.querySelectorAll('.patternRm').forEach(function (a) {
+    a.addEventListener('click', function (e) {
+      e.preventDefault();
+      var p = a.dataset.pattern;
+      if (!confirm('Remove pattern "' + p + '"? Emails matching it will no longer be blocked.')) return;
+      fetch('/api/admin/leads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'unblacklistPattern', pw: PW, pattern: p }),
       })
         .then(function (r) { return r.json(); })
         .then(function (d) {

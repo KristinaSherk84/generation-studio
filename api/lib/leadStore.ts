@@ -379,27 +379,109 @@ export async function markLeadEntryUnlock(
 // message so the abuser can't tell it's a personal ban. Stored as a Redis
 // SET of lowercase email strings.
 const BLACKLIST_KEY = "email-blacklist";
+// Substring-pattern blacklist (2026-09-03). Blacklisting exact addresses
+// alone is bypassable — Gmail ignores dots + `+alias`, and an abuser can
+// register 10 variants on a domain in seconds. Any pattern here that
+// appears as a substring of the incoming email (case-insensitive) blocks
+// the send. Kristi adds one pattern like "kusuma" and every arrangement
+// (c.kusuma, chris.kusuma+123, ckusuma@work.com, etc.) is blocked.
+const BLACKLIST_PATTERN_KEY = "email-blacklist-patterns";
 
-/** Add one email to the blacklist. Lowercased. Idempotent. */
+/** Gmail treats dots + `+aliases` as identical. Normalize a Gmail address
+ *  down to its canonical form so a.b@gmail.com and ab+1@gmail.com match. */
+function gmailNormalize(email: string): string {
+  const lower = email.trim().toLowerCase();
+  const at = lower.indexOf("@");
+  if (at < 0) return lower;
+  const local = lower.slice(0, at);
+  const domain = lower.slice(at + 1);
+  if (domain !== "gmail.com" && domain !== "googlemail.com") return lower;
+  const strippedPlus = local.split("+")[0];
+  const strippedDots = strippedPlus.replace(/\./g, "");
+  return `${strippedDots}@gmail.com`;
+}
+
+/** Add one email to the blacklist. Lowercased. Idempotent. Also stores the
+ *  Gmail-normalized form (if different) so the abuser can't add a dot to
+ *  bypass. */
 export async function blacklistEmail(email: string): Promise<void> {
   if (!looksLikeEmail(email)) return;
-  await redis.sadd(BLACKLIST_KEY, email.trim().toLowerCase());
+  const lower = email.trim().toLowerCase();
+  const canon = gmailNormalize(lower);
+  await redis.sadd(BLACKLIST_KEY, lower);
+  if (canon !== lower) {
+    await redis.sadd(BLACKLIST_KEY, canon);
+  }
 }
 
-/** Remove one email from the blacklist. */
+/** Remove one email from the blacklist. Also removes the Gmail-normalized
+ *  form so re-adding later starts fresh. */
 export async function unblacklistEmail(email: string): Promise<void> {
   if (!looksLikeEmail(email)) return;
-  await redis.srem(BLACKLIST_KEY, email.trim().toLowerCase());
+  const lower = email.trim().toLowerCase();
+  const canon = gmailNormalize(lower);
+  await redis.srem(BLACKLIST_KEY, lower);
+  if (canon !== lower) {
+    await redis.srem(BLACKLIST_KEY, canon);
+  }
 }
 
-/** True if this exact address is blacklisted. Case-insensitive. */
+/** Add a substring pattern (e.g. "kusuma") that will block ANY email
+ *  containing it. Lowercased. Idempotent. */
+export async function blacklistPattern(pattern: string): Promise<void> {
+  const p = (pattern || "").trim().toLowerCase();
+  if (p.length < 2) return; // safety: no 1-char patterns
+  await redis.sadd(BLACKLIST_PATTERN_KEY, p);
+}
+
+/** Remove a substring pattern. */
+export async function unblacklistPattern(pattern: string): Promise<void> {
+  const p = (pattern || "").trim().toLowerCase();
+  if (!p) return;
+  await redis.srem(BLACKLIST_PATTERN_KEY, p);
+}
+
+/** Full set of substring patterns (admin UI). */
+export async function listBlacklistedPatterns(): Promise<string[]> {
+  const arr = (await redis.smembers(BLACKLIST_PATTERN_KEY)) as string[] | null;
+  return arr ?? [];
+}
+
+/** True if this address is blacklisted. Checks:
+ *  1. exact match (lowercased)
+ *  2. Gmail-normalized match (a.b+1@gmail.com → ab@gmail.com)
+ *  3. any substring pattern from the pattern set
+ *
+ *  Fail-open: on Redis errors returns false so a KV outage doesn't lock
+ *  every customer out. Abuse blocking is a nice-to-have; delivering to
+ *  legitimate customers is the priority. */
 export async function isEmailBlacklisted(email: string): Promise<boolean> {
   if (!looksLikeEmail(email)) return false;
-  const r = await redis.sismember(
-    BLACKLIST_KEY,
-    email.trim().toLowerCase(),
-  );
-  return r === 1;
+  const lower = email.trim().toLowerCase();
+  const canon = gmailNormalize(lower);
+  try {
+    // Cheap exact check first.
+    const [exact, canonMatch] = await Promise.all([
+      redis.sismember(BLACKLIST_KEY, lower),
+      canon !== lower
+        ? redis.sismember(BLACKLIST_KEY, canon)
+        : Promise.resolve(0),
+    ]);
+    if (exact === 1 || canonMatch === 1) return true;
+    // Substring-pattern check (only if the cheap paths didn't hit).
+    const patterns = (await redis.smembers(BLACKLIST_PATTERN_KEY)) as
+      | string[]
+      | null;
+    if (patterns && patterns.length > 0) {
+      for (const p of patterns) {
+        if (!p) continue;
+        if (lower.includes(p) || canon.includes(p)) return true;
+      }
+    }
+    return false;
+  } catch {
+    return false;
+  }
 }
 
 /** Full set of blacklisted addresses for the admin UI. */
