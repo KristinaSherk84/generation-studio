@@ -706,7 +706,7 @@ Include a subtle fill from below the subject to soften — not eliminate — the
 // on multiple entries makes the backdrop explicit as photography paper,
 // not a room/environment.
 const BLOCK_6_BACKGROUND: Record<Exclude<Background, "rainbow">, string> = {
-  white: `Background: Seamless bright white, clean, no gradients. Generate 255 clipped bright white seamless paper backgrounds with no edges.`,
+  white: `Background: Seamless bright PURE WHITE paper (RGB 255,255,255) at every pixel of the frame behind the subject. Every point of the background reads as pure 255-clipped white — the same paper-white tone as the whitest highlight on a magazine cover. The background is its own independent layer, unaffected by anything else in the frame; whatever color the subject wears, whatever hue their skin or hair has, the paper behind them stays pure 255 white throughout. Consistent, uniform, flat pure white edge-to-edge, no gradients, no edges, no tint.`,
   lightgrey: `Background: Neutral light grey paper seamless, gentle vignette.`,
   dark: `Background: Near-black charcoal with slight gradient to deeper black at edges. Place a spot light on the background illuminating the background directly behind the subject's lower neck and upper shoulders. The brightest part of the spot light should be medium grey with a very gradual gradient transitioning outward to a dark grey almost black.`,
   black: `Background: deep-black, dark photo background with rim lights on both sides and edges of the person. Separate the subject from the background on both sides with soft subtle rim lights.`,
