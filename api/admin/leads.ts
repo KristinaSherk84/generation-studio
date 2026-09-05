@@ -64,7 +64,7 @@ const FOUND_VIA_OPTIONS = [
   "Google Ad",
   "LinkedIn Ad",
   '"Best Generator" Article',
-  "Facebook",
+  "Reddit",
   "Other",
 ];
 

@@ -13208,14 +13208,14 @@ const RETOUCH_TIER_DESCRIPTIONS: {
 // after 4s or when the customer ticks an answer. The answer is saved against
 // their email so Kristi can see acquisition sources on the leads page.
 const FOUND_VIA_OPTIONS = [
-  // Order set by Kristi 2026-08-10: "Best Generator" Article first; Facebook
-  // moved into the 4th slot (where the reported non-closing taps cluster),
-  // since it is the least-advertised source so a stray mis-tap there costs
-  // the least.
+  // Order set by Kristi 2026-08-10: "Best Generator" Article first; the
+  // 4th slot (where reported non-closing taps cluster) is deliberately a
+  // less-advertised source so a stray mis-tap there costs the least.
+  // 2026-09-04: swapped Facebook → Reddit per Kristi (new channel focus).
   '"Best Generator" Article',
   "Google Ad",
   "LinkedIn Ad",
-  "Facebook",
+  "Reddit",
   "Email",
   "Referral",
 ] as const;
