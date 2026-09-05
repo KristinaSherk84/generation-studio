@@ -8710,8 +8710,27 @@ const BG_EXAMPLES: { id: string; name: string; slug: string }[] = [
   { id: "healthcare", name: "Healthcare", slug: "healthcare" },
   { id: "tech", name: "IT/Tech", slug: "tech" },
 ];
-type BackgroundExamplesModalProps = { open: boolean; onClose: () => void };
-const BackgroundExamplesModal = ({ open, onClose }: BackgroundExamplesModalProps) => {
+type BackgroundExamplesModalProps = {
+  open: boolean;
+  onClose: () => void;
+  // Which style is currently selected on the screen behind — so the modal
+  // can highlight it with a "You're on this one" chip. Optional.
+  currentStyle?: string | null;
+  // 2026-09-04, per Kristi: many customers CLICK on a section (Urban
+  // Industrial / Paper-color / Creative Natural / etc.) expecting it to
+  // pick that style for them. Sections are now tappable — tap fires
+  // onSelectStyle(id) and the modal closes so they see the change land on
+  // the screen underneath. Optional so a future reuse (e.g. an
+  // information-only preview) can pass no handler and keep the old
+  // display-only behavior.
+  onSelectStyle?: (styleId: string) => void;
+};
+const BackgroundExamplesModal = ({
+  open,
+  onClose,
+  currentStyle,
+  onSelectStyle,
+}: BackgroundExamplesModalProps) => {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -8786,36 +8805,121 @@ const BackgroundExamplesModal = ({ open, onClose }: BackgroundExamplesModalProps
           </p>
         </div>
         <div style={{ padding: "6px 24px 20px", maxHeight: "64vh", overflowY: "auto" }}>
-          {BG_EXAMPLES.map((st) => (
-            <section key={st.id} style={{ padding: "18px 0", borderTop: "1px solid #EEE9DF", textAlign: "center" }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: BRAND.charcoal, marginBottom: 10 }}>
-                {st.name}
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 62px)", gap: 6, justifyContent: "center" }}>
-                {[1, 2, 3, 4].map((n) => (
+          {BG_EXAMPLES.map((st) => {
+            const isCurrent = currentStyle === st.id;
+            const clickable = !!onSelectStyle;
+            const pick = () => {
+              if (!onSelectStyle) return;
+              onSelectStyle(st.id);
+              onClose();
+            };
+            return (
+              <section
+                key={st.id}
+                onClick={clickable ? pick : undefined}
+                role={clickable ? "button" : undefined}
+                aria-label={
+                  clickable ? `Choose ${st.name} for your headshots` : undefined
+                }
+                style={{
+                  padding: "18px 12px",
+                  borderTop: "1px solid #EEE9DF",
+                  textAlign: "center",
+                  cursor: clickable ? "pointer" : "default",
+                  borderRadius: 8,
+                  transition: "background 0.15s",
+                  ...(isCurrent
+                    ? { background: "#FBF8F0", boxShadow: "inset 0 0 0 2px #C9A961" }
+                    : {}),
+                }}
+                onMouseEnter={(e) => {
+                  if (clickable && !isCurrent)
+                    (e.currentTarget as HTMLElement).style.background = "#F7F4EC";
+                }}
+                onMouseLeave={(e) => {
+                  if (clickable && !isCurrent)
+                    (e.currentTarget as HTMLElement).style.background = "transparent";
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 15,
+                    fontWeight: 700,
+                    color: BRAND.charcoal,
+                    marginBottom: 6,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 8,
+                  }}
+                >
+                  {st.name}
+                  {isCurrent && (
+                    <span
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 600,
+                        letterSpacing: 0.8,
+                        textTransform: "uppercase",
+                        background: "#C9A961",
+                        color: "#FFF",
+                        padding: "2px 8px",
+                        borderRadius: 999,
+                      }}
+                    >
+                      Selected
+                    </span>
+                  )}
+                </div>
+                {clickable && !isCurrent && (
                   <div
-                    key={n}
                     style={{
-                      position: "relative",
-                      width: 62,
-                      height: 62,
-                      borderRadius: 6,
-                      overflow: "hidden",
-                      background: "#ECEAE3",
+                      fontSize: 11,
+                      color: BRAND.subText,
+                      marginBottom: 8,
                     }}
                   >
-                    <img
-                      src={`/marketing/background-examples/${st.id}/ai-headshot-background-example-${st.slug}-${n}.jpg`}
-                      alt={`AI headshot background example — ${st.name} ${n}`}
-                      loading="lazy"
-                      decoding="async"
-                      style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-                    />
+                    Tap to choose this style →
                   </div>
-                ))}
-              </div>
-            </section>
-          ))}
+                )}
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(4, 62px)",
+                    gap: 6,
+                    justifyContent: "center",
+                  }}
+                >
+                  {[1, 2, 3, 4].map((n) => (
+                    <div
+                      key={n}
+                      style={{
+                        position: "relative",
+                        width: 62,
+                        height: 62,
+                        borderRadius: 6,
+                        overflow: "hidden",
+                        background: "#ECEAE3",
+                      }}
+                    >
+                      <img
+                        src={`/marketing/background-examples/${st.id}/ai-headshot-background-example-${st.slug}-${n}.jpg`}
+                        alt={`AI headshot background example — ${st.name} ${n}`}
+                        loading="lazy"
+                        decoding="async"
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          objectFit: "cover",
+                          display: "block",
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </section>
+            );
+          })}
         </div>
         <div style={{ padding: "12px 24px 20px", borderTop: "1px solid #EEE9DF", textAlign: "center" }}>
           <button
@@ -9311,7 +9415,12 @@ const StyleScreen = ({
       >
         See example backgrounds →
       </button>
-      <BackgroundExamplesModal open={showBgExamples} onClose={() => setShowBgExamples(false)} />
+      <BackgroundExamplesModal
+        open={showBgExamples}
+        onClose={() => setShowBgExamples(false)}
+        currentStyle={style}
+        onSelectStyle={(id) => setStyle(id)}
+      />
 
       {/* Creative-style info banner removed 2026-07-31 — the "See example
           backgrounds" link now covers this, so the bokeh explainer box was
@@ -11582,6 +11691,78 @@ const GridScreen = ({
                     }}
                   />
                   Still generating…
+                </div>
+              ) : regenError &&
+                regenError.startsWith("You've reached the generation limit") ? (
+                // 2026-09-04 (per Kristi): when the reason for an empty slot
+                // is an over-limit HIT (not a genuine per-slot generation
+                // failure), 'Generation failed. Try regenerating.' misled
+                // customers into tapping regen forever. Show the paywall
+                // CTA here instead — same visual language as the free-tier
+                // blocked-slot state, but framed for a customer who ALREADY
+                // paid the first $3.99 and needs to top up.
+                <div
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onUnlockMoreGenerations?.();
+                  }}
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 8,
+                    padding: 14,
+                    textAlign: "center",
+                    background: C.lightGrey,
+                    cursor: "pointer",
+                  }}
+                >
+                  <Lock size={22} style={{ color: C.mediumGrey }} />
+                  <div
+                    style={{
+                      fontSize: 12.5,
+                      fontWeight: 600,
+                      color: C.dark,
+                      lineHeight: 1.35,
+                    }}
+                  >
+                    Generation limit hit
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: C.mediumGrey,
+                      lineHeight: 1.4,
+                    }}
+                  >
+                    Pay $3.99 to keep generating, or review the ones you've
+                    already made.
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onUnlockMoreGenerations?.();
+                    }}
+                    style={{
+                      marginTop: 4,
+                      padding: "8px 14px",
+                      background: C.dark,
+                      color: C.buttonText,
+                      border: "none",
+                      borderRadius: 999,
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      lineHeight: 1.2,
+                      fontFamily: "inherit",
+                    }}
+                  >
+                    Unlock more · $3.99
+                  </button>
                 </div>
               ) : (
                 // Generation failed for this slot — show a clear, non-clickable
@@ -17143,6 +17324,564 @@ const UpsellModal = ({
   );
 };
 
+// -------------------- All-shots gallery (2026-09-04) --------------------
+//
+// Full-screen overlay showing EVERY shot a customer generated across their
+// entire session — main grid (0-5) + wild card bonus + earlier batches
+// (accumulated 6+) + variation shots — in one 3-column view with sticky
+// header and sticky checkout footer. Uses its own 450px-capped lightbox
+// so tap-to-enlarge works without prop-drilling from GridScreen.
+//
+// Opened from:
+//   - The "Review all images you've created" button on the over-limit banner
+//   - (Roadmap) A persistent cabinet icon in the app header
+//
+// Pricing shown = Basic ($12.99 × cart count). Tier selection still happens
+// on the RetouchScreen after Check out; Kristi's call 2026-09-04 to show
+// concrete Basic pricing here rather than a range.
+type AllShotsGalleryProps = {
+  mainImages: string[]; // first 6 are the main grid; slice(6) is accumulated extras
+  wildCards: WildCardShot[];
+  versionShots: (string | null)[];
+  cart: string[];
+  maxCartSize: number;
+  onAddToCart: (url: string) => void;
+  onRemoveFromCart: (url: string) => void;
+  onCheckout: () => void;
+  onClose: () => void;
+};
+const BASIC_PRICE_PER_PHOTO = 12.99;
+
+const AllShotsGallery = ({
+  mainImages,
+  wildCards,
+  versionShots,
+  cart,
+  maxCartSize,
+  onAddToCart,
+  onRemoveFromCart,
+  onCheckout,
+  onClose,
+}: AllShotsGalleryProps) => {
+  const cartSet = new Set(cart);
+  const cartFull = cart.length >= maxCartSize;
+  const toggle = (src: string | null) => {
+    if (!src) return;
+    if (cartSet.has(src)) onRemoveFromCart(src);
+    else if (!cartFull) onAddToCart(src);
+  };
+
+  // Build the four sections. Flatten into one ordered list for the
+  // lightbox arrow-cycle (arrows walk across sections top-to-bottom).
+  const mainSlots = mainImages.slice(0, 6).filter((u): u is string => !!u);
+  const extras = mainImages.slice(6).filter((u): u is string => !!u);
+  const wcFilled = wildCards.filter((w) => !!w.image);
+  const versionFilled = versionShots.filter((u): u is string => !!u);
+  const flat: string[] = [
+    ...mainSlots,
+    ...wcFilled.map((w) => w.image as string),
+    ...extras,
+    ...versionFilled,
+  ];
+
+  // Lightbox state (self-contained — doesn't touch the GridScreen lightbox).
+  const [lbIdx, setLbIdx] = useState<number | null>(null);
+  const lbSrc = lbIdx !== null ? flat[lbIdx] : null;
+  useEffect(() => {
+    if (lbIdx === null) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setLbIdx(null);
+      if (e.key === "ArrowLeft")
+        setLbIdx((i) =>
+          i === null ? null : (i + flat.length - 1) % flat.length,
+        );
+      if (e.key === "ArrowRight")
+        setLbIdx((i) => (i === null ? null : (i + 1) % flat.length));
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [lbIdx, flat.length]);
+
+  // Lock body scroll while the gallery overlay is open so the page
+  // underneath doesn't scroll when the customer scrolls the gallery.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
+  const totalShots = flat.length;
+  const cartTotal = (cart.length * BASIC_PRICE_PER_PHOTO).toFixed(2);
+
+  // Reusable tile renderer for uniform look across all four sections.
+  const tile = (src: string, key: string) => {
+    const picked = cartSet.has(src);
+    return (
+      <div
+        key={key}
+        onClick={() => toggle(src)}
+        style={{
+          position: "relative",
+          aspectRatio: "3/4",
+          borderRadius: 10,
+          overflow: "hidden",
+          background: C.lightGrey,
+          cursor: "pointer",
+          border: `2px solid ${picked ? C.dark : "transparent"}`,
+          transition: "border-color 0.15s",
+        }}
+      >
+        <img
+          src={src}
+          alt=""
+          draggable={false}
+          onContextMenu={(e) => e.preventDefault()}
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            objectPosition: "center 20%",
+            pointerEvents: "none",
+            userSelect: "none",
+          }}
+        />
+        {/* Watermark — same 2-band pattern as the extras tiles */}
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            pointerEvents: "none",
+            overflow: "hidden",
+          }}
+        >
+          {[33, 67].map((topPercent, row) => (
+            <div
+              key={row}
+              style={{
+                position: "absolute",
+                top: `${topPercent}%`,
+                left: "50%",
+                transform: "translate(-50%, -50%) rotate(-30deg)",
+                fontSize: 10,
+                color: "rgba(255,255,255,0.5)",
+                textShadow: "0 1px 2px rgba(0,0,0,0.4)",
+                letterSpacing: 1.5,
+                whiteSpace: "nowrap",
+              }}
+            >
+              INVISIBLE WATERMARKS APPLIED TO PROTECT ARTIST
+            </div>
+          ))}
+        </div>
+        {/* Cart badge — top-right */}
+        <div
+          style={{
+            position: "absolute",
+            top: 8,
+            right: 8,
+            width: 28,
+            height: 28,
+            borderRadius: "50%",
+            background: picked
+              ? C.dark
+              : cartFull
+                ? "rgba(255,255,255,0.4)"
+                : "rgba(255,255,255,0.92)",
+            color: picked ? C.white : C.dark,
+            border: picked ? "none" : "1.5px solid rgba(255,255,255,0.95)",
+            boxShadow: "0 1px 4px rgba(0,0,0,0.3)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            pointerEvents: "none",
+          }}
+        >
+          {picked ? <Check size={15} /> : <Plus size={15} strokeWidth={2.4} />}
+        </div>
+        {/* Expand — bottom-left */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setLbIdx(flat.indexOf(src));
+          }}
+          aria-label="View larger"
+          style={{
+            position: "absolute",
+            bottom: 8,
+            left: 8,
+            width: 26,
+            height: 26,
+            borderRadius: "50%",
+            background: "rgba(255,255,255,0.9)",
+            color: C.dark,
+            border: "none",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 0,
+            boxShadow: "0 1px 3px rgba(0,0,0,0.25)",
+          }}
+        >
+          <Maximize2 size={14} />
+        </button>
+      </div>
+    );
+  };
+
+  const sectionLabel = (label: string, count: number) => (
+    <div
+      style={{
+        fontSize: 11,
+        letterSpacing: 1.5,
+        color: C.mediumGrey,
+        textTransform: "uppercase",
+        padding: "18px 0 8px",
+        fontWeight: 500,
+      }}
+    >
+      {label}{" "}
+      <span style={{ color: "#C9A961", marginLeft: 6, fontWeight: 600, letterSpacing: 0 }}>
+        · {count}
+      </span>
+    </div>
+  );
+
+  const gridStyle: CSSProperties = {
+    display: "grid",
+    gridTemplateColumns: "repeat(3, 1fr)",
+    gap: 14,
+  };
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Every shot from your session"
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "#F5F1E8",
+        zIndex: 1200,
+        display: "flex",
+        flexDirection: "column",
+        ...font,
+      }}
+    >
+      {/* Sticky header */}
+      <div
+        style={{
+          background: C.white,
+          borderBottom: `1px solid ${C.border}`,
+          padding: "14px 22px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 16,
+        }}
+      >
+        <div>
+          <h1
+            style={{
+              fontSize: 16,
+              fontWeight: 600,
+              margin: 0,
+              letterSpacing: -0.2,
+              color: C.dark,
+            }}
+          >
+            Every shot from your session
+          </h1>
+          <div style={{ fontSize: 12, color: C.mediumGrey, marginTop: 2 }}>
+            {totalShots} shots · {cart.length} in cart · Tap + to add to cart
+          </div>
+        </div>
+        <button
+          onClick={onClose}
+          aria-label="Close gallery"
+          style={{
+            width: 36,
+            height: 36,
+            border: "none",
+            background: "transparent",
+            color: C.mediumGrey,
+            fontSize: 22,
+            lineHeight: 1,
+            cursor: "pointer",
+            padding: 0,
+            borderRadius: "50%",
+          }}
+        >
+          ×
+        </button>
+      </div>
+
+      {/* Scrollable body — the four sections in order */}
+      <div
+        style={{
+          overflowY: "auto",
+          flex: 1,
+          padding: "0 22px 24px",
+        }}
+      >
+        {mainSlots.length > 0 && (
+          <>
+            {sectionLabel("Main Grid", mainSlots.length)}
+            <div style={gridStyle}>
+              {mainSlots.map((src, i) => tile(src, `m-${i}`))}
+            </div>
+          </>
+        )}
+        {wcFilled.length > 0 && (
+          <>
+            {sectionLabel("Wild Card Bonus", wcFilled.length)}
+            <div style={gridStyle}>
+              {wcFilled.map((w, i) => tile(w.image as string, `wc-${i}`))}
+            </div>
+          </>
+        )}
+        {extras.length > 0 && (
+          <>
+            {sectionLabel("Earlier Batches", extras.length)}
+            <div style={gridStyle}>
+              {extras.map((src, i) => tile(src, `x-${i}`))}
+            </div>
+          </>
+        )}
+        {versionFilled.length > 0 && (
+          <>
+            {sectionLabel("Variations You Requested", versionFilled.length)}
+            <div style={gridStyle}>
+              {versionFilled.map((src, i) => tile(src, `v-${i}`))}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Sticky footer */}
+      <div
+        style={{
+          background: C.white,
+          borderTop: `1px solid ${C.border}`,
+          padding: "14px 22px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 14,
+        }}
+      >
+        <div style={{ fontSize: 13, color: C.dark, fontWeight: 500 }}>
+          <span style={{ color: "#C9A961", fontWeight: 700 }}>{cart.length}</span>{" "}
+          in your cart
+          {cart.length > 0 && (
+            <> · <span>${cartTotal}</span></>
+          )}
+        </div>
+        <button
+          onClick={onCheckout}
+          disabled={cart.length === 0}
+          style={{
+            padding: "11px 22px",
+            background: cart.length === 0 ? "#B4B2A9" : C.dark,
+            color: C.buttonText,
+            border: "none",
+            borderRadius: 8,
+            fontSize: 14,
+            fontWeight: 600,
+            cursor: cart.length === 0 ? "default" : "pointer",
+            fontFamily: "inherit",
+          }}
+        >
+          Check out →
+        </button>
+      </div>
+
+      {/* Internal 450px-capped lightbox (self-contained so we don't have
+          to prop-drill setPreviewSrc/setPreviewIndex out of GridScreen). */}
+      {lbSrc && (
+        <div
+          onClick={() => setLbIdx(null)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.92)",
+            zIndex: 1300,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 20,
+            cursor: "zoom-out",
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: "relative",
+              width: "min(90vw, 70vh, 450px)",
+              aspectRatio: "3/4",
+            }}
+          >
+            <img
+              src={lbSrc}
+              alt="Headshot preview"
+              draggable={false}
+              onContextMenu={(e) => e.preventDefault()}
+              style={{
+                position: "absolute",
+                inset: 0,
+                width: "100%",
+                height: "100%",
+                objectFit: "contain",
+                borderRadius: 12,
+                pointerEvents: "none",
+                userSelect: "none",
+              }}
+            />
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                pointerEvents: "none",
+                overflow: "hidden",
+                borderRadius: 12,
+              }}
+            >
+              {[20, 40, 60, 80].map((t, r) => (
+                <div
+                  key={r}
+                  style={{
+                    position: "absolute",
+                    top: `${t}%`,
+                    left: "50%",
+                    transform: "translate(-50%, -50%) rotate(-30deg)",
+                    fontSize: 22,
+                    letterSpacing: 8,
+                    color: "rgba(255,255,255,0.4)",
+                    whiteSpace: "nowrap",
+                    fontWeight: 700,
+                    textShadow: "0 1px 2px rgba(0,0,0,0.4)",
+                  }}
+                >
+                  INVISIBLE WATERMARKS APPLIED TO PROTECT ARTIST
+                </div>
+              ))}
+            </div>
+            {/* Close X — sits above the frame at top-right */}
+            <button
+              onClick={() => setLbIdx(null)}
+              aria-label="Close preview"
+              style={{
+                position: "absolute",
+                top: -44,
+                right: -8,
+                width: 36,
+                height: 36,
+                borderRadius: "50%",
+                background: C.white,
+                border: "none",
+                color: C.dark,
+                fontSize: 18,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.35)",
+                padding: 0,
+              }}
+            >
+              <X size={20} />
+            </button>
+            {flat.length > 1 && (
+              <>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setLbIdx((i) =>
+                      i === null ? null : (i + flat.length - 1) % flat.length,
+                    );
+                  }}
+                  aria-label="Previous"
+                  style={{
+                    position: "absolute",
+                    top: "50%",
+                    left: 10,
+                    transform: "translateY(-50%)",
+                    width: 46,
+                    height: 46,
+                    borderRadius: "50%",
+                    background: "rgba(255,255,255,0.92)",
+                    color: C.dark,
+                    border: "none",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: 0,
+                    boxShadow: "0 2px 8px rgba(0,0,0,0.35)",
+                  }}
+                >
+                  <ArrowLeft size={22} />
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setLbIdx((i) =>
+                      i === null ? null : (i + 1) % flat.length,
+                    );
+                  }}
+                  aria-label="Next"
+                  style={{
+                    position: "absolute",
+                    top: "50%",
+                    right: 10,
+                    transform: "translateY(-50%)",
+                    width: 46,
+                    height: 46,
+                    borderRadius: "50%",
+                    background: "rgba(255,255,255,0.92)",
+                    color: C.dark,
+                    border: "none",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: 0,
+                    boxShadow: "0 2px 8px rgba(0,0,0,0.35)",
+                  }}
+                >
+                  <ArrowRight size={22} />
+                </button>
+                <div
+                  style={{
+                    position: "absolute",
+                    bottom: -40,
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                    background: "rgba(255,255,255,0.92)",
+                    color: C.dark,
+                    fontSize: 13,
+                    fontWeight: 500,
+                    padding: "6px 14px",
+                    borderRadius: 999,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {(lbIdx ?? 0) + 1} of {flat.length}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function App() {
   const [screen, setScreen] = useState<Screen>("landing");
 
@@ -17629,6 +18368,10 @@ export default function App() {
     }
   };
   const [showRegenLimitModal, setShowRegenLimitModal] = useState(false);
+  // Full-screen "Every shot from your session" gallery (2026-09-04). Opened
+  // from the over-limit banner's "Review all images you've created" button
+  // and (roadmap) a persistent cabinet icon in the header.
+  const [showAllShotsGallery, setShowAllShotsGallery] = useState(false);
 
   // Guard against the #1 cause of "all generations failed": the customer
   // closing, reloading, or navigating away from the tab while the initial
@@ -20988,15 +21731,13 @@ export default function App() {
           // shows up in logs, the server cap check needs to accept a
           // "second unlock" marker.
           onReviewAllShots={() => {
-            // Fetch the customer's accumulated server session and merge any
-            // shots not already in local state. Customers often generate
-            // 30+ shots across multiple in-session batches — but the client
-            // only keeps the CURRENT batch's 6 slots in generatedImages, so
-            // "Review all" needs to hydrate the rest from the saved
-            // session before expanding extras is meaningful.
-            // (2026-09-04 fix per Kristi: customer had 31+ shots on the
-            // server but the button did nothing because client state
-            // hadn't loaded them.)
+            // 2026-09-04: open the full-screen AllShotsGallery. Before we
+            // paint it, ALSO fire /api/get-session to merge any accumulated
+            // shots the client hasn't loaded yet — the customer often has
+            // 30+ shots on the server but only the current 6 in state.
+            // The gallery renders whatever's in state at open time and
+            // updates as the hydrate completes.
+            setShowAllShotsGallery(true);
             const token = resumeTokenRef.current;
             if (!token) return; // no session token yet — nothing to hydrate
             void (async () => {
@@ -21348,6 +22089,29 @@ export default function App() {
       {showLoadingRetouchPopup && retouchImgReady && (
         <LoadingRetouchPreviewModal
           onDismiss={() => setShowLoadingRetouchPopup(false)}
+        />
+      )}
+
+      {/* Full-screen "Every shot from your session" gallery (2026-09-04).
+          Opens from the over-limit banner's Review all button. Passes ALL
+          shots — main grid + wild cards + extras + versions — so a customer
+          with 30+ accumulated shots can browse them together and cart from
+          any section. Check out routes through handleAdvanceToRetouch so
+          the RetouchScreen still gates tier selection before payment. */}
+      {showAllShotsGallery && (
+        <AllShotsGallery
+          mainImages={generatedImages}
+          wildCards={wildCards}
+          versionShots={versionShots}
+          cart={cart}
+          maxCartSize={MAX_CART_SIZE}
+          onAddToCart={addToCart}
+          onRemoveFromCart={removeFromCart}
+          onCheckout={() => {
+            setShowAllShotsGallery(false);
+            handleAdvanceToRetouch(cart);
+          }}
+          onClose={() => setShowAllShotsGallery(false)}
         />
       )}
       {/* Email-capture gate — opens on the first Generate click, before any
