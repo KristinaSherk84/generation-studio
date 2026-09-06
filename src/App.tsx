@@ -19408,12 +19408,67 @@ export default function App() {
     const sessionId = url.searchParams.get("session_id");
     const photoCancel = url.searchParams.get("photo_cancel");
 
-    // Cancel path: Stripe back-button returns with ?photo_cancel=1. Just
-    // strip the param and leave the user on Landing — they can re-navigate.
-    // (Their selections are gone with the redirect; that's acceptable MVP UX.)
+    // Cancel path: Stripe redirects back with ?photo_cancel=1 when the
+    // customer taps back on the Stripe page OR Stripe otherwise aborts
+    // without collecting payment. 2026-09-06 (per Kristi report):
+    // previously we just stripped the param and left the user on Landing —
+    // customers landed on the home page with empty grid tiles and no
+    // memory of what they'd just tried to buy, thought the app was broken,
+    // and left. Fix: restore state from `pending_delivery` (which
+    // CheckoutScreen stashed right before the Stripe redirect) so the
+    // customer lands back on their cart with their picks intact, then
+    // show a friendly "checkout canceled — try again" banner instead of
+    // dumping them on the home page. Cart is preserved regardless (it
+    // lives in localStorage).
     if (photoCancel === "1") {
       const cleanUrl = `${url.origin}${url.pathname}`;
       window.history.replaceState({}, "", cleanUrl);
+      try {
+        const stashRaw = window.sessionStorage.getItem("pending_delivery");
+        if (stashRaw) {
+          const cancelStash = JSON.parse(stashRaw) as {
+            email?: string;
+            uploadedUrls?: string[];
+            referencePhotoUrls?: string[];
+            selections?: StyleSelections;
+            retouchTiers?: RetouchTier[];
+          };
+          // Rehydrate the pieces of state the retouch screen needs so the
+          // customer can retry checkout without redoing anything. We don't
+          // clear `pending_delivery` here — leaving it lets a customer
+          // who tries checkout again reuse the same stash.
+          if (cancelStash.email) setEmail(cancelStash.email);
+          if (cancelStash.selections) setLastSelections(cancelStash.selections);
+          if (Array.isArray(cancelStash.referencePhotoUrls)) {
+            setLastPhotoUrls(cancelStash.referencePhotoUrls);
+          }
+          if (Array.isArray(cancelStash.uploadedUrls)) {
+            setGeneratedImages(cancelStash.uploadedUrls);
+            setReadyCount(cancelStash.uploadedUrls.length);
+          }
+          if (
+            cancelStash.retouchTiers &&
+            Array.isArray(cancelStash.retouchTiers) &&
+            Array.isArray(cancelStash.uploadedUrls)
+          ) {
+            const tierMap: Record<string, RetouchTier> = {};
+            cancelStash.uploadedUrls.forEach((u, i) => {
+              const t = cancelStash.retouchTiers![i];
+              if (u && (t === "basic" || t === "deluxe")) tierMap[u] = t;
+            });
+            setRetouchTiers(tierMap);
+          }
+          // Send them straight back to the retouch screen with their
+          // picks + tiers intact so "try again" is one tap.
+          setScreen("retouch");
+          setRegenError(
+            "Checkout was canceled. Your picks and settings are still here — tap Continue to checkout when you're ready to try again.",
+          );
+          return;
+        }
+      } catch {
+        /* JSON parse failure or storage error — fall through to landing */
+      }
       return;
     }
 
