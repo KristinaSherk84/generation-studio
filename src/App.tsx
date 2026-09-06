@@ -13359,6 +13359,18 @@ const RetouchBeforeAfterSlider = ({
 
   return (
     <div
+      style={{
+        // Outer wrapper (2026-09-04) so the SLIDE cues can sit OUTSIDE the
+        // slider frame per Kristi. overflow:visible on this outer div lets
+        // the ◀ SLIDE / SLIDE ▶ chips render in the whitespace beside the
+        // slider (they'd get clipped by the slider's overflow:hidden if
+        // they were children of it). The slider itself keeps overflow:hidden
+        // so the before/after clip-path masks work cleanly.
+        position: "relative",
+        width: "100%",
+      }}
+    >
+    <div
       ref={containerRef}
       onMouseDown={(e) => {
         e.preventDefault();
@@ -13507,27 +13519,27 @@ const RetouchBeforeAfterSlider = ({
       >
         ⇔
       </div>
-      {/* Slide-me cues (2026-09-04 per Kristi). Left + right side hints
-          telegraph the drag interaction — customers who don't realize the
-          divider is draggable see arrows + "SLIDE" text on both sides and
-          try it. Non-interactive so they never intercept the drag. */}
+    </div>
+      {/* Slide-me cues (2026-09-04 v2 per Kristi): moved OUTSIDE the slider
+          frame — sit in the whitespace to the left and right of the image
+          at vertical center. Dark charcoal now (was white with drop-shadow)
+          since they render on the modal's light background. */}
       <div
         aria-hidden="true"
         style={{
           position: "absolute",
           top: "50%",
-          left: 10,
+          left: -34,
           transform: "translateY(-50%)",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
           gap: 2,
-          color: "#fff",
-          textShadow: "0 1px 2px rgba(0,0,0,0.7)",
+          color: "#2A2A2A",
           pointerEvents: "none",
         }}
       >
-        <span style={{ fontSize: 20, lineHeight: 1, fontWeight: 700 }}>◀</span>
+        <span style={{ fontSize: 22, lineHeight: 1, fontWeight: 700 }}>◀</span>
         <span style={{ fontSize: 10, letterSpacing: 1.5, fontWeight: 700 }}>SLIDE</span>
       </div>
       <div
@@ -13535,18 +13547,17 @@ const RetouchBeforeAfterSlider = ({
         style={{
           position: "absolute",
           top: "50%",
-          right: 10,
+          right: -34,
           transform: "translateY(-50%)",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
           gap: 2,
-          color: "#fff",
-          textShadow: "0 1px 2px rgba(0,0,0,0.7)",
+          color: "#2A2A2A",
           pointerEvents: "none",
         }}
       >
-        <span style={{ fontSize: 20, lineHeight: 1, fontWeight: 700 }}>▶</span>
+        <span style={{ fontSize: 22, lineHeight: 1, fontWeight: 700 }}>▶</span>
         <span style={{ fontSize: 10, letterSpacing: 1.5, fontWeight: 700 }}>SLIDE</span>
       </div>
     </div>
