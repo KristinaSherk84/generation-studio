@@ -14254,6 +14254,11 @@ type RetouchScreenProps = {
   // per-photo tier rows so the screen behind the popup reflects the discount
   // (old price struck through). (2026-08-20)
   discountedUrls: Set<string>;
+  // Winback 10% off (2026-09-06). True when the customer arrived via the
+  // ?winback=1 URL and the discount is stashed in localStorage. Applies to
+  // EVERY tier price shown on this screen — Basic, Glow Up, and the total
+  // — so the customer SEES the discount before hitting Stripe.
+  winbackActive?: boolean;
 };
 
 const RetouchScreen = ({
@@ -14264,7 +14269,29 @@ const RetouchScreen = ({
   onBack,
   onRemovePick,
   discountedUrls,
+  winbackActive = false,
 }: RetouchScreenProps) => {
+  // Formatting helpers for the winback discount (2026-09-06). When active,
+  // every tier price shows as "$original crossed through" + "$discounted" so
+  // the customer SEES the 10% off in the app before the Stripe redirect.
+  const priceStr = (cents: number) => "$" + (cents / 100).toFixed(2);
+  const winbackPrice = (cents: number) =>
+    Math.round(cents * 0.9);
+  // Render a price with the winback strike-through when active, or just the
+  // raw price otherwise. Used inline anywhere a Basic/Deluxe number shows.
+  const fmtTierPrice = (cents: number) => {
+    if (!winbackActive) return <>{priceStr(cents)}</>;
+    return (
+      <>
+        <span style={{ textDecoration: "line-through", color: C.mediumGrey, marginRight: 4 }}>
+          {priceStr(cents)}
+        </span>
+        <span style={{ color: "#1B4332", fontWeight: 700 }}>
+          {priceStr(winbackPrice(cents))}
+        </span>
+      </>
+    );
+  };
   // Defensive: if no photos somehow made it here, hand the user back to
   // the grid so they can pick favorites again rather than locking them
   // on an empty screen.
@@ -14344,21 +14371,39 @@ const RetouchScreen = ({
           lineHeight: 1.55,
         }}
       >
+        {winbackActive && (
+          <div
+            style={{
+              display: "inline-block",
+              background: "#1B4332",
+              color: "#FFFFFF",
+              fontSize: 12,
+              fontWeight: 700,
+              letterSpacing: 0.6,
+              padding: "5px 12px",
+              borderRadius: 999,
+              marginBottom: 10,
+              textTransform: "uppercase",
+            }}
+          >
+            10% winback discount applied
+          </div>
+        )}
         <div style={{ marginBottom: 4 }}>
           You're getting the{" "}
           <span style={{ fontWeight: 700 }}>Glow Up Bundle</span> on each
-          photo — three retouched versions for $17.99. Downshift to Basic
-          if you'd rather just the realistic version.
+          photo — three retouched versions for {fmtTierPrice(PHOTO_DELUXE_CENTS)}
+          . Downshift to Basic if you'd rather just the realistic version.
         </div>
         <div>
           <span style={{ fontWeight: 700 }}>Glow Up Bundle:</span> Realistic
           + Polished + Glam — three retouching levels of each photo.{" "}
-          <span style={{ color: C.mediumGrey }}>$17.99</span>
+          <span style={{ color: C.mediumGrey }}>{fmtTierPrice(PHOTO_DELUXE_CENTS)}</span>
         </div>
         <div>
           <span style={{ fontWeight: 700 }}>Basic:</span> Realistic version
           only.{" "}
-          <span style={{ color: C.mediumGrey }}>$12.99</span>
+          <span style={{ color: C.mediumGrey }}>{fmtTierPrice(PHOTO_BASIC_CENTS)}</span>
         </div>
       </div>
 
@@ -14550,29 +14595,38 @@ const RetouchScreen = ({
                             whiteSpace: "nowrap",
                           }}
                         >
-                          {discountedUrls.has(url) ? (
-                            <>
-                              <span
-                                style={{
-                                  textDecoration: "line-through",
-                                  color: C.mediumGrey,
-                                  fontWeight: 400,
-                                  marginRight: 6,
-                                }}
-                              >
-                                {t.price}
-                              </span>
-                              <span
-                                style={{ color: "#1B6B4C", fontWeight: 600 }}
-                              >
-                                {usdCents(
-                                  centsAfterUpsell(centsForTier(t.tier)),
-                                )}
-                              </span>
-                            </>
-                          ) : (
-                            t.price
-                          )}
+                          {(() => {
+                            // Combine upsell (30% off flagged photos) with
+                            // winback (10% off entire order) — same math the
+                            // server does. Stacks: base × 0.7 × 0.9 when both.
+                            const base = centsForTier(t.tier);
+                            const withUpsell = discountedUrls.has(url)
+                              ? centsAfterUpsell(base)
+                              : base;
+                            const final = winbackActive
+                              ? Math.round(withUpsell * 0.9)
+                              : withUpsell;
+                            if (final === base) return t.price;
+                            return (
+                              <>
+                                <span
+                                  style={{
+                                    textDecoration: "line-through",
+                                    color: C.mediumGrey,
+                                    fontWeight: 400,
+                                    marginRight: 6,
+                                  }}
+                                >
+                                  {t.price}
+                                </span>
+                                <span
+                                  style={{ color: "#1B6B4C", fontWeight: 600 }}
+                                >
+                                  {usdCents(final)}
+                                </span>
+                              </>
+                            );
+                          })()}
                         </div>
                       </div>
                     </label>
@@ -21969,6 +22023,18 @@ export default function App() {
           retouchTiers={retouchTiers}
           setRetouchTiers={setRetouchTiers}
           discountedUrls={discountedUrls}
+          // Winback 10%-off flag (2026-09-06). Read from localStorage — set
+          // when the customer arrived via ?winback=1 on the win-back email
+          // link. RetouchScreen shows the discount on every tier price so
+          // customers SEE it before hitting Stripe, not just at checkout.
+          winbackActive={(() => {
+            if (typeof window === "undefined") return false;
+            try {
+              return window.localStorage.getItem("winback_discount") === "1";
+            } catch {
+              return false;
+            }
+          })()}
           onContinue={handleRetouchContinue}
           onBack={() => setScreen("grid")}
           onRemovePick={(url) => {
