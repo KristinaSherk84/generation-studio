@@ -18762,6 +18762,7 @@ export default function App() {
           }[];
           previousUrls?: (string | null)[];
           revertedSlots?: number[];
+          versionShots?: string[];
         };
         if (!d.generatedUrls || d.generatedUrls.length === 0) return;
         setGeneratedImages(d.generatedUrls);
@@ -18801,6 +18802,16 @@ export default function App() {
               };
             }),
           );
+        }
+        // Restore "Generate Versions" variation shots (2026-09-04) so the
+        // RTV email link shows them in the AllShotsGallery. Client state
+        // is (string | null)[] — the server stores just the filled URLs,
+        // so map to a compatible shape.
+        if (Array.isArray(d.versionShots) && d.versionShots.length > 0) {
+          setVersionShots(d.versionShots);
+          // A restored version set counts as "used" for the one-per-batch
+          // rule so a resumed session doesn't hand out a free extra pair.
+          setVersionsUsedThisBatch(true);
         }
         setResumedFromEmail(true);
         // Remember the token so a damage-control regen can be written back to
@@ -20108,6 +20119,28 @@ export default function App() {
       setRegenError(
         "Couldn't generate versions right now. Please try again in a moment.",
       );
+    // Persist any successful version shots to the saved session so they
+    // show on the RTV email resume link (2026-09-04, per Kristi report:
+    // customer generated 2 variations but they weren't included in the
+    // saved session so the RTV email link didn't show them). Best-effort.
+    const persistedTokenNow = resumeTokenRef.current;
+    if (persistedTokenNow && anyOk) {
+      const filled = outputs.filter((u): u is string => !!u);
+      if (filled.length > 0) {
+        try {
+          void fetch("/api/session-versions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              token: persistedTokenNow,
+              versionShots: filled,
+            }),
+          });
+        } catch {
+          /* best-effort */
+        }
+      }
+    }
   };
 
   // Regenerate a SINGLE thumbnail slot, reusing the most recently-submitted
@@ -21775,6 +21808,7 @@ export default function App() {
                     lighting?: string;
                     variationIndex?: number;
                   }[];
+                  versionShots?: string[];
                 };
                 if (Array.isArray(d.generatedUrls) && d.generatedUrls.length > 0) {
                   setGeneratedImages((prev) => {
@@ -21812,6 +21846,25 @@ export default function App() {
                               : inferred?.variationIndex,
                         });
                         seenUrls.add(w.url);
+                      }
+                    }
+                    return merged;
+                  });
+                }
+                // Also hydrate variation shots (2026-09-04) so the gallery
+                // shows every "Generate Versions" tile the customer has
+                // requested this session, not just what's currently in
+                // client state.
+                if (Array.isArray(d.versionShots) && d.versionShots.length > 0) {
+                  setVersionShots((prev) => {
+                    const seen = new Set(
+                      prev.filter((u): u is string => !!u),
+                    );
+                    const merged: (string | null)[] = [...prev];
+                    for (const url of d.versionShots!) {
+                      if (!seen.has(url)) {
+                        merged.push(url);
+                        seen.add(url);
                       }
                     }
                     return merged;

@@ -44,5 +44,8 @@ export default async function handler(
     // regenerated shot and the older one across devices.
     previousUrls: session.previousUrls ?? [],
     revertedSlots: session.revertedSlots ?? [],
+    // "Generate Versions" variation shots persisted 2026-09-04 so they
+    // survive the RTV link and show in the AllShotsGallery.
+    versionShots: session.versionShots ?? [],
   });
 }

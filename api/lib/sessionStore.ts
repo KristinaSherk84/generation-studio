@@ -59,6 +59,11 @@ export type SavedSession = {
   // the toggle direction survives the resume-link round-trip. Indexes into the
   // (already-merged) generatedUrls array.
   revertedSlots?: number[];
+  // "Generate Versions" bonus shots — variations the customer requested
+  // from a specific source shot on the grid (2026-09-04). Accumulate across
+  // batches, capped for record size. Missing on records saved before this
+  // field existed; those sessions just show no variations on the RTV link.
+  versionShots?: string[];
 };
 
 const TTL_SECONDS = 4 * 24 * 60 * 60; // 4 days (safe cushion; win-back fires ~12h after generation, so the resume link is always alive)
@@ -266,6 +271,40 @@ export async function setSessionWildCards(
     mergedWc.push(w);
   }
   rec.wildCards = mergedWc.slice(0, 24);
+  await redis.set(key(token), rec, { ex: TTL_SECONDS });
+  return true;
+}
+
+/**
+ * Attach "Generate Versions" variation shots to a saved session so the
+ * resume link shows them (2026-09-04). Same pattern as
+ * setSessionWildCards: accumulate + dedupe by URL, cap for record size,
+ * refresh TTL. Returns false if the session is gone.
+ */
+export async function setSessionVersionShots(
+  token: string,
+  versionShots: string[],
+): Promise<boolean> {
+  if (!token || !/^[A-Za-z0-9]{16,48}$/.test(token)) return false;
+  let rec: SavedSession | null;
+  try {
+    rec = (await redis.get<SavedSession>(key(token))) ?? null;
+  } catch {
+    return false;
+  }
+  if (!rec) return false;
+  const incoming = (Array.isArray(versionShots) ? versionShots : []).filter(
+    (u) => typeof u === "string" && /^https?:\/\//.test(u),
+  );
+  const priorV = Array.isArray(rec.versionShots) ? rec.versionShots : [];
+  const seenV = new Set<string>();
+  const mergedV: string[] = [];
+  for (const u of [...priorV, ...incoming]) {
+    if (seenV.has(u)) continue;
+    seenV.add(u);
+    mergedV.push(u);
+  }
+  rec.versionShots = mergedV.slice(0, 40);
   await redis.set(key(token), rec, { ex: TTL_SECONDS });
   return true;
 }
