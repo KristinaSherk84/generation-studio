@@ -239,6 +239,14 @@ export default async function handler(
   // new email — even if they already got the old one. Use ?reblast=1 in
   // combination with the CRON_SECRET.
   const reblast = req.query.reblast === "1" || req.query.reblast === "true";
+  // Test mode (2026-09-06, per Kristi): send ONE copy of the email to the
+  // given address using the FIRST eligible lead's session data (so the
+  // preview has real thumbnails), then stop. Marks nothing as followedUp;
+  // safe to run as many times as needed while iterating on the template.
+  //   ?testEmail=kristi@kristinasherk.com
+  const testEmail =
+    typeof req.query.testEmail === "string" ? req.query.testEmail.trim() : "";
+  const isTestMode = testEmail.length > 0 && looksLikeEmail(testEmail);
 
   const now = Date.now();
   let leads;
@@ -288,6 +296,72 @@ export default async function handler(
         MAX_AGE_MS / 3.6e6
       }h since last generation).`,
     });
+  }
+
+  // Test mode: send exactly one email to testEmail, using the first
+  // eligible lead's session data for the thumbnail preview. Nothing is
+  // marked as followedUp. (2026-09-06 per Kristi.)
+  if (isTestMode) {
+    const source = eligible[0];
+    if (!source) {
+      return res.status(200).json({
+        ok: false,
+        reason: "no_eligible_lead_for_preview",
+        note: "Test needs at least one eligible lead so the email has real thumbnails. Try again once someone new has generated.",
+      });
+    }
+    let sessionGeneratedUrls: string[] = [];
+    try {
+      const session = await getSession(source.resolvedToken);
+      if (session)
+        sessionGeneratedUrls = Array.isArray(session.generatedUrls)
+          ? session.generatedUrls
+          : [];
+    } catch {
+      /* fall through with empty thumbs */
+    }
+    const testResumeUrl = `${SITE_URL}/?resume=${source.resolvedToken}&winback=1&utm_source=email&utm_medium=email&utm_campaign=winback_test`;
+    const { subject, html, text } = buildEmail({
+      resumeUrl: testResumeUrl,
+      generatedUrls: sessionGeneratedUrls,
+    });
+    try {
+      const resp = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: "Kristi at GenerAItion Headshots <kristi@kristinasherk.com>",
+          to: [testEmail],
+          reply_to: "kristi@kristinasherk.com",
+          subject: `[TEST] ${subject}`,
+          html,
+          text,
+        }),
+      });
+      if (!resp.ok) {
+        const body = await resp.text().catch(() => "");
+        return res.status(200).json({
+          ok: false,
+          reason: "send_failed",
+          status: resp.status,
+          body: body.slice(0, 200),
+        });
+      }
+      return res.status(200).json({
+        ok: true,
+        testEmail,
+        usedLeadEmail: source.email,
+        thumbnailCount: sessionGeneratedUrls.length,
+      });
+    } catch (err) {
+      return res.status(200).json({
+        ok: false,
+        reason: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   const batch = eligible.slice(0, MAX_PER_RUN);
