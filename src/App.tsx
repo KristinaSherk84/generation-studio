@@ -10122,23 +10122,29 @@ const LoadingScreen = ({
                 borderRadius: 12,
               }}
             >
-              {[25, 50, 75].map((topPercent, row) => (
+              {[
+                { top: 15, offset: -30 },
+                { top: 35, offset: 60 },
+                { top: 55, offset: -70 },
+                { top: 75, offset: 40 },
+                { top: 92, offset: -20 },
+              ].map((band, row) => (
                 <div
                   key={row}
                   style={{
                     position: "absolute",
-                    top: `${topPercent}%`,
-                    left: "50%",
+                    top: `${band.top}%`,
+                    left: `calc(50% + ${band.offset}px)`,
                     transform: "translate(-50%, -50%) rotate(-30deg)",
-                    fontSize: 22,
+                    fontSize: 18,
                     color: "rgba(255,255,255,0.45)",
                     textShadow: "0 1px 3px rgba(0,0,0,0.5)",
-                    letterSpacing: 4,
+                    letterSpacing: 3,
                     whiteSpace: "nowrap",
-                    fontWeight: 400,
+                    fontWeight: 700,
                   }}
                 >
-                  INVISIBLE WATERMARKS APPLIED TO PROTECT ARTIST
+                  INVISIBLE WATERMARKS APPLIED · INVISIBLE WATERMARKS APPLIED
                 </div>
               ))}
             </div>
@@ -12942,23 +12948,34 @@ const GridScreen = ({
               }}
             >
               {/* Four evenly-spaced watermark bands on the expanded view. */}
-              {[20, 40, 60, 80].map((topPercent, row) => (
+              {/* Staggered watermark bands (2026-09-04, per Kristi). Each
+                  row is horizontally offset differently so 'INVISIBLE' shows
+                  in SOME bands even when others clip. Text is repeated
+                  twice per band so at least one full pass reads inside
+                  the frame regardless of stagger. */}
+              {[
+                { top: 15, offset: -30 },
+                { top: 35, offset: 60 },
+                { top: 55, offset: -70 },
+                { top: 75, offset: 40 },
+                { top: 92, offset: -20 },
+              ].map((band, row) => (
                 <div
                   key={row}
                   style={{
                     position: "absolute",
-                    top: `${topPercent}%`,
-                    left: "50%",
+                    top: `${band.top}%`,
+                    left: `calc(50% + ${band.offset}px)`,
                     transform: "translate(-50%, -50%) rotate(-30deg)",
-                    fontSize: 22,
-                    letterSpacing: 8,
+                    fontSize: 18,
+                    letterSpacing: 3,
                     color: "rgba(255,255,255,0.4)",
                     whiteSpace: "nowrap",
                     fontWeight: 700,
                     textShadow: "0 1px 2px rgba(0,0,0,0.4)",
                   }}
                 >
-                  INVISIBLE WATERMARKS APPLIED TO PROTECT ARTIST
+                  INVISIBLE WATERMARKS APPLIED · INVISIBLE WATERMARKS APPLIED
                 </div>
               ))}
             </div>
@@ -17753,23 +17770,29 @@ const AllShotsGallery = ({
                 borderRadius: 12,
               }}
             >
-              {[20, 40, 60, 80].map((t, r) => (
+              {[
+                { top: 15, offset: -30 },
+                { top: 35, offset: 60 },
+                { top: 55, offset: -70 },
+                { top: 75, offset: 40 },
+                { top: 92, offset: -20 },
+              ].map((band, r) => (
                 <div
                   key={r}
                   style={{
                     position: "absolute",
-                    top: `${t}%`,
-                    left: "50%",
+                    top: `${band.top}%`,
+                    left: `calc(50% + ${band.offset}px)`,
                     transform: "translate(-50%, -50%) rotate(-30deg)",
-                    fontSize: 22,
-                    letterSpacing: 8,
+                    fontSize: 18,
+                    letterSpacing: 3,
                     color: "rgba(255,255,255,0.4)",
                     whiteSpace: "nowrap",
                     fontWeight: 700,
                     textShadow: "0 1px 2px rgba(0,0,0,0.4)",
                   }}
                 >
-                  INVISIBLE WATERMARKS APPLIED TO PROTECT ARTIST
+                  INVISIBLE WATERMARKS APPLIED · INVISIBLE WATERMARKS APPLIED
                 </div>
               ))}
             </div>
