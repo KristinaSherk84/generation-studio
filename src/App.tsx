@@ -8713,9 +8713,6 @@ const BG_EXAMPLES: { id: string; name: string; slug: string }[] = [
 type BackgroundExamplesModalProps = {
   open: boolean;
   onClose: () => void;
-  // Which style is currently selected on the screen behind — so the modal
-  // can highlight it with a "You're on this one" chip. Optional.
-  currentStyle?: string | null;
   // 2026-09-04, per Kristi: many customers CLICK on a section (Urban
   // Industrial / Paper-color / Creative Natural / etc.) expecting it to
   // pick that style for them. Sections are now tappable — tap fires
@@ -8728,7 +8725,6 @@ type BackgroundExamplesModalProps = {
 const BackgroundExamplesModal = ({
   open,
   onClose,
-  currentStyle,
   onSelectStyle,
 }: BackgroundExamplesModalProps) => {
   useEffect(() => {
@@ -9373,7 +9369,6 @@ const StyleScreen = ({
       <BackgroundExamplesModal
         open={showBgExamples}
         onClose={() => setShowBgExamples(false)}
-        currentStyle={style}
         onSelectStyle={(id) => setStyle(id)}
       />
 
