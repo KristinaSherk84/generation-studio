@@ -8806,7 +8806,6 @@ const BackgroundExamplesModal = ({
         </div>
         <div style={{ padding: "6px 24px 20px", maxHeight: "64vh", overflowY: "auto" }}>
           {BG_EXAMPLES.map((st) => {
-            const isCurrent = currentStyle === st.id;
             const clickable = !!onSelectStyle;
             const pick = () => {
               if (!onSelectStyle) return;
@@ -8822,23 +8821,10 @@ const BackgroundExamplesModal = ({
                   clickable ? `Choose ${st.name} for your headshots` : undefined
                 }
                 style={{
-                  padding: "18px 12px",
+                  padding: "18px 0",
                   borderTop: "1px solid #EEE9DF",
                   textAlign: "center",
                   cursor: clickable ? "pointer" : "default",
-                  borderRadius: 8,
-                  transition: "background 0.15s",
-                  ...(isCurrent
-                    ? { background: "#FBF8F0", boxShadow: "inset 0 0 0 2px #C9A961" }
-                    : {}),
-                }}
-                onMouseEnter={(e) => {
-                  if (clickable && !isCurrent)
-                    (e.currentTarget as HTMLElement).style.background = "#F7F4EC";
-                }}
-                onMouseLeave={(e) => {
-                  if (clickable && !isCurrent)
-                    (e.currentTarget as HTMLElement).style.background = "transparent";
                 }}
               >
                 <div
@@ -8846,42 +8832,11 @@ const BackgroundExamplesModal = ({
                     fontSize: 15,
                     fontWeight: 700,
                     color: BRAND.charcoal,
-                    marginBottom: 6,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 8,
+                    marginBottom: 10,
                   }}
                 >
                   {st.name}
-                  {isCurrent && (
-                    <span
-                      style={{
-                        fontSize: 10,
-                        fontWeight: 600,
-                        letterSpacing: 0.8,
-                        textTransform: "uppercase",
-                        background: "#C9A961",
-                        color: "#FFF",
-                        padding: "2px 8px",
-                        borderRadius: 999,
-                      }}
-                    >
-                      Selected
-                    </span>
-                  )}
                 </div>
-                {clickable && !isCurrent && (
-                  <div
-                    style={{
-                      fontSize: 11,
-                      color: BRAND.subText,
-                      marginBottom: 8,
-                    }}
-                  >
-                    Tap to choose this style →
-                  </div>
-                )}
                 <div
                   style={{
                     display: "grid",
@@ -13337,19 +13292,19 @@ type RetouchBeforeAfterSliderProps = {
   afterSrc: string;
   beforeLabel: string;
   afterLabel: string;
+  // Where the divider starts (0-100, from left). Different defaults per
+  // tab so switching tabs makes the bar visibly MOVE — otherwise the tab
+  // switch felt unresponsive to customers (2026-09-04 per Kristi).
+  initialPos?: number;
 };
 const RetouchBeforeAfterSlider = ({
   beforeSrc,
   afterSrc,
   beforeLabel,
   afterLabel,
+  initialPos = 66,
 }: RetouchBeforeAfterSliderProps) => {
-  // Initial position: 66% clips the top layer (AFTER / retouched) so the
-  // divider sits 2/3 from the left — customer sees mostly Realistic with a
-  // strip of the retouched version on the right, so the "before" is the
-  // dominant view. (2026-09-03 per Kristi — teaches "these look real, and
-  // here's a peek at what retouching does".)
-  const [pos, setPos] = useState(66); // 0-100 percentage
+  const [pos, setPos] = useState(initialPos);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const draggingRef = useRef(false);
 
@@ -13540,6 +13495,48 @@ const RetouchBeforeAfterSlider = ({
       >
         ⇔
       </div>
+      {/* Slide-me cues (2026-09-04 per Kristi). Left + right side hints
+          telegraph the drag interaction — customers who don't realize the
+          divider is draggable see arrows + "SLIDE" text on both sides and
+          try it. Non-interactive so they never intercept the drag. */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          top: "50%",
+          left: 10,
+          transform: "translateY(-50%)",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 2,
+          color: "#fff",
+          textShadow: "0 1px 2px rgba(0,0,0,0.7)",
+          pointerEvents: "none",
+        }}
+      >
+        <span style={{ fontSize: 20, lineHeight: 1, fontWeight: 700 }}>◀</span>
+        <span style={{ fontSize: 10, letterSpacing: 1.5, fontWeight: 700 }}>SLIDE</span>
+      </div>
+      <div
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          top: "50%",
+          right: 10,
+          transform: "translateY(-50%)",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 2,
+          color: "#fff",
+          textShadow: "0 1px 2px rgba(0,0,0,0.7)",
+          pointerEvents: "none",
+        }}
+      >
+        <span style={{ fontSize: 20, lineHeight: 1, fontWeight: 700 }}>▶</span>
+        <span style={{ fontSize: 10, letterSpacing: 1.5, fontWeight: 700 }}>SLIDE</span>
+      </div>
     </div>
   );
 };
@@ -13596,6 +13593,7 @@ const RetouchTabbedSlider = () => {
           afterSrc="/marketing/retouch-glam.jpg"
           beforeLabel="Realistic"
           afterLabel="Glam"
+          initialPos={66}
         />
       ) : (
         <RetouchBeforeAfterSlider
@@ -13604,6 +13602,7 @@ const RetouchTabbedSlider = () => {
           afterSrc="/marketing/retouch-polished.jpg"
           beforeLabel="Realistic"
           afterLabel="Polished"
+          initialPos={50}
         />
       )}
       {/* Caption below the slider removed 2026-09-03 per Kristi — the ⇔
@@ -13801,7 +13800,8 @@ const LoadingRetouchPreviewModal = ({
       >
         These headshots are made with <strong>REALISTIC SKIN</strong> — not
         like AI plastic. First, pick the shots that resemble you best, then
-        we'll add the <strong>glow-up</strong>. 💋
+        we'll add the <strong>glow-up</strong>. 💋{" "}
+        <strong>Slide the arrow below to preview.</strong>
       </p>
       {/* Interactive before/after slider (2026-09-03 v3, per Kristi).
           Replaces the static 3-panel composite. Two tabs — Realistic vs
@@ -14310,22 +14310,6 @@ const RetouchScreen = ({
       >
         Your retouch level for each headshot:
       </h1>
-      {/* Interactive before/after slider on the retouch screen (2026-09-03,
-          per Kristi). Same component used in LoadingRetouchPreviewModal —
-          two tabs (Realistic vs Glam default, Realistic vs Polished) with a
-          draggable divider. Sits between the h1 and the pricing explainer so
-          customers can SEE the actual difference between the tiers before
-          they pick Basic vs Glow Up. Capped at 240px wide + centered so the
-          tall portrait aspect ratio (515/773) doesn't dominate the viewport,
-          leaves plenty of vertical room for the per-photo tier picker below. */}
-      <div
-        style={{
-          maxWidth: 240,
-          margin: "0 auto 22px",
-        }}
-      >
-        <RetouchTabbedSlider />
-      </div>
       {/* Compact 3-line explainer (2026-06-21). Re-framed after default
           flipped from Basic → Glow Up Bundle. The new framing positions
           Glow Up as what they're getting unless they remove it. */}
@@ -14616,11 +14600,29 @@ const RetouchScreen = ({
         })}
       </div>
 
+      {/* Interactive before/after slider — moved BELOW the per-photo cart
+          rows (2026-09-04, per Kristi). Was between the h1 and the pricing
+          explainer, but that pushed the customer's actual cart items below
+          the fold and they couldn't see what they were paying for at a
+          glance. Now the cart rows are the first thing on screen; the
+          slider preview lives just above the checkout CTA as a last-chance
+          look at what retouching does. Same tabbed component (Polished |
+          Glam, Glam default-active) used in LoadingRetouchPreviewModal;
+          capped at 240px wide + centered. */}
+      <div
+        style={{
+          maxWidth: 240,
+          margin: "28px auto 0",
+        }}
+      >
+        <RetouchTabbedSlider />
+      </div>
+
       {/* CTA at the bottom. The total math runs in the parent's
           handleAdvanceToCheckout; we deliberately don't show a running
           total here per Kristi 2026-05-18 — simpler screen, math is
           finalized at the Stripe page. */}
-      <div style={{ marginTop: 28 }}>
+      <div style={{ marginTop: 20 }}>
         <Button onClick={onContinue} full>
           Continue to checkout
         </Button>
