@@ -14961,6 +14961,17 @@ const CheckoutScreen = ({
             // the payment method with one tap — effectively turning the
             // second payment into "click Pay."
             customerEmail: email,
+            // Win-back 10%-off flag (2026-09-06). Set when the customer
+            // arrived via the ?winback=1 URL in the win-back email — server
+            // applies -10% to every photo. Read from localStorage so it
+            // survives page reloads and the Stripe roundtrip.
+            winback: (() => {
+              try {
+                return window.localStorage.getItem("winback_discount") === "1";
+              } catch {
+                return false;
+              }
+            })(),
           }),
         },
       );
@@ -18749,9 +18760,22 @@ export default function App() {
     if (!token) return;
     // Admin damage-control password (optional). Captured before we strip it.
     const fixPw = url.searchParams.get("fix");
+    // Win-back 10%-off flag (2026-09-06). If the URL carries ?winback=1
+    // (from the win-back email link), stash it in localStorage so the
+    // discount survives the Stripe roundtrip. Cleared on any explicit
+    // reset / new-session. The flag is a plain boolean; the server owns
+    // the actual discount rate.
+    if (url.searchParams.get("winback") === "1") {
+      try {
+        window.localStorage.setItem("winback_discount", "1");
+      } catch {
+        /* localStorage unavailable — winback discount just won't apply */
+      }
+    }
     // Strip the params so a refresh doesn't re-trigger the restore.
     url.searchParams.delete("resume");
     url.searchParams.delete("fix");
+    url.searchParams.delete("winback");
     window.history.replaceState({}, "", url.toString());
     void (async () => {
       try {

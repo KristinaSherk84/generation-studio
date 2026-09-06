@@ -54,39 +54,120 @@ const INTERNAL_EMAILS = new Set(
   ),
 );
 
-/** Kristi's win-back email — links the customer back to their saved grid. */
-function buildEmail(resumeUrl: string): { subject: string; html: string; text: string } {
-  const subject = "Your generated headshots are about to expire";
+/** Kristi's win-back email — links the customer back to their saved grid.
+ *  2026-09-06 rewrite: added subject urgency, 6 thumbnail previews of the
+ *  customer's actual shots, a 10%-off pricing card with old/new totals,
+ *  a "Kristina's Recommendation" callout for the Versions feature, and a
+ *  ?winback=1 flag on the resume URL so checkout knows to apply 10% off. */
+function buildEmail(args: {
+  resumeUrl: string; // already carries winback=1 + utm params
+  generatedUrls: string[]; // up to 6 rendered as thumbnails
+}): { subject: string; html: string; text: string } {
+  const subject = "Urgent: your headshots expire soon.";
 
-  const paragraphs = [
-    "Hello! Earlier today you tried generating some amazing headshots, but left before purchasing. I wanted to let you know those headshots are about to be deleted from our servers — I don't keep images people don't buy.",
-    "Here's your last link to preview the shots we made earlier. If you feel one doesn't look like you, you can regenerate two more headshots to see if that gives you a better result. And if it was the style itself that didn't feel right, head back and try a completely different look — there are several styles to choose from.",
-    "If you didn't feel like ANY of them looked like you, this is almost always a reference-photo issue — the photos may not have been high enough resolution, weren't cropped in tight enough, or didn't have enough variety.",
-  ];
-  const closing =
-    "And even if you don't buy, thank you for trying it! This app is very new, and I'm still learning.";
+  const thumbs = args.generatedUrls
+    .filter((u) => typeof u === "string" && /^https?:\/\//.test(u))
+    .slice(0, 6);
+
+  // Thumbnail cell — 3-column grid, each with 2 diagonal watermark bands
+  // (per Kristi 2026-09-06: two watermarks per photo, not one).
+  const thumbCell = (url: string) => `
+    <td style="width:33.33%;padding:4px;vertical-align:top;">
+      <div style="position:relative;width:100%;padding-bottom:133%;background:#EFECE3;border-radius:8px;overflow:hidden;">
+        <img src="${url}" alt="Your headshot preview" width="160" style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;object-position:center 20%;display:block;" />
+        <div style="position:absolute;top:35%;left:50%;transform:translate(-50%,-50%) rotate(-30deg);font-size:9px;color:rgba(255,255,255,0.55);letter-spacing:1;font-weight:700;white-space:nowrap;text-shadow:0 1px 2px rgba(0,0,0,0.5);">INVISIBLE WATERMARKS APPLIED</div>
+        <div style="position:absolute;top:70%;left:50%;transform:translate(-50%,-50%) rotate(-30deg);font-size:9px;color:rgba(255,255,255,0.55);letter-spacing:1;font-weight:700;white-space:nowrap;text-shadow:0 1px 2px rgba(0,0,0,0.5);">INVISIBLE WATERMARKS APPLIED</div>
+      </div>
+    </td>`;
+
+  // Split thumbs into rows of 3 for the email table (many email clients
+  // don't support CSS grid; table rows are the reliable layout).
+  const rows: string[] = [];
+  for (let i = 0; i < thumbs.length; i += 3) {
+    const cells = thumbs
+      .slice(i, i + 3)
+      .map(thumbCell)
+      .join("");
+    // Pad the last row with empty cells so widths stay 33.33% each.
+    const padding =
+      i + 3 > thumbs.length
+        ? '<td style="width:33.33%;padding:4px;"></td>'.repeat(
+            3 - (thumbs.length - i),
+          )
+        : "";
+    rows.push(`<tr>${cells}${padding}</tr>`);
+  }
+  const thumbsTable = thumbs.length
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:16px 0 22px;border-collapse:separate;">${rows.join("")}</table>`
+    : "";
 
   const html = `<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"></head>
 <body style="margin:0;background:#FAF8F4;padding:24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:#2A2A2A;">
-  <div style="max-width:540px;margin:0 auto;background:#ffffff;border:1px solid #E8E4DB;border-radius:14px;padding:28px 26px;">
-    ${paragraphs
-      .map(
-        (p) =>
-          `<p style="font-size:15px;line-height:1.65;margin:0 0 16px;">${p}</p>`,
-      )
-      .join("\n    ")}
-    <div style="text-align:center;margin:24px 0 8px;">
-      <a href="${resumeUrl}"
-         style="display:inline-block;background:#1B4332;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:13px 28px;border-radius:999px;">
-        Preview my headshots &rarr;
+  <div style="max-width:540px;margin:0 auto;background:#ffffff;border:1px solid #E8E4DB;border-radius:14px;padding:28px 26px;line-height:1.65;">
+    <h1 style="font-size:22px;font-weight:700;color:#7A1F1B;margin:0 0 14px;letter-spacing:-0.2px;">Urgent: your headshots expire soon.</h1>
+
+    <p style="font-size:15px;line-height:1.65;margin:0 0 16px;">Hi there,</p>
+    <p style="font-size:15px;line-height:1.65;margin:0 0 16px;">You made these but didn't grab any. They'll be deleted from my servers <strong>soon</strong> — here's one last look:</p>
+
+    ${thumbsTable}
+
+    <!-- 10%-off pricing card -->
+    <div style="background:#FBF8F0;border:1px solid #E8E4DB;border-radius:8px;padding:16px 14px;text-align:center;margin:0 0 22px;">
+      <div style="display:inline-block;background:#7A1F1B;color:#FFFFFF;font-size:11px;font-weight:700;letter-spacing:1;padding:3px 10px;border-radius:999px;margin-bottom:10px;text-transform:uppercase;">10% off · come back today</div>
+      <div style="font-size:15px;color:#2A2A2A;margin:4px 0;">
+        Any 1 shot · <span style="text-decoration:line-through;color:#9A968D;margin-right:6px;">$12.99</span> <span style="font-size:20px;font-weight:700;color:#C9A961;letter-spacing:-0.3px;">$11.69</span>
+      </div>
+      <div style="font-size:15px;color:#2A2A2A;margin:4px 0;">
+        Two realistic shots · <span style="text-decoration:line-through;color:#9A968D;margin-right:6px;">$25.98</span> <span style="font-size:20px;font-weight:700;color:#C9A961;letter-spacing:-0.3px;">$23.38</span>
+      </div>
+    </div>
+
+    <div style="text-align:center;margin:22px 0 6px;">
+      <a href="${args.resumeUrl}"
+         style="display:inline-block;background:#1B4332;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:14px 30px;border-radius:999px;">
+        Pick my favorites &rarr;
       </a>
     </div>
-    <p style="font-size:13px;line-height:1.6;margin:6px 0 18px;text-align:center;color:#6E6E6A;">
-      Here&rsquo;s the link to access your headshots one last time.
-    </p>
-    <p style="font-size:15px;line-height:1.65;margin:0;">${closing}</p>
+
+    <p style="font-size:13px;color:#5A5A56;text-align:center;font-style:italic;margin:8px 0 22px;">Most customers who come back on the second look end up buying — you already know what the shots look like.</p>
+
+    <!-- Kristina's Recommendation: Versions feature -->
+    <div style="background:#F5F1E8;border:1px solid #E8E4DB;border-left:4px solid #C9A961;border-radius:0 10px 10px 0;padding:16px 18px;margin:22px 0;">
+      <div style="font-size:11px;letter-spacing:1.5px;color:#C9A961;font-weight:700;text-transform:uppercase;margin-bottom:8px;">Kristina's recommendation</div>
+      <div style="font-size:15px;font-weight:600;color:#2A2A2A;margin-bottom:12px;line-height:1.4;">Was one ALMOST right, but needed a tweak? Try creating versions of it.</div>
+      <!-- Diagram: 1 headshot frame → arrows → 2 smaller frames. Pure CSS, no images. -->
+      <table role="presentation" cellpadding="0" cellspacing="0" style="margin:14px auto 6px;">
+        <tr>
+          <td style="padding:0 10px;">
+            <div style="width:56px;height:70px;border:2px solid #2A2A2A;border-radius:6px;background:#FFF;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;">
+              <div style="width:24px;height:24px;background:#B4B2A9;border-radius:50%;margin-bottom:2px;"></div>
+              <div style="width:44px;height:22px;background:#B4B2A9;border-radius:22px 22px 0 0;"></div>
+            </div>
+          </td>
+          <td style="padding:0 6px;vertical-align:middle;">
+            <div style="font-size:20px;color:#C9A961;font-weight:700;line-height:1;">&rarr;<br/>&rarr;</div>
+          </td>
+          <td style="padding:0 10px;">
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <div style="width:40px;height:52px;border:2px solid #2A2A2A;border-radius:6px;background:#FFF;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;margin-bottom:8px;">
+                <div style="width:18px;height:18px;background:#B4B2A9;border-radius:50%;margin-bottom:2px;"></div>
+                <div style="width:32px;height:16px;background:#B4B2A9;border-radius:16px 16px 0 0;"></div>
+              </div>
+              <div style="width:40px;height:52px;border:2px solid #2A2A2A;border-radius:6px;background:#FFF;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;">
+                <div style="width:18px;height:18px;background:#B4B2A9;border-radius:50%;margin-bottom:2px;"></div>
+                <div style="width:32px;height:16px;background:#B4B2A9;border-radius:16px 16px 0 0;"></div>
+              </div>
+            </div>
+          </td>
+        </tr>
+      </table>
+      <p style="font-size:14px;color:#3D3D3A;line-height:1.55;margin:0;">Pick a shot you liked and tap <strong>"Love one? Click here to make more variations"</strong> on the grid — one free set of two variations per link. Great when you like a shot but want a wider crop or a different smile.</p>
+    </div>
+
+    <p style="font-size:15px;line-height:1.65;margin:0 0 16px;">If none feel like you, that's usually a reference-photo thing — try again with 5+ recent close-up photos. Happy to help troubleshoot, just reply.</p>
+
     <p style="font-size:15px;line-height:1.65;margin:18px 0 0;">Thanks!<br>Kristina</p>
   </div>
   <p style="max-width:540px;margin:14px auto 0;font-size:12px;color:#9A968D;text-align:center;line-height:1.5;">
@@ -96,11 +177,20 @@ function buildEmail(resumeUrl: string): { subject: string; html: string; text: s
 </body></html>`;
 
   const text = [
-    ...paragraphs,
+    "Urgent: your headshots expire soon.",
     "",
-    "Preview your headshots (last chance): " + resumeUrl,
+    "You made these but didn't grab any — they'll be deleted from my servers soon.",
     "",
-    closing,
+    "10% OFF · come back today:",
+    "  Any 1 shot · $12.99 → $11.69",
+    "  Two realistic shots · $25.98 → $23.38",
+    "",
+    "Pick your favorites: " + args.resumeUrl,
+    "",
+    "KRISTINA'S RECOMMENDATION — Was one ALMOST right, but needed a tweak? Try creating versions of it.",
+    "Pick a shot you liked and tap 'Love one? Click here to make more variations' on the grid — one free set of two variations per link.",
+    "",
+    "If none feel like you, that's usually a reference-photo thing — try again with 5+ recent close-up photos. Happy to help, just reply.",
     "",
     "Thanks!",
     "Kristina",
@@ -114,16 +204,26 @@ export default async function handler(
   res: VercelResponse,
 ) {
   // ---- Auth (fail closed) ----
+  // Two accepted credentials:
+  //   1. CRON_SECRET (Bearer header OR ?key=) — what Vercel Cron sends
+  //      automatically every hour for the normal followup run.
+  //   2. ADMIN_PASSWORD (?adminpw=) — lets Kristi trigger the reblast from
+  //      Terminal without needing the CRON_SECRET value (which is often
+  //      locked as a Secret env var and can't be copied). (2026-09-06)
   const cronSecret = process.env.CRON_SECRET;
-  if (!cronSecret) {
+  const adminPassword = process.env.ADMIN_PASSWORD;
+  if (!cronSecret && !adminPassword) {
     return res
       .status(500)
-      .json({ error: "CRON_SECRET env var not configured" });
+      .json({ error: "Neither CRON_SECRET nor ADMIN_PASSWORD configured" });
   }
   const headerAuth = req.headers.authorization;
   const queryKey = typeof req.query.key === "string" ? req.query.key : "";
+  const queryAdmin = typeof req.query.adminpw === "string" ? req.query.adminpw : "";
   const authorized =
-    headerAuth === `Bearer ${cronSecret}` || queryKey === cronSecret;
+    (!!cronSecret &&
+      (headerAuth === `Bearer ${cronSecret}` || queryKey === cronSecret)) ||
+    (!!adminPassword && queryAdmin === adminPassword);
   if (!authorized) {
     return res.status(401).json({ error: "Unauthorized" });
   }
@@ -134,6 +234,11 @@ export default async function handler(
   }
 
   const dryRun = req.query.dryRun === "1" || req.query.dryRun === "true";
+  // Reblast mode (2026-09-06, per Kristi): one-time re-send that ignores the
+  // followedUp flag so EVERY eligible lead who tried but didn't buy gets the
+  // new email — even if they already got the old one. Use ?reblast=1 in
+  // combination with the CRON_SECRET.
+  const reblast = req.query.reblast === "1" || req.query.reblast === "true";
 
   const now = Date.now();
   let leads;
@@ -149,7 +254,10 @@ export default async function handler(
   // because some leads need a Redis lookup (the atomic pointer) for it.
   const inWindow = leads.filter((l) => {
     if (l.purchased) return false;
-    if (l.followedUp) return false;
+    // In reblast mode, ignore the followedUp flag so every eligible lead
+    // who tried but didn't buy gets the new email — even if they already
+    // got the old one. (2026-09-06 per Kristi.)
+    if (!reblast && l.followedUp) return false;
     if (!looksLikeEmail(l.email)) return false;
     if (INTERNAL_EMAILS.has(l.email.trim().toLowerCase())) return false;
     const seenMs = Date.parse(l.lastSeenAt || l.createdAt);
@@ -190,12 +298,18 @@ export default async function handler(
 
   for (const lead of batch) {
     const token = lead.resolvedToken;
+    let sessionGeneratedUrls: string[] = [];
     try {
       const session = await getSession(token);
       if (!session) {
         skippedExpired++;
         continue;
       }
+      // Snapshot the customer's actual shot URLs for the thumbnail preview
+      // in the email (2026-09-06). Up to 6 rendered inline as a 2×3 grid.
+      sessionGeneratedUrls = Array.isArray(session.generatedUrls)
+        ? session.generatedUrls
+        : [];
     } catch {
       skippedExpired++;
       continue;
@@ -203,10 +317,16 @@ export default async function handler(
     // UTM tags: a client CLICK shows in GA4/Clarity as email/email,
     // campaign winback. Unique per client, so a click = that client came
     // back from the win-back email (2026-08-06).
-    const resumeUrl = `${SITE_URL}/?resume=${token}&utm_source=email&utm_medium=email&utm_campaign=winback`;
+    // ?winback=1 (2026-09-06) triggers the 10% discount at checkout — the
+    // client detects it on mount, stashes in localStorage, and forwards to
+    // /api/create-photo-checkout-session which applies -10% to every photo.
+    const resumeUrl = `${SITE_URL}/?resume=${token}&winback=1&utm_source=email&utm_medium=email&utm_campaign=winback`;
 
     try {
-      const { subject, html, text } = buildEmail(resumeUrl);
+      const { subject, html, text } = buildEmail({
+        resumeUrl,
+        generatedUrls: sessionGeneratedUrls,
+      });
       const resp = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: {

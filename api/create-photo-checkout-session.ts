@@ -43,6 +43,10 @@ const PRICE_DELUXE_CENTS = 1799;   // $17.99 — Realistic + Polished + Glam
 // (the discounted[] flags); the server owns the 30% amount so it can't be
 // tampered with client-side.
 const UPSELL_DISCOUNT = 0.3;
+// Win-back 10% off (2026-09-06). Applied to EVERY photo when the customer
+// arrived via the win-back email link (?winback=1). Stacks with the upsell
+// discount above — an upsell photo purchased from a win-back link gets both.
+const WINBACK_DISCOUNT = 0.1;
 
 type RetouchTier = "basic" | "deluxe";
 
@@ -60,6 +64,11 @@ type CreatePhotoCheckoutBody = {
   // auto-recognize the customer and fill their saved card. If omitted,
   // Stripe just prompts the user to type their email again.
   customerEmail?: string;
+  // Win-back 10% off flag (2026-09-06). True when the customer arrived via
+  // the ?winback=1 URL param on the win-back email. Server multiplies each
+  // per-photo charge by 0.9 (rounded per photo, same pattern as the upsell
+  // discount above) so nothing about the tier / count math changes downstream.
+  winback?: boolean;
 };
 
 type CreatePhotoCheckoutResponse = {
@@ -120,14 +129,20 @@ export default async function handler(
   const discounted: boolean[] = tiers.map((_, i) => rawDiscounted[i] === true);
   const discountedCount = discounted.filter(Boolean).length;
 
+  // Win-back 10% off (2026-09-06). Applies to EVERY photo when the customer
+  // came from a ?winback=1 URL. Client sends a plain boolean — the server
+  // owns the actual discount rate so it can't be tampered with.
+  const winback = body?.winback === true;
+
   // Mixed total: each photo at its tier price, minus 30% for any flagged as an
-  // upsell add. Rounded PER PHOTO so it matches the client's on-screen total
-  // exactly.
+  // upsell add, minus another 10% if this is a win-back checkout. Multipliers
+  // stack (0.7 × 0.9 = 0.63 for an upsell+winback photo). Rounded PER PHOTO so
+  // it matches the client's on-screen total exactly.
   const totalCents = tiers.reduce((sum, t, i) => {
     const base = priceCentsForTier(t);
-    const charged = discounted[i]
-      ? Math.round(base * (1 - UPSELL_DISCOUNT))
-      : base;
+    let charged = base;
+    if (discounted[i]) charged = Math.round(charged * (1 - UPSELL_DISCOUNT));
+    if (winback) charged = Math.round(charged * (1 - WINBACK_DISCOUNT));
     return sum + charged;
   }, 0);
 
@@ -149,6 +164,9 @@ export default async function handler(
   }
   if (discountedCount > 0) {
     itemName += ` (${discountedCount} at 30% off)`;
+  }
+  if (winback) {
+    itemName += ` · 10% off (winback)`;
   }
 
   const formBody = new URLSearchParams();
