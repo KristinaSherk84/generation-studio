@@ -10139,7 +10139,7 @@ const LoadingScreen = ({
                     fontWeight: 700,
                   }}
                 >
-                  INVISIBLE WATERMARKS APPLIED · INVISIBLE WATERMARKS APPLIED
+                  INVISIBLE WATERMARK APPLIED
                 </div>
               ))}
             </div>
@@ -11728,8 +11728,10 @@ const GridScreen = ({
                     position: "absolute",
                     inset: 0,
                     display: "flex",
+                    flexDirection: "column",
                     alignItems: "center",
                     justifyContent: "center",
+                    gap: 10,
                     color: C.mediumGrey,
                     fontSize: 12,
                     padding: 16,
@@ -11737,7 +11739,41 @@ const GridScreen = ({
                     background: `repeating-linear-gradient(45deg, ${C.lightGrey}, ${C.lightGrey} 20px, ${C.border} 20px, ${C.border} 40px)`,
                   }}
                 >
-                  Generation failed. Try regenerating.
+                  <div>Generation failed. Try regenerating.</div>
+                  {/* Admin regen button on failed tiles (2026-09-07 per Kristi).
+                      When a customer's batch drops some slots (backgrounded
+                      tab, network hiccup), the server usually has generated
+                      the images anyway — regen-in-admin lets Kristi trigger
+                      a fresh generation to fill the gap. Uses the same 2-per-
+                      link admin regen budget as the existing damage-control
+                      path. Only visible in admin fix mode. */}
+                  {adminFixMode && adminRegensUsed < 2 && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onRegenerateSlot(i);
+                      }}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                        padding: "6px 12px",
+                        background: "#1B4332",
+                        color: "#FFF",
+                        border: "none",
+                        borderRadius: 999,
+                        fontSize: 11,
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        lineHeight: 1.2,
+                        fontFamily: "inherit",
+                      }}
+                    >
+                      <RefreshCw size={12} />
+                      Admin: regen slot {i + 1}
+                    </button>
+                  )}
                 </div>
               )}
               {/* Selection indicator — always shown when there's a photo.
@@ -12103,7 +12139,7 @@ const GridScreen = ({
                 marginTop: 6,
               }}
             >
-              1 free per batch · 2 variations (wider crop + expression change)
+              1 free per batch · 2 variations (body angle + expression)
             </div>
           </div>
         )
@@ -12150,7 +12186,7 @@ const GridScreen = ({
               {versionsSourceIndex !== null
                 ? ` · from photo ${versionsSourceIndex + 1}`
                 : ""}
-              {" · wider crop + expression"}
+              {" · body angle + expression"}
             </span>
           </div>
           <div
@@ -12970,7 +13006,7 @@ const GridScreen = ({
                     textShadow: "0 1px 2px rgba(0,0,0,0.4)",
                   }}
                 >
-                  INVISIBLE WATERMARKS APPLIED · INVISIBLE WATERMARKS APPLIED
+                  INVISIBLE WATERMARK APPLIED
                 </div>
               ))}
             </div>
@@ -17863,7 +17899,7 @@ const AllShotsGallery = ({
                     textShadow: "0 1px 2px rgba(0,0,0,0.4)",
                   }}
                 >
-                  INVISIBLE WATERMARKS APPLIED · INVISIBLE WATERMARKS APPLIED
+                  INVISIBLE WATERMARK APPLIED
                 </div>
               ))}
             </div>
