@@ -55,7 +55,7 @@ const BODY_PARAGRAPHS: string[] = [
 const BODY_BULLETS: Array<{ lead: string; body: string }> = [
   {
     lead: "Outfits:",
-    body: "not everyone likes the clothing generated. Choosing \"Keep my outfit\" will generate your headshots in the outfit from your first uploaded reference photo. I've also added a \"Pick your own color polo shirt\" option in case your company has a uniform.",
+    body: "not everyone likes the clothing generated. Choosing \"Keep my 1st Outfit\" will generate your headshots in the outfit from your first uploaded reference photo. I've also added a \"Pick your own color polo shirt\" option in case your company has a uniform.",
   },
   {
     lead: "One didn't look like you:",

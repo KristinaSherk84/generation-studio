@@ -8545,7 +8545,7 @@ const ATTIRE = [
   { id: "casual", label: "Business casual" },
   { id: "polo", label: "Polo shirt" },
   { id: "medical", label: "🩺 Healthcare" },
-  { id: "keep", label: "Keep my outfit" },
+  { id: "keep", label: "Keep my 1st Outfit" },
 ] as const;
 
 // "natural" was removed from the UI on 2026-05-22 — Kristi found it
