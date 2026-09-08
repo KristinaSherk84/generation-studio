@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
-import { Upload, Check, X, ArrowLeft, RefreshCw, Loader2, Download, Maximize2, ChevronDown, User, Sparkles, CircleUser, ArrowDown, ArrowRight, Menu, Plus, ShoppingBag, Trash2, Lock, Unlock, Undo2, Redo2 } from "lucide-react";
+import { Upload, Check, X, ArrowLeft, RefreshCw, Loader2, Download, Maximize2, ChevronDown, User, Sparkles, CircleUser, ArrowDown, ArrowRight, Menu, Plus, ShoppingBag, Trash2, Lock, Unlock, Undo2, Redo2, Folder } from "lucide-react";
 import { upload } from "@vercel/blob/client";
 import exifr from "exifr";
 
@@ -10372,6 +10372,12 @@ type GridScreenProps = {
   // still renders safely if the App forgets to wire them.
   onReviewAllShots?: () => void;
   onUnlockMoreGenerations?: () => void;
+  // Persistent "file cabinet" pill in the grid header (2026-09-07 per
+  // Kristi). Always-visible entry point to the AllShotsGallery so a
+  // customer can pop it open from anywhere on the grid, not just when
+  // the over-limit banner fires. Shows a running count of every shot
+  // generated this session.
+  onOpenAllShots?: () => void;
 };
 
 const GridScreen = ({
@@ -10411,6 +10417,7 @@ const GridScreen = ({
   extrasExpandedByDefault = false,
   onReviewAllShots,
   onUnlockMoreGenerations,
+  onOpenAllShots,
 }: GridScreenProps) => {
   // Cart is App-level URLs (Phase 1, 2026-06-03 revised) — lifted out of
   // GridScreen's useState so it survives the user backing out to the Style
@@ -10569,22 +10576,66 @@ const GridScreen = ({
         <div
           style={{
             display: "inline-flex",
-            alignItems: "center",
-            gap: 8,
-            padding: "8px 14px",
-            borderRadius: 999,
-            background: cartIsFull ? "#C9A961" : C.dark,
-            color: C.white,
-            fontSize: 13,
-            fontWeight: 500,
-            letterSpacing: 0.2,
-            boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
+            flexDirection: "column",
+            alignItems: "flex-end",
+            gap: 6,
           }}
-          aria-live="polite"
-          aria-label={`Cart: ${cart.length} of ${maxCartSize} saved`}
         >
-          <ShoppingBag size={15} />
-          {cartIsFull ? `Cart full · ${cart.length} / ${maxCartSize}` : `Cart · ${cart.length} / ${maxCartSize}`}
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "8px 14px",
+              borderRadius: 999,
+              background: cartIsFull ? "#C9A961" : C.dark,
+              color: C.white,
+              fontSize: 13,
+              fontWeight: 500,
+              letterSpacing: 0.2,
+              boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
+            }}
+            aria-live="polite"
+            aria-label={`Cart: ${cart.length} of ${maxCartSize} saved`}
+          >
+            <ShoppingBag size={15} />
+            {cartIsFull ? `Cart full · ${cart.length} / ${maxCartSize}` : `Cart · ${cart.length} / ${maxCartSize}`}
+          </div>
+          {/* File-cabinet pill (2026-09-07 per Kristi). Always-visible way
+              to open the "Every shot from your session" gallery. Total
+              count includes main grid + wild cards + versions filled. */}
+          {onOpenAllShots && (() => {
+            const totalShots =
+              images.filter(Boolean).length +
+              wildCards.filter((w) => !!w.image).length +
+              versionShots.filter(Boolean).length;
+            if (totalShots === 0) return null;
+            return (
+              <button
+                type="button"
+                onClick={onOpenAllShots}
+                aria-label={`Open all-shots gallery (${totalShots} shots)`}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "6px 12px",
+                  borderRadius: 999,
+                  background: "transparent",
+                  color: C.dark,
+                  border: `1px solid ${C.border}`,
+                  fontSize: 12,
+                  fontWeight: 500,
+                  letterSpacing: 0.2,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
+                <Folder size={13} />
+                All shots · {totalShots}
+              </button>
+            );
+          })()}
         </div>
       </div>
       <div
@@ -22103,6 +22154,10 @@ export default function App() {
             // marker later.
             void handleFreeTierUnlockPay();
           }}
+          // Persistent "file cabinet" pill in the grid header opens the
+          // AllShotsGallery so customers can review everything without
+          // having to hit the over-limit banner first (2026-09-07 per Kristi).
+          onOpenAllShots={() => setShowAllShotsGallery(true)}
         />
       )}
       {/* Last-chance upsell popup — overlays the retouch screen when it's open,
