@@ -10596,10 +10596,10 @@ const GridScreen = ({
               boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
             }}
             aria-live="polite"
-            aria-label={`Cart: ${cart.length} of ${maxCartSize} saved`}
+            aria-label={`Cart: ${cart.length} saved`}
           >
             <ShoppingBag size={15} />
-            {cartIsFull ? `Cart full · ${cart.length} / ${maxCartSize}` : `Cart · ${cart.length} / ${maxCartSize}`}
+            {`Cart · ${cart.length}`}
           </div>
           {/* File-cabinet pill (2026-09-07 per Kristi). Always-visible way
               to open the "Every shot from your session" gallery. Total
@@ -10876,7 +10876,7 @@ const GridScreen = ({
             }}
           >
             <ShoppingBag size={13} />
-            Your cart · {cart.length} / {maxCartSize}
+            Your cart · {cart.length}
           </div>
           <div
             style={{
@@ -18700,11 +18700,14 @@ export default function App() {
   // style rounds: suit/office → save 1, sweater/outdoor → save 2,
   // glasses/studio → save 3, check out with 6 from across the rounds.
   //
-  // Capped at MAX_CART_SIZE (6) — matches what the customer pays for.
+  // No hard cap on cart size (removed 2026-09-08 per Kristi — customers were
+  // hitting 6 and giving up instead of buying more). MAX_CART_SIZE kept as a
+  // very high safety valve for slice() and old-code compatibility; the UI no
+  // longer surfaces the cap and cartFull/cartIsFull will never trigger.
   //
   // Cleared in reset() (back to landing) and whenever the user goes back to
   // Upload (changing source photos invalidates prior picks).
-  const MAX_CART_SIZE = 6;
+  const MAX_CART_SIZE = 999;
   // Cart persistence (Phase 2, 2026-06-03). Lazy initial state hydrates the
   // cart from localStorage on mount so a refresh / accidental tab close
   // during checkout doesn't wipe a customer's saved picks. Keyed with a
