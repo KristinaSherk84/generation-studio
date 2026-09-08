@@ -10132,8 +10132,11 @@ const LoadingScreen = ({
                     left: `calc(50% + ${band.offset}px)`,
                     transform: "translate(-50%, -50%) rotate(-30deg)",
                     fontSize: 18,
-                    color: "rgba(255,255,255,0.45)",
-                    textShadow: "0 1px 3px rgba(0,0,0,0.5)",
+                    // 2026-09-07 per Kristi: lightbox watermark opacity
+                    // lowered from 0.45 → 0.25 so the face reads clearer
+                    // in the full preview.
+                    color: "rgba(255,255,255,0.25)",
+                    textShadow: "0 1px 3px rgba(0,0,0,0.3)",
                     letterSpacing: 3,
                     whiteSpace: "nowrap",
                     fontWeight: 700,
@@ -12235,6 +12238,37 @@ const GridScreen = ({
                           userSelect: "none",
                         }}
                       />
+                      {/* Watermark overlay on version tiles (2026-09-07 per
+                          Kristi — previously missing). Two diagonal bands,
+                          same pattern as the main grid tiles. */}
+                      <div
+                        style={{
+                          position: "absolute",
+                          inset: 0,
+                          pointerEvents: "none",
+                          overflow: "hidden",
+                        }}
+                      >
+                        {[33, 67].map((topPercent, row) => (
+                          <div
+                            key={row}
+                            style={{
+                              position: "absolute",
+                              top: `${topPercent}%`,
+                              left: "50%",
+                              transform: "translate(-50%, -50%) rotate(-30deg)",
+                              fontSize: 10,
+                              color: "rgba(255,255,255,0.5)",
+                              textShadow: "0 1px 2px rgba(0,0,0,0.4)",
+                              letterSpacing: 1.5,
+                              whiteSpace: "nowrap",
+                              fontWeight: 400,
+                            }}
+                          >
+                            INVISIBLE WATERMARK APPLIED
+                          </div>
+                        ))}
+                      </div>
                       {/* Add-to-cart pill in the corner. Uses the same cart
                           mechanism (URL-based), so version shots move into
                           the same cart as main-grid shots. */}
@@ -13000,7 +13034,9 @@ const GridScreen = ({
                     transform: "translate(-50%, -50%) rotate(-30deg)",
                     fontSize: 18,
                     letterSpacing: 3,
-                    color: "rgba(255,255,255,0.4)",
+                    // 2026-09-07 per Kristi: lightbox watermark opacity
+                    // lowered from 0.4 → 0.25 so the face reads clearer.
+                    color: "rgba(255,255,255,0.25)",
                     whiteSpace: "nowrap",
                     fontWeight: 700,
                     textShadow: "0 1px 2px rgba(0,0,0,0.4)",
@@ -17893,7 +17929,9 @@ const AllShotsGallery = ({
                     transform: "translate(-50%, -50%) rotate(-30deg)",
                     fontSize: 18,
                     letterSpacing: 3,
-                    color: "rgba(255,255,255,0.4)",
+                    // 2026-09-07 per Kristi: lightbox watermark opacity
+                    // lowered from 0.4 → 0.25 so the face reads clearer.
+                    color: "rgba(255,255,255,0.25)",
                     whiteSpace: "nowrap",
                     fontWeight: 700,
                     textShadow: "0 1px 2px rgba(0,0,0,0.4)",
