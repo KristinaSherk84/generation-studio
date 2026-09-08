@@ -10524,6 +10524,25 @@ const GridScreen = ({
 
   return (
     <div style={{ maxWidth: 1100, margin: "0 auto", padding: "64px 32px", ...font }}>
+      {/* Focus dim (2026-09-08 per Kristi): when the customer taps
+          "Love one? make more variations", everything on the screen dims
+          EXCEPT the photo grid and the picking banner, so it's obvious the
+          next tap should be on a headshot. Fixed backdrop covers viewport;
+          the grid + banner get position:relative + high zIndex so they float
+          above it. pointer-events on the overlay swallow stray taps on the
+          dimmed UI. */}
+      {pickingVersionSource && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(20,18,12,0.62)",
+            zIndex: 40,
+            pointerEvents: "auto",
+          }}
+          aria-hidden
+        />
+      )}
       <button
         onClick={onBack}
         style={{
@@ -11042,6 +11061,11 @@ const GridScreen = ({
           gridTemplateColumns: "repeat(3, 1fr)",
           gap: 16,
           marginTop: 16,
+          // Raised above the focus-dim overlay when picking a version source
+          // (2026-09-08), so the photos stay bright + tappable while the rest
+          // of the screen fades back.
+          position: "relative",
+          zIndex: pickingVersionSource ? 50 : undefined,
         }}
       >
         {/* WILD CARD RESULTS — bonus shots in styles the customer did NOT
@@ -12147,6 +12171,10 @@ const GridScreen = ({
               justifyContent: "space-between",
               gap: 12,
               flexWrap: "wrap",
+              // Raised above the focus-dim overlay (2026-09-08) so the
+              // instruction text + Cancel button stay bright and clickable.
+              position: "relative",
+              zIndex: 50,
             }}
           >
             <div style={{ fontSize: 14, color: C.dark, fontWeight: 500 }}>
