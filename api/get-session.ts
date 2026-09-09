@@ -47,5 +47,9 @@ export default async function handler(
     // "Generate Versions" variation shots persisted 2026-09-04 so they
     // survive the RTV link and show in the AllShotsGallery.
     versionShots: session.versionShots ?? [],
+    // Complete per-session generation history (2026-09-09) — every URL
+    // this session ever produced, so the "Every shot" cabinet + RTV link
+    // never lose a shot the customer regenerated over more than once.
+    allGeneratedUrls: session.allGeneratedUrls ?? [],
   });
 }

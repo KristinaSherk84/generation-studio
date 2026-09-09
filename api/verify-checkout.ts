@@ -41,6 +41,7 @@
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { addHardCapCredits } from "./lib/freeGenLimit.js";
 
 export const maxDuration = 15;
 
@@ -189,8 +190,39 @@ export default async function handler(
         // existing window so the clock doesn't reset on refresh.
         unlockExpiresAt = existingNum;
       } else {
-        // First confirmation. Write the window to Stripe metadata.
+        // First confirmation. Write the window to Stripe metadata AND grant
+        // the caller's IP additional hard-cap credits (2026-09-09 per
+        // Kristi) so a paying user isn't blocked at the 40-call abuse
+        // floor. Idempotency: the credit grant is gated on the SAME
+        // "no unlock_expires_at yet" branch as the metadata write, so a
+        // page refresh / re-verify never double-credits.
         unlockExpiresAt = Date.now() + UNLOCK_TTL_MS;
+        // Client IP for the per-IP hard-cap credit. Vercel puts the real
+        // client first in x-forwarded-for; x-real-ip is the fallback.
+        const xff = req.headers["x-forwarded-for"];
+        const clientIp =
+          (typeof xff === "string"
+            ? xff.split(",")[0]?.trim()
+            : Array.isArray(xff)
+              ? xff[0]
+              : "") ||
+          (typeof req.headers["x-real-ip"] === "string"
+            ? (req.headers["x-real-ip"] as string)
+            : "") ||
+          "";
+        // Fire the credit grant BEFORE the Stripe write so the customer
+        // sees the extra headroom on their very next /api/generate call.
+        // Best-effort — a Redis blip should never fail the paywall verify.
+        let creditsGranted = 0;
+        try {
+          const result = await addHardCapCredits(clientIp);
+          if (result.ok) creditsGranted = 30;
+        } catch (err) {
+          console.warn(
+            "hardcap credit grant threw:",
+            err instanceof Error ? err.message : String(err),
+          );
+        }
         try {
           const formBody = new URLSearchParams();
           formBody.append(
@@ -198,6 +230,15 @@ export default async function handler(
             String(unlockExpiresAt),
           );
           formBody.append("metadata[unlock_consumed]", "false");
+          // Stamp the credit grant on the Stripe session too so an audit
+          // trail lives outside Redis (Redis is ephemeral; Stripe metadata
+          // survives forever) and so we can spot double-credits later.
+          if (creditsGranted > 0) {
+            formBody.append(
+              "metadata[hardcap_credit_granted]",
+              String(creditsGranted),
+            );
+          }
           const updateResp = await fetch(
             `https://api.stripe.com/v1/checkout/sessions/${encodeURIComponent(sessionId)}`,
             {

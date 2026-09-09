@@ -64,6 +64,18 @@ export type SavedSession = {
   // batches, capped for record size. Missing on records saved before this
   // field existed; those sessions just show no variations on the RTV link.
   versionShots?: string[];
+  // Complete generation history (2026-09-09, per Kristi). Every image URL
+  // this session ever produced, in first-seen order — main-batch shots,
+  // regens, wild cards, variations, and shots that were later replaced by
+  // subsequent regens. Populated additively (never shrinks except on TTL
+  // expiry) so no shot is ever lost from the customer's cabinet or RTV
+  // link. Deduped by URL, capped at 120 entries for record size. The client
+  // renders this in the AllShotsGallery as the definitive "Every shot from
+  // your session" pool.
+  //
+  // Backfilled for old sessions by /api/admin/salvage-session, which scans
+  // Vercel Blob for orphan shots that predate this field.
+  allGeneratedUrls?: string[];
 };
 
 const TTL_SECONDS = 4 * 24 * 60 * 60; // 4 days (safe cushion; win-back fires ~12h after generation, so the resume link is always alive)
@@ -79,12 +91,41 @@ function makeToken(): string {
   return s;
 }
 
+/**
+ * Merge a set of URLs into a session record's allGeneratedUrls (in place).
+ * Dedupe by URL, first-seen order, cap 120. Used by every mutation path so
+ * the "Every shot from your session" pool is always complete without an
+ * extra redis round-trip. Safe on records that predate this field.
+ * (2026-09-09)
+ */
+function mergeIntoAllGenerated(rec: SavedSession, urls: (string | null | undefined)[]): void {
+  const cleaned = urls.filter(
+    (u): u is string => typeof u === "string" && /^https?:\/\//.test(u),
+  );
+  if (cleaned.length === 0 && Array.isArray(rec.allGeneratedUrls)) return;
+  const prior = Array.isArray(rec.allGeneratedUrls) ? rec.allGeneratedUrls : [];
+  const seen = new Set<string>();
+  const merged: string[] = [];
+  for (const u of [...prior, ...cleaned]) {
+    if (seen.has(u)) continue;
+    seen.add(u);
+    merged.push(u);
+  }
+  rec.allGeneratedUrls = merged.slice(0, 120);
+}
+
 /** Save a session; returns the token to embed in the email link. */
 export async function saveSession(
   data: Omit<SavedSession, "createdAt">,
 ): Promise<string> {
   const token = makeToken();
   const rec: SavedSession = { ...data, createdAt: new Date().toISOString() };
+  mergeIntoAllGenerated(rec, [
+    ...(rec.generatedUrls ?? []),
+    ...(rec.previousUrls ?? []),
+    ...((rec.wildCards ?? []).map((w) => w.url)),
+    ...(rec.versionShots ?? []),
+  ]);
   await redis.set(key(token), rec, { ex: TTL_SECONDS });
   return token;
 }
@@ -101,7 +142,29 @@ export async function replaceSession(
   data: Omit<SavedSession, "createdAt">,
 ): Promise<boolean> {
   if (!token || !/^[A-Za-z0-9]{16,48}$/.test(token)) return false;
-  const rec: SavedSession = { ...data, createdAt: new Date().toISOString() };
+  // Preserve the accumulating history across replacements: if the caller
+  // didn't carry allGeneratedUrls forward, pick it up from the existing
+  // record before we overwrite. (2026-09-09)
+  let prior: SavedSession | null = null;
+  if (!data.allGeneratedUrls) {
+    try {
+      prior = (await redis.get<SavedSession>(key(token))) ?? null;
+    } catch {
+      prior = null;
+    }
+  }
+  const rec: SavedSession = {
+    ...data,
+    allGeneratedUrls:
+      data.allGeneratedUrls ?? prior?.allGeneratedUrls ?? [],
+    createdAt: new Date().toISOString(),
+  };
+  mergeIntoAllGenerated(rec, [
+    ...(rec.generatedUrls ?? []),
+    ...(rec.previousUrls ?? []),
+    ...((rec.wildCards ?? []).map((w) => w.url)),
+    ...(rec.versionShots ?? []),
+  ]);
   await redis.set(key(token), rec, { ex: TTL_SECONDS });
   return true;
 }
@@ -166,6 +229,14 @@ export async function updateSessionSlot(
   if (Array.isArray(rec.revertedSlots) && rec.revertedSlots.includes(index)) {
     rec.revertedSlots = rec.revertedSlots.filter((i) => i !== index);
   }
+  // Record BOTH the new URL and the URL it replaced into the accumulating
+  // all-shots history (2026-09-09). previousUrls only keeps the last prior
+  // version per slot, so without this the customer loses every shot they
+  // regenerated over more than once.
+  mergeIntoAllGenerated(rec, [
+    url,
+    typeof previousUrl === "string" ? previousUrl : null,
+  ]);
   await redis.set(key(token), rec, { ex: TTL_SECONDS });
   return true;
 }
@@ -271,6 +342,9 @@ export async function setSessionWildCards(
     mergedWc.push(w);
   }
   rec.wildCards = mergedWc.slice(0, 24);
+  // Mirror wild card URLs into the accumulating all-shots history so they
+  // show up in the "Every shot from your session" pool. (2026-09-09)
+  mergeIntoAllGenerated(rec, incoming.map((w) => w.url));
   await redis.set(key(token), rec, { ex: TTL_SECONDS });
   return true;
 }
@@ -305,6 +379,35 @@ export async function setSessionVersionShots(
     mergedV.push(u);
   }
   rec.versionShots = mergedV.slice(0, 40);
+  // Mirror into the accumulating all-shots history (2026-09-09).
+  mergeIntoAllGenerated(rec, incoming);
+  await redis.set(key(token), rec, { ex: TTL_SECONDS });
+  return true;
+}
+
+/**
+ * Append URLs to a session's complete generation history
+ * (allGeneratedUrls). Deduped by URL, first-seen order preserved, capped at
+ * 120 entries so the record stays bounded. Refreshes TTL. Safe to call
+ * multiple times with overlapping sets — dedupe absorbs it. (2026-09-09)
+ */
+export async function appendSessionAllUrls(
+  token: string,
+  urls: string[],
+): Promise<boolean> {
+  if (!token || !/^[A-Za-z0-9]{16,48}$/.test(token)) return false;
+  const cleaned = (Array.isArray(urls) ? urls : []).filter(
+    (u): u is string => typeof u === "string" && /^https?:\/\//.test(u),
+  );
+  if (cleaned.length === 0) return true;
+  let rec: SavedSession | null;
+  try {
+    rec = (await redis.get<SavedSession>(key(token))) ?? null;
+  } catch {
+    return false;
+  }
+  if (!rec) return false;
+  mergeIntoAllGenerated(rec, cleaned);
   await redis.set(key(token), rec, { ex: TTL_SECONDS });
   return true;
 }

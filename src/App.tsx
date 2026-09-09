@@ -10444,6 +10444,11 @@ type GridScreenProps = {
   // the over-limit banner fires. Shows a running count of every shot
   // generated this session.
   onOpenAllShots?: () => void;
+  // Complete server-tracked generation history (2026-09-09). Every URL
+  // this session ever produced. Feeds the extras pill's total count and
+  // grid so shots that were regenerated over more than once still show
+  // up (previousImages only tracks the last prior per slot).
+  allGeneratedUrls?: string[];
 };
 
 const GridScreen = ({
@@ -10484,6 +10489,7 @@ const GridScreen = ({
   onReviewAllShots,
   onUnlockMoreGenerations,
   onOpenAllShots,
+  allGeneratedUrls = [],
 }: GridScreenProps) => {
   // Cart is App-level URLs (Phase 1, 2026-06-03 revised) — lifted out of
   // GridScreen's useState so it survives the user backing out to the Style
@@ -10612,7 +10618,23 @@ const GridScreen = ({
     (u): u is string => !!u && !currentlyVisibleUrls.has(u),
   );
   const accumulatedExtras = images.slice(6).filter((u): u is string => !!u);
-  const totalExtrasCount = accumulatedExtras.length + regenHistoryExtras.length;
+  // Server's complete generation history catches shots the customer
+  // regenerated over more than once — previousImages only stores the
+  // single most-recent prior version per slot, so anything older was
+  // lost from client state. Dedupe against everything already shown so
+  // we don't render a shot twice. (2026-09-09)
+  const alreadyShownInExtras = new Set<string>([
+    ...currentlyVisibleUrls,
+    ...regenHistoryExtras,
+    ...accumulatedExtras,
+  ]);
+  const alsoGeneratedExtras = allGeneratedUrls.filter(
+    (u) => typeof u === "string" && !alreadyShownInExtras.has(u),
+  );
+  const totalExtrasCount =
+    accumulatedExtras.length +
+    regenHistoryExtras.length +
+    alsoGeneratedExtras.length;
   const hasExtras = totalExtrasCount > 0;
   const [isMobileGrid, setIsMobileGrid] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
@@ -10741,21 +10763,34 @@ const GridScreen = ({
               </span>
             )}
           </div>
-          {/* File-cabinet pill (2026-09-07 per Kristi). Always-visible way
-              to open the "Every shot from your session" gallery. Total
-              count includes main grid + wild cards + versions filled. */}
+          {/* File-cabinet pill (2026-09-07 per Kristi, 2026-09-09 promoted
+              to a headline gold pill so customers actually notice it —
+              Lawrence's 40-shot session made clear the small outline
+              button was getting missed). Always-visible way to open the
+              "Every shot from your session" gallery. Total count now also
+              rolls in the server-side allGeneratedUrls so shots
+              regenerated over more than once (lost by previousImages'
+              single-depth stash) are still counted. */}
           {onOpenAllShots && (() => {
             const currentlyVisibleSet = new Set(
               images.filter((u): u is string => !!u),
             );
-            const regenHistoryCount = previousImages.filter(
+            const regenHistoryDedupe = previousImages.filter(
               (u): u is string => !!u && !currentlyVisibleSet.has(u),
+            );
+            const allShown = new Set<string>([
+              ...currentlyVisibleSet,
+              ...regenHistoryDedupe,
+            ]);
+            const alsoGeneratedCount = allGeneratedUrls.filter(
+              (u) => typeof u === "string" && !allShown.has(u),
             ).length;
             const totalShots =
               images.filter(Boolean).length +
               wildCards.filter((w) => !!w.image).length +
               versionShots.filter(Boolean).length +
-              regenHistoryCount;
+              regenHistoryDedupe.length +
+              alsoGeneratedCount;
             if (totalShots === 0) return null;
             return (
               <button
@@ -10765,21 +10800,22 @@ const GridScreen = ({
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
-                  gap: 6,
-                  padding: "6px 12px",
+                  gap: 8,
+                  padding: "10px 16px",
                   borderRadius: 999,
-                  background: "transparent",
-                  color: C.dark,
-                  border: `1px solid ${C.border}`,
-                  fontSize: 12,
-                  fontWeight: 500,
+                  background: "#C9A961",
+                  color: C.white,
+                  border: "none",
+                  fontSize: 13,
+                  fontWeight: 600,
                   letterSpacing: 0.2,
                   cursor: "pointer",
                   fontFamily: "inherit",
+                  boxShadow: "0 2px 8px rgba(201,169,97,0.4)",
                 }}
               >
-                <Folder size={13} />
-                All shots · {totalShots}
+                <Folder size={15} />
+                See all {totalShots} shots
               </button>
             );
           })()}
@@ -12666,7 +12702,11 @@ const GridScreen = ({
                 }}
               >
                 {[0, 1, 2, 3].map((n) => {
-                  const filled = [...accumulatedExtras, ...regenHistoryExtras];
+                  const filled = [
+                    ...accumulatedExtras,
+                    ...regenHistoryExtras,
+                    ...alsoGeneratedExtras,
+                  ];
                   const src = filled[n] ?? filled[n % Math.max(filled.length, 1)];
                   return (
                     <div
@@ -12752,7 +12792,11 @@ const GridScreen = ({
                 gap: 12,
               }}
             >
-              {[...accumulatedExtras, ...regenHistoryExtras].map((src, idx) => {
+              {[
+                ...accumulatedExtras,
+                ...regenHistoryExtras,
+                ...alsoGeneratedExtras,
+              ].map((src, idx) => {
                 if (!src) return null;
                 const globalIndex = idx + 6;
                 const picked = cartSet.has(src);
@@ -17720,6 +17764,12 @@ type AllShotsGalleryProps = {
   // their own labeled section so customers can still buy a shot they
   // regenerated over.
   regenHistoryShots?: (string | null)[];
+  // Complete server-tracked generation history (2026-09-09, per Kristi):
+  // EVERY URL this session ever produced. Any URL here that isn't already
+  // in another section renders as an "Also generated in this session"
+  // catch-all — so shots the customer regenerated over more than once (lost
+  // by the single-depth previousUrls stash) still surface in the cabinet.
+  allGeneratedUrls?: string[];
   cart: string[];
   maxCartSize: number;
   onAddToCart: (url: string) => void;
@@ -17734,6 +17784,7 @@ const AllShotsGallery = ({
   wildCards,
   versionShots,
   regenHistoryShots = [],
+  allGeneratedUrls = [],
   cart,
   maxCartSize,
   onAddToCart,
@@ -17767,12 +17818,25 @@ const AllShotsGallery = ({
   const regenHistory = regenHistoryShots.filter(
     (u): u is string => !!u && !currentlyVisible.has(u),
   );
+  // Catch-all: any URL the server logged as "generated in this session"
+  // that isn't already surfaced above (main / wild / extras / versions /
+  // regen-history). This is the safety net that guarantees "every shot the
+  // customer generated" actually appears — the previousUrls single-depth
+  // stash used to drop shots that were regenerated over twice.
+  const alreadySurfaced = new Set<string>([
+    ...currentlyVisible,
+    ...regenHistory,
+  ]);
+  const alsoGenerated = allGeneratedUrls.filter(
+    (u) => typeof u === "string" && !alreadySurfaced.has(u),
+  );
   const flat: string[] = [
     ...mainSlots,
     ...wcFilled.map((w) => w.image as string),
     ...extras,
     ...versionFilled,
     ...regenHistory,
+    ...alsoGenerated,
   ];
 
   // Lightbox state (self-contained — doesn't touch the GridScreen lightbox).
@@ -18071,6 +18135,28 @@ const AllShotsGallery = ({
             </div>
             <div style={gridStyle}>
               {regenHistory.map((src, i) => tile(src, `rh-${i}`))}
+            </div>
+          </>
+        )}
+        {alsoGenerated.length > 0 && (
+          <>
+            {sectionLabel(
+              "Also Generated in This Session",
+              alsoGenerated.length,
+            )}
+            <div
+              style={{
+                fontSize: 12,
+                color: C.mediumGrey,
+                margin: "-6px 0 12px",
+                lineHeight: 1.45,
+              }}
+            >
+              Every other headshot this session ever produced — nothing is
+              lost.
+            </div>
+            <div style={gridStyle}>
+              {alsoGenerated.map((src, i) => tile(src, `ag-${i}`))}
             </div>
           </>
         )}
@@ -18595,6 +18681,16 @@ export default function App() {
   // preserving identity from the standard reference set, with a slightly
   // wider crop. Full spec: [[project_generate_similar]].
   const [versionShots, setVersionShots] = useState<(string | null)[]>([]);
+  // Complete generation history (2026-09-09, per Kristi). Every URL this
+  // session ever produced across the RTV lifecycle — main batches, regens,
+  // wild cards, versions, and prior shots that were overwritten by
+  // subsequent regens. Populated on resume from the server's
+  // allGeneratedUrls, and fed into the AllShotsGallery as the definitive
+  // "Every shot from your session" pool. Live-session shots naturally end
+  // up here too via the server-side accumulator in updateSessionSlot; the
+  // useEffect below also mirrors client state changes into this pool so
+  // the cabinet reflects new shots without waiting for a page reload.
+  const [allGeneratedUrls, setAllGeneratedUrls] = useState<string[]>([]);
   const [versionsSourceIndex, setVersionsSourceIndex] = useState<number | null>(
     null,
   );
@@ -18603,6 +18699,41 @@ export default function App() {
   const [versionsGenerating, setVersionsGenerating] = useState(false);
   // Wild Card bonus previews shown below the main grid (2026-08-04).
   const [wildCards, setWildCards] = useState<WildCardShot[]>([]);
+  // Mirror live client state into the accumulating allGeneratedUrls pool
+  // (2026-09-09) so the "See all N shots" pill + cabinet reflect NEW shots
+  // the instant they come back — without waiting for a page reload to
+  // rehydrate from the server. Deduped by URL, first-seen order, capped
+  // to keep the array bounded.
+  useEffect(() => {
+    const incoming: string[] = [];
+    for (const u of generatedImages) {
+      if (typeof u === "string" && /^https?:\/\//.test(u)) incoming.push(u);
+    }
+    for (const u of previousImages) {
+      if (typeof u === "string" && /^https?:\/\//.test(u)) incoming.push(u);
+    }
+    for (const w of wildCards) {
+      if (w.image && /^https?:\/\//.test(w.image)) incoming.push(w.image);
+    }
+    for (const u of versionShots) {
+      if (typeof u === "string" && /^https?:\/\//.test(u)) incoming.push(u);
+    }
+    if (incoming.length === 0) return;
+    setAllGeneratedUrls((prev) => {
+      const seen = new Set(prev);
+      let changed = false;
+      const next = [...prev];
+      for (const u of incoming) {
+        if (!seen.has(u)) {
+          next.push(u);
+          seen.add(u);
+          changed = true;
+        }
+      }
+      if (!changed) return prev;
+      return next.slice(0, 200);
+    });
+  }, [generatedImages, previousImages, wildCards, versionShots]);
   const [wildCardRegenerating, setWildCardRegenerating] = useState<Set<number>>(
     new Set(),
   );
@@ -19180,6 +19311,7 @@ export default function App() {
           previousUrls?: (string | null)[];
           revertedSlots?: number[];
           versionShots?: string[];
+          allGeneratedUrls?: string[];
         };
         if (!d.generatedUrls || d.generatedUrls.length === 0) return;
         setGeneratedImages(d.generatedUrls);
@@ -19229,6 +19361,14 @@ export default function App() {
           // A restored version set counts as "used" for the one-per-batch
           // rule so a resumed session doesn't hand out a free extra pair.
           setVersionsUsedThisBatch(true);
+        }
+        // Complete generation history (2026-09-09). Every URL this session
+        // ever produced — including shots the customer regenerated over more
+        // than once (which previousUrls loses because it only tracks the
+        // last prior version per slot). Feeds the "Every shot from your
+        // session" cabinet.
+        if (Array.isArray(d.allGeneratedUrls) && d.allGeneratedUrls.length > 0) {
+          setAllGeneratedUrls(d.allGeneratedUrls);
         }
         setResumedFromEmail(true);
         // Remember the token so a damage-control regen can be written back to
@@ -22361,6 +22501,10 @@ export default function App() {
           // AllShotsGallery so customers can review everything without
           // having to hit the over-limit banner first (2026-09-07 per Kristi).
           onOpenAllShots={() => setShowAllShotsGallery(true)}
+          // Complete server-tracked generation history (2026-09-09) —
+          // guarantees the extras pill + cabinet total include shots the
+          // customer regenerated over more than once.
+          allGeneratedUrls={allGeneratedUrls}
         />
       )}
       {/* Last-chance upsell popup — overlays the retouch screen when it's open,
@@ -22665,6 +22809,7 @@ export default function App() {
           wildCards={wildCards}
           versionShots={versionShots}
           regenHistoryShots={previousImages}
+          allGeneratedUrls={allGeneratedUrls}
           cart={cart}
           maxCartSize={MAX_CART_SIZE}
           onAddToCart={addToCart}

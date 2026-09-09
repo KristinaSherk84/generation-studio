@@ -54,21 +54,80 @@ const HARD_CAP = Math.max(1, Number(process.env.GEN_HARD_CAP_PER_IP ?? "40"));
 const HARD_CAP_WINDOW_SECONDS =
   Math.max(1, Number(process.env.GEN_HARD_CAP_WINDOW_HOURS ?? "24")) * 3600;
 const hardCapKey = (ip: string) => `gencap:${ip}`;
+// Per-IP purchased extra credits (2026-09-09, per Kristi). Every $3.99
+// unlock adds HARD_CAP_CREDIT_PER_UNLOCK (default 30) to the caller's IP,
+// so a legitimate power user who keeps paying keeps generating instead of
+// hitting the abuse floor. Same rolling window as HARD_CAP itself so the
+// bought headroom decays with the base cap. Tunable via env with no
+// redeploy: HARD_CAP_CREDIT_PER_UNLOCK.
+const HARD_CAP_CREDIT_PER_UNLOCK = Math.max(
+  1,
+  Number(process.env.HARD_CAP_CREDIT_PER_UNLOCK ?? "30"),
+);
+const hardCapCreditsKey = (ip: string) => `gencap:extra:${ip}`;
+
+/**
+ * Read the extra hard-cap credits currently granted to this IP. Returns 0
+ * on any miss / error. Fail-safe: if Redis is down we behave as if no
+ * extra credits — the base HARD_CAP still applies, which is the tighter
+ * bound anyway, so this can never over-generate.
+ */
+async function readHardCapCredits(ip: string): Promise<number> {
+  try {
+    const raw = await redis.get<string | number | null>(hardCapCreditsKey(ip));
+    const n = typeof raw === "number" ? raw : raw ? Number(raw) : 0;
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Grant an IP additional hard-cap credits (called from verify-checkout on
+ * every confirmed $3.99 unlock). Credits stack across repeated unlocks
+ * within the window; the TTL is set/refreshed on each grant so continuing
+ * to pay keeps the headroom alive. Fail-open — if Redis is unavailable
+ * the grant is skipped but the customer still gets their in-session
+ * unlock (they just might hit the base 40 wall if their IP already burned
+ * that much today). Idempotency is the CALLER's responsibility — pair
+ * with a persistent flag on the Stripe session so a page refresh doesn't
+ * re-credit.
+ */
+export async function addHardCapCredits(
+  ip: string | undefined,
+  amount: number = HARD_CAP_CREDIT_PER_UNLOCK,
+): Promise<{ ok: boolean; total: number }> {
+  if (!ip) return { ok: false, total: 0 };
+  const grant = Number.isFinite(amount) && amount > 0 ? Math.floor(amount) : 0;
+  if (grant <= 0) return { ok: false, total: 0 };
+  try {
+    const k = hardCapCreditsKey(ip);
+    const total = await redis.incrby(k, grant);
+    // Refresh the TTL on every grant so credits stay usable for a full
+    // window from the LAST payment, not the first.
+    await redis.expire(k, HARD_CAP_WINDOW_SECONDS);
+    return { ok: true, total };
+  } catch {
+    return { ok: false, total: 0 };
+  }
+}
 
 export async function checkGenHardCap(
   ip: string | undefined,
-): Promise<{ allowed: boolean; count: number }> {
-  if (!ip) return { allowed: true, count: 0 };
+): Promise<{ allowed: boolean; count: number; cap: number }> {
+  if (!ip) return { allowed: true, count: 0, cap: HARD_CAP };
   try {
     const k = hardCapKey(ip);
     const count = await redis.incr(k);
     // Fixed window: set the TTL only on the first call so the counter decays on
     // its own after the window rather than sliding forever.
     if (count === 1) await redis.expire(k, HARD_CAP_WINDOW_SECONDS);
-    return { allowed: count <= HARD_CAP, count };
+    const extra = await readHardCapCredits(ip);
+    const cap = HARD_CAP + extra;
+    return { allowed: count <= cap, count, cap };
   } catch {
     // Redis unreachable → never block generation on this guard.
-    return { allowed: true, count: 0 };
+    return { allowed: true, count: 0, cap: HARD_CAP };
   }
 }
 
