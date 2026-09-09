@@ -10599,6 +10599,21 @@ const GridScreen = ({
   // section that appears below the grid + wild cards when there ARE extras.
   // Collapsed by default so the page doesn't feel overwhelming.
   const [extrasExpanded, setExtrasExpanded] = useState(extrasExpandedByDefault);
+
+  // Regen-history extras (2026-09-09 per Kristi): shots the customer
+  // replaced via ↺ regenerate. Filtered to (a) non-null and (b) not
+  // currently shown on the main grid (so a reverted slot doesn't
+  // double-show). These join the accumulated-batches extras in the same
+  // "expand for more" pill.
+  const currentlyVisibleUrls = new Set(
+    images.filter((u): u is string => !!u),
+  );
+  const regenHistoryExtras = previousImages.filter(
+    (u): u is string => !!u && !currentlyVisibleUrls.has(u),
+  );
+  const accumulatedExtras = images.slice(6).filter((u): u is string => !!u);
+  const totalExtrasCount = accumulatedExtras.length + regenHistoryExtras.length;
+  const hasExtras = totalExtrasCount > 0;
   const [isMobileGrid, setIsMobileGrid] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     return window.matchMedia("(max-width: 640px)").matches;
@@ -10730,10 +10745,17 @@ const GridScreen = ({
               to open the "Every shot from your session" gallery. Total
               count includes main grid + wild cards + versions filled. */}
           {onOpenAllShots && (() => {
+            const currentlyVisibleSet = new Set(
+              images.filter((u): u is string => !!u),
+            );
+            const regenHistoryCount = previousImages.filter(
+              (u): u is string => !!u && !currentlyVisibleSet.has(u),
+            ).length;
             const totalShots =
               images.filter(Boolean).length +
               wildCards.filter((w) => !!w.image).length +
-              versionShots.filter(Boolean).length;
+              versionShots.filter(Boolean).length +
+              regenHistoryCount;
             if (totalShots === 0) return null;
             return (
               <button
@@ -12565,7 +12587,7 @@ const GridScreen = ({
           main grid. NO regen / no revert on extras (they're historical
           receipts, not primary slots), which keeps the click surface small
           and avoids touching the main-grid regen paths. */}
-      {images.length > 6 && (
+      {hasExtras && (
         <div style={{ marginTop: 18 }}>
           {/* Collapsed pill (2026-09-03 v2, per Kristi): three faded/blurry
               preview thumbnails from the actual extras behind the label,
@@ -12599,8 +12621,8 @@ const GridScreen = ({
               }}
             >
               <span style={{ fontSize: 12 }}>▾</span>
-              Hide the {images.length - 6} extra headshot
-              {images.length - 6 === 1 ? "" : "s"} from earlier
+              Hide the {totalExtrasCount} extra headshot
+              {totalExtrasCount === 1 ? "" : "s"} from earlier
             </button>
           ) : (
             <button
@@ -12608,7 +12630,7 @@ const GridScreen = ({
               onClick={() => setExtrasExpanded(true)}
               aria-expanded={false}
               aria-controls="extras-grid"
-              aria-label={`Expand to see ${images.length - 6} more headshots you generated today`}
+              aria-label={`Expand to see ${totalExtrasCount} more headshots you generated today`}
               style={{
                 position: "relative",
                 display: "flex",
@@ -12644,9 +12666,7 @@ const GridScreen = ({
                 }}
               >
                 {[0, 1, 2, 3].map((n) => {
-                  const filled = images
-                    .slice(6)
-                    .filter((u): u is string => !!u);
+                  const filled = [...accumulatedExtras, ...regenHistoryExtras];
                   const src = filled[n] ?? filled[n % Math.max(filled.length, 1)];
                   return (
                     <div
@@ -12703,8 +12723,8 @@ const GridScreen = ({
                 }}
               >
                 <span>
-                  Expand to see {images.length - 6} more headshot
-                  {images.length - 6 === 1 ? "" : "s"} you generated today
+                  Expand to see {totalExtrasCount} more headshot
+                  {totalExtrasCount === 1 ? "" : "s"} you generated today
                 </span>
                 <span
                   aria-hidden="true"
@@ -12732,7 +12752,7 @@ const GridScreen = ({
                 gap: 12,
               }}
             >
-              {images.slice(6).map((src, idx) => {
+              {[...accumulatedExtras, ...regenHistoryExtras].map((src, idx) => {
                 if (!src) return null;
                 const globalIndex = idx + 6;
                 const picked = cartSet.has(src);
@@ -17695,6 +17715,11 @@ type AllShotsGalleryProps = {
   mainImages: string[]; // first 6 are the main grid; slice(6) is accumulated extras
   wildCards: WildCardShot[];
   versionShots: (string | null)[];
+  // Regen-history shots (2026-09-09 per Kristi): the originals stashed in
+  // previousUrls when a customer used ↺ to regenerate a slot. Rendered as
+  // their own labeled section so customers can still buy a shot they
+  // regenerated over.
+  regenHistoryShots?: (string | null)[];
   cart: string[];
   maxCartSize: number;
   onAddToCart: (url: string) => void;
@@ -17708,6 +17733,7 @@ const AllShotsGallery = ({
   mainImages,
   wildCards,
   versionShots,
+  regenHistoryShots = [],
   cart,
   maxCartSize,
   onAddToCart,
@@ -17723,17 +17749,30 @@ const AllShotsGallery = ({
     else if (!cartFull) onAddToCart(src);
   };
 
-  // Build the four sections. Flatten into one ordered list for the
+  // Build the sections. Flatten into one ordered list for the
   // lightbox arrow-cycle (arrows walk across sections top-to-bottom).
   const mainSlots = mainImages.slice(0, 6).filter((u): u is string => !!u);
   const extras = mainImages.slice(6).filter((u): u is string => !!u);
   const wcFilled = wildCards.filter((w) => !!w.image);
   const versionFilled = versionShots.filter((u): u is string => !!u);
+  // Regen-history: filter to strings AND drop anything already visible on
+  // the main grid (a slot that was reverted keeps its original in
+  // previousUrls but is also currently showing on the grid).
+  const currentlyVisible = new Set<string>([
+    ...mainSlots,
+    ...extras,
+    ...wcFilled.map((w) => w.image as string),
+    ...versionFilled,
+  ]);
+  const regenHistory = regenHistoryShots.filter(
+    (u): u is string => !!u && !currentlyVisible.has(u),
+  );
   const flat: string[] = [
     ...mainSlots,
     ...wcFilled.map((w) => w.image as string),
     ...extras,
     ...versionFilled,
+    ...regenHistory,
   ];
 
   // Lightbox state (self-contained — doesn't touch the GridScreen lightbox).
@@ -18010,6 +18049,28 @@ const AllShotsGallery = ({
             {sectionLabel("Variations You Requested", versionFilled.length)}
             <div style={gridStyle}>
               {versionFilled.map((src, i) => tile(src, `v-${i}`))}
+            </div>
+          </>
+        )}
+        {regenHistory.length > 0 && (
+          <>
+            {sectionLabel(
+              "Earlier Versions You Regenerated Over",
+              regenHistory.length,
+            )}
+            <div
+              style={{
+                fontSize: 12,
+                color: C.mediumGrey,
+                margin: "-6px 0 12px",
+                lineHeight: 1.45,
+              }}
+            >
+              Shots you replaced with a regeneration — still yours to keep if
+              one grew on you.
+            </div>
+            <div style={gridStyle}>
+              {regenHistory.map((src, i) => tile(src, `rh-${i}`))}
             </div>
           </>
         )}
@@ -22603,6 +22664,7 @@ export default function App() {
           mainImages={generatedImages}
           wildCards={wildCards}
           versionShots={versionShots}
+          regenHistoryShots={previousImages}
           cart={cart}
           maxCartSize={MAX_CART_SIZE}
           onAddToCart={addToCart}
