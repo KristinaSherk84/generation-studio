@@ -10433,6 +10433,28 @@ const GridScreen = ({
   const cartSet = new Set(cart);
   const cartIsFull = cart.length >= maxCartSize;
 
+  // Running cart total (2026-09-08 per Kristi). Priced at Realistic/Basic
+  // per photo so customers see a total that matches the cheapest keeper tier.
+  // The actual per-tier pricing (Basic vs. Glow-Up) is still picked at
+  // checkout — this is just an at-a-glance number to reduce sticker shock.
+  const CART_PRICE_PER_PHOTO = 12.99;
+  const cartRunningTotal = (cart.length * CART_PRICE_PER_PHOTO).toFixed(2);
+
+  // Bump animation on add. Watches cart.length; when it goes UP, the pill
+  // briefly scales so the eye jumps to the new price. Not fired on remove,
+  // regen, or first render — only genuine adds.
+  const prevCartLenRef = useRef(cart.length);
+  const [cartPillBump, setCartPillBump] = useState(false);
+  useEffect(() => {
+    if (cart.length > prevCartLenRef.current) {
+      setCartPillBump(true);
+      const t = window.setTimeout(() => setCartPillBump(false), 380);
+      prevCartLenRef.current = cart.length;
+      return () => window.clearTimeout(t);
+    }
+    prevCartLenRef.current = cart.length;
+  }, [cart.length]);
+
   // First-load reveal (2026-08-06): large 2K blobs sometimes paint
   // half-decoded on first load, so a tile can look "not fully loaded."
   // We keep each <img> invisible until its own `load` event fires (which
@@ -10612,13 +10634,31 @@ const GridScreen = ({
               fontSize: 13,
               fontWeight: 500,
               letterSpacing: 0.2,
-              boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
+              boxShadow: cartPillBump
+                ? "0 6px 18px rgba(201,169,97,0.55)"
+                : "0 1px 3px rgba(0,0,0,0.15)",
+              // Bounce on add (2026-09-08). Springy cubic-bezier for a soft
+              // pop; falls back to a linear ease on the settle.
+              transform: cartPillBump ? "scale(1.14)" : "scale(1)",
+              transition:
+                "transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 260ms ease",
             }}
             aria-live="polite"
-            aria-label={`Cart: ${cart.length} saved`}
+            aria-label={`Cart: ${cart.length} saved, running total $${cartRunningTotal}`}
           >
             <ShoppingBag size={15} />
-            {`Cart · ${cart.length}`}
+            <span>{`Cart · ${cart.length}`}</span>
+            {cart.length > 0 && (
+              <span
+                style={{
+                  fontWeight: 700,
+                  color: "#F3D98A",
+                  letterSpacing: 0.3,
+                }}
+              >
+                {`$${cartRunningTotal}`}
+              </span>
+            )}
           </div>
           {/* File-cabinet pill (2026-09-07 per Kristi). Always-visible way
               to open the "Every shot from your session" gallery. Total
@@ -10896,6 +10936,11 @@ const GridScreen = ({
           >
             <ShoppingBag size={13} />
             Your cart · {cart.length}
+            {cart.length > 0 && (
+              <span style={{ marginLeft: 8, color: C.dark, fontWeight: 700 }}>
+                ${cartRunningTotal}
+              </span>
+            )}
           </div>
           <div
             style={{
