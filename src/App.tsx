@@ -3959,20 +3959,86 @@ const LandingV2 = ({
           Only pay for the headshots that{" "}
           <em style={{ fontStyle: "italic" }}>look like you.</em>
         </h2>
-        <p
+        {/* Pricing rundown (2026-09-09 per Kristi): explicit line-item list
+            so customers stop adding photos to cart without realizing keepers
+            cost money. FREE line highlighted in forest green to draw the eye
+            first. */}
+        <div
           style={{
-            fontSize: "clamp(15px, 1.3vw, 17px)",
-            lineHeight: 1.6,
-            color: BRAND.subText,
-            maxWidth: 600,
+            maxWidth: 520,
             margin: "28px auto 0",
+            fontSize: "clamp(15px, 1.3vw, 17px)",
+            lineHeight: 1.5,
+            color: BRAND.bodyText,
+            textAlign: "left",
           }}
         >
-          $3.99 to start your session. $12.99 per Basic keeper, or $17.99 for the
-          Glow Up Deluxe Bundle — smoother skin + magazine-style polish across
-          3 retouched versions (just $5 more than Basic). No surprise fees, no
-          charges for headshots that don't look like you.
-        </p>
+          {[
+            {
+              label: "Preview your first 6 headshots",
+              price: "Free",
+              highlight: true,
+            },
+            {
+              label: "Keep generating more styles",
+              price: "$3.99",
+              highlight: false,
+            },
+            {
+              label: "One headshot · Realistic",
+              price: "$12.99",
+              highlight: false,
+            },
+            {
+              label: "One headshot · Glow Up Bundle",
+              price: "$17.99",
+              highlight: false,
+            },
+          ].map((row, i) => (
+            <div
+              key={i}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "baseline",
+                gap: 16,
+                padding: "10px 0",
+                borderBottom:
+                  i < 3 ? `1px solid rgba(0,0,0,0.06)` : "none",
+              }}
+            >
+              <span
+                style={{
+                  color: row.highlight ? BRAND.forestGreen : BRAND.bodyText,
+                  fontWeight: row.highlight ? 600 : 400,
+                }}
+              >
+                {row.label}
+              </span>
+              <span
+                style={{
+                  color: row.highlight ? BRAND.forestGreen : BRAND.charcoal,
+                  fontWeight: row.highlight ? 700 : 600,
+                  fontSize: row.highlight ? "1.05em" : "1em",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {row.price}
+              </span>
+            </div>
+          ))}
+          <p
+            style={{
+              fontSize: 13,
+              color: BRAND.subText,
+              margin: "16px 0 0",
+              textAlign: "center",
+              lineHeight: 1.5,
+            }}
+          >
+            No surprise fees, no charges for headshots that don't look like you.
+          </p>
+        </div>
         {/* Promise-band CTA uses the short action variant per 2026-06-02
             CTA-variation pass. After-chart CTA above this section is the
             price-anchored one. Free-tier mode swaps to the standard
