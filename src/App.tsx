@@ -19369,7 +19369,37 @@ export default function App() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
-    const token = url.searchParams.get("resume");
+    let token = url.searchParams.get("resume");
+    // Refresh-safe restore (2026-09-10 per Kristi). If the URL doesn't
+    // carry ?resume=, look for a locally-stashed token from a completed
+    // save-session on this browser — same effect as the email link, so a
+    // page refresh puts the customer back on their grid instead of an
+    // empty "Generation failed" screen. TTL guard: anything older than
+    // 4 days is treated as stale (matches server session TTL). Do NOT
+    // fire when there's an active checkout redirect in the URL — those
+    // paths do their own state restore.
+    const hasCheckoutParam =
+      url.searchParams.get("paid") === "1" ||
+      url.searchParams.get("photo_cancel") === "1";
+    if (!token && !hasCheckoutParam) {
+      try {
+        const raw = window.localStorage.getItem("gh_resume_token");
+        if (raw) {
+          const parsed = JSON.parse(raw) as { token?: string; ts?: number };
+          const age =
+            typeof parsed.ts === "number" ? Date.now() - parsed.ts : Infinity;
+          const FOUR_DAYS_MS = 4 * 24 * 60 * 60 * 1000;
+          if (typeof parsed.token === "string" && age < FOUR_DAYS_MS) {
+            token = parsed.token;
+          } else {
+            // Stale — clean it up so it doesn't linger.
+            window.localStorage.removeItem("gh_resume_token");
+          }
+        }
+      } catch {
+        /* localStorage unavailable or malformed — treat as no token */
+      }
+    }
     if (!token) return;
     // Admin damage-control password (optional). Captured before we strip it.
     const fixPw = url.searchParams.get("fix");
@@ -20264,6 +20294,10 @@ export default function App() {
     // Fresh session clears any post-purchase perk.
     try {
       window.localStorage.removeItem("purchase_session_id");
+      // Also clear the refresh-safe resume token so an explicit reset
+      // actually starts fresh instead of yanking the user back into their
+      // just-abandoned session on the next page load. (2026-09-10)
+      window.localStorage.removeItem("gh_resume_token");
     } catch {
       /* ignore */
     }
@@ -20658,6 +20692,22 @@ export default function App() {
               // per-slot regen patches the correct photo (2026-08-24).
               batchOffsetRef.current =
                 typeof d.offset === "number" && d.offset >= 0 ? d.offset : 0;
+              // Stash the resume token locally so a browser refresh (or a
+              // return-trip from Stripe that doesn't come back with
+              // ?resume= in the URL) can rehydrate the grid instead of
+              // dropping the customer on an empty "Generation failed"
+              // screen. Timestamped so a stale token from days ago doesn't
+              // yank them out of a fresh session — the read side ignores
+              // anything older than the server-side TTL. (2026-09-10 per
+              // Kristi, after the Colombia refresh-loses-grid case.)
+              try {
+                window.localStorage.setItem(
+                  "gh_resume_token",
+                  JSON.stringify({ token: d.token, ts: Date.now() }),
+                );
+              } catch {
+                /* localStorage unavailable — resume still works via ?resume= */
+              }
               void flushWildCardPersist();
             }
           }

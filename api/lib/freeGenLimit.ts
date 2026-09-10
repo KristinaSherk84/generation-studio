@@ -180,7 +180,25 @@ export async function checkGenHardCap(
     if (count === 1) await redis.expire(k, HARD_CAP_WINDOW_SECONDS);
     const extra = await readHardCapCredits(ip);
     const cap = HARD_CAP + extra;
-    return { allowed: count <= cap, count, cap };
+    // Fix 2026-09-10: if this call would exceed the cap, ROLL BACK the
+    // increment. Otherwise every blocked retry inflates the counter, so
+    // a customer who hits the wall and reflexively clicks "try again"
+    // pushes themselves further and further past the cap — even after
+    // an admin grants more credits (Lawrence's case: real
+    // generations ~40, counter showed 114 because 74 blocked retries
+    // still incremented it). Fail-open on the decr (a Redis blip after
+    // the incr just means the counter stays inflated for the rest of
+    // the window; the customer isn't blocked because the ceiling still
+    // catches at cap+1).
+    if (count > cap) {
+      try {
+        await redis.decr(k);
+      } catch {
+        /* ignore — non-fatal */
+      }
+      return { allowed: false, count: count - 1, cap };
+    }
+    return { allowed: true, count, cap };
   } catch {
     // Redis unreachable → never block generation on this guard.
     return { allowed: true, count: 0, cap: HARD_CAP };
