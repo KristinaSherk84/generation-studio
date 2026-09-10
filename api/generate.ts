@@ -2199,12 +2199,25 @@ export default async function handler(
     //       background, same framing — ONLY the mouth/eyes shift.
     if (similarImage) {
       const isExpressionVariant = body.variationIndex === 1;
-      // Shared header — used verbatim by both variants so Gemini sees the
-      // SAME "outfit + background from image 1" language regardless of
-      // which delta we're asking for. Emphatic, repeated, and physically
-      // describes what "match" means so Gemini can't reinterpret it as
-      // "professional headshot vibes."
-      const sharedHeader = `You are an image editor. You will receive:
+
+      // Variant 0 — Kristi's rewrite (2026-09-10). Widen crop by ~10%
+      // AND rotate body angle in one go. Kept as a complete standalone
+      // prompt (not shared-header + delta) so the wording flows exactly
+      // as she wrote it — no assembly-drift.
+      const variant0Prompt = `You are an image editor. You will receive:
+- IMAGE 1: the TARGET SHOT — a finished professional headshot. This is what your output must look like.
+- IMAGES 2+: identity reference photos of the same person. Use these ONLY to reinforce facial identity (face shape, jawline, eyes, skin tone). Do NOT copy their outfit, background, framing, or pose.
+Your output must be a slightly zoomed out, NEW image, a wider variant of IMAGE 1:
+- OUTFIT: copy from IMAGE 1 exactly. Same garment, same color, same neckline — DO NOT SWAP or change THE OUTFIT.
+- BACKGROUND: copy from IMAGE 1 exactly. Same color, same environment, same depth-of-field. If IMAGE 1 is on a solid dark studio backdrop, keep the solid dark studio backdrop. Do NOT introduce an office/building/outdoor environment from the identity photos.
+- HAIR: copy from IMAGE 1 exactly. Identical hair to image 1.
+- LIGHTING: copy from IMAGE 1 exactly. Same direction, same intensity, same shadow shape.
+- FRAMING / CROP: widen slightly, zoom out by 10 percent. copy base from IMAGE 1, then slightly expand frame. show a tiny bit more of the body than IMAGE 1 shows.
+- FACE IDENTITY: unmistakably the same person as in the identity photos (IMAGES 2+). Cross-check jawline, brow, eyes, skin tone.
+- BODY ANGLE: rotate the shoulders and torso 25–35° to one side (pick a natural direction). The head can turn with the shoulders or stay looking at the camera.`;
+
+      // Variant 1 — expression change. Unchanged from 2026-09-10 rewrite.
+      const variant1Prompt = `You are an image editor. You will receive:
 - IMAGE 1: the TARGET SHOT — a finished professional headshot the customer already picked. This is what your output must look like almost exactly.
 - IMAGES 2+: identity reference photos of the same person. Use these ONLY to reinforce facial identity (face shape, jawline, eyes, skin tone). Do NOT copy their outfit, background, framing, or pose.
 
@@ -2215,24 +2228,14 @@ Your output must be a NEW image that is functionally a variant of IMAGE 1:
 - HAIR: copy from IMAGE 1 exactly. Same style, same length, same color.
 - LIGHTING: copy from IMAGE 1 exactly. Same direction, same intensity, same shadow shape.
 - FRAMING / CROP: copy from IMAGE 1 exactly. The head must occupy the SAME PERCENTAGE of the frame as it does in IMAGE 1. The top of the head, the bottom of the crop, and the head's position within the frame must match IMAGE 1. Do NOT widen. Do NOT zoom out. Do NOT show more of the body than IMAGE 1 shows. If IMAGE 1 crops at the mid-chest, output crops at the mid-chest.
-- FACE IDENTITY: unmistakably the same person as in the identity photos (IMAGES 2+). Cross-check jawline, brow, eyes, skin tone.`;
-
-      const angleDelta = `
-
-The ONE thing you WILL change from IMAGE 1:
-- BODY ANGLE: rotate the shoulders and torso 25–35° to one side (pick a natural direction). The head can turn with the shoulders or stay looking at the camera. Everything else — outfit, background, hair, lighting, framing, expression — stays identical to IMAGE 1.
-
-Do NOT change the crop. Do NOT change the outfit. Do NOT change the background. The output is IMAGE 1 with the body rotated. Nothing else.`;
-
-      const expressionDelta = `
+- FACE IDENTITY: unmistakably the same person as in the identity photos (IMAGES 2+). Cross-check jawline, brow, eyes, skin tone.
 
 The ONE thing you WILL change from IMAGE 1:
 - EXPRESSION: shift the mouth and eye energy. If IMAGE 1 has a broad open-mouth smile, output a softer closed-lip smile. If IMAGE 1 has a subtle closed smile, output a brighter teeth-showing smile. Pull the exact expression flavor from the identity photos (IMAGES 2+), not from IMAGE 1. Everything else — outfit, background, hair, lighting, framing, body angle — stays identical to IMAGE 1.
 
 Do NOT change the crop. Do NOT change the outfit. Do NOT change the background. The output is IMAGE 1 with a different expression. Nothing else.`;
 
-      prompt =
-        sharedHeader + (isExpressionVariant ? expressionDelta : angleDelta);
+      prompt = isExpressionVariant ? variant1Prompt : variant0Prompt;
     }
 
     // ---- Generate ONE headshot. The frontend calls this six times in
