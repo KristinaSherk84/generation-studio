@@ -117,7 +117,7 @@ function buildEmail(args: {
     <div style="background:#FBF8F0;border:1px solid #E8E4DB;border-radius:8px;padding:16px 14px;text-align:center;margin:0 0 22px;">
       <div style="display:inline-block;background:#7A1F1B;color:#FFFFFF;font-size:11px;font-weight:700;letter-spacing:1;padding:3px 10px;border-radius:999px;margin-bottom:10px;text-transform:uppercase;">10% off · come back today</div>
       <div style="font-size:15px;color:#2A2A2A;margin:4px 0;">
-        Any 1 shot · <span style="text-decoration:line-through;color:#9A968D;margin-right:6px;">$12.99</span> <span style="font-size:20px;font-weight:700;color:#C9A961;letter-spacing:-0.3px;">$11.69</span>
+        Any 1 shot · <span style="text-decoration:line-through;color:#9A968D;margin-right:6px;">$14.99</span> <span style="font-size:20px;font-weight:700;color:#C9A961;letter-spacing:-0.3px;">$13.49</span>
       </div>
       <div style="font-size:15px;color:#2A2A2A;margin:4px 0;">
         Two realistic shots · <span style="text-decoration:line-through;color:#9A968D;margin-right:6px;">$25.98</span> <span style="font-size:20px;font-weight:700;color:#C9A961;letter-spacing:-0.3px;">$23.38</span>
@@ -182,7 +182,7 @@ function buildEmail(args: {
     "You made these but didn't grab any — they'll be deleted from my servers soon.",
     "",
     "10% OFF · come back today:",
-    "  Any 1 shot · $12.99 → $11.69",
+    "  Any 1 shot · $14.99 → $13.49",
     "  Two realistic shots · $25.98 → $23.38",
     "",
     "Pick your favorites: " + args.resumeUrl,
