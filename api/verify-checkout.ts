@@ -216,7 +216,31 @@ export default async function handler(
         let creditsGranted = 0;
         try {
           const result = await addHardCapCredits(clientIp);
-          if (result.ok) creditsGranted = 30;
+          if (result.ok) {
+            creditsGranted = 30;
+            // Structured success log so every grant is greppable in Vercel
+            // logs — search for "hardcap_credit_granted" to audit every
+            // repeat-payer.
+            console.log(
+              JSON.stringify({
+                type: "hardcap_credit_granted",
+                ip: clientIp || "unknown",
+                sessionId,
+                granted: 30,
+                totalForIp: result.total,
+                email,
+              }),
+            );
+          } else {
+            console.warn(
+              JSON.stringify({
+                type: "hardcap_credit_grant_skipped",
+                ip: clientIp || "unknown",
+                sessionId,
+                reason: clientIp ? "redis_error" : "missing_ip",
+              }),
+            );
+          }
         } catch (err) {
           console.warn(
             "hardcap credit grant threw:",
