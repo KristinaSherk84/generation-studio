@@ -10815,6 +10815,14 @@ const GridScreen = ({
             flexDirection: "column",
             alignItems: "flex-end",
             gap: 6,
+            // Push the pill column to the right edge on mobile (2026-09-09
+            // per Kristi). On desktop the parent's justify-content:
+            // space-between already handles this — but when the header row
+            // wraps on mobile, this column drops to a new line and lands
+            // flush-left by default. marginLeft:auto in a flex parent
+            // reserves all the leftover horizontal space on the LEFT of
+            // this item, which yanks it to the right regardless of wrap.
+            marginLeft: "auto",
           }}
         >
           <div
