@@ -2183,42 +2183,56 @@ export default async function handler(
       );
     }
     let prompt = assemblePrompt(body as GenerateRequest);
-    // Append the "match this specific source shot" directive when we have
-    // one. Kept at the END of the prompt so it OVERRIDES the composition and
-    // per-slot crop guidance from the earlier blocks — this generation is a
-    // variation of a specific target, not a free-composition slot fill.
+    // Generate Versions overrides (2026-09-10 rewrite per Kristi — the
+    // earlier prompts stacked our huge assembled base prompt on top of the
+    // "match target" directive, and Gemini kept anchoring to the identity
+    // references' outfit/framing instead of the target shot's. Fix:
+    // REPLACE the base prompt entirely when a similar-to source is
+    // provided. Send just the target reference + identity refs + a
+    // tight, single-purpose instruction so nothing pulls Gemini toward
+    // "generate a headshot from scratch" behavior.).
     //
     // Two flavors, keyed off variationIndex (client fires 0 and 1):
-    //   0 = "body-angle change, same crop + expression" — rotates the pose
-    //       so the customer sees the same shot with a different body angle
-    //       (2026-09-07 replaces the earlier 'wider crop' variant, which
-    //       Gemini's image-edit model wouldn't respect no matter how the
-    //       prompt was tuned — it defaults to matching the reference's
-    //       framing, and prompting harder lost to that bias every time).
-    //   1 = "same crop, expression variation" — a different smile (more or
-    //       less than the source) drawn from the customer's own reference
-    //       photos, so it looks like an authentic alternate expression
+    //   0 = "body-angle change" — same face, same clothes, same
+    //       background, same framing — ONLY the shoulders/torso rotate.
+    //   1 = "expression change" — same face, same clothes, same
+    //       background, same framing — ONLY the mouth/eyes shift.
     if (similarImage) {
       const isExpressionVariant = body.variationIndex === 1;
-      // Two distinct preambles per variant so the crop directive doesn't
-      // fight the "match target exactly" language. (2026-09-04, per Kristi:
-      // the wide variant kept coming back at the target's crop because the
-      // preamble told Gemini to match everything exactly, then the crop
-      // override at #4 got out-weighted by the earlier "exactly" language.)
-      const expressionPreamble = `\n\nGENERATE VERSIONS OVERRIDE (2026-09-01): The FIRST image in this request is a TARGET REFERENCE — a finished professional headshot the customer already loves. All OTHER images are the customer's identity reference photos. Your job is to generate a NEW professional headshot that:\n1. IDENTITY: comes entirely from the identity reference photos (images 2+). Preserve their face with high fidelity — the SAME person, unmistakably.\n2. OUTFIT, HAIR, BACKGROUND, LIGHTING: match the TARGET REFERENCE (image 1) exactly. Same outfit style + color, same hair style + color, same background environment + color palette, same lighting direction + quality. Do NOT swap the outfit. Do NOT change the background.`;
-      // 2026-09-07: WIDE variant retired — replaced with BODY-ANGLE variant.
-      // Gemini's image-edit model would not respect the wider-crop directive
-      // regardless of prompt tuning (defaults hard to reference framing).
-      // Body-angle change is well within what image-edit models handle
-      // reliably: same crop, same expression, same outfit, but the subject's
-      // shoulders/torso/head rotated to a different angle. Kept the variable
-      // name `wideSuffix` for now so the isExpressionVariant branch below
-      // still routes correctly — the CONTENT is now angle-focused.
-      const anglePreamble = `\n\nGENERATE VERSIONS OVERRIDE (2026-09-07 · BODY-ANGLE VARIANT): The FIRST image is a TARGET REFERENCE — a finished professional headshot the customer already loves. All OTHER images are the customer's identity reference photos.\n\nALWAYS refer to the identity reference photos (images 2+) for the subject's actual identity — face shape, jawline, skin tone, hair texture, eyes, natural proportions. Cross-check every feature against those photos as you generate.\n\n1. IDENTITY: comes entirely from the identity reference photos (images 2+). Preserve the face with high fidelity — the SAME person, unmistakably.\n2. OUTFIT, HAIR, BACKGROUND, LIGHTING: match the TARGET REFERENCE (image 1) exactly. Same outfit style + color, same hair style + color, same background environment + color palette, same lighting direction + quality.\n3. EXPRESSION: match the target reference's expression closely.\n4. FRAMING / CROP: match the target reference's framing exactly — the head is in the same position, the same size, at the same distance. Do NOT widen. Do NOT tighten.\n5. BODY ANGLE (CRITICAL — this is the ONE thing this variation changes): rotate the subject's body, shoulders, and head to a NOTICEABLY DIFFERENT angle from the target. If the target is facing the camera dead-on (0°), turn the shoulders 25–35° to one side (either direction is fine — pick whichever feels more natural for the pose). If the target is already angled slightly, either straighten to face-on OR angle harder in the opposite direction. The head can turn with the shoulders or stay looking at the camera — either is fine as long as it reads as an alternate pose, not a mirror image of the target.\n6. EVERYTHING ELSE: identical to the target.`;
-      const wideSuffix = anglePreamble + `\n\nFINAL COMPOSITION CHECK — the output MUST have a visibly different body angle from the reference. Same face, same outfit, same expression, same crop, same background — but the shoulders and torso are rotated to a different angle. That is the entire point of this variant.`;
-      const expressionSuffix = expressionPreamble + `\n3. FRAMING: match the target reference's crop (do NOT widen, do NOT tighten).\n4. EXPRESSION (CRITICAL — this is the whole point of this variation): give a NOTICEABLY DIFFERENT expression from the target. Pull the exact smile intensity and eye energy from the customer's own reference photos (images 2+), NOT from the target. If the target has a broad open-mouth smile, produce a softer, closed-lip smile or a warm-eyes-only expression. If the target has a subtle closed smile, produce a brighter, teeth-showing smile. Either direction is fine — the goal is a distinctly different mood while still being unmistakably the same person, dressed the same, in the same setting.\n5. VARIATION: keep everything else identical to the target.`;
-      const chosenSuffix = isExpressionVariant ? expressionSuffix : wideSuffix;
-      prompt = prompt + chosenSuffix + `\n\nOverride any conflicting composition, crop, or expression guidance from earlier blocks in this prompt.`;
+      // Shared header — used verbatim by both variants so Gemini sees the
+      // SAME "outfit + background from image 1" language regardless of
+      // which delta we're asking for. Emphatic, repeated, and physically
+      // describes what "match" means so Gemini can't reinterpret it as
+      // "professional headshot vibes."
+      const sharedHeader = `You are an image editor. You will receive:
+- IMAGE 1: the TARGET SHOT — a finished professional headshot the customer already picked. This is what your output must look like almost exactly.
+- IMAGES 2+: identity reference photos of the same person. Use these ONLY to reinforce facial identity (face shape, jawline, eyes, skin tone). Do NOT copy their outfit, background, framing, or pose.
+
+Your output must be a NEW image that is functionally a variant of IMAGE 1:
+
+- OUTFIT: copy from IMAGE 1 exactly. Same garment, same color, same neckline. If IMAGE 1 shows a black t-shirt, output a black t-shirt. Do NOT change to a suit/blazer/tie/shirt just because the identity photos show one. This is the single most common failure mode — DO NOT SWAP THE OUTFIT.
+- BACKGROUND: copy from IMAGE 1 exactly. Same color, same environment, same depth-of-field. If IMAGE 1 is on a solid dark studio backdrop, keep the solid dark studio backdrop. Do NOT introduce an office/building/outdoor environment from the identity photos.
+- HAIR: copy from IMAGE 1 exactly. Same style, same length, same color.
+- LIGHTING: copy from IMAGE 1 exactly. Same direction, same intensity, same shadow shape.
+- FRAMING / CROP: copy from IMAGE 1 exactly. The head must occupy the SAME PERCENTAGE of the frame as it does in IMAGE 1. The top of the head, the bottom of the crop, and the head's position within the frame must match IMAGE 1. Do NOT widen. Do NOT zoom out. Do NOT show more of the body than IMAGE 1 shows. If IMAGE 1 crops at the mid-chest, output crops at the mid-chest.
+- FACE IDENTITY: unmistakably the same person as in the identity photos (IMAGES 2+). Cross-check jawline, brow, eyes, skin tone.`;
+
+      const angleDelta = `
+
+The ONE thing you WILL change from IMAGE 1:
+- BODY ANGLE: rotate the shoulders and torso 25–35° to one side (pick a natural direction). The head can turn with the shoulders or stay looking at the camera. Everything else — outfit, background, hair, lighting, framing, expression — stays identical to IMAGE 1.
+
+Do NOT change the crop. Do NOT change the outfit. Do NOT change the background. The output is IMAGE 1 with the body rotated. Nothing else.`;
+
+      const expressionDelta = `
+
+The ONE thing you WILL change from IMAGE 1:
+- EXPRESSION: shift the mouth and eye energy. If IMAGE 1 has a broad open-mouth smile, output a softer closed-lip smile. If IMAGE 1 has a subtle closed smile, output a brighter teeth-showing smile. Pull the exact expression flavor from the identity photos (IMAGES 2+), not from IMAGE 1. Everything else — outfit, background, hair, lighting, framing, body angle — stays identical to IMAGE 1.
+
+Do NOT change the crop. Do NOT change the outfit. Do NOT change the background. The output is IMAGE 1 with a different expression. Nothing else.`;
+
+      prompt =
+        sharedHeader + (isExpressionVariant ? expressionDelta : angleDelta);
     }
 
     // ---- Generate ONE headshot. The frontend calls this six times in

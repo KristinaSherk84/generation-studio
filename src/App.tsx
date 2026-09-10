@@ -10872,9 +10872,27 @@ const GridScreen = ({
               regenerated over more than once (lost by previousImages'
               single-depth stash) are still counted. */}
           {onOpenAllShots && (() => {
-            const currentlyVisibleSet = new Set(
-              images.filter((u): u is string => !!u),
+            // MUST mirror AllShotsGallery's dedupe order or the pill count
+            // will disagree with what the gallery actually renders. Bug
+            // caught 2026-09-10 — pill said 14, gallery showed 12,
+            // because "alsoGenerated" wasn't deduped against wildcards
+            // and versions here. Any URL that lived in both
+            // allGeneratedUrls AND wildCards/versionShots got counted
+            // twice.
+            const mainFilled = images.filter(
+              (u): u is string => typeof u === "string" && !!u,
             );
+            const wildCardUrls = wildCards
+              .map((w) => w.image)
+              .filter((u): u is string => typeof u === "string" && !!u);
+            const versionUrls = versionShots.filter(
+              (u): u is string => typeof u === "string" && !!u,
+            );
+            const currentlyVisibleSet = new Set<string>([
+              ...mainFilled,
+              ...wildCardUrls,
+              ...versionUrls,
+            ]);
             const regenHistoryDedupe = previousImages.filter(
               (u): u is string => !!u && !currentlyVisibleSet.has(u),
             );
@@ -10886,9 +10904,9 @@ const GridScreen = ({
               (u) => typeof u === "string" && !allShown.has(u),
             ).length;
             const totalShots =
-              images.filter(Boolean).length +
-              wildCards.filter((w) => !!w.image).length +
-              versionShots.filter(Boolean).length +
+              mainFilled.length +
+              wildCardUrls.length +
+              versionUrls.length +
               regenHistoryDedupe.length +
               alsoGeneratedCount;
             if (totalShots === 0) return null;
@@ -17967,6 +17985,30 @@ const AllShotsGallery = ({
     };
   }, []);
 
+  // Browser-back closes the gallery instead of navigating away from the
+  // app (2026-09-10 per Kristi — a customer hit the browser back arrow to
+  // exit the gallery and lost the whole session). We push a synthetic
+  // history entry on mount; popstate on that entry fires onClose.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    // Marker so we only intercept OUR entry, not a real navigation.
+    window.history.pushState({ __allShotsGallery: true }, "");
+    const onPop = () => {
+      onClose();
+    };
+    window.addEventListener("popstate", onPop);
+    return () => {
+      window.removeEventListener("popstate", onPop);
+      // If the entry is still there when the gallery unmounts via the X
+      // (not via back), rewind it silently so we don't leave a dangling
+      // history entry behind. Guarded so we don't rewind twice on a
+      // back-triggered close.
+      if (window.history.state && (window.history.state as { __allShotsGallery?: boolean }).__allShotsGallery) {
+        window.history.back();
+      }
+    };
+  }, [onClose]);
+
   const totalShots = flat.length;
   const cartTotal = (cart.length * BASIC_PRICE_PER_PHOTO).toFixed(2);
 
@@ -18140,7 +18182,34 @@ const AllShotsGallery = ({
           gap: 16,
         }}
       >
-        <div>
+        {/* Back-to-grid pill (2026-09-10 per Kristi). Prominent primary
+            "way out" so customers stop hitting the browser back arrow to
+            exit. Left side matches the standard "back arrow at top-left"
+            convention the rest of the app uses. */}
+        <button
+          onClick={onClose}
+          aria-label="Back to your grid"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "10px 16px",
+            borderRadius: 999,
+            border: `1px solid ${C.border}`,
+            background: C.white,
+            color: C.dark,
+            fontSize: 14,
+            fontWeight: 600,
+            cursor: "pointer",
+            fontFamily: "inherit",
+            letterSpacing: 0.2,
+            flexShrink: 0,
+          }}
+        >
+          <ArrowLeft size={16} />
+          Back to grid
+        </button>
+        <div style={{ textAlign: "center", flex: 1, minWidth: 0 }}>
           <h1
             style={{
               fontSize: 16,
@@ -18148,6 +18217,9 @@ const AllShotsGallery = ({
               margin: 0,
               letterSpacing: -0.2,
               color: C.dark,
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
             }}
           >
             Every shot from your session
@@ -18156,20 +18228,26 @@ const AllShotsGallery = ({
             {totalShots} shots · {cart.length} in cart · Tap + to add to cart
           </div>
         </div>
+        {/* Redundant close X on the right, larger + higher-contrast than
+            before so it's obvious as a secondary way out. */}
         <button
           onClick={onClose}
           aria-label="Close gallery"
           style={{
-            width: 36,
-            height: 36,
-            border: "none",
-            background: "transparent",
-            color: C.mediumGrey,
-            fontSize: 22,
+            width: 44,
+            height: 44,
+            border: `1px solid ${C.border}`,
+            background: C.white,
+            color: C.dark,
+            fontSize: 26,
             lineHeight: 1,
             cursor: "pointer",
             padding: 0,
             borderRadius: "50%",
+            flexShrink: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
           }}
         >
           ×
@@ -18274,12 +18352,44 @@ const AllShotsGallery = ({
           gap: 14,
         }}
       >
-        <div style={{ fontSize: 13, color: C.dark, fontWeight: 500 }}>
-          <span style={{ color: "#C9A961", fontWeight: 700 }}>{cart.length}</span>{" "}
-          in your cart
-          {cart.length > 0 && (
-            <> · <span>${cartTotal}</span></>
-          )}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          {/* Secondary "Back to grid" text-button in the footer too so a
+              customer scrolled to the bottom doesn't have to scroll back
+              up to find the header exit. (2026-09-10) */}
+          <button
+            onClick={onClose}
+            style={{
+              background: "transparent",
+              border: "none",
+              color: C.mediumGrey,
+              fontSize: 13,
+              cursor: "pointer",
+              padding: "6px 10px",
+              fontFamily: "inherit",
+              textDecoration: "underline",
+            }}
+          >
+            ← Back to grid
+          </button>
+          <div style={{ fontSize: 13, color: C.dark, fontWeight: 500 }}>
+            <span style={{ color: "#C9A961", fontWeight: 700 }}>
+              {cart.length}
+            </span>{" "}
+            in your cart
+            {cart.length > 0 && (
+              <>
+                {" · "}
+                <span>${cartTotal}</span>
+              </>
+            )}
+          </div>
         </div>
         <button
           onClick={onCheckout}
@@ -18791,6 +18901,29 @@ export default function App() {
   // useEffect below also mirrors client state changes into this pool so
   // the cabinet reflects new shots without waiting for a page reload.
   const [allGeneratedUrls, setAllGeneratedUrls] = useState<string[]>([]);
+
+  // Debounce for the empty-grid recovery card (2026-09-10). Multiple
+  // async paths (?resume=, localStorage token, free-tier IDB restore,
+  // Stripe roundtrip) briefly set screen="grid" before generatedImages
+  // populates. Without this delay the recovery card would flash for
+  // ~200ms during a normal successful restore — which would scare users
+  // even more than the "Generation failed" tiles it replaces. Only show
+  // the card if the grid has been empty for 1200ms — long enough that
+  // any in-flight restore has finished, short enough that a real
+  // problem doesn't leave the user staring at a blank screen.
+  const [emptyGridForAWhile, setEmptyGridForAWhile] = useState(false);
+  useEffect(() => {
+    if (screen !== "grid") {
+      setEmptyGridForAWhile(false);
+      return;
+    }
+    if (generatedImages.filter(Boolean).length > 0) {
+      setEmptyGridForAWhile(false);
+      return;
+    }
+    const t = window.setTimeout(() => setEmptyGridForAWhile(true), 1200);
+    return () => window.clearTimeout(t);
+  }, [screen, generatedImages]);
   const [versionsSourceIndex, setVersionsSourceIndex] = useState<number | null>(
     null,
   );
@@ -22449,7 +22582,155 @@ export default function App() {
           }}
         />
       )}
-      {screen === "grid" && (
+      {/* Empty-grid recovery card (2026-09-10 per Kristi). If a customer
+          lands on the grid screen with zero images populated — usually
+          from a Stripe return-trip that didn't re-hydrate cleanly, a
+          stale localStorage state, or an incognito refresh — we no
+          longer show 6 "Generation failed" tiles. That was scaring
+          customers out of the session (especially right after they paid).
+          Instead: warm messaging + a big "Restore my session" button + a
+          fallback email lookup so support-Kristi still has a path in.
+          Gated by emptyGridForAWhile so a fast in-flight restore
+          (free-tier IDB rehydrate, resume-URL fetch) doesn't flash the
+          recovery UI before the images land. */}
+      {/* Loading spinner during the debounce window — the customer sees
+          a friendly "just a sec" beat while the async restore paths race
+          to hydrate. Without this, empty grid = blank white screen for
+          1.2s, which reads as broken. */}
+      {screen === "grid" &&
+        generatedImages.filter(Boolean).length === 0 &&
+        !emptyGridForAWhile && (
+          <div
+            style={{
+              maxWidth: 560,
+              margin: "0 auto",
+              padding: "120px 24px 40px",
+              textAlign: "center",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 18,
+              ...font,
+            }}
+          >
+            <Loader2
+              size={28}
+              style={{
+                animation: "spin 1s linear infinite",
+                color: BRAND.subText,
+              }}
+            />
+            <div style={{ color: BRAND.subText, fontSize: 14 }}>
+              Reconnecting to your session…
+            </div>
+          </div>
+        )}
+      {screen === "grid" &&
+        generatedImages.filter(Boolean).length === 0 &&
+        emptyGridForAWhile && (
+          <div
+            style={{
+              maxWidth: 560,
+              margin: "0 auto",
+              padding: "80px 24px 40px",
+              textAlign: "center",
+              ...font,
+            }}
+          >
+            <div
+              style={{
+                fontSize: 11,
+                letterSpacing: 1.2,
+                textTransform: "uppercase",
+                color: "#C9A961",
+                fontWeight: 600,
+                marginBottom: 14,
+              }}
+            >
+              We've got you
+            </div>
+            <h2
+              style={{
+                fontFamily: SERIF_STACK,
+                fontSize: "clamp(24px, 3.5vw, 34px)",
+                fontWeight: 400,
+                lineHeight: 1.2,
+                letterSpacing: -0.3,
+                color: BRAND.charcoal,
+                margin: "0 0 16px",
+              }}
+            >
+              Let's pick up where you left off.
+            </h2>
+            <p
+              style={{
+                fontSize: 15,
+                lineHeight: 1.6,
+                color: BRAND.subText,
+                margin: "0 0 28px",
+              }}
+            >
+              Your headshots are safe on our side — this browser just
+              needs a moment to reconnect. Tap below to bring them back.
+            </p>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 10,
+                alignItems: "center",
+              }}
+            >
+              <button
+                onClick={() => {
+                  // Try the same paths the initial-mount resume effect
+                  // uses: URL first, then localStorage. A page reload
+                  // reruns that effect cleanly, so the simplest, most
+                  // reliable "restore" action is to reload. Cart +
+                  // localStorage resume token survive; the useEffect
+                  // then re-hydrates the grid from the server.
+                  try {
+                    window.location.reload();
+                  } catch {
+                    /* browser blocked reload — fall through */
+                  }
+                }}
+                style={{
+                  background: BRAND.forestGreen,
+                  color: BRAND.white,
+                  border: "none",
+                  borderRadius: 999,
+                  padding: "14px 32px",
+                  fontSize: 15,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  letterSpacing: 0.3,
+                  boxShadow: "0 3px 12px rgba(27,67,50,0.25)",
+                }}
+              >
+                Restore my session
+              </button>
+              <a
+                href={`mailto:kristi@kristinasherk.com?subject=${encodeURIComponent(
+                  "Help recovering my headshots",
+                )}&body=${encodeURIComponent(
+                  "Hi Kristi — I generated headshots on generationheadshots.com and can't get back to them. Can you help?",
+                )}`}
+                style={{
+                  color: BRAND.subText,
+                  fontSize: 13,
+                  textDecoration: "underline",
+                  padding: "10px 0 0",
+                }}
+              >
+                Or email Kristi for help — she'll get you sorted
+              </a>
+            </div>
+          </div>
+        )}
+      {screen === "grid" &&
+        generatedImages.filter(Boolean).length > 0 && (
         <GridScreen
           images={generatedImages}
           previousImages={previousImages}
