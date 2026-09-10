@@ -10508,13 +10508,15 @@ type GridScreenProps = {
   wildCards: WildCardShot[];
   // Generate Versions state (2026-09-01). See handleGenerateVersionsFor in App.
   versionShots: (string | null)[];
-  versionsSourceIndex: number | null;
+  versionsSourceLabel: string | null;
   versionsUsedThisBatch: boolean;
   pickingVersionSource: boolean;
   versionsGenerating: boolean;
   onStartPickVersionSource: () => void;
   onCancelPickVersionSource: () => void;
-  onPickVersionSource: (sourceIndex: number) => void;
+  // Accepts a source URL + display label (e.g. "photo 3" or "wild card").
+  // Wild cards can trigger this too — 2026-09-10 per Kristi.
+  onPickVersionSource: (sourceUrl: string, sourceLabel: string) => void;
   // Default state for the "extras from earlier today" section (2026-09-03).
   // True when the customer landed via an RTV email link — extras open by
   // default so they see the full history without having to notice the small
@@ -10570,7 +10572,7 @@ const GridScreen = ({
   maxCartSize,
   wildCards,
   versionShots,
-  versionsSourceIndex,
+  versionsSourceLabel,
   versionsUsedThisBatch,
   pickingVersionSource,
   versionsGenerating,
@@ -11394,6 +11396,16 @@ const GridScreen = ({
                     className="wc-shot"
                     onClick={() => {
                       if (!wc.image) return;
+                      // Pick-a-source mode for Generate Versions
+                      // (2026-09-10 per Kristi — wild cards were
+                      // originally excluded from the version picker but
+                      // customers wanted to make variations of a wild
+                      // card too, especially when it turned out better
+                      // than the main grid slots).
+                      if (pickingVersionSource) {
+                        onPickVersionSource(wc.image, "wild card");
+                        return;
+                      }
                       if (wcPicked) onRemoveFromCart(wc.image);
                       else if (!cartIsFull) onAddToCart(wc.image);
                     }}
@@ -11695,7 +11707,7 @@ const GridScreen = ({
                 // toggling cart. Empty or in-flight slots ignore the tap.
                 if (pickingVersionSource) {
                   if (src && !regenerating && !perfecting) {
-                    onPickVersionSource(i);
+                    onPickVersionSource(src, `photo ${i + 1}`);
                   }
                   return;
                 }
@@ -12552,9 +12564,7 @@ const GridScreen = ({
               }}
             >
               Variations of your source shot
-              {versionsSourceIndex !== null
-                ? ` · from photo ${versionsSourceIndex + 1}`
-                : ""}
+              {versionsSourceLabel ? ` · from ${versionsSourceLabel}` : ""}
               {" · body angle + expression"}
             </span>
           </div>
@@ -18924,7 +18934,11 @@ export default function App() {
     const t = window.setTimeout(() => setEmptyGridForAWhile(true), 1200);
     return () => window.clearTimeout(t);
   }, [screen, generatedImages]);
-  const [versionsSourceIndex, setVersionsSourceIndex] = useState<number | null>(
+  // What to caption the "Variations of your source shot" strip with —
+  // e.g. "photo 3" or "wild card". null = no caption. Replaced the older
+  // versionsSourceIndex when wild cards became valid version sources
+  // (2026-09-10 per Kristi).
+  const [versionsSourceLabel, setVersionsSourceLabel] = useState<string | null>(
     null,
   );
   const [versionsUsedThisBatch, setVersionsUsedThisBatch] = useState(false);
@@ -21599,7 +21613,7 @@ export default function App() {
     // Fresh batch → clear Generate Versions state so the customer gets their
     // one free "make versions" use back.
     setVersionShots([]);
-    setVersionsSourceIndex(null);
+    setVersionsSourceLabel(null);
     setVersionsUsedThisBatch(false);
     setPickingVersionSource(false);
     setVersionsGenerating(false);
@@ -22807,14 +22821,14 @@ export default function App() {
           maxCartSize={MAX_CART_SIZE}
           wildCards={wildCards}
           versionShots={versionShots}
-          versionsSourceIndex={versionsSourceIndex}
+          versionsSourceLabel={versionsSourceLabel}
           versionsUsedThisBatch={versionsUsedThisBatch}
           pickingVersionSource={pickingVersionSource}
           versionsGenerating={versionsGenerating}
           onStartPickVersionSource={() => setPickingVersionSource(true)}
           onCancelPickVersionSource={() => setPickingVersionSource(false)}
-          onPickVersionSource={(sourceIndex) => {
-            void handleGenerateVersionsFor(sourceIndex);
+          onPickVersionSource={(sourceUrl, sourceLabel) => {
+            void handleGenerateVersionsFor(sourceUrl, sourceLabel);
           }}
           // Open the extras section by default when the customer arrived via
           // an RTV email link (2026-09-03, per Kristi). Fresh in-session
