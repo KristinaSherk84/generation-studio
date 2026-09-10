@@ -20938,10 +20938,17 @@ export default function App() {
   // composition/outfit/hair/etc with a slightly wider crop. Reuses the
   // current batchId so this counts as part of the ongoing batch (won't trip
   // the per-IP fresh-batch cap). Once per batch, cleared on new full batch.
-  const handleGenerateVersionsFor = async (sourceIndex: number) => {
+  // Signature change (2026-09-10 per Kristi): accept a URL directly so
+  // wild-card tiles can trigger version generation too, not just the
+  // main-grid slots. Callers pass the source URL plus an optional label
+  // (e.g. "photo 3", "wild card") used purely for the on-screen "from …"
+  // caption above the versions row.
+  const handleGenerateVersionsFor = async (
+    sourceUrl: string,
+    sourceLabel?: string | null,
+  ) => {
     if (versionsUsedThisBatch || versionsGenerating) return;
     if (!lastSelections || lastPhotoUrls.length < 5) return;
-    const sourceUrl = generatedImages[sourceIndex];
     if (!sourceUrl || !/^https?:\/\//.test(sourceUrl)) {
       // We need an https URL to pass to the server as similarToUrl. Base64
       // won't work — the server needs to fetch it. Should be rare given the
@@ -20952,7 +20959,7 @@ export default function App() {
       return;
     }
     setPickingVersionSource(false);
-    setVersionsSourceIndex(sourceIndex);
+    setVersionsSourceLabel(sourceLabel ?? null);
     setVersionsGenerating(true);
     setVersionShots([null, null]);
     setRegenError(null);
