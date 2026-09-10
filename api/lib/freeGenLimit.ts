@@ -65,6 +65,13 @@ const HARD_CAP_CREDIT_PER_UNLOCK = Math.max(
   Number(process.env.HARD_CAP_CREDIT_PER_UNLOCK ?? "30"),
 );
 const hardCapCreditsKey = (ip: string) => `gencap:extra:${ip}`;
+// Payment count within the rolling window (2026-09-09, per Kristi). The
+// FIRST $3.99 in the window gives the customer the base HARD_CAP (40) and
+// no extra credits — HARD_CAP is what one payment already unlocks. The
+// SECOND+ payment in the same window each add HARD_CAP_CREDIT_PER_UNLOCK
+// (30) on top. Tracked per IP so a customer who pays, walks away past the
+// window, and comes back tomorrow starts fresh at "first payment" again.
+const hardCapPayCountKey = (ip: string) => `gencap:paycount:${ip}`;
 
 /**
  * Read the extra hard-cap credits currently granted to this IP. Returns 0
@@ -109,6 +116,55 @@ export async function addHardCapCredits(
     return { ok: true, total };
   } catch {
     return { ok: false, total: 0 };
+  }
+}
+
+/**
+ * Record a confirmed $3.99 unlock for this IP and — ONLY when it's the
+ * SECOND-or-later payment in the current rolling window — grant the
+ * bonus HARD_CAP_CREDIT_PER_UNLOCK credits. The first payment in the
+ * window doesn't add credits: the customer just gets the base HARD_CAP
+ * (40 calls) that the initial payment already unlocks. Kristi's model
+ * (2026-09-09): $3.99×1 = 40, $3.99×2 = 70, $3.99×3 = 100.
+ *
+ * Returns {creditsGranted, paymentNumber, totalExtraCredits} so the
+ * caller can log the outcome and stamp Stripe metadata for audit.
+ * Fail-open on any Redis error (returns as if first payment, no
+ * credits) so a paywall verify never breaks because of an infra hiccup.
+ */
+export async function recordUnlockPayment(
+  ip: string | undefined,
+): Promise<{
+  creditsGranted: number;
+  paymentNumber: number;
+  totalExtraCredits: number;
+}> {
+  if (!ip)
+    return { creditsGranted: 0, paymentNumber: 0, totalExtraCredits: 0 };
+  try {
+    const payKey = hardCapPayCountKey(ip);
+    const paymentNumber = await redis.incr(payKey);
+    if (paymentNumber === 1) {
+      await redis.expire(payKey, HARD_CAP_WINDOW_SECONDS);
+    }
+    // First payment in this window → base HARD_CAP is enough, no credit
+    if (paymentNumber <= 1) {
+      const existing = await readHardCapCredits(ip);
+      return {
+        creditsGranted: 0,
+        paymentNumber,
+        totalExtraCredits: existing,
+      };
+    }
+    // Second-or-later payment → grant a full HARD_CAP_CREDIT_PER_UNLOCK
+    const result = await addHardCapCredits(ip, HARD_CAP_CREDIT_PER_UNLOCK);
+    return {
+      creditsGranted: result.ok ? HARD_CAP_CREDIT_PER_UNLOCK : 0,
+      paymentNumber,
+      totalExtraCredits: result.total,
+    };
+  } catch {
+    return { creditsGranted: 0, paymentNumber: 0, totalExtraCredits: 0 };
   }
 }
 

@@ -41,7 +41,7 @@
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { addHardCapCredits } from "./lib/freeGenLimit.js";
+import { recordUnlockPayment } from "./lib/freeGenLimit.js";
 
 export const maxDuration = 15;
 
@@ -213,34 +213,28 @@ export default async function handler(
         // Fire the credit grant BEFORE the Stripe write so the customer
         // sees the extra headroom on their very next /api/generate call.
         // Best-effort — a Redis blip should never fail the paywall verify.
+        // recordUnlockPayment tracks how many $3.99 payments this IP has
+        // made in the rolling window and only grants credits on the 2nd+
+        // payment (2026-09-09 per Kristi's model — payment #1 = 40 total,
+        // payment #2 = 70, payment #3 = 100).
         let creditsGranted = 0;
         try {
-          const result = await addHardCapCredits(clientIp);
-          if (result.ok) {
-            creditsGranted = 30;
-            // Structured success log so every grant is greppable in Vercel
-            // logs — search for "hardcap_credit_granted" to audit every
-            // repeat-payer.
-            console.log(
-              JSON.stringify({
-                type: "hardcap_credit_granted",
-                ip: clientIp || "unknown",
-                sessionId,
-                granted: 30,
-                totalForIp: result.total,
-                email,
-              }),
-            );
-          } else {
-            console.warn(
-              JSON.stringify({
-                type: "hardcap_credit_grant_skipped",
-                ip: clientIp || "unknown",
-                sessionId,
-                reason: clientIp ? "redis_error" : "missing_ip",
-              }),
-            );
-          }
+          const result = await recordUnlockPayment(clientIp);
+          creditsGranted = result.creditsGranted;
+          console.log(
+            JSON.stringify({
+              type:
+                creditsGranted > 0
+                  ? "hardcap_credit_granted"
+                  : "hardcap_first_payment_no_credit",
+              ip: clientIp || "unknown",
+              sessionId,
+              paymentNumber: result.paymentNumber,
+              creditsGranted,
+              totalExtraCreditsForIp: result.totalExtraCredits,
+              email,
+            }),
+          );
         } catch (err) {
           console.warn(
             "hardcap credit grant threw:",

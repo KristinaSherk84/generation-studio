@@ -50,15 +50,23 @@ export default async function handler(
   const usageKey = `gencap:${ip}`;
   const creditsKey = `gencap:extra:${ip}`;
   const freeCallsKey = `freecalls:${ip}`;
+  const payCountKey = `gencap:paycount:${ip}`;
 
-  const [rawUsage, rawCredits, rawFreeCalls, usageTtl, creditsTtl] =
-    await Promise.all([
-      redis.get<string | number | null>(usageKey),
-      redis.get<string | number | null>(creditsKey),
-      redis.get<string | number | null>(freeCallsKey),
-      redis.ttl(usageKey),
-      redis.ttl(creditsKey),
-    ]);
+  const [
+    rawUsage,
+    rawCredits,
+    rawFreeCalls,
+    rawPayCount,
+    usageTtl,
+    creditsTtl,
+  ] = await Promise.all([
+    redis.get<string | number | null>(usageKey),
+    redis.get<string | number | null>(creditsKey),
+    redis.get<string | number | null>(freeCallsKey),
+    redis.get<string | number | null>(payCountKey),
+    redis.ttl(usageKey),
+    redis.ttl(creditsKey),
+  ]);
 
   const toInt = (v: string | number | null): number => {
     if (v === null || v === undefined) return 0;
@@ -69,6 +77,7 @@ export default async function handler(
   const used = toInt(rawUsage);
   const extraCredits = toInt(rawCredits);
   const freeCallsUsed = toInt(rawFreeCalls);
+  const paymentCount = toInt(rawPayCount);
   const effectiveCap = BASE_HARD_CAP + extraCredits;
   const remaining = Math.max(0, effectiveCap - used);
   const overCap = used > effectiveCap;
@@ -83,6 +92,7 @@ export default async function handler(
     remaining,
     overCap,
     freeCallsUsed,
+    paymentCount,
     ttlSeconds: {
       usage: usageTtl,
       credits: creditsTtl,
@@ -92,6 +102,8 @@ export default async function handler(
         "true means this IP is currently blocked. Grant more credits via /api/admin/grant-cap-credits or wait for the TTL to roll off.",
       remaining:
         "How many more /api/generate calls this IP can make right now.",
+      paymentCount:
+        "Number of confirmed $3.99 unlocks in the rolling window. Credits are granted on payment #2 and later (payment #1 unlocks the base 40 with no bonus).",
     },
   });
 }
