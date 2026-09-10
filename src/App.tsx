@@ -9455,41 +9455,77 @@ const StyleScreen = ({
               maxWidth: 240,
             }}
           >
-            {STUDIO_BGS.map((bg) => (
-              <div
-                key={bg.id}
-                onClick={() => setBackground(bg.id)}
-                title={bg.label}
-                style={{
-                  width: 28,
-                  height: 28,
-                  borderRadius: "50%",
-                  // The Dark swatch previews its spotlight backdrop: a small
-                  // lighter-grey center fading out to near-black, mirroring the
-                  // "Background: dark" prompt. Per Kristi 2026-08-03.
-                  // The Red swatch previews its goldenrod→red→rust paper sweep:
-                  // a small spot of goldenrod yellow at the bottom transitioning
-                  // up through fire-truck red into deep dark rust, mirroring the
-                  // "Background: red" prompt. Per Kristi 2026-08-04.
-                  background:
-                    bg.id === "dark"
-                      ? "radial-gradient(circle, #9A9A94 0%, #2A2A26 55%, #171712 100%)"
-                      : bg.id === "red"
-                        ? "linear-gradient(to top, #E4A81E 0%, #E4A81E 16%, #CE2029 55%, #7A2409 100%)"
-                        : bg.id === "bluebright"
-                          ? "radial-gradient(circle at 50% 45%, #007DB8 0%, #002FA7 60%, #001a5c 100%)"
-                          : bg.id === "blue"
-                            ? "radial-gradient(circle at 50% 45%, #1E5A96 0%, #0B2A5E 55%, #04122E 100%)"
-                            : bg.color,
-                  border:
-                    background === bg.id
-                      ? `2px solid ${C.dark}`
+            {STUDIO_BGS.map((bg) => {
+              const isSelected = background === bg.id;
+              return (
+                <div
+                  key={bg.id}
+                  onClick={() => setBackground(bg.id)}
+                  title={bg.label}
+                  style={{
+                    width: 28,
+                    height: 28,
+                    borderRadius: "50%",
+                    // The Dark swatch previews its spotlight backdrop: a small
+                    // lighter-grey center fading out to near-black, mirroring the
+                    // "Background: dark" prompt. Per Kristi 2026-08-03.
+                    // The Red swatch previews its goldenrod→red→rust paper sweep:
+                    // a small spot of goldenrod yellow at the bottom transitioning
+                    // up through fire-truck red into deep dark rust, mirroring the
+                    // "Background: red" prompt. Per Kristi 2026-08-04.
+                    background:
+                      bg.id === "dark"
+                        ? "radial-gradient(circle, #9A9A94 0%, #2A2A26 55%, #171712 100%)"
+                        : bg.id === "red"
+                          ? "linear-gradient(to top, #E4A81E 0%, #E4A81E 16%, #CE2029 55%, #7A2409 100%)"
+                          : bg.id === "bluebright"
+                            ? "radial-gradient(circle at 50% 45%, #007DB8 0%, #002FA7 60%, #001a5c 100%)"
+                            : bg.id === "blue"
+                              ? "radial-gradient(circle at 50% 45%, #1E5A96 0%, #0B2A5E 55%, #04122E 100%)"
+                              : bg.color,
+                    // Selected state (2026-09-09 per Kristi): a plain dark
+                    // border disappears on dark swatches (Executive, Dark,
+                    // Navy). Swap to a WHITE inner ring + GOLD outer ring
+                    // via layered box-shadows, which stays visible over
+                    // every color from white paper to near-black spotlight.
+                    // A small confirm-check overlay drops on top for
+                    // belt-and-suspenders clarity.
+                    border: isSelected
+                      ? "none"
                       : `1px solid ${C.border}`,
-                  cursor: "pointer",
-                  transition: "border 0.15s",
-                }}
-              />
-            ))}
+                    boxShadow: isSelected
+                      ? "0 0 0 2px #FFFFFF, 0 0 0 4px #C9A961, 0 2px 6px rgba(201,169,97,0.45)"
+                      : "none",
+                    cursor: "pointer",
+                    transition: "box-shadow 0.15s, transform 0.15s",
+                    transform: isSelected ? "scale(1.08)" : "scale(1)",
+                    position: "relative",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  {isSelected && (
+                    <div
+                      aria-hidden
+                      style={{
+                        width: 14,
+                        height: 14,
+                        borderRadius: "50%",
+                        background: "#C9A961",
+                        color: "#FFFFFF",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        boxShadow: "0 1px 2px rgba(0,0,0,0.35)",
+                      }}
+                    >
+                      <Check size={9} strokeWidth={3.5} />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </>
       )}
@@ -9535,13 +9571,41 @@ const StyleScreen = ({
                     height: 28,
                     borderRadius: "50%",
                     background: s.hex,
-                    border: selected
-                      ? `2px solid ${C.dark}`
-                      : `1px solid ${C.border}`,
+                    // Selected state: white-ring + gold-ring double outline
+                    // (2026-09-09 per Kristi) so dark scrub colors like Navy
+                    // and Black still show a clear "picked" affordance.
+                    border: selected ? "none" : `1px solid ${C.border}`,
+                    boxShadow: selected
+                      ? "0 0 0 2px #FFFFFF, 0 0 0 4px #C9A961, 0 2px 6px rgba(201,169,97,0.45)"
+                      : "none",
                     cursor: "pointer",
-                    transition: "border 0.15s",
+                    transition: "box-shadow 0.15s, transform 0.15s",
+                    transform: selected ? "scale(1.08)" : "scale(1)",
+                    position: "relative",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
                   }}
-                />
+                >
+                  {selected && (
+                    <div
+                      aria-hidden
+                      style={{
+                        width: 14,
+                        height: 14,
+                        borderRadius: "50%",
+                        background: "#C9A961",
+                        color: "#FFFFFF",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        boxShadow: "0 1px 2px rgba(0,0,0,0.35)",
+                      }}
+                    >
+                      <Check size={9} strokeWidth={3.5} />
+                    </div>
+                  )}
+                </div>
               );
             })}
           </div>
@@ -9586,13 +9650,41 @@ const StyleScreen = ({
                     height: 28,
                     borderRadius: "50%",
                     background: s.hex,
-                    border: selected
-                      ? `2px solid ${C.dark}`
-                      : `1px solid ${C.border}`,
+                    // Selected state: white-ring + gold-ring double outline
+                    // (2026-09-09 per Kristi) so dark polo colors (Black,
+                    // Navy, Charcoal) still show a visible "picked" ring.
+                    border: selected ? "none" : `1px solid ${C.border}`,
+                    boxShadow: selected
+                      ? "0 0 0 2px #FFFFFF, 0 0 0 4px #C9A961, 0 2px 6px rgba(201,169,97,0.45)"
+                      : "none",
                     cursor: "pointer",
-                    transition: "border 0.15s",
+                    transition: "box-shadow 0.15s, transform 0.15s",
+                    transform: selected ? "scale(1.08)" : "scale(1)",
+                    position: "relative",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
                   }}
-                />
+                >
+                  {selected && (
+                    <div
+                      aria-hidden
+                      style={{
+                        width: 14,
+                        height: 14,
+                        borderRadius: "50%",
+                        background: "#C9A961",
+                        color: "#FFFFFF",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        boxShadow: "0 1px 2px rgba(0,0,0,0.35)",
+                      }}
+                    >
+                      <Check size={9} strokeWidth={3.5} />
+                    </div>
+                  )}
+                </div>
               );
             })}
           </div>
