@@ -10700,31 +10700,59 @@ const GridScreen = ({
   // Collapsed by default so the page doesn't feel overwhelming.
   const [extrasExpanded, setExtrasExpanded] = useState(extrasExpandedByDefault);
 
-  // Regen-history extras (2026-09-09 per Kristi): shots the customer
-  // replaced via ↺ regenerate. Filtered to (a) non-null and (b) not
-  // currently shown on the main grid (so a reverted slot doesn't
-  // double-show). These join the accumulated-batches extras in the same
-  // "expand for more" pill.
-  const currentlyVisibleUrls = new Set(
-    images.filter((u): u is string => !!u),
-  );
-  const regenHistoryExtras = previousImages.filter(
-    (u): u is string => !!u && !currentlyVisibleUrls.has(u),
-  );
-  const accumulatedExtras = images.slice(6).filter((u): u is string => !!u);
+  // Extras section (2026-09-11 revised per Kristi — the earlier dedupe
+  // only checked the main 6-slot grid, so a shot that was already
+  // showing as a Version or a Wild Card would ALSO appear in extras.
+  // Customers were seeing the same photo two or three times and worried
+  // they'd get double-charged. Now we exclude EVERYTHING already on
+  // screen above the extras pill: main grid + wild cards + version
+  // shots, and dedupe each extras source against everything already
+  // added to extras.).
+  const currentlyVisibleUrls = new Set<string>([
+    ...images.filter((u): u is string => !!u),
+    ...wildCards
+      .map((w) => w.image)
+      .filter((u): u is string => typeof u === "string" && !!u),
+    ...versionShots.filter((u): u is string => typeof u === "string" && !!u),
+  ]);
+  // Accumulated extras first — historical batches (positions 6+ of the
+  // main grid) are the "newest" extras conceptually.
+  const rawAccumulated = images.slice(6).filter((u): u is string => !!u);
+  const accumulatedExtras: string[] = [];
+  const seenAccum = new Set<string>();
+  for (const u of rawAccumulated) {
+    if (currentlyVisibleUrls.has(u)) continue;
+    if (seenAccum.has(u)) continue;
+    seenAccum.add(u);
+    accumulatedExtras.push(u);
+  }
+  // Regen history second — shots that were replaced via ↺ regenerate.
+  const regenHistoryExtras: string[] = [];
+  const seenAfterAccum = new Set<string>([
+    ...currentlyVisibleUrls,
+    ...accumulatedExtras,
+  ]);
+  for (const u of previousImages) {
+    if (typeof u !== "string" || !u) continue;
+    if (seenAfterAccum.has(u)) continue;
+    seenAfterAccum.add(u);
+    regenHistoryExtras.push(u);
+  }
   // Server's complete generation history catches shots the customer
   // regenerated over more than once — previousImages only stores the
   // single most-recent prior version per slot, so anything older was
-  // lost from client state. Dedupe against everything already shown so
-  // we don't render a shot twice. (2026-09-09)
-  const alreadyShownInExtras = new Set<string>([
-    ...currentlyVisibleUrls,
+  // lost from client state.
+  const seenAfterRegen = new Set<string>([
+    ...seenAfterAccum,
     ...regenHistoryExtras,
-    ...accumulatedExtras,
   ]);
-  const alsoGeneratedExtras = allGeneratedUrls.filter(
-    (u) => typeof u === "string" && !alreadyShownInExtras.has(u),
-  );
+  const alsoGeneratedExtras: string[] = [];
+  for (const u of allGeneratedUrls) {
+    if (typeof u !== "string" || !u) continue;
+    if (seenAfterRegen.has(u)) continue;
+    seenAfterRegen.add(u);
+    alsoGeneratedExtras.push(u);
+  }
   const totalExtrasCount =
     accumulatedExtras.length +
     regenHistoryExtras.length +
@@ -12818,24 +12846,33 @@ const GridScreen = ({
                   grid layout. Each thumbnail fades to transparent at its
                   own bottom edge via mask-image so the rectangles dissolve
                   into the pill background together (no left/right fade). */}
+              {(() => {
+                // Preview thumbnails — up to 4, but only ONE tile per unique
+                // shot (2026-09-11 per Kristi — the earlier `n % length`
+                // fallback was cycling the same 2 shots into 4 slots, which
+                // read as duplicates and made customers worry they'd be
+                // charged twice). If there are fewer than 4 unique extras,
+                // just show the ones we have.
+                const filled = [
+                  ...accumulatedExtras,
+                  ...regenHistoryExtras,
+                  ...alsoGeneratedExtras,
+                ];
+                const previews = filled.slice(0, 4);
+                if (previews.length === 0) return null;
+                return (
               <div
                 aria-hidden="true"
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "repeat(4, minmax(0, 68px))",
+                  gridTemplateColumns: `repeat(${previews.length}, minmax(0, 68px))`,
                   gap: 8,
                   width: "100%",
                   maxWidth: 320,
                   justifyContent: "center",
                 }}
               >
-                {[0, 1, 2, 3].map((n) => {
-                  const filled = [
-                    ...accumulatedExtras,
-                    ...regenHistoryExtras,
-                    ...alsoGeneratedExtras,
-                  ];
-                  const src = filled[n] ?? filled[n % Math.max(filled.length, 1)];
+                {previews.map((src, n) => {
                   return (
                     <div
                       key={n}
@@ -12874,6 +12911,8 @@ const GridScreen = ({
                   );
                 })}
               </div>
+                );
+              })()}
               {/* Label + double-down-arrow cue, sitting BELOW the thumbnail
                   strip. Cleaner than overlaying now that the pill has room
                   to breathe. */}
@@ -19538,8 +19577,18 @@ export default function App() {
     // 4 days is treated as stale (matches server session TTL). Do NOT
     // fire when there's an active checkout redirect in the URL — those
     // paths do their own state restore.
+    // Every Stripe roundtrip URL param — do NOT auto-restore when any of
+    // these are present, they have their own dedicated handlers that
+    // set the correct screen (delivering / retouch / paywall unlock).
+    // 2026-09-11 bugfix: photo_paid was missing here, so after a real
+    // headshot purchase the auto-restore fired first and switched the
+    // customer to the grid before the delivery handler could take over.
+    // Symptoms: paid, "preparing" flashed briefly, then they landed on
+    // the grid with no download. Multiple customers hit this
+    // (Akshat + Kristi herself).
     const hasCheckoutParam =
       url.searchParams.get("paid") === "1" ||
+      url.searchParams.get("photo_paid") === "1" ||
       url.searchParams.get("photo_cancel") === "1";
     if (!token && !hasCheckoutParam) {
       try {
