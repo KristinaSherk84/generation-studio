@@ -12974,6 +12974,13 @@ const GridScreen = ({
                       alt={`Earlier headshot ${globalIndex + 1}`}
                       draggable={false}
                       decoding="async"
+                      // Lazy-load extras (2026-09-11 per Kristi — the RTV
+                      // link was taking forever to load because auto-expand
+                      // fired 30+ parallel 2-3MB Blob fetches for the full
+                      // allGeneratedUrls pool). Browser now only fetches
+                      // as tiles scroll into view. Main-grid images stay
+                      // eager — that's the primary content.
+                      loading="lazy"
                       onLoad={() => markLoaded(src)}
                       onError={() => markFailed(src)}
                       onContextMenu={(e) => e.preventDefault()}
@@ -18044,6 +18051,12 @@ const AllShotsGallery = ({
           src={src}
           alt=""
           draggable={false}
+          // Lazy-load cabinet tiles (2026-09-11 per Kristi). This gallery
+          // can hold 40+ shots; without lazy loading the whole set fires
+          // parallel Blob fetches the moment it opens. `decoding="async"`
+          // + `loading="lazy"` = only fetch as tiles scroll into view.
+          decoding="async"
+          loading="lazy"
           onContextMenu={(e) => e.preventDefault()}
           style={{
             position: "absolute",
