@@ -12475,16 +12475,49 @@ const GridScreen = ({
         })}
       </div>
 
-      {/* Generate Versions block (2026-09-01). Three states:
-          1. Idle (default): show the "Love one? Make more versions of it"
-             button below the grid.
-          2. Picking: show a banner asking the customer to tap the shot they
-             love, with a Cancel option.
-          3. Generating / rendered: hide the button and render the versions
-             strip (below).
-          Cap: one use per initial batch. After the customer generates their
-          versions, the button hides for the rest of this batch. */}
-      {!versionsUsedThisBatch && !versionsGenerating && (
+      {/* Generate Versions block (2026-09-01, expanded 2026-09-13). States:
+          1. Idle (default, unused): pulsing gold "Love one?" button to
+             draw the customer's eye — key conversion moment.
+          2. Picking: banner asking the customer to tap the shot they love,
+             with a Cancel option.
+          3. Generating: (rendered by the block below the button)
+          4. Used, unlocked: paid customer sees the pulsing button again
+             (they have unlimited version rounds while unlocked).
+          5. Used, NOT unlocked: greyed-out "Unlock more versions · $3.99"
+             CTA — routes to the same paywall used elsewhere. Kristi's
+             call 2026-09-13 — she wants the first use to be free and
+             every additional round to convert into a purchase. */}
+      {versionsUsedThisBatch && !versionsGenerating && !isUnlocked && (
+        <div style={{ marginTop: 20, textAlign: "center" }}>
+          <button
+            onClick={onBlockedSlotClick}
+            style={{
+              background: "#F1EFE8",
+              border: `1px solid ${C.border}`,
+              color: C.mediumGrey,
+              borderRadius: 999,
+              padding: "12px 24px",
+              fontSize: 14,
+              fontWeight: 500,
+              cursor: "pointer",
+              fontFamily: "inherit",
+              letterSpacing: 0.3,
+            }}
+          >
+            🔒 Unlock more versions · $3.99
+          </button>
+          <div
+            style={{
+              fontSize: 12,
+              color: C.mediumGrey,
+              marginTop: 6,
+            }}
+          >
+            First round free · additional rounds included with any purchase
+          </div>
+        </div>
+      )}
+      {(!versionsUsedThisBatch || isUnlocked) && !versionsGenerating && (
         pickingVersionSource ? (
           <div
             style={{
@@ -12505,7 +12538,7 @@ const GridScreen = ({
             }}
           >
             <div style={{ fontSize: 14, color: C.dark, fontWeight: 500 }}>
-              Tap the shot you love — I'll make 2 more variations of it.
+              Tap the shot you love — I'll make 3 more variations of it.
             </div>
             <button
               onClick={onCancelPickVersionSource}
@@ -12524,11 +12557,21 @@ const GridScreen = ({
           </div>
         ) : (
           <div style={{ marginTop: 20, textAlign: "center" }}>
+            {/* Pulsing gold outline animation (2026-09-13 per Kristi) —
+                draws the customer's eye to the key conversion moment.
+                Only pulses in the IDLE state (before use); the greyed
+                "Unlock more" state above stays static. */}
+            <style>{`
+              @keyframes versions-pulse {
+                0%, 100% { box-shadow: 0 0 0 0 rgba(201,169,97,0.55), 0 0 0 0 rgba(201,169,97,0); }
+                50%      { box-shadow: 0 0 0 8px rgba(201,169,97,0.06), 0 0 16px 2px rgba(201,169,97,0.55); }
+              }
+            `}</style>
             <button
               onClick={onStartPickVersionSource}
               style={{
                 background: "transparent",
-                border: `1px solid #C9A961`,
+                border: `2px solid #C9A961`,
                 color: "#8A6E1F",
                 borderRadius: 999,
                 padding: "12px 24px",
@@ -12537,6 +12580,7 @@ const GridScreen = ({
                 cursor: "pointer",
                 fontFamily: "inherit",
                 letterSpacing: 0.3,
+                animation: "versions-pulse 1.8s ease-in-out infinite",
               }}
             >
               Love one? Click here to make more variations of the headshot →
@@ -12548,7 +12592,9 @@ const GridScreen = ({
                 marginTop: 6,
               }}
             >
-              1 free per batch · 2 variations (body angle + expression)
+              {isUnlocked
+                ? "3 variations (body angle · expression · hair)"
+                : "1 free per batch · 3 variations (body angle · expression · hair)"}
             </div>
           </div>
         )
@@ -12593,7 +12639,7 @@ const GridScreen = ({
             >
               Variations of your source shot
               {versionsSourceLabel ? ` · from ${versionsSourceLabel}` : ""}
-              {" · body angle + expression"}
+              {" · body angle · expression · hair"}
             </span>
           </div>
           <div
@@ -12604,7 +12650,7 @@ const GridScreen = ({
               marginBottom: 6,
             }}
           >
-            {[0, 1].map((vi) => {
+            {[0, 1, 2].map((vi) => {
               const vsrc = versionShots[vi];
               const isCarted = !!vsrc && cartSet.has(vsrc);
               return (
@@ -21037,7 +21083,7 @@ export default function App() {
     setPickingVersionSource(false);
     setVersionsSourceLabel(sourceLabel ?? null);
     setVersionsGenerating(true);
-    setVersionShots([null, null]);
+    setVersionShots([null, null, null]);
     setRegenError(null);
 
     const buildBody = (variationIndex: number) => ({
@@ -21056,6 +21102,12 @@ export default function App() {
       ...readUnlockRequestFields(),
     });
 
+    // Fire 3 parallel variants (2026-09-13 per Kristi — bumped from 2 to
+    // 3 to give the customer more visual variety and improve conversion
+    // on the "make more like this" moment):
+    //   0 → body-angle rotate + slight wider crop
+    //   1 → expression change (softer or brighter than source)
+    //   2 → hair + expression + body-angle change, SAME crop
     const settled = await Promise.allSettled([
       fetch("/api/generate", {
         method: "POST",
@@ -21067,9 +21119,14 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(buildBody(1)),
       }),
+      fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildBody(2)),
+      }),
     ]);
 
-    const outputs: (string | null)[] = [null, null];
+    const outputs: (string | null)[] = [null, null, null];
     let anyOk = false;
     for (let i = 0; i < settled.length; i++) {
       const r = settled[i];
