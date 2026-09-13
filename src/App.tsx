@@ -12593,8 +12593,8 @@ const GridScreen = ({
               }}
             >
               {isUnlocked
-                ? "3 variations (body angle · expression · hair)"
-                : "1 free per batch · 3 variations (body angle · expression · hair)"}
+                ? "3 variations (body angle · expression · alternate angle)"
+                : "1 free per batch · 3 variations (body angle · expression · alternate angle)"}
             </div>
           </div>
         )
@@ -12639,7 +12639,7 @@ const GridScreen = ({
             >
               Variations of your source shot
               {versionsSourceLabel ? ` · from ${versionsSourceLabel}` : ""}
-              {" · body angle · expression · hair"}
+              {" · body angle · expression · alternate angle"}
             </span>
           </div>
           <div

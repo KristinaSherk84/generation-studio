@@ -217,7 +217,7 @@ export async function checkGenHardCap(
 // (paid / promo / post-purchase skip it and stay bounded by the 40 HARD_CAP).
 // Fail-open. Tunable live in Vercel with no redeploy: FREE_CALLS_PER_IP
 // (default 12), FREE_CALLS_WINDOW_HOURS (default 24).
-const FREE_CALL_CAP = Math.max(1, Number(process.env.FREE_CALLS_PER_IP ?? "12"));
+const FREE_CALL_CAP = Math.max(1, Number(process.env.FREE_CALLS_PER_IP ?? "14"));
 const FREE_CALL_WINDOW_SECONDS =
   Math.max(1, Number(process.env.FREE_CALLS_WINDOW_HOURS ?? "24")) * 3600;
 const freeCallKey = (ip: string) => `freecalls:${ip}`;

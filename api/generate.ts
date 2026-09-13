@@ -2236,29 +2236,31 @@ The ONE thing you WILL change from IMAGE 1:
 
 Do NOT change the crop. Do NOT change the outfit. Do NOT change the background. The output is IMAGE 1 with a different expression. Nothing else.`;
 
-      // Variant 2 — hair + expression + body angle change, SAME CROP
-      // (2026-09-13 revised per Kristi — she pulled the "tighter crop"
-      // idea because it risked cropping the shot beyond what she'd
-      // originally shown the customer; the customer picked THAT crop, so
-      // don't override it. Now this variant just tweaks hair, expression,
-      // and body angle for visual variety without touching framing.).
+      // Variant 2 — body angle change, opposite direction of V0
+      // (2026-09-13 simplified per Kristi — the earlier hair+expression+
+      // angle stack was asking Gemini to change 3 things at once, which
+      // tanks completion rate; V2 was returning empty ~1/3 of the time.
+      // Now V2 is a SINGLE clean delta like V0/V1: body rotates the
+      // OPPOSITE way from V0 so the customer visually sees left-turned,
+      // straight-on (via V1), and right-turned across the three shots.).
       const variant2Prompt = `You are an image editor. You will receive:
 - IMAGE 1: the TARGET SHOT — a finished professional headshot.
 - IMAGES 2+: identity reference photos of the same person. Use these ONLY to reinforce facial identity (face shape, jawline, eyes, skin tone). Do NOT copy their outfit, background, framing, or pose.
 
-Your output must be a naturally-different variant of IMAGE 1 with the SAME crop:
+Your output must be a variant of IMAGE 1:
+
 - OUTFIT: copy from IMAGE 1 exactly. Same garment, same color, same neckline — DO NOT SWAP the outfit.
 - BACKGROUND: copy from IMAGE 1 exactly. Same color, same environment, same depth-of-field.
+- HAIR: copy from IMAGE 1 exactly. Identical hair style, length, color.
 - LIGHTING: copy from IMAGE 1 exactly. Same direction, same intensity, same shadow shape.
-- FRAMING / CROP: copy from IMAGE 1 exactly. The head must occupy the SAME percentage of the frame as in IMAGE 1. Do NOT zoom in. Do NOT zoom out. Do NOT tighten. Do NOT widen. Match the crop of IMAGE 1 pixel-for-pixel.
+- EXPRESSION: match the target reference's expression closely.
+- FRAMING / CROP: copy from IMAGE 1 exactly. Same head size, same head position, same crop line.
 - FACE IDENTITY: unmistakably the same person as in the identity photos.
 
-The THREE things you WILL change from IMAGE 1 (all subtle, all natural — this is the same person on the same day, just an alternate frame):
-- HAIR: gently different arrangement — a slightly different part, a wisp moved, a subtle style variation. Same hair length and color. Do NOT invent a new haircut.
-- EXPRESSION: a naturally different mouth and eye energy from IMAGE 1. If IMAGE 1 has a broad smile, output a warmer closed-lip smile; if IMAGE 1 has a subtle smile, output a brighter smile. Pull the flavor from the identity photos.
-- BODY ANGLE: rotate the shoulders and torso 20–30° to one side (pick a natural direction — opposite of any angle the source may already have). The head can turn with the shoulders or stay looking at the camera.
+The ONE thing you WILL change from IMAGE 1:
+- BODY ANGLE: rotate the shoulders and torso 25–35° so the subject faces the opposite direction from IMAGE 1. If IMAGE 1 is straight to camera, rotate to the LEFT. If IMAGE 1 is angled to the right, rotate to face fully LEFT. The head can turn with the shoulders or stay looking at the camera. Everything else stays identical to IMAGE 1.
 
-Do NOT change the outfit. Do NOT change the background. Do NOT change the crop. The output is IMAGE 1 with a subtle hair change, a different expression, and a different body angle. Nothing else.`;
+Do NOT change the crop. Do NOT change the outfit. Do NOT change the background. The output is IMAGE 1 with the body rotated in the opposite direction. Nothing else.`;
 
       prompt = isPortraitCropVariant
         ? variant2Prompt
