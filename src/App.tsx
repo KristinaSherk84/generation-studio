@@ -4683,7 +4683,6 @@ const HealthcareScreen = ({
             </p>
           }
         />
-        {renderPromoLine()}
       </section>
 
       {/* MEDICAL FILMSTRIP — 7 composited pairs, infinite scroll, click to enlarge */}
@@ -6229,7 +6228,6 @@ const HowItWorksScreen = ({
             </div>
           }
         />
-        {renderPromoLine()}
       </section>
 
       {/* ========== FOOTER ========== */}
@@ -6673,7 +6671,6 @@ const FAQScreen = ({ onStart, onBackToHome, entryFeeEnabled }: FAQScreenProps) =
             </div>
           }
         />
-        {renderPromoLine()}
       </section>
     </div>
   );
@@ -10799,16 +10796,18 @@ const GridScreen = ({
   // Collapsed by default so the page doesn't feel overwhelming.
   const [extrasExpanded, setExtrasExpanded] = useState(extrasExpandedByDefault);
 
-  // Extras section (2026-09-11 revised per Kristi — the earlier dedupe
-  // only checked the main 6-slot grid, so a shot that was already
-  // showing as a Version or a Wild Card would ALSO appear in extras.
-  // Customers were seeing the same photo two or three times and worried
-  // they'd get double-charged. Now we exclude EVERYTHING already on
-  // screen above the extras pill: main grid + wild cards + version
-  // shots, and dedupe each extras source against everything already
-  // added to extras.).
+  // Extras section (2026-09-11 → revised 2026-09-14 per Kristi).
+  // The "already visible on screen" set is what the customer can see in
+  // the main grid + Wild Card row + Version strip — NOT every URL that
+  // happens to sit inside the images array (that array holds indices
+  // 6+ as "extras" waiting to be revealed). The earlier version pulled
+  // ALL of images into currentlyVisibleUrls, which caused every
+  // slice(6) extra to be removed as a "duplicate" and hid the entire
+  // extras pill for RTV sessions with >6 shots (Claire Damon case).
   const currentlyVisibleUrls = new Set<string>([
-    ...images.filter((u): u is string => !!u),
+    ...images
+      .slice(0, 6)
+      .filter((u): u is string => !!u),
     ...wildCards
       .map((w) => w.image)
       .filter((u): u is string => typeof u === "string" && !!u),
