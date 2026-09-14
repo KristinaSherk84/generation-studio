@@ -464,7 +464,8 @@ function buildBlockPet(variationIndex: number): string {
 
 const BLOCK_2_COMPOSITION = `Framing: professional business headshot. The specific body angle and crop are specified in the variation block at the end of this prompt.
 - Extremely minimal headroom above the top of the head. Only add 2–3% of the total frame height above the top of the head. The top of the head should nearly touch the top of the frame. No empty space above the head.
-- Strong posture, proud posture with shoulders back, puffed chest. Body angled, head rotated slightly back toward the lens).`;
+- Strong posture, proud posture with shoulders back, puffed chest. Body angled, head rotated slightly back toward the lens).
+- ARMS AND HANDS: The subject's arms hang naturally at their sides, OUT of frame. Both hands are completely BELOW the bottom of the crop — not visible anywhere in the image. This is a headshot, not an environmental portrait. No arms crossed. No hands on hips. No hand near the face or chin. No fingers touching the collar or lapel. No thumbs hooked into pockets. Hands stay down, out of frame — every time. (2026-09-14: hands-on-hips was creeping into ~20% of outputs; explicit ban here to stamp that out.)`;
 
 // Block 3 Style base text (no background) per style.
 //
