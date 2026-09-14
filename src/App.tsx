@@ -2413,6 +2413,101 @@ const LandingV2 = ({
     }
   };
 
+  // Shared promo-code line — rendered directly beneath EVERY start CTA on
+  // the page (2026-09-14 per Kristi — customers often see a CTA further
+  // down the page and don't scroll back to the hero to redeem an apology
+  // code). The state (showHeroPromo, promoCode, promoStatus) is shared
+  // across all instances, so opening the entry at any location shows it
+  // everywhere consistently.
+  const renderPromoLine = () => (
+    <div style={{ marginTop: 14, textAlign: "center" }}>
+      {promoStatus === "success" ? (
+        <div
+          style={{
+            fontSize: 13,
+            color: BRAND.charcoal,
+            fontFamily: SANS_STACK,
+            fontWeight: 600,
+          }}
+        >
+          ✓ Promo code applied — your generations are on us.
+        </div>
+      ) : !showHeroPromo ? (
+        <button
+          onClick={() => setShowHeroPromo(true)}
+          style={{
+            background: "none",
+            border: "none",
+            color: BRAND.subText,
+            fontSize: 13,
+            cursor: "pointer",
+            textDecoration: "underline",
+            fontFamily: SANS_STACK,
+            padding: 0,
+          }}
+        >
+          Have a promo code?
+        </button>
+      ) : (
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <input
+            type="text"
+            value={promoCode}
+            onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+            placeholder="Enter code"
+            autoFocus
+            style={{
+              fontSize: 13,
+              padding: "6px 10px",
+              border: `1px solid ${BRAND.subText}`,
+              borderRadius: 6,
+              fontFamily: SANS_STACK,
+              width: 140,
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") submitPromo();
+            }}
+          />
+          <button
+            onClick={submitPromo}
+            disabled={promoStatus === "submitting" || !promoCode.trim()}
+            style={{
+              fontSize: 13,
+              padding: "6px 14px",
+              background: BRAND.charcoal,
+              color: BRAND.white,
+              border: "none",
+              borderRadius: 6,
+              cursor: "pointer",
+              fontFamily: SANS_STACK,
+            }}
+          >
+            {promoStatus === "submitting" ? "..." : "Apply"}
+          </button>
+        </div>
+      )}
+      {promoStatus === "error" && (
+        <div
+          style={{
+            marginTop: 8,
+            fontSize: 12,
+            color: "#B23A2E",
+            fontFamily: SANS_STACK,
+          }}
+        >
+          {promoErrMsg}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div
       style={{
@@ -3390,6 +3485,7 @@ const LandingV2 = ({
             </div>
           }
         />
+        {renderPromoLine()}
       </section>
 
       {/* ========== FOUNDER (photo + personal note) ==========
@@ -4587,6 +4683,7 @@ const HealthcareScreen = ({
             </p>
           }
         />
+        {renderPromoLine()}
       </section>
 
       {/* MEDICAL FILMSTRIP — 7 composited pairs, infinite scroll, click to enlarge */}
@@ -6132,6 +6229,7 @@ const HowItWorksScreen = ({
             </div>
           }
         />
+        {renderPromoLine()}
       </section>
 
       {/* ========== FOOTER ========== */}
@@ -6575,6 +6673,7 @@ const FAQScreen = ({ onStart, onBackToHome, entryFeeEnabled }: FAQScreenProps) =
             </div>
           }
         />
+        {renderPromoLine()}
       </section>
     </div>
   );
