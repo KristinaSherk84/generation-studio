@@ -21675,6 +21675,29 @@ export default function App() {
       return;
     }
 
+    // Fresh-references clears the "resumed from email" flag (2026-09-14
+    // per Kristi — Claire Damon case). When someone hits an old resume
+    // link (or the LS auto-restore picks up a stale token from a
+    // colleague's earlier session on the same computer) and then uploads
+    // a WHOLLY DIFFERENT set of reference photos, they're clearly
+    // starting a fresh session for themselves — they deserve the full
+    // regen budget, not the "view-only" 0-regens rule the resumed flag
+    // enforces. Detection: the freshly-uploaded photoUrls (from
+    // usablePhotos) don't overlap with the previous session's
+    // lastPhotoUrls. Non-fresh (reused) references are the case where
+    // the fallback earlier reassigned photoUrls = lastPhotoUrls; in that
+    // case usablePhotos would be empty and we skip the reset (they
+    // really ARE continuing the resumed session).
+    if (resumedFromEmail && usablePhotos.length >= 5) {
+      const priorSet = new Set(lastPhotoUrls);
+      const freshUploads = usablePhotos
+        .map((p) => p.blobUrl as string)
+        .filter((u) => !priorSet.has(u));
+      if (freshUploads.length >= 3) {
+        setResumedFromEmail(false);
+      }
+    }
+
     // Kick off gender detection in parallel (2026-08-10). We await it just
     // before firing the batch so each shot's prompt can be trimmed to the
     // subject's gender. Fail-open: any error/timeout → undefined → the server
