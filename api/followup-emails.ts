@@ -60,10 +60,22 @@ const INTERNAL_EMAILS = new Set(
  *  a "Kristina's Recommendation" callout for the Versions feature, and a
  *  ?winback=1 flag on the resume URL so checkout knows to apply 10% off. */
 function buildEmail(args: {
-  resumeUrl: string; // already carries winback=1 + utm params
+  resumeUrl: string; // for non-buyers carries winback=1; for buyers, plain resume URL
   generatedUrls: string[]; // up to 6 rendered as thumbnails
+  // Split copy path (2026-09-13 per Kristi):
+  //   false → the original win-back email — 10% discount pricing card
+  //           and "you made these but didn't grab any" language.
+  //   true  → the buyer variant — acknowledges they already bought, no
+  //           discount card (they've already paid full price and it's
+  //           unfair to show a discount they didn't get), still nudges
+  //           them to come back for the shots they DIDN'T buy before
+  //           the session expires.
+  isBuyer?: boolean;
 }): { subject: string; html: string; text: string } {
-  const subject = "Urgent: your headshots expire soon.";
+  const isBuyer = args.isBuyer === true;
+  const subject = isBuyer
+    ? "Your remaining headshots expire soon."
+    : "Urgent: your headshots expire soon.";
 
   const thumbs = args.generatedUrls
     .filter((u) => typeof u === "string" && /^https?:\/\//.test(u))
@@ -101,18 +113,26 @@ function buildEmail(args: {
     ? `<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:16px 0 22px;border-collapse:separate;">${rows.join("")}</table>`
     : "";
 
-  const html = `<!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1"></head>
-<body style="margin:0;background:#FAF8F4;padding:24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:#2A2A2A;">
-  <div style="max-width:540px;margin:0 auto;background:#ffffff;border:1px solid #E8E4DB;border-radius:14px;padding:28px 26px;line-height:1.65;">
-    <h1 style="font-size:22px;font-weight:700;color:#7A1F1B;margin:0 0 14px;letter-spacing:-0.2px;">Urgent: your headshots expire soon.</h1>
+  // Body copy variants — buyers see gratitude + "grab the rest before
+  // they're gone"; non-buyers see the urgent-winback framing.
+  const headline = isBuyer
+    ? "Your remaining headshots expire soon."
+    : "Urgent: your headshots expire soon.";
+  const introPara = isBuyer
+    ? "Thanks again for your purchase! You had a few more headshots in your session that you didn't grab. They'll be deleted from my servers <strong>soon</strong> — here's one last look in case you want any of them too:"
+    : "You made these but didn't grab any. They'll be deleted from my servers <strong>soon</strong> — here's one last look:";
+  const ctaLabel = isBuyer ? "Grab more headshots &rarr;" : "Pick my favorites &rarr;";
+  const microcopy = isBuyer
+    ? "The shots you already bought are safe in your delivery email — this is just about the extras you didn't add to your order."
+    : "Most customers who come back on the second look end up buying — you already know what the shots look like.";
 
-    <p style="font-size:15px;line-height:1.65;margin:0 0 16px;">Hi there,</p>
-    <p style="font-size:15px;line-height:1.65;margin:0 0 16px;">You made these but didn't grab any. They'll be deleted from my servers <strong>soon</strong> — here's one last look:</p>
-
-    ${thumbsTable}
-
+  // Discount card renders ONLY for non-buyers (2026-09-13 per Kristi —
+  // buyers already paid full price for what they wanted; showing them a
+  // discount they didn't get feels bad, and any extra shots they grab now
+  // will just be at standard pricing).
+  const discountCard = isBuyer
+    ? ""
+    : `
     <!-- 10%-off pricing card -->
     <div style="background:#FBF8F0;border:1px solid #E8E4DB;border-radius:8px;padding:16px 14px;text-align:center;margin:0 0 22px;">
       <div style="display:inline-block;background:#7A1F1B;color:#FFFFFF;font-size:11px;font-weight:700;letter-spacing:1;padding:3px 10px;border-radius:999px;margin-bottom:10px;text-transform:uppercase;">10% off · come back today</div>
@@ -122,16 +142,29 @@ function buildEmail(args: {
       <div style="font-size:15px;color:#2A2A2A;margin:4px 0;">
         Two realistic shots · <span style="text-decoration:line-through;color:#9A968D;margin-right:6px;">$25.98</span> <span style="font-size:20px;font-weight:700;color:#C9A961;letter-spacing:-0.3px;">$23.38</span>
       </div>
-    </div>
+    </div>`;
+
+  const html = `<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"></head>
+<body style="margin:0;background:#FAF8F4;padding:24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:#2A2A2A;">
+  <div style="max-width:540px;margin:0 auto;background:#ffffff;border:1px solid #E8E4DB;border-radius:14px;padding:28px 26px;line-height:1.65;">
+    <h1 style="font-size:22px;font-weight:700;color:#7A1F1B;margin:0 0 14px;letter-spacing:-0.2px;">${headline}</h1>
+
+    <p style="font-size:15px;line-height:1.65;margin:0 0 16px;">Hi there,</p>
+    <p style="font-size:15px;line-height:1.65;margin:0 0 16px;">${introPara}</p>
+
+    ${thumbsTable}
+${discountCard}
 
     <div style="text-align:center;margin:22px 0 6px;">
       <a href="${args.resumeUrl}"
          style="display:inline-block;background:#1B4332;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:14px 30px;border-radius:999px;">
-        Pick my favorites &rarr;
+        ${ctaLabel}
       </a>
     </div>
 
-    <p style="font-size:13px;color:#5A5A56;text-align:center;font-style:italic;margin:8px 0 22px;">Most customers who come back on the second look end up buying — you already know what the shots look like.</p>
+    <p style="font-size:13px;color:#5A5A56;text-align:center;font-style:italic;margin:8px 0 22px;">${microcopy}</p>
 
     <!-- Kristina's Recommendation: Versions feature -->
     <div style="background:#F5F1E8;border:1px solid #E8E4DB;border-left:4px solid #C9A961;border-radius:0 10px 10px 0;padding:16px 18px;margin:22px 0;">
@@ -176,25 +209,43 @@ function buildEmail(args: {
   </p>
 </body></html>`;
 
-  const text = [
-    "Urgent: your headshots expire soon.",
-    "",
-    "You made these but didn't grab any — they'll be deleted from my servers soon.",
-    "",
-    "10% OFF · come back today:",
-    "  Any 1 shot · $14.99 → $13.49",
-    "  Two realistic shots · $25.98 → $23.38",
-    "",
-    "Pick your favorites: " + args.resumeUrl,
-    "",
-    "KRISTINA'S RECOMMENDATION — Was one ALMOST right, but needed a tweak? Try creating versions of it.",
-    "Pick a shot you liked and tap 'Love one? Click here to make more variations' on the grid — one free set of two variations per link.",
-    "",
-    "If none feel like you, that's usually a reference-photo thing — try again with 5+ recent close-up photos. Happy to help, just reply.",
-    "",
-    "Thanks!",
-    "Kristina",
-  ].join("\n");
+  const text = isBuyer
+    ? [
+        "Your remaining headshots expire soon.",
+        "",
+        "Thanks again for your purchase! You had a few more headshots in your session that you didn't grab. They'll be deleted from my servers soon.",
+        "",
+        "Grab any of the extras: " + args.resumeUrl,
+        "",
+        "The shots you already bought are safe in your delivery email — this is just about the extras you didn't add to your order.",
+        "",
+        "KRISTINA'S RECOMMENDATION — Was one ALMOST right, but needed a tweak? Try creating versions of it.",
+        "Pick a shot you liked and tap 'Love one? Click here to make more variations' on the grid.",
+        "",
+        "Happy to help with anything, just reply.",
+        "",
+        "Thanks!",
+        "Kristina",
+      ].join("\n")
+    : [
+        "Urgent: your headshots expire soon.",
+        "",
+        "You made these but didn't grab any — they'll be deleted from my servers soon.",
+        "",
+        "10% OFF · come back today:",
+        "  Any 1 shot · $14.99 → $13.49",
+        "  Two realistic shots · $25.98 → $23.38",
+        "",
+        "Pick your favorites: " + args.resumeUrl,
+        "",
+        "KRISTINA'S RECOMMENDATION — Was one ALMOST right, but needed a tweak? Try creating versions of it.",
+        "Pick a shot you liked and tap 'Love one? Click here to make more variations' on the grid — one free set of two variations per link.",
+        "",
+        "If none feel like you, that's usually a reference-photo thing — try again with 5+ recent close-up photos. Happy to help, just reply.",
+        "",
+        "Thanks!",
+        "Kristina",
+      ].join("\n");
 
   return { subject, html, text };
 }
@@ -257,14 +308,19 @@ export default async function handler(
     return res.status(500).json({ error: "Failed to load leads" });
   }
 
-  // Cheap synchronous filters first: not purchased, not already emailed, valid
-  // address, and inside the 12-96h window. The resume token is resolved AFTER,
+  // Cheap synchronous filters first: not already emailed, valid address,
+  // and inside the 12-96h window. The resume token is resolved AFTER,
   // because some leads need a Redis lookup (the atomic pointer) for it.
+  //
+  // 2026-09-13: buyers are now INCLUDED — they get the "extras will
+  // expire" variant (no discount card, gratitude-toned copy) instead of
+  // being filtered out. Some buyers only purchased 1 shot but had 5
+  // more sitting in their session; this nudges them to come back for
+  // the rest before TTL wipes the resume link.
   const inWindow = leads.filter((l) => {
-    if (l.purchased) return false;
     // In reblast mode, ignore the followedUp flag so every eligible lead
-    // who tried but didn't buy gets the new email — even if they already
-    // got the old one. (2026-09-06 per Kristi.)
+    // gets the new email — even if they already got the old one.
+    // (2026-09-06 per Kristi.)
     if (!reblast && l.followedUp) return false;
     if (!looksLikeEmail(l.email)) return false;
     if (INTERNAL_EMAILS.has(l.email.trim().toLowerCase())) return false;
@@ -320,10 +376,18 @@ export default async function handler(
     } catch {
       /* fall through with empty thumbs */
     }
-    const testResumeUrl = `${SITE_URL}/?resume=${source.resolvedToken}&winback=1&utm_source=email&utm_medium=email&utm_campaign=winback_test`;
+    // Force the buyer variant with ?buyerTest=1 so Kristi can preview it
+    // without having to find a buyer in the eligible list. Otherwise the
+    // test just mirrors the source lead's purchased flag.
+    const isBuyerTest =
+      String(req.query.buyerTest ?? "") === "1" || source.purchased === true;
+    const testResumeUrl = isBuyerTest
+      ? `${SITE_URL}/?resume=${source.resolvedToken}&utm_source=email&utm_medium=email&utm_campaign=winback_buyer_test`
+      : `${SITE_URL}/?resume=${source.resolvedToken}&winback=1&utm_source=email&utm_medium=email&utm_campaign=winback_test`;
     const { subject, html, text } = buildEmail({
       resumeUrl: testResumeUrl,
       generatedUrls: sessionGeneratedUrls,
+      isBuyer: isBuyerTest,
     });
     try {
       const resp = await fetch("https://api.resend.com/emails", {
@@ -388,18 +452,22 @@ export default async function handler(
       skippedExpired++;
       continue;
     }
-    // UTM tags: a client CLICK shows in GA4/Clarity as email/email,
-    // campaign winback. Unique per client, so a click = that client came
-    // back from the win-back email (2026-08-06).
-    // ?winback=1 (2026-09-06) triggers the 10% discount at checkout — the
-    // client detects it on mount, stashes in localStorage, and forwards to
-    // /api/create-photo-checkout-session which applies -10% to every photo.
-    const resumeUrl = `${SITE_URL}/?resume=${token}&winback=1&utm_source=email&utm_medium=email&utm_campaign=winback`;
+    // Buyers vs non-buyers split (2026-09-13 per Kristi):
+    //   - Non-buyers get ?winback=1 → 10% off at checkout + the discount
+    //     card in the email body.
+    //   - Buyers get a plain resume URL (no discount flag) and a
+    //     gratitude-toned email that just nudges them to grab any
+    //     leftover shots before the session TTL expires.
+    const isBuyer = lead.purchased === true;
+    const resumeUrl = isBuyer
+      ? `${SITE_URL}/?resume=${token}&utm_source=email&utm_medium=email&utm_campaign=winback_buyer`
+      : `${SITE_URL}/?resume=${token}&winback=1&utm_source=email&utm_medium=email&utm_campaign=winback`;
 
     try {
       const { subject, html, text } = buildEmail({
         resumeUrl,
         generatedUrls: sessionGeneratedUrls,
+        isBuyer,
       });
       const resp = await fetch("https://api.resend.com/emails", {
         method: "POST",

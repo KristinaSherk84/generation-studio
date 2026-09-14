@@ -14455,10 +14455,16 @@ const EmailCaptureModal = ({ onSubmit, onClose }: EmailCaptureModalProps) => {
           position: "relative",
           background: C.white,
           borderRadius: 12,
-          padding: "28px 24px",
+          // Tightened 2026-09-14 per Kristi — the previous 28/24 padding
+          // + generous vertical rhythm pushed the "Generate" submit
+          // button below the fold on short phone viewports (customer
+          // reported not seeing it). Every vertical dimension in this
+          // modal was shrunk to bring the total under ~600px so the
+          // button lands above the fold on the most common mobile sizes.
+          padding: "18px 20px",
           maxWidth: 420,
           width: "100%",
-          maxHeight: "90vh",
+          maxHeight: "92vh",
           overflowY: "auto",
         }}
       >
@@ -14485,11 +14491,11 @@ const EmailCaptureModal = ({ onSubmit, onClose }: EmailCaptureModalProps) => {
         </button>
         <h2
           style={{
-            fontSize: 21,
+            fontSize: 19,
             fontWeight: 500,
             color: C.dark,
-            margin: "0 0 10px",
-            lineHeight: 1.3,
+            margin: "0 0 6px",
+            lineHeight: 1.25,
             textAlign: "center",
           }}
         >
@@ -14497,31 +14503,15 @@ const EmailCaptureModal = ({ onSubmit, onClose }: EmailCaptureModalProps) => {
         </h2>
         <p
           style={{
-            fontSize: 14,
-            color: C.dark,
-            margin: "0 0 18px",
-            lineHeight: 1.55,
+            fontSize: 13,
+            color: C.mediumGrey,
+            margin: "0 0 12px",
+            lineHeight: 1.45,
             textAlign: "center",
           }}
         >
-          Input your email to see your results and save your session in case
-          anything happens.
+          Enter your email to see your results and save your session.
         </p>
-        {/* Two clearly separated steps (Kristi 2026-08-19): email first, then
-            the "How did you find us?" question as its own section below a
-            divider. */}
-        <div
-          style={{
-            fontSize: 11,
-            letterSpacing: 1.5,
-            textTransform: "uppercase",
-            fontWeight: 600,
-            color: C.mediumGrey,
-            marginBottom: 8,
-          }}
-        >
-          Step 1 · Your email
-        </div>
         <input
           type="email"
           value={value}
@@ -14533,7 +14523,7 @@ const EmailCaptureModal = ({ onSubmit, onClose }: EmailCaptureModalProps) => {
           autoFocus
           style={{
             width: "100%",
-            padding: "12px 14px",
+            padding: "10px 14px",
             fontSize: 15,
             border: `1px solid ${C.border}`,
             borderRadius: 8,
@@ -14542,31 +14532,15 @@ const EmailCaptureModal = ({ onSubmit, onClose }: EmailCaptureModalProps) => {
           }}
         />
 
-        {/* Divider between the two steps */}
-        <div
-          style={{ height: 1, background: C.border, margin: "22px 0 18px" }}
-        />
-
-        {/* Step 2 — "How did you find us?" (single-select; one option must be
-            picked before Generate enables). */}
+        {/* "How did you find us?" — compact single-select; one option must
+            be picked before Generate enables. Step labels + divider
+            removed 2026-09-14 to save vertical room. */}
         <div
           style={{
-            fontSize: 11,
-            letterSpacing: 1.5,
-            textTransform: "uppercase",
-            fontWeight: 600,
-            color: C.mediumGrey,
-            marginBottom: 8,
-          }}
-        >
-          Step 2 · One quick question
-        </div>
-        <div
-          style={{
-            fontSize: 19,
+            fontSize: 15,
             fontWeight: 600,
             color: C.dark,
-            margin: "0 0 14px",
+            margin: "14px 0 8px",
             lineHeight: 1.3,
           }}
         >
@@ -14576,14 +14550,12 @@ const EmailCaptureModal = ({ onSubmit, onClose }: EmailCaptureModalProps) => {
           style={{
             display: "flex",
             flexDirection: "column",
-            gap: 8,
-            marginBottom: 18,
+            gap: 5,
+            marginBottom: 12,
           }}
         >
           {FOUND_VIA_OPTIONS.map((o) => {
             const picked = foundVia === o;
-            // Selected source = dark grey (Kristi 2026-08-19), distinct from
-            // the near-black Generate button.
             const pickedGrey = "#57564F";
             return (
               <button
@@ -14594,9 +14566,9 @@ const EmailCaptureModal = ({ onSubmit, onClose }: EmailCaptureModalProps) => {
                   background: picked ? pickedGrey : C.white,
                   color: picked ? C.white : C.dark,
                   border: `1px solid ${picked ? pickedGrey : C.border}`,
-                  borderRadius: 10,
-                  padding: "12px 14px",
-                  fontSize: 14,
+                  borderRadius: 8,
+                  padding: "8px 12px",
+                  fontSize: 13.5,
                   fontWeight: 500,
                   cursor: "pointer",
                   fontFamily: "inherit",
@@ -14608,25 +14580,40 @@ const EmailCaptureModal = ({ onSubmit, onClose }: EmailCaptureModalProps) => {
             );
           })}
         </div>
-        <button
-          onClick={submit}
-          disabled={!valid}
+        {/* Sticky submit — pinned to the bottom of the modal so the CTA
+            is ALWAYS visible even if the content scrolls (Kristi 2026-09-14
+            after a customer reported not seeing the button at all on a
+            short viewport). The white padding-band above the button hides
+            content bleeding through from behind the sticky element. */}
+        <div
           style={{
-            width: "100%",
-            padding: "13px 22px",
-            background: C.dark,
-            color: C.buttonText,
-            border: "none",
-            borderRadius: 8,
-            fontSize: 14,
-            fontWeight: 500,
-            cursor: valid ? "pointer" : "default",
-            opacity: valid ? 1 : 0.55,
-            ...font,
+            position: "sticky",
+            bottom: -18,
+            background: C.white,
+            paddingTop: 10,
+            marginTop: 4,
           }}
         >
-          Generate my headshots
-        </button>
+          <button
+            onClick={submit}
+            disabled={!valid}
+            style={{
+              width: "100%",
+              padding: "13px 22px",
+              background: C.dark,
+              color: C.buttonText,
+              border: "none",
+              borderRadius: 8,
+              fontSize: 14,
+              fontWeight: 500,
+              cursor: valid ? "pointer" : "default",
+              opacity: valid ? 1 : 0.55,
+              ...font,
+            }}
+          >
+            Generate my headshots
+          </button>
+        </div>
       </div>
     </div>
   );
