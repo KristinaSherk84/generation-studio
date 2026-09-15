@@ -325,10 +325,21 @@ export async function setSessionWildCards(
     }));
   // Merge with wild cards already saved from earlier batches (accumulate,
   // 2026-08-24) instead of replacing — a multi-batch customer keeps ALL their
-  // bonus shots on the one growing resume grid. Dedupe by URL (newest kept,
-  // in first-seen order), capped so the record stays bounded.
+  // bonus shots on the one growing resume grid.
+  //
+  // 2026-09-14: dedupe key is now LABEL, not URL, and INCOMING wins over
+  // PRIOR. Reason: when Kristi (or a customer) regenerates a wild card, the
+  // new render lives at a fresh blob URL but shares the same label as the
+  // old one (labels look like "Urban industrial · Studio light · Warm
+  // smile" — the stable slot identity). Old URL-dedupe kept BOTH the old
+  // and the regenerated shot in the array, and because prior came first in
+  // iteration order the RTV resume link showed the OLD (rejected) shot on
+  // top. Africa-American customer regenerated to correct a wrong-race
+  // wild card was the bug that surfaced this. Iterating incoming FIRST
+  // guarantees the freshest render wins its slot; prior wild cards from
+  // OTHER batches (different labels) still accumulate normally.
   const priorWc = Array.isArray(rec.wildCards) ? rec.wildCards : [];
-  const seenWc = new Set<string>();
+  const seenLabels = new Set<string>();
   const mergedWc: {
     url: string;
     label: string;
@@ -336,9 +347,10 @@ export async function setSessionWildCards(
     lighting?: string;
     variationIndex?: number;
   }[] = [];
-  for (const w of [...priorWc, ...incoming]) {
-    if (seenWc.has(w.url)) continue;
-    seenWc.add(w.url);
+  for (const w of [...incoming, ...priorWc]) {
+    const dedupeKey = w.label && w.label.length > 0 ? w.label : w.url;
+    if (seenLabels.has(dedupeKey)) continue;
+    seenLabels.add(dedupeKey);
     mergedWc.push(w);
   }
   rec.wildCards = mergedWc.slice(0, 24);

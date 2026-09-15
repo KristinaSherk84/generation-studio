@@ -31,6 +31,7 @@ import { isCodeActiveForGenerate } from "./lib/promoStore.js";
 import {
   checkFreeBatchLimit,
   checkPurchaseBatchCredit,
+  checkPurchaseCallCredit,
   checkGenHardCap,
   checkFreeCallCap,
 } from "./lib/freeGenLimit.js";
@@ -940,13 +941,13 @@ const FLAVORS: Flavor[] = [
   },
   {
     expression: "soft realistic open smile, approachable",
-    bodyPose: "body turned approximately 10 degrees to the subject's left, head rotated slightly back toward the lens",
+    bodyPose: "body VERY slightly angled toward the subject's left — barely off-square, both shoulders fully in frame with only a hair of asymmetry between them, head straight to the lens. Do NOT rotate the torso far. This is nearly a square-to-camera pose with just a whisper of angle. (2026-09-14: earlier '10 degree' spec was getting rendered as 40+ degrees by Gemini — describing the result instead of the angle.)",
     crop: "medium crop — from just above the top of the head to the upper chest",
     attireHint: "shirt or top in a soft light or dark blue",
   },
   {
     expression: "warm realistic teeth-showing smile, genuine and bright, the EYES smile clearly: slight crinkle at the outer corners, upper cheeks lifted, warm-eyed jovial smile that reads as genuine joy. Under no circumstances flat, neutral, or blank eyes",
-    bodyPose: "body turned approximately 10 degrees to the subject's right, head rotated slightly back toward the lens",
+    bodyPose: "body VERY slightly angled toward the subject's right — barely off-square, both shoulders fully in frame with only a hair of asymmetry between them, head straight to the lens. Do NOT rotate the torso far. This is nearly a square-to-camera pose with just a whisper of angle. (2026-09-14: earlier '10 degree' spec was getting rendered as 40+ degrees.)",
     crop: "medium crop — from just above the top of the head to the upper chest",
     attireHint: "shirt or top in a soft pastel tone (blush, cream, or pale grey)",
   },
@@ -964,7 +965,7 @@ const FLAVORS: Flavor[] = [
   },
   {
     expression: "natural easy realistic smile, relaxed and personable, confident.",
-    bodyPose: "body turned approximately 10 degrees to the subject's left",
+    bodyPose: "body VERY slightly angled toward the subject's left — barely off-square, both shoulders fully in frame with only a hair of asymmetry between them, head straight to the lens. Do NOT rotate the torso far. This is nearly a square-to-camera pose with just a whisper of angle.",
     crop: "medium crop — from just above the top of the head to the upper chest",
     attireHint: "a subtly textured dark colored blazer or cardigan.",
   },
@@ -1733,10 +1734,20 @@ async function verifyUnlock(
         /* any error → not exempt → falls through to the cap */
       }
     }
-    // Post-purchase perk (2026-08-11): a customer who just BOUGHT gets 2 more
-    // free full batches. We verify their photo-checkout session is genuinely
-    // PAID, then allow up to POST_PURCHASE_BATCHES distinct batchIds against it
-    // (regens/wild cards reuse the batchId, so they don't burn extra credit).
+    // Post-purchase perk (2026-08-11, revised 2026-09-15): a customer who
+    // just BOUGHT gets more free generations even though their IP already
+    // used its free batch. We verify their photo-checkout session is
+    // genuinely PAID, is within POST_PURCHASE_WINDOW_DAYS of the purchase
+    // date (absolute — not sliding), and has not yet spent
+    // POST_PURCHASE_CALLS total generation calls against it.
+    //
+    // OLD behavior: allowed 2 distinct batchIds; regens reused the batchId
+    // so they were unlimited within the window. Combined with a SLIDING
+    // 7-day Redis TTL, this let one $4.99 purchase pay for unlimited regens
+    // as long as the customer kept coming back within 7 days of the last
+    // visit — Natalia Tamzoke was still burning credits 25 days after her
+    // 8/21 purchase (18 calls in 30 min on 9/15). Now: hard 30-call cap +
+    // hard 7-day cutoff off Stripe's session.created.
     if (
       !exempt &&
       typeof purchaseSessionId === "string" &&
@@ -1751,18 +1762,51 @@ async function verifyUnlock(
           const ses = (await r.json()) as {
             payment_status?: string;
             payment_intent?: { status?: string } | string | null;
+            created?: number;
           };
           const pi =
             ses.payment_intent && typeof ses.payment_intent === "object"
               ? ses.payment_intent.status
               : undefined;
           const paid = ses.payment_status === "paid" || pi === "succeeded";
-          if (paid) {
-            const { allowed } = await checkPurchaseBatchCredit(
-              purchaseSessionId,
-              batchId,
+          // Age gate: reject purchases older than POST_PURCHASE_WINDOW_DAYS.
+          // ses.created is unix seconds; missing or non-numeric → treat as
+          // ancient (safest for cost — old sessions from before this field
+          // was populated get shut out too, which is fine because the code
+          // path is only reached after they'd already exceeded free tier).
+          const WINDOW_DAYS = Math.max(
+            1,
+            Number(process.env.POST_PURCHASE_WINDOW_DAYS ?? "7"),
+          );
+          const createdSec = Number(ses.created);
+          const ageDays =
+            Number.isFinite(createdSec) && createdSec > 0
+              ? (Date.now() / 1000 - createdSec) / 86400
+              : Infinity;
+          const withinWindow = ageDays <= WINDOW_DAYS;
+          if (paid && withinWindow) {
+            const credit = await checkPurchaseCallCredit(purchaseSessionId);
+            if (credit.allowed) exempt = true;
+            else {
+              console.warn(
+                JSON.stringify({
+                  type: "post_purchase_cap_hit",
+                  purchaseSessionId,
+                  count: credit.count,
+                  cap: credit.cap,
+                  ageDays: Math.round(ageDays * 10) / 10,
+                }),
+              );
+            }
+          } else if (paid && !withinWindow) {
+            console.warn(
+              JSON.stringify({
+                type: "post_purchase_expired",
+                purchaseSessionId,
+                ageDays: Math.round(ageDays * 10) / 10,
+                windowDays: WINDOW_DAYS,
+              }),
             );
-            if (allowed) exempt = true;
           }
         }
       } catch {

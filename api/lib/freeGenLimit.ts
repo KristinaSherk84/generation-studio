@@ -270,6 +270,9 @@ export async function checkFreeBatchLimit(
  * Fail-CLOSED (no credit) on any error — the caller then falls through to the
  * normal per-IP cap, which is itself fail-open, so generation is never blocked
  * by an infra hiccup here.
+ *
+ * KEPT for legacy reference / callers that still want batch-based gating.
+ * The active production gate is now checkPurchaseCallCredit below.
  */
 const PP_LIMIT = Math.max(1, Number(process.env.POST_PURCHASE_BATCHES ?? "2"));
 const ppKey = (sessionId: string) => `ppcredit:${sessionId}`;
@@ -287,5 +290,60 @@ export async function checkPurchaseBatchCredit(
     return { allowed: n <= PP_LIMIT };
   } catch {
     return { allowed: false };
+  }
+}
+
+/**
+ * Post-purchase CALL credit (2026-09-15). Replaces checkPurchaseBatchCredit
+ * as the production gate. Counts EVERY billable /api/generate call against
+ * the paid Stripe purchase, not distinct batchIds — regens reuse the
+ * batchId, so the old gate let one $4.99 purchase pay for unlimited regens
+ * as long as the customer stayed within a sliding 7-day activity window.
+ *
+ * Natalia Tamzoke case: bought 8/21, still generating 9/15 (25 days later),
+ * 18 calls in 30 minutes on the same purchaseSessionId — ~$1.80 in Gemini
+ * on top of what was already spent. Kristi asked for a hard 30-call cap
+ * per purchase, combined with a 7-day age check off Stripe's session.created
+ * timestamp (enforced by the caller in api/generate.ts).
+ *
+ * Redis key gets an 8-day TTL (7-day window + 1-day buffer) so old records
+ * GC naturally. The age check is AUTHORITATIVE — the caller checks Stripe's
+ * session.created first and only calls this if the purchase is within
+ * window. The TTL here is just cleanup.
+ *
+ * Rollback (over-cap): decrement the counter so a rejected call doesn't
+ * permanently inflate the count (Lawrence Ang lesson from 2026-09-11).
+ *
+ * Fail-CLOSED on Redis error — the caller then falls through to the normal
+ * per-IP cap, which is itself fail-open, so generation is never blocked by
+ * an infra hiccup here.
+ */
+const PP_CALL_LIMIT = Math.max(
+  1,
+  Number(process.env.POST_PURCHASE_CALLS ?? "30"),
+);
+const ppCallKey = (sessionId: string) => `ppcalls:${sessionId}`;
+
+export async function checkPurchaseCallCredit(
+  sessionId: string | undefined,
+): Promise<{ allowed: boolean; count: number; cap: number }> {
+  if (!sessionId) return { allowed: false, count: 0, cap: PP_CALL_LIMIT };
+  try {
+    const k = ppCallKey(sessionId);
+    const n = await redis.incr(k);
+    if (n === 1) {
+      // First call for this purchase → set the cleanup TTL. Later calls
+      // don't touch expiry, so the key expires 8 days after the FIRST
+      // post-purchase generation (not sliding).
+      await redis.expire(k, 8 * 24 * 3600);
+    }
+    if (n > PP_CALL_LIMIT) {
+      // Roll back the increment so a rejected call doesn't burn a credit.
+      await redis.decr(k).catch(() => {});
+      return { allowed: false, count: n - 1, cap: PP_CALL_LIMIT };
+    }
+    return { allowed: true, count: n, cap: PP_CALL_LIMIT };
+  } catch {
+    return { allowed: false, count: 0, cap: PP_CALL_LIMIT };
   }
 }
