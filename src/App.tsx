@@ -18267,30 +18267,36 @@ const AllShotsGallery = ({
             </div>
           ))}
         </div>
-        {/* Cart badge — top-right */}
+        {/* Cart badge — top-right.
+            2026-09-15: switched unpicked background from near-white
+            (rgba(255,255,255,0.92)) to brand gold (#C9A961). The near-white
+            + was invisible against light/cream studio backdrops — customers
+            couldn't tell the "Also Generated" tiles were addable. Gold
+            stands out on both dark and light tiles and matches the "Add to
+            cart" pill styling used elsewhere. */}
         <div
           style={{
             position: "absolute",
             top: 8,
             right: 8,
-            width: 28,
-            height: 28,
+            width: 30,
+            height: 30,
             borderRadius: "50%",
             background: picked
               ? C.dark
               : cartFull
-                ? "rgba(255,255,255,0.4)"
-                : "rgba(255,255,255,0.92)",
-            color: picked ? C.white : C.dark,
-            border: picked ? "none" : "1.5px solid rgba(255,255,255,0.95)",
-            boxShadow: "0 1px 4px rgba(0,0,0,0.3)",
+                ? "rgba(180,180,180,0.85)"
+                : "#C9A961",
+            color: C.white,
+            border: "1.5px solid rgba(255,255,255,0.95)",
+            boxShadow: "0 1px 6px rgba(0,0,0,0.35)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             pointerEvents: "none",
           }}
         >
-          {picked ? <Check size={15} /> : <Plus size={15} strokeWidth={2.4} />}
+          {picked ? <Check size={16} /> : <Plus size={16} strokeWidth={2.6} />}
         </div>
         {/* Expand — bottom-left */}
         <button
