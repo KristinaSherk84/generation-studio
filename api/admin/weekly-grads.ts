@@ -118,9 +118,12 @@ export default async function handler(
         if (!b.pathname.endsWith("/manifest.json")) continue;
         const ts = new Date(b.uploadedAt);
         if (ts < since || ts > until) continue;
+        // Vercel Blob returns uploadedAt as a Date object at runtime even
+        // though the type declares string. Normalize to ISO string so
+        // downstream localeCompare + JSON serialize works.
         manifestBlobs.push({
           url: b.url,
-          uploadedAt: b.uploadedAt as unknown as string,
+          uploadedAt: ts.toISOString(),
         });
       }
       cursor = page.cursor;
