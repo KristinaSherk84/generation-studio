@@ -9087,9 +9087,21 @@ const StyleScreen = ({
   // vertical user gets "healthcare"), honor that instead so the customer
   // lands on the right preselection.
   const [style, setStyle] = useState<string | null>(defaultStyle ?? "executive");
-  // Paper/color (corporate) background default = the graduated dark-grey
-  // spotlight swatch (id "dark"), per Kristi 2026-08-07.
-  const [background, setBackground] = useState<string>("dark");
+  // Background default 2026-09-18: switched from "dark" to "surprise" per
+  // Kristi. Clarity showed most customers never clicked around the
+  // background swatches, so we default them into a "you pick for me"
+  // mode that (a) removes decision friction and (b) subtly exposes the
+  // range by letting the server pick one they may not have chosen. Also
+  // primes the ground for A/B measurement — conversion delta week over
+  // week tells us if this pattern outperforms the old fixed default.
+  //
+  // "surprise" is a sentinel; the actual background is resolved on
+  // Generate by rolling one at random from STUDIO_BGS. All 6 photos in
+  // the batch use that single roll (customer explicitly asked NOT for a
+  // variety pack — keeps costs identical, avoids paralysis in the RTV
+  // grid). If the customer clicks a specific swatch, this state flips
+  // to that swatch id and the roll doesn't fire.
+  const [background, setBackground] = useState<string>("surprise");
   const [attire, setAttire] = useState<string | null>(defaultAttire ?? null);
   const [lighting, setLighting] = useState<string | null>(null);
   // "See example backgrounds" popup (opens from hot text under the Background picker)
@@ -9542,6 +9554,54 @@ const StyleScreen = ({
       {style === "corporate" && (
         <>
           <SectionLabel>Background color</SectionLabel>
+          {/* "Surprise me" pill (2026-09-18). PRE-SELECTED by default so
+              a customer who doesn't want to make a decision just clicks
+              Generate and gets a rolled background. Big and obviously
+              interactive so people also notice the swatches exist below. */}
+          <button
+            type="button"
+            onClick={() => setBackground("surprise")}
+            aria-pressed={background === "surprise"}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              background: background === "surprise" ? "#1B4332" : BRAND.white,
+              color: background === "surprise" ? BRAND.cream : C.dark,
+              border:
+                background === "surprise"
+                  ? "2px solid #1B4332"
+                  : `2px dashed ${C.border}`,
+              padding: "10px 16px",
+              borderRadius: 999,
+              fontFamily: "inherit",
+              fontSize: 13,
+              fontWeight: 500,
+              cursor: "pointer",
+              marginBottom: 12,
+              letterSpacing: 0.2,
+              boxShadow:
+                background === "surprise"
+                  ? "0 1px 4px rgba(27,67,50,0.35)"
+                  : "none",
+              transition: "background 0.15s, box-shadow 0.15s",
+            }}
+          >
+            <span style={{ fontSize: 15, lineHeight: 1 }} aria-hidden>🎲</span>
+            Surprise me · I'll pick a great one
+          </button>
+          <div
+            style={{
+              fontSize: 11,
+              color: C.mediumGrey,
+              marginBottom: 8,
+              textTransform: "uppercase",
+              letterSpacing: 1.1,
+              fontWeight: 500,
+            }}
+          >
+            Or choose one yourself:
+          </div>
           <div
             style={{
               display: "grid",
@@ -9827,16 +9887,29 @@ const StyleScreen = ({
         <Button
           onClick={() => {
             if (!canGenerate || !style || !attire || !lighting) return;
+            // Resolve "surprise" (the pre-selected default) into a real
+            // background id by rolling one at random from STUDIO_BGS.
+            // The roll happens ONCE here so all 6 photos in the batch,
+            // plus any per-slot regens / wild cards / versions later on
+            // that read lastSelections.background, use the same
+            // background. If the customer picked a specific swatch, its
+            // id is already in `background` and no roll happens.
+            // 2026-09-18 experiment (see setBackground default note).
+            const resolvedBackground =
+              style === "corporate"
+                ? (background === "surprise"
+                    ? (STUDIO_BGS[
+                        Math.floor(Math.random() * STUDIO_BGS.length)
+                      ].id as StyleSelections["background"])
+                    : (background as StyleSelections["background"]))
+                : undefined;
             onGenerate({
               style: style as StyleSelections["style"],
               attire: attire as StyleSelections["attire"],
               lighting: lighting as StyleSelections["lighting"],
               // Only pass background for Corporate — for Creative / Executive
               // the style block handles background direction on its own.
-              background:
-                style === "corporate"
-                  ? (background as StyleSelections["background"])
-                  : undefined,
+              background: resolvedBackground,
               skin,
               // Scrub color only matters when attire is medical. Pass it
               // anyway — the server ignores it for non-medical attire and
