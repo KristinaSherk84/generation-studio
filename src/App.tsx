@@ -12659,25 +12659,45 @@ const GridScreen = ({
                 draws the customer's eye to the key conversion moment.
                 Only pulses in the IDLE state (before use); the greyed
                 "Unlock more" state above stays static. */}
+            {/* 2026-09-18: filled forest-green CTA with a graduated 3D
+                pillow effect — lighter highlight at the top edge, darker
+                shadow at the bottom edge, so the button reads as a
+                raised, pressable object rather than a flat swatch. The
+                pulse animation keeps the inset shadows constant so the
+                3D look never flickers. */}
             <style>{`
               @keyframes versions-pulse {
-                0%, 100% { box-shadow: 0 0 0 0 rgba(201,169,97,0.55), 0 0 0 0 rgba(201,169,97,0); }
-                50%      { box-shadow: 0 0 0 8px rgba(201,169,97,0.06), 0 0 16px 2px rgba(201,169,97,0.55); }
+                0%, 100% {
+                  box-shadow:
+                    inset 0 1px 0 rgba(255,255,255,0.28),
+                    inset 0 -3px 6px rgba(0,0,0,0.35),
+                    0 2px 4px rgba(0,0,0,0.18),
+                    0 0 0 0 rgba(27,67,50,0.45);
+                }
+                50% {
+                  box-shadow:
+                    inset 0 1px 0 rgba(255,255,255,0.28),
+                    inset 0 -3px 6px rgba(0,0,0,0.35),
+                    0 2px 4px rgba(0,0,0,0.18),
+                    0 0 18px 3px rgba(27,67,50,0.45);
+                }
               }
             `}</style>
             <button
               onClick={onStartPickVersionSource}
               style={{
-                background: "transparent",
-                border: `2px solid #C9A961`,
-                color: "#8A6E1F",
+                background:
+                  "linear-gradient(180deg, #2F5F46 0%, #1B4332 55%, #0F2E1E 100%)",
+                border: "1px solid #0B2415",
+                color: "#FAF8F4",
                 borderRadius: 999,
-                padding: "12px 24px",
+                padding: "13px 26px",
                 fontSize: 14,
                 fontWeight: 500,
                 cursor: "pointer",
                 fontFamily: "inherit",
                 letterSpacing: 0.3,
+                textShadow: "0 1px 1px rgba(0,0,0,0.4)",
                 animation: "versions-pulse 1.8s ease-in-out infinite",
               }}
             >
