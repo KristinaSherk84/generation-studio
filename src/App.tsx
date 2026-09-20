@@ -10811,6 +10811,11 @@ const GridScreen = ({
   // a main-grid tile. null when opened from a version tile (those don't
   // cycle). Drives the left/right arrows + keyboard cycling. (2026-09-02)
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
+  // 2026-09-20: index into versionShots when the lightbox was opened from
+  // a variation tile. When set, the arrows + keyboard cycle within
+  // versionShots instead of the main grid. Only ONE of previewIndex /
+  // previewVersionIndex is set at a time (they're mutually exclusive).
+  const [previewVersionIndex, setPreviewVersionIndex] = useState<number | null>(null);
 
   // Broken-image protection (2026-08-18): if a photo fails to LOAD (a gray
   // broken block — the image was made & saved fine, the browser just couldn't
@@ -12833,12 +12838,21 @@ const GridScreen = ({
               {" · body angle · expression · alternate angle"}
             </span>
           </div>
+          {/* Layout 2026-09-20 per Kristi: 2 tiles on the top row, 3rd
+              centered on the bottom row. Grid replaces the old flex row
+              (which sized each tile to 22% of the container width and
+              rendered them uselessly tiny on phones). Tiles are now
+              ~half the container wide — huge on mobile, still bounded
+              at ~230px on desktop by the outer maxWidth. */}
           <div
             style={{
-              display: "flex",
-              justifyContent: "center",
-              gap: 14,
+              display: "grid",
+              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+              gap: 12,
               marginBottom: 6,
+              maxWidth: 480,
+              marginLeft: "auto",
+              marginRight: "auto",
             }}
           >
             {[0, 1, 2].map((vi) => {
@@ -12849,12 +12863,21 @@ const GridScreen = ({
                   key={vi}
                   style={{
                     position: "relative",
-                    width: "22%",
                     aspectRatio: "3/4",
                     borderRadius: 8,
                     overflow: "hidden",
                     background: C.lightGrey,
                     border: `1px solid ${C.border}`,
+                    // The 3rd tile spans both columns and centers itself
+                    // at the same width as the top-row tiles so the grid
+                    // reads 2-1 (not 3 stretched full width).
+                    ...(vi === 2
+                      ? {
+                          gridColumn: "1 / -1",
+                          justifySelf: "center",
+                          width: "calc(50% - 6px)",
+                        }
+                      : {}),
                   }}
                 >
                   {vsrc ? (
@@ -12913,6 +12936,10 @@ const GridScreen = ({
                       {/* Add-to-cart pill in the corner. Uses the same cart
                           mechanism (URL-based), so version shots move into
                           the same cart as main-grid shots. */}
+                      {/* Button sizes bumped from 26 to 40 (2026-09-20
+                          per Kristi) so the tap targets are usable on
+                          mobile — 40x40 is right at the Apple/Google
+                          minimum-touch-target recommendation. */}
                       {!cartIsFull || isCarted ? (
                         <button
                           onClick={(e) => {
@@ -12923,57 +12950,60 @@ const GridScreen = ({
                           aria-label={isCarted ? "Remove from cart" : "Add to cart"}
                           style={{
                             position: "absolute",
-                            top: 6,
-                            right: 6,
-                            width: 26,
-                            height: 26,
+                            top: 8,
+                            right: 8,
+                            width: 40,
+                            height: 40,
                             borderRadius: "50%",
-                            background: isCarted ? C.dark : "rgba(255,255,255,0.92)",
-                            color: isCarted ? C.white : C.dark,
-                            border: "none",
+                            background: isCarted ? C.dark : "#C9A961",
+                            color: C.white,
+                            border: "1.5px solid rgba(255,255,255,0.95)",
                             cursor: "pointer",
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
                             padding: 0,
-                            boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+                            boxShadow: "0 1px 6px rgba(0,0,0,0.35)",
                           }}
                         >
                           {isCarted ? (
-                            <Check size={14} />
+                            <Check size={20} strokeWidth={2.6} />
                           ) : (
-                            <Plus size={15} strokeWidth={2.4} />
+                            <Plus size={20} strokeWidth={2.6} />
                           )}
                         </button>
                       ) : null}
-                      {/* Expand button, bottom-left, reuses the same
-                          lightbox state as main tiles. */}
+                      {/* Expand button, bottom-left. Sets
+                          previewVersionIndex (not previewIndex) so the
+                          lightbox cycles through the 3 variation tiles
+                          instead of the main-grid images. */}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           setPreviewSrc(vsrc);
-                          setPreviewIndex(null); // version tiles don't cycle
+                          setPreviewIndex(null);
+                          setPreviewVersionIndex(vi);
                         }}
                         aria-label="View larger"
                         style={{
                           position: "absolute",
-                          bottom: 6,
-                          left: 6,
-                          width: 26,
-                          height: 26,
+                          bottom: 8,
+                          left: 8,
+                          width: 40,
+                          height: 40,
                           borderRadius: "50%",
-                          background: "rgba(255,255,255,0.92)",
+                          background: "rgba(255,255,255,0.95)",
                           color: C.dark,
-                          border: "none",
+                          border: "1.5px solid rgba(255,255,255,0.95)",
                           cursor: "pointer",
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "center",
                           padding: 0,
-                          boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+                          boxShadow: "0 1px 6px rgba(0,0,0,0.35)",
                         }}
                       >
-                        <Maximize2 size={14} />
+                        <Maximize2 size={18} strokeWidth={2.2} />
                       </button>
                     </>
                   ) : (
@@ -13591,12 +13621,28 @@ const GridScreen = ({
           onClick={() => {
             setPreviewSrc(null);
             setPreviewIndex(null);
+            setPreviewVersionIndex(null);
           }}
           onKeyDown={(e) => {
             if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
               e.preventDefault();
               e.stopPropagation();
-              // Recompute cyclable list here since it can shift as regens land.
+              const delta = e.key === "ArrowRight" ? 1 : -1;
+              // Version-tile lightbox: cycle within versionShots.
+              if (previewVersionIndex !== null) {
+                const vcy: number[] = [];
+                for (let ii = 0; ii < versionShots.length; ii++) {
+                  if (versionShots[ii]) vcy.push(ii);
+                }
+                if (vcy.length < 2) return;
+                const pos = vcy.indexOf(previewVersionIndex);
+                if (pos < 0) return;
+                const nextIdx = vcy[(pos + delta + vcy.length) % vcy.length];
+                setPreviewVersionIndex(nextIdx);
+                setPreviewSrc(versionShots[nextIdx] as string);
+                return;
+              }
+              // Main-grid lightbox: cycle within images.
               const cy: number[] = [];
               for (let ii = 0; ii < images.length; ii++) {
                 if (images[ii]) cy.push(ii);
@@ -13604,13 +13650,13 @@ const GridScreen = ({
               if (previewIndex === null || cy.length < 2) return;
               const pos = cy.indexOf(previewIndex);
               if (pos < 0) return;
-              const delta = e.key === "ArrowRight" ? 1 : -1;
               const nextIdx = cy[(pos + delta + cy.length) % cy.length];
               setPreviewIndex(nextIdx);
               setPreviewSrc(images[nextIdx]);
             } else if (e.key === "Escape") {
               setPreviewSrc(null);
               setPreviewIndex(null);
+              setPreviewVersionIndex(null);
             }
           }}
           tabIndex={-1}
@@ -13715,6 +13761,7 @@ const GridScreen = ({
               onClick={() => {
                 setPreviewSrc(null);
                 setPreviewIndex(null);
+                setPreviewVersionIndex(null);
               }}
               aria-label="Close preview"
               style={{
@@ -13738,24 +13785,38 @@ const GridScreen = ({
             >
               <X size={20} />
             </button>
-            {/* Left/right arrows + counter — only when the lightbox was opened
-                from a main-grid tile (previewIndex !== null) AND there is more
-                than one filled tile to cycle through. Version-tile expansions
-                skip this. (2026-09-02 per Kristi.) */}
-            {previewIndex !== null &&
+            {/* Left/right arrows + counter — active when the lightbox is
+                cycling either the main grid (previewIndex !== null) OR
+                the 3 version tiles (previewVersionIndex !== null).
+                2026-09-20: version cycling added per Kristi. */}
+            {(previewIndex !== null || previewVersionIndex !== null) &&
               (() => {
+                // Pick the array + current index based on which source
+                // opened the lightbox.
+                const usingVersions = previewVersionIndex !== null;
+                const sourceArr: (string | null | undefined)[] = usingVersions
+                  ? (versionShots as (string | null | undefined)[])
+                  : images;
+                const currentIdx = usingVersions
+                  ? (previewVersionIndex as number)
+                  : (previewIndex as number);
                 const cyclable: number[] = [];
-                for (let ii = 0; ii < images.length; ii++) {
-                  if (images[ii]) cyclable.push(ii);
+                for (let ii = 0; ii < sourceArr.length; ii++) {
+                  if (sourceArr[ii]) cyclable.push(ii);
                 }
                 if (cyclable.length < 2) return null;
-                const pos = cyclable.indexOf(previewIndex);
+                const pos = cyclable.indexOf(currentIdx);
                 if (pos < 0) return null;
                 const go = (delta: 1 | -1) => (e: MouseEvent) => {
                   e.stopPropagation();
                   const next = cyclable[(pos + delta + cyclable.length) % cyclable.length];
-                  setPreviewIndex(next);
-                  setPreviewSrc(images[next]);
+                  if (usingVersions) {
+                    setPreviewVersionIndex(next);
+                    setPreviewSrc(sourceArr[next] as string);
+                  } else {
+                    setPreviewIndex(next);
+                    setPreviewSrc(images[next]);
+                  }
                 };
                 const arrowBtn = (
                   side: "left" | "right",
