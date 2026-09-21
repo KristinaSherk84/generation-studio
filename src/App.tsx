@@ -18955,6 +18955,19 @@ const AllShotsGallery = ({
 export default function App() {
   const [screen, setScreen] = useState<Screen>("landing");
 
+  // Scroll-to-top on every screen change (2026-09-21 per Kristi). Without
+  // this, navigating from a screen the customer has scrolled DOWN (e.g.
+  // scrolled to the bottom of the Landing FAQ, then tapped "Get started")
+  // to the next screen lands them mid-page — the new screen looks like
+  // its own header + everything above the current fold is missing, and
+  // customers didn't realize there was content above where they landed.
+  // Uses "auto" (not smooth) so it feels like a real page navigation, not
+  // a scroll animation.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [screen]);
+
   // Back-button warning state (added 2026-05-27 after Stripe data showed
   // a customer paying entry fee then losing session). When the customer
   // is on a post-generation screen (grid / retouch / checkout) and hits
