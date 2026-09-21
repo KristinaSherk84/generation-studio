@@ -9088,11 +9088,11 @@ const StyleScreen = ({
   batchesUsed,
   maxBatches,
 }: StyleScreenProps) => {
-  // Default style is EXECUTIVE (2026-08-10, Kristi) for general landing
-  // entries. If an entry-specialty default was passed (e.g. a /healthcare
-  // vertical user gets "healthcare"), honor that instead so the customer
-  // lands on the right preselection.
-  const [style, setStyle] = useState<string | null>(defaultStyle ?? "executive");
+  // Default style: null now that the "variety pack" pill is selected by
+  // default (2026-09-21). A defaultStyle override (e.g. a /healthcare
+  // vertical arriving with defaultStyle="healthcare") still wins and
+  // implicitly turns variety-pack mode off in the effect below.
+  const [style, setStyle] = useState<string | null>(defaultStyle ?? null);
   // Paper/color (corporate) background default = the graduated dark-grey
   // spotlight swatch (id "dark"), per Kristi 2026-08-07.
   const [background, setBackground] = useState<string>("dark");
@@ -9101,8 +9101,10 @@ const StyleScreen = ({
   // generator makes 1 of each style (urban, corporate, creative,
   // executive, healthcare) plus a bonus executive as the 6th. Toggles
   // OFF the moment the customer taps any style card, and back ON if
-  // they tap the pill again.
-  const [surpriseMode, setSurpriseMode] = useState<boolean>(true);
+  // they tap the pill again. Falls back to OFF when a defaultStyle prop
+  // is supplied (e.g. a /healthcare vertical entry) so those visitors
+  // arrive on a pre-selected specific style, not the variety pack.
+  const [surpriseMode, setSurpriseMode] = useState<boolean>(!defaultStyle);
   const [attire, setAttire] = useState<string | null>(defaultAttire ?? null);
   const [lighting, setLighting] = useState<string | null>(null);
   // "See example backgrounds" popup (opens from hot text under the Background picker)
@@ -9234,7 +9236,11 @@ const StyleScreen = ({
           }}
         >
         {STYLES.map((s) => {
-          const selected = style === s.id;
+          // "Selected" only applies when the customer has picked a
+          // specific style. In variety-pack mode nothing is selected at
+          // the style tier — the pill below the row is what's active.
+          // (2026-09-21)
+          const selected = style === s.id && !surpriseMode;
           const disabled = s.comingSoon === true;
           return (
             <div
@@ -9261,8 +9267,16 @@ const StyleScreen = ({
                 padding: 4,
                 border: `1.5px solid ${selected ? C.dark : C.border}`,
                 cursor: disabled ? "default" : "pointer",
-                transition: "border-color 0.15s",
-                opacity: disabled ? 0.78 : 1,
+                transition: "border-color 0.15s, opacity 0.15s, filter 0.15s",
+                // When variety-pack mode is on, dim + desaturate the
+                // style cards so they visually recede — the customer
+                // gets an immediate signal that the pill below is
+                // what's driving generation, not any individual card.
+                // Tapping any card lifts them all back to full color +
+                // opacity (see setSurpriseMode(false) in onClick above).
+                // (2026-09-21 per Kristi)
+                opacity: disabled ? 0.5 : surpriseMode ? 0.42 : 1,
+                filter: !disabled && surpriseMode ? "grayscale(0.7)" : "none",
               }}
             >
               <div
@@ -9535,96 +9549,65 @@ const StyleScreen = ({
         </div>
       </div>
 
-      {/* Surprise-me pill (2026-09-21). Lives directly below the STYLE
+      {/* Variety-pack pill (2026-09-21). Lives directly below the STYLE
           row, at the same tier as picking an individual style. On by
-          default so a customer who doesn't want to decide gets one of
-          each style — urban, corporate (paper), creative, executive,
-          healthcare, plus a bonus executive as the 6th. Toggling any
-          style card off flips surpriseMode off and behaves as before. */}
-      <button
-        type="button"
-        onClick={() => {
-          setSurpriseMode(true);
-          setStyle(null);
-        }}
-        aria-pressed={surpriseMode}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          width: "100%",
-          maxWidth: 480,
-          margin: "14px auto 0",
-          background: surpriseMode
-            ? "linear-gradient(180deg, #2F5F46 0%, #1B4332 55%, #0F2E1E 100%)"
-            : BRAND.white,
-          border: surpriseMode
-            ? "1px solid #0B2415"
-            : `2px dashed ${C.border}`,
-          color: surpriseMode ? BRAND.cream : C.dark,
-          borderRadius: 14,
-          padding: surpriseMode ? "13px 16px" : "12px 16px",
-          fontFamily: SANS_STACK,
-          fontSize: 13,
-          fontWeight: 500,
-          cursor: "pointer",
-          letterSpacing: 0.2,
-          textAlign: "left",
-          boxShadow: surpriseMode
-            ? "inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -3px 6px rgba(0,0,0,0.35), 0 2px 6px rgba(0,0,0,0.18)"
-            : "none",
-          textShadow: surpriseMode ? "0 1px 1px rgba(0,0,0,0.4)" : "none",
-          transition: "background 0.15s, box-shadow 0.15s",
-        }}
-      >
-        <span
-          style={{
-            width: 32,
-            height: 32,
-            borderRadius: 10,
-            background: surpriseMode
-              ? "rgba(201,169,97,0.25)"
-              : "rgba(201,169,97,0.12)",
-            border: `1px solid ${surpriseMode ? "rgba(201,169,97,0.6)" : "rgba(201,169,97,0.4)"}`,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 16,
-            lineHeight: 1,
-            color: BRAND.gold,
-            flexShrink: 0,
+          default. Kept small + inline (Kristi feedback 2026-09-21) so
+          it reads as a peer option to the style cards, not a header
+          banner. Full-width green banner was too visually heavy. */}
+      <div style={{ textAlign: "center", margin: "12px 0 0" }}>
+        <button
+          type="button"
+          onClick={() => {
+            setSurpriseMode(true);
+            setStyle(null);
           }}
-          aria-hidden
+          aria-pressed={surpriseMode}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            background: surpriseMode
+              ? "linear-gradient(180deg, #2F5F46 0%, #1B4332 55%, #0F2E1E 100%)"
+              : BRAND.white,
+            border: surpriseMode
+              ? "1px solid #0B2415"
+              : `1px dashed ${C.border}`,
+            color: surpriseMode ? BRAND.cream : C.dark,
+            borderRadius: 999,
+            padding: "7px 14px 7px 8px",
+            fontFamily: SANS_STACK,
+            fontSize: 12,
+            fontWeight: 500,
+            cursor: "pointer",
+            letterSpacing: 0.2,
+            boxShadow: surpriseMode
+              ? "inset 0 1px 0 rgba(255,255,255,0.25), inset 0 -2px 4px rgba(0,0,0,0.3), 0 1px 3px rgba(0,0,0,0.18)"
+              : "none",
+            textShadow: surpriseMode ? "0 1px 1px rgba(0,0,0,0.35)" : "none",
+            transition: "background 0.15s, box-shadow 0.15s",
+          }}
         >
-          ✦
-        </span>
-        <span style={{ flex: 1, minWidth: 0 }}>
-          <span style={{ display: "block", fontWeight: 500 }}>
-            The variety pack — one of each style
-          </span>
           <span
             style={{
-              display: "block",
-              fontSize: 11,
-              marginTop: 2,
-              color: surpriseMode ? "rgba(250,248,244,0.75)" : C.mediumGrey,
-              letterSpacing: 0.2,
+              width: 20,
+              height: 20,
+              borderRadius: "50%",
+              background: surpriseMode ? BRAND.gold : "rgba(201,169,97,0.18)",
+              color: surpriseMode ? BRAND.white : BRAND.gold,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 12,
+              lineHeight: 1,
+              flexShrink: 0,
             }}
+            aria-hidden
           >
-            Urban · Paper · Creative · Executive · Healthcare · IT/Tech
+            {surpriseMode ? "✓" : "✦"}
           </span>
-        </span>
-        <span
-          style={{
-            color: surpriseMode ? BRAND.gold : C.mediumGrey,
-            fontSize: 16,
-            lineHeight: 1,
-          }}
-          aria-hidden
-        >
-          {surpriseMode ? "✓" : "→"}
-        </span>
-      </button>
+          The variety pack · one of each style
+        </button>
+      </div>
 
       {/* Hot text under the Background cards → opens the example-backgrounds popup */}
       <button
