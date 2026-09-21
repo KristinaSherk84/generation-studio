@@ -8801,6 +8801,12 @@ export type StyleSelections = {
   // Customer-picked polo color (2026-08-12). Only used when attire === "polo".
   // Default "navy" when omitted server-side.
   poloColor?: PoloColor;
+  // Surprise-me mode (2026-09-21). When true, the customer didn't pick a
+  // specific style — the generator rotates through one of each style for
+  // the 6-slot batch (see SURPRISE_STYLE_ROTATION in App.handleGenerate).
+  // The `style` field in this shape is a placeholder in that case; the
+  // dispatch loop overrides it per slot.
+  surpriseMode?: boolean;
 };
 
 // Scrub colors available in the picker. Keep order in sync with the
@@ -9087,21 +9093,16 @@ const StyleScreen = ({
   // vertical user gets "healthcare"), honor that instead so the customer
   // lands on the right preselection.
   const [style, setStyle] = useState<string | null>(defaultStyle ?? "executive");
-  // Background default 2026-09-18: switched from "dark" to "surprise" per
-  // Kristi. Clarity showed most customers never clicked around the
-  // background swatches, so we default them into a "you pick for me"
-  // mode that (a) removes decision friction and (b) subtly exposes the
-  // range by letting the server pick one they may not have chosen. Also
-  // primes the ground for A/B measurement — conversion delta week over
-  // week tells us if this pattern outperforms the old fixed default.
-  //
-  // "surprise" is a sentinel; the actual background is resolved on
-  // Generate by rolling one at random from STUDIO_BGS. All 6 photos in
-  // the batch use that single roll (customer explicitly asked NOT for a
-  // variety pack — keeps costs identical, avoids paralysis in the RTV
-  // grid). If the customer clicks a specific swatch, this state flips
-  // to that swatch id and the roll doesn't fire.
-  const [background, setBackground] = useState<string>("surprise");
+  // Paper/color (corporate) background default = the graduated dark-grey
+  // spotlight swatch (id "dark"), per Kristi 2026-08-07.
+  const [background, setBackground] = useState<string>("dark");
+  // Surprise-me (2026-09-21 per Kristi). ON by default at the STYLE
+  // level: when true, the customer doesn't need to pick a style — the
+  // generator makes 1 of each style (urban, corporate, creative,
+  // executive, healthcare) plus a bonus executive as the 6th. Toggles
+  // OFF the moment the customer taps any style card, and back ON if
+  // they tap the pill again.
+  const [surpriseMode, setSurpriseMode] = useState<boolean>(true);
   const [attire, setAttire] = useState<string | null>(defaultAttire ?? null);
   const [lighting, setLighting] = useState<string | null>(null);
   // "See example backgrounds" popup (opens from hot text under the Background picker)
@@ -9139,7 +9140,10 @@ const StyleScreen = ({
     el.scrollLeft = target;
   }, []);
 
-  const canGenerate = Boolean(style && attire && lighting);
+  // 2026-09-21: also allow Generate when surpriseMode is on and the
+  // customer hasn't picked a specific style (surpriseMode makes the
+  // style-per-slot decision at dispatch time in App.handleGenerate).
+  const canGenerate = Boolean((style || surpriseMode) && attire && lighting);
 
   return (
     <div style={{ maxWidth: 720, margin: "0 auto", padding: "48px 32px", ...font }}>
@@ -9235,7 +9239,17 @@ const StyleScreen = ({
           return (
             <div
               key={s.id}
-              onClick={disabled ? undefined : () => setStyle(s.id)}
+              onClick={
+                disabled
+                  ? undefined
+                  : () => {
+                      setStyle(s.id);
+                      // Picking a specific style turns off surprise-me,
+                      // so the generator uses that one style for all 6
+                      // shots instead of rotating. (2026-09-21)
+                      setSurpriseMode(false);
+                    }
+              }
               style={{
                 // Fixed-width cards in the horizontal scroll row. 56px lines
                 // up roughly 5 fully-visible cards on a 360px mobile viewport
@@ -9521,6 +9535,97 @@ const StyleScreen = ({
         </div>
       </div>
 
+      {/* Surprise-me pill (2026-09-21). Lives directly below the STYLE
+          row, at the same tier as picking an individual style. On by
+          default so a customer who doesn't want to decide gets one of
+          each style — urban, corporate (paper), creative, executive,
+          healthcare, plus a bonus executive as the 6th. Toggling any
+          style card off flips surpriseMode off and behaves as before. */}
+      <button
+        type="button"
+        onClick={() => {
+          setSurpriseMode(true);
+          setStyle(null);
+        }}
+        aria-pressed={surpriseMode}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          width: "100%",
+          maxWidth: 480,
+          margin: "14px auto 0",
+          background: surpriseMode
+            ? "linear-gradient(180deg, #2F5F46 0%, #1B4332 55%, #0F2E1E 100%)"
+            : BRAND.white,
+          border: surpriseMode
+            ? "1px solid #0B2415"
+            : `2px dashed ${C.border}`,
+          color: surpriseMode ? BRAND.cream : C.dark,
+          borderRadius: 14,
+          padding: surpriseMode ? "13px 16px" : "12px 16px",
+          fontFamily: SANS_STACK,
+          fontSize: 13,
+          fontWeight: 500,
+          cursor: "pointer",
+          letterSpacing: 0.2,
+          textAlign: "left",
+          boxShadow: surpriseMode
+            ? "inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -3px 6px rgba(0,0,0,0.35), 0 2px 6px rgba(0,0,0,0.18)"
+            : "none",
+          textShadow: surpriseMode ? "0 1px 1px rgba(0,0,0,0.4)" : "none",
+          transition: "background 0.15s, box-shadow 0.15s",
+        }}
+      >
+        <span
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: 10,
+            background: surpriseMode
+              ? "rgba(201,169,97,0.25)"
+              : "rgba(201,169,97,0.12)",
+            border: `1px solid ${surpriseMode ? "rgba(201,169,97,0.6)" : "rgba(201,169,97,0.4)"}`,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 16,
+            lineHeight: 1,
+            color: BRAND.gold,
+            flexShrink: 0,
+          }}
+          aria-hidden
+        >
+          ✦
+        </span>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: "block", fontWeight: 500 }}>
+            The variety pack — one of each style
+          </span>
+          <span
+            style={{
+              display: "block",
+              fontSize: 11,
+              marginTop: 2,
+              color: surpriseMode ? "rgba(250,248,244,0.75)" : C.mediumGrey,
+              letterSpacing: 0.2,
+            }}
+          >
+            Urban · Paper · Creative · Executive · Healthcare · IT/Tech
+          </span>
+        </span>
+        <span
+          style={{
+            color: surpriseMode ? BRAND.gold : C.mediumGrey,
+            fontSize: 16,
+            lineHeight: 1,
+          }}
+          aria-hidden
+        >
+          {surpriseMode ? "✓" : "→"}
+        </span>
+      </button>
+
       {/* Hot text under the Background cards → opens the example-backgrounds popup */}
       <button
         type="button"
@@ -9554,54 +9659,6 @@ const StyleScreen = ({
       {style === "corporate" && (
         <>
           <SectionLabel>Background color</SectionLabel>
-          {/* "Surprise me" pill (2026-09-18). PRE-SELECTED by default so
-              a customer who doesn't want to make a decision just clicks
-              Generate and gets a rolled background. Big and obviously
-              interactive so people also notice the swatches exist below. */}
-          <button
-            type="button"
-            onClick={() => setBackground("surprise")}
-            aria-pressed={background === "surprise"}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 8,
-              background: background === "surprise" ? "#1B4332" : BRAND.white,
-              color: background === "surprise" ? BRAND.cream : C.dark,
-              border:
-                background === "surprise"
-                  ? "2px solid #1B4332"
-                  : `2px dashed ${C.border}`,
-              padding: "10px 16px",
-              borderRadius: 999,
-              fontFamily: "inherit",
-              fontSize: 13,
-              fontWeight: 500,
-              cursor: "pointer",
-              marginBottom: 12,
-              letterSpacing: 0.2,
-              boxShadow:
-                background === "surprise"
-                  ? "0 1px 4px rgba(27,67,50,0.35)"
-                  : "none",
-              transition: "background 0.15s, box-shadow 0.15s",
-            }}
-          >
-            <span style={{ fontSize: 15, lineHeight: 1 }} aria-hidden>🎲</span>
-            Surprise me · I'll pick a great one
-          </button>
-          <div
-            style={{
-              fontSize: 11,
-              color: C.mediumGrey,
-              marginBottom: 8,
-              textTransform: "uppercase",
-              letterSpacing: 1.1,
-              fontWeight: 500,
-            }}
-          >
-            Or choose one yourself:
-          </div>
           <div
             style={{
               display: "grid",
@@ -9886,30 +9943,25 @@ const StyleScreen = ({
       <div style={{ marginTop: 24 }}>
         <Button
           onClick={() => {
-            if (!canGenerate || !style || !attire || !lighting) return;
-            // Resolve "surprise" (the pre-selected default) into a real
-            // background id by rolling one at random from STUDIO_BGS.
-            // The roll happens ONCE here so all 6 photos in the batch,
-            // plus any per-slot regens / wild cards / versions later on
-            // that read lastSelections.background, use the same
-            // background. If the customer picked a specific swatch, its
-            // id is already in `background` and no roll happens.
-            // 2026-09-18 experiment (see setBackground default note).
-            const resolvedBackground =
-              style === "corporate"
-                ? (background === "surprise"
-                    ? (STUDIO_BGS[
-                        Math.floor(Math.random() * STUDIO_BGS.length)
-                      ].id as StyleSelections["background"])
-                    : (background as StyleSelections["background"]))
-                : undefined;
+            if (!canGenerate || !attire || !lighting) return;
+            if (!surpriseMode && !style) return;
             onGenerate({
-              style: style as StyleSelections["style"],
+              // In surpriseMode the customer hasn't picked a style —
+              // pass "executive" as a placeholder (the App-level
+              // handleGenerate detects surpriseMode and rotates the
+              // style per slot).
+              style: (surpriseMode
+                ? "executive"
+                : (style as StyleSelections["style"])),
               attire: attire as StyleSelections["attire"],
               lighting: lighting as StyleSelections["lighting"],
               // Only pass background for Corporate — for Creative / Executive
               // the style block handles background direction on its own.
-              background: resolvedBackground,
+              background:
+                !surpriseMode && style === "corporate"
+                  ? (background as StyleSelections["background"])
+                  : undefined,
+              surpriseMode,
               skin,
               // Scrub color only matters when attire is medical. Pass it
               // anyway — the server ignores it for non-medical attire and
@@ -22141,6 +22193,21 @@ export default function App() {
 
     const STAGGER_MS = 5000;
     const slotCount = partialBatch ? 4 : TOTAL_HEADSHOTS;
+    // Variety-pack rotation (2026-09-21). When the customer picked the
+    // "variety pack" pill instead of a specific style, each of the 6
+    // slots uses a different style. Order chosen to spread the visual
+    // variety (starts with the customer's biggest wow — Executive) and
+    // ends with IT/Tech so the 6-slot batch is one true representative
+    // of each style Kristi offers. Slots are ignored when a specific
+    // style was picked (surpriseMode === false).
+    const SURPRISE_STYLE_ROTATION = [
+      "executive",
+      "urban",
+      "corporate",
+      "creative",
+      "healthcare",
+      "tech",
+    ] as const;
     const calls = Array.from({ length: slotCount }, async (_, index) => {
       // Each call waits its turn before firing. Promise.all below still
       // collects them in parallel — we're just delaying the START of the
@@ -22148,16 +22215,28 @@ export default function App() {
       if (index > 0) {
         await staggerDelay(index * STAGGER_MS);
       }
+      // Per-slot style: Surprise-me rotates; otherwise use the picked
+      // style for every slot.
+      const perSlotStyle = selections.surpriseMode
+        ? SURPRISE_STYLE_ROTATION[index % SURPRISE_STYLE_ROTATION.length]
+        : selections.style;
+      // Corporate paper backdrop needs an explicit background color;
+      // pick a sensible default (dark) for Surprise-me's corporate
+      // slot since the customer didn't choose one.
+      const perSlotBackground =
+        selections.surpriseMode && perSlotStyle === "corporate"
+          ? "dark"
+          : selections.background;
       try {
         const response = await fetch("/api/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             photoUrls,
-            style: selections.style,
+            style: perSlotStyle,
             attire: selections.attire,
             lighting: selections.lighting,
-            background: selections.background,
+            background: perSlotBackground,
             variationIndex: index,
             hasWideAngle,
             skin: selections.skin,
