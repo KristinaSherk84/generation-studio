@@ -342,7 +342,9 @@ type InlineImage = { mimeType: string; data: string };
 // 2026-05-19).
 const BLOCK_1_IDENTITY = `Generate a professional headshot of the person shown in the reference photos.
 
-REFERENCE PHOTOS ARE FOR IDENTITY ONLY: The reference photos are provided EXCLUSIVELY to establish the subject's face, features, skin, hair, and personal likeness. Do NOT copy, reproduce, echo, or borrow ANY element of the reference photos' environments — this includes walls, wall paneling, wood grain, siding, tiles, textures, furniture, curtains, doors, ceilings, floors, outdoor scenery, beaches, streets, trees, sky, cars, other people, pets, or ANY other visual content in the backdrop or surroundings of the reference photos. The background of the generated headshot comes ENTIRELY from the STYLE and BACKGROUND direction later in this prompt — never from the reference photos. If a reference photo shows the subject in front of a specific wall or environment, treat that wall/environment as INVISIBLE for the purpose of generating the output. The subject's face + body are extracted; the environment they were photographed in is discarded. (2026-09-15: added because Gemini was reproducing the exact diagonal wood-paneled wall from a customer's reference selfies as the studio background in one delivered shot.)
+REFERENCE PHOTOS ARE FOR IDENTITY ONLY: The reference photos give you exactly one thing — the subject's face, hair, skin, and personal likeness. The generated output contains exactly one person (the subject), framed as a professional head-and-shoulders headshot, standing in front of the background described in the STYLE and BACKGROUND direction later in this prompt.
+
+The subject's face and hair are the only elements carried forward from the reference photos. If a reference photo also contains additional content — a full body, arms and hands beyond the shoulders, a purse or bag, jewelry outside the collarbone frame, other people, a pet, furniture, walls, wallpaper, wood paneling, tile, windows, doors, ceilings, floors, outdoor scenery, streets, cars, trees, or sky — that additional content stays entirely in the reference photo and is not represented in the output. The generated output has the composition of a photograph taken in a proper studio session: a single subject centered in the frame, a clean studio-quality background driven by the style direction below, and every element that appears in the image is a natural part of a professional headshot. (2026-09-22: expanded from earlier walls/environment scope after Solis Andrea's delivered grid contained "blobs" — the customer uploaded uncropped full-body references and Gemini treated the extra content as visual material to reproduce in the output.)
 
 IDENTITY PRESERVATION (RULE #1 — NON-NEGOTIABLE):
 
@@ -466,9 +468,11 @@ function buildBlockPet(variationIndex: number): string {
 }
 
 const BLOCK_2_COMPOSITION = `Framing: professional business headshot. The specific body angle and crop are specified in the variation block at the end of this prompt.
-- Extremely minimal headroom above the top of the head. Only add 2–3% of the total frame height above the top of the head. The top of the head should nearly touch the top of the frame. No empty space above the head.
-- Strong posture, proud posture with shoulders back, puffed chest. Body angled, head rotated slightly back toward the lens).
-- SHOULDER AND ARM SILHOUETTE: The subject's shoulders and upper arms form a narrow, VERTICAL silhouette — the shoulder line slopes gently DOWN into the upper arms, which drop STRAIGHT DOWN parallel to the body. The elbows are pointed toward the floor, tucked in close to the torso, NEVER flared outward or bent up. No triangle or diamond shape formed by the upper arms. The overall body shape from the shoulders down reads as a straight column, NOT a wide triangle. Hands are entirely below the frame — not visible, not touching the body, not resting on hips, waist, or chest. If any part of the upper arms is visible in the frame, it must be dropping vertically like a resting arm, not bent up like an arm placed on a hip or a waist. (2026-09-15: previous "no hands on hips" ban wasn't enough — Gemini was cropping the hands out but still bending the elbows into the hands-on-hips triangle shape. Rewritten to describe the SILHOUETTE, not just the hands.)`;
+- Extremely minimal headroom above the top of the head. Only add 2–3% of the total frame height above the top of the head. The top of the head nearly touches the top of the frame.
+- Strong posture, shoulders back, puffed chest. Body angled, head rotated slightly back toward the lens.
+- HAND POSITION: Hands always rest down at the sides of the body, arms hanging naturally with elbows pointing toward the floor, forearms drawing a straight vertical line along the torso. An acceptable alternate: arms crossed at mid-chest with the forearms horizontal and the hands tucked loosely at the opposite forearm. Both positions read as calm, grounded, and photographer-directed.
+- CROP: The bottom edge of the frame sits at or just above the shoulder line (top of the collarbone). The rendered image contains head, neck, and a sliver of the top of the shoulders. Passport-photo tightness. Keep this crop consistent across the batch even when the variation block below uses the words "wider" or "medium" — those refer to subtle differences within the head-and-shoulders frame.
+- REFERENCE-PHOTO USE: Use the reference photos as the source for the subject's face, hair, skin, and identity. The body pose comes from the variation block below, with hands positioned as described above. (2026-09-21: rewritten to be entirely positive-language — earlier "no hands on hips" phrasings were being misconstrued by Gemini as reinforcement rather than prohibition.)`;
 
 // Block 3 Style base text (no background) per style.
 //
@@ -497,9 +501,17 @@ const BLOCK_3_STYLE_BASE: Record<Style, string> = {
 // buildBlock3Style logic distributes backgrounds across that range so a full
 // batch of 6 returns a mixed grid rather than 6 of the same scene.
 
-// CREATIVE NATURAL (3 backgrounds × 2 variations each = 2/2/2 split):
+// CREATIVE NATURAL (2 backgrounds × 3 variations each = 3/3 split as of
+// 2026-09-22 — Kristi dropped the spring-garden prompt because the
+// flowers kept rendering in-focus rather than as bokeh orbs. The 3/3
+// split now runs green-tree bokeh × 3 + fall-tree bokeh × 3.
 const CREATIVE_BG_TREES = `Background: Extremely blurry green-foliage trees placed 50+ feet behind the subject. Very bokeh heavy photographed with extreme creamy bokeh (shot with a 200mm lens at f/1.2). The background blur must be SO heavy that you CANNOT identify any specific tree elements. What should be visible: large creamy bokeh orbs, abstract painterly washes of green and gold, soft dappled highlights. What must NOT be visible: any recognizable tree, branch structure, leaf shape, or specific object.`;
 
+// DEACTIVATED 2026-09-22: kept in the source as reference/rollback only.
+// Removed from creativeBgs rotation below because the spring flowers kept
+// rendering as in-focus recognizable blossoms, not the intended bokeh.
+// Leave here so a future prompt rewrite can bring the concept back.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const CREATIVE_BG_SPRING_GARDEN = `Background: A spring garden in full bloom — cherry blossoms, magnolias, dogwoods, peonies, or wisteria at the peak of their flowering season — placed 70+ feet behind the subject and photographed with the most extreme creamy bokeh imaginable (shot on a 200mm lens at f/1.2). The background must be SO heavily blurred that you CANNOT identify any specific flower, branch, or petal. What should be visible: large creamy bokeh orbs in soft pinks, whites, lavenders, pale corals, with hints of fresh pale-green leaves; abstract painterly washes of color; gentle dappled highlights. What must NOT be visible: any recognizable flower head, individual petal, leaf, or branch. Think impressionist painting of a garden in May — not a photograph of one.`;
 
 const CREATIVE_BG_FALL_TREES = `Background: Extremely blurred out fall colored foliage — blurry trees should be in peak fall color, from gold and amber through burnt orange and deep crimson, background is placed 70+ feet behind the subject and photographed with the most extreme creamy bokeh imaginable (as if shot on a 200mm lens at f/1.2). The background must be SO heavily blurred that you CANNOT identify any specific tree, branch, or leaf. What should be visible: large creamy bokeh orbs in warm autumn tones (gold, amber, rust, deep red, occasional emerald), abstract painterly washes of warm color, soft dappled highlights. What must NOT be visible: any recognizable tree, branch structure, or leaf shape. Think impressionist painting of New England in October — not a photograph of one.`;
@@ -529,17 +541,15 @@ function buildBlock3Style(style: Style, variationIndex: number): string {
   }
 
   if (style === "creative") {
-    // 3 outdoor-natural backgrounds × 2 variations each = 2/2/2 split.
-    // Indices 0,3 = trees; 1,4 = spring garden; 2,5 = fall colored trees.
-    const creativeBgs = [
-      CREATIVE_BG_TREES,         // 0
-      CREATIVE_BG_SPRING_GARDEN, // 1
-      CREATIVE_BG_FALL_TREES,    // 2
-      CREATIVE_BG_TREES,         // 3
-      CREATIVE_BG_SPRING_GARDEN, // 4
-      CREATIVE_BG_FALL_TREES,    // 5
-    ];
-    const bg = creativeBgs[variationIndex] ?? CREATIVE_BG_TREES;
+    // 2 outdoor-natural backgrounds × 3 variations each = 3/3 split.
+    // 2026-09-22: dropped CREATIVE_BG_SPRING_GARDEN per Kristi — spring
+    // flowers kept rendering as recognizable in-focus blossoms rather
+    // than the intended bokeh. Now: 3 green-tree + 3 fall-tree
+    // variations, alternating so the delivered grid mixes them.
+    // Even indices (0, 2, 4) = green trees; odd indices (1, 3, 5) =
+    // fall colored trees.
+    const bg =
+      variationIndex % 2 === 0 ? CREATIVE_BG_TREES : CREATIVE_BG_FALL_TREES;
     return `${seg("style_creative", BLOCK_3_STYLE_BASE.creative)}\n\n${bg}`;
   }
 
