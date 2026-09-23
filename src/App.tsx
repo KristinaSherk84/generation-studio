@@ -77,6 +77,11 @@ export type UploadedPhoto = {
   id: string;                        // local unique id, stable across rerenders
   localPreview: string;              // object URL for instant thumbnail
   blobUrl: string | null;            // populated when upload to Blob completes
+  // Face-cropped copy of the photo (2026-09-23). Filled in a few seconds
+  // after upload by /api/crop-reference. Sent to Gemini instead of the
+  // original when present, for a stronger likeness. Undefined = crop not
+  // back yet or not needed — the original is used.
+  croppedUrl?: string;
   status: "uploading" | "done" | "error";
   errorMessage: string | null;
   // EXIF-derived wide-angle flag, read in the browser via `exifr` as soon as
@@ -8196,6 +8201,26 @@ const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) 
                 : p,
             ),
           );
+          // Face-crop in the background (2026-09-23) while the customer
+          // keeps going. Best-effort: on any failure the original is used.
+          void fetch("/api/crop-reference", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url: result.url }),
+          })
+            .then((r) => (r.ok ? r.json() : null))
+            .then((d: { url?: string; cropped?: boolean } | null) => {
+              if (!d?.cropped || typeof d.url !== "string") return;
+              const croppedUrl = d.url;
+              setPhotos((prev) =>
+                prev.map((p) =>
+                  p.id === placeholder.id ? { ...p, croppedUrl } : p,
+                ),
+              );
+            })
+            .catch(() => {
+              /* keep the original */
+            });
         })
         .catch((err: unknown) => {
           const message =
@@ -9961,7 +9986,9 @@ const StyleScreen = ({
           disabled={!canGenerate}
           full
         >
-          {!style
+          {/* 2026-09-23: the variety pack counts as a style choice — the
+              button used to read "Select a style" even with it selected. */}
+          {!style && !surpriseMode
             ? "Select a style"
             : !attire
             ? "Choose your attire"
@@ -9969,6 +9996,22 @@ const StyleScreen = ({
             ? "Choose your lighting"
             : "Generate 6 headshots"}
         </Button>
+        {/* Price clarity (2026-09-23). 3 of 12 survey replies said "I
+            didn't know I had to pay." Say it plainly, BEFORE they
+            generate, so the price is never a surprise on the grid. */}
+        <div
+          style={{
+            fontSize: 13,
+            color: C.dark,
+            marginTop: 10,
+            textAlign: "center",
+            lineHeight: 1.5,
+          }}
+        >
+          Your 6 previews are <strong>free</strong>. Keep the ones you love
+          for <strong>${(PHOTO_BASIC_CENTS / 100).toFixed(2)} each</strong>.
+          You only pay for the photos you pick.
+        </div>
         {/* Phase 4 batch counter (2026-06-03). Quietly surfaces the regen
             cap when the customer has done at least one batch. Color
             shifts to red when 1 generation away from the cap so they
@@ -22042,7 +22085,11 @@ export default function App() {
     const usablePhotos = photos.filter(
       (p) => p.status === "done" && p.blobUrl,
     );
-    let photoUrls = usablePhotos.map((p) => p.blobUrl as string);
+    // Use the face-cropped copy when it's ready, else the original.
+    // (2026-09-23 — likeness boost; see /api/crop-reference.)
+    let photoUrls = usablePhotos.map(
+      (p) => p.croppedUrl ?? (p.blobUrl as string),
+    );
     // Wide-angle flag: true if ANY usable reference photo was detected as
     // wide via EXIF. `null` (EXIF unreadable) and `false` (confirmed ≥40mm)
     // both count as "not wide" — the server will fall back to Block 1's

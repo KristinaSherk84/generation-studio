@@ -344,6 +344,78 @@ export async function detectLandmarks(
 }
 
 /**
+ * Find every face in `imageBytes` (2026-09-23 — reference-photo cropping).
+ * Boxes are in the pixel space of the EXIF-ROTATED original image, sorted
+ * largest first. Returns null on any failure (models missing, decode
+ * error) so callers can fall back to the uncropped photo.
+ */
+export async function detectFaceBoxes(imageBytes: Buffer): Promise<{
+  width: number;
+  height: number;
+  boxes: { x: number; y: number; width: number; height: number }[];
+} | null> {
+  try {
+    if (!cachedModelDir) {
+      cachedModelDir = await resolveModelDir();
+      if (!cachedModelDir) return null;
+    }
+    await ensureModelsLoaded(cachedModelDir);
+
+    const origMeta = await sharp(imageBytes).rotate().metadata();
+    // sharp reports pre-rotation dims; swap for 90°/270° EXIF orientations.
+    const o = origMeta.orientation ?? 1;
+    const swap = o >= 5 && o <= 8;
+    const origW = (swap ? origMeta.height : origMeta.width) ?? 0;
+    const origH = (swap ? origMeta.width : origMeta.height) ?? 0;
+    if (!origW || !origH) return null;
+
+    const FACE_API_INPUT_MAX = 640;
+    const decoded = await sharp(imageBytes)
+      .rotate()
+      .resize(FACE_API_INPUT_MAX, FACE_API_INPUT_MAX, {
+        fit: "inside",
+        withoutEnlargement: true,
+      })
+      .removeAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const { data: pixels, info } = decoded;
+    const tensor = tf.tensor3d(
+      new Uint8Array(pixels),
+      [info.height, info.width, 3],
+      "int32",
+    );
+    const results = await faceapi.detectAllFaces(
+      tensor as unknown,
+      new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 }),
+    );
+    tensor.dispose();
+
+    const sx = origW / info.width;
+    const sy = origH / info.height;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const boxes = (results as any[])
+      .map((r) => r.box ?? r.detection?.box)
+      .filter(Boolean)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .map((b: any) => ({
+        x: b.x * sx,
+        y: b.y * sy,
+        width: b.width * sx,
+        height: b.height * sy,
+      }))
+      .sort((a, b) => b.width * b.height - a.width * a.height);
+    return { width: origW, height: origH, boxes };
+  } catch (err) {
+    console.warn(
+      "[crop] detectFaceBoxes failed:",
+      err instanceof Error ? err.message : String(err),
+    );
+    return null;
+  }
+}
+
+/**
  * Compute a 128-D face-recognition descriptor for the single most prominent
  * face in `imageBytes`. Used for identity matching between a generated
  * headshot and the customer's reference photos (2026-07-30).
