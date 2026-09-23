@@ -82,6 +82,10 @@ export type UploadedPhoto = {
   // original when present, for a stronger likeness. Undefined = crop not
   // back yet or not needed — the original is used.
   croppedUrl?: string;
+  // True when /api/crop-reference found 2+ people in the photo. We never
+  // guess which one is the customer — the thumbnail asks them to crop in
+  // on themselves and re-upload. (2026-09-23)
+  multiFace?: boolean;
   status: "uploading" | "done" | "error";
   errorMessage: string | null;
   // EXIF-derived wide-angle flag, read in the browser via `exifr` as soon as
@@ -8209,7 +8213,15 @@ const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) 
             body: JSON.stringify({ url: result.url }),
           })
             .then((r) => (r.ok ? r.json() : null))
-            .then((d: { url?: string; cropped?: boolean } | null) => {
+            .then((d: { url?: string; cropped?: boolean; reason?: string } | null) => {
+              if (d?.reason === "multiple_faces") {
+                setPhotos((prev) =>
+                  prev.map((p) =>
+                    p.id === placeholder.id ? { ...p, multiFace: true } : p,
+                  ),
+                );
+                return;
+              }
               if (!d?.cropped || typeof d.url !== "string") return;
               const croppedUrl = d.url;
               setPhotos((prev) =>
@@ -8493,6 +8505,32 @@ const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) 
                 </div>
               )}
 
+              {/* Group photo warning (2026-09-23). Sits along the bottom so
+                  the customer can still see who's in the shot. */}
+              {p.multiFace && p.status === "done" && (
+                <div
+                  style={{
+                    position: "absolute",
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    padding: "6px 6px 7px",
+                    background: "rgba(122, 31, 27, 0.9)",
+                    color: C.white,
+                    fontSize: 10.5,
+                    fontWeight: 600,
+                    textAlign: "center",
+                    lineHeight: 1.25,
+                  }}
+                  title="This photo has more than one person. Crop it so only you are in it, then upload it again."
+                >
+                  Too many people
+                  <div style={{ fontWeight: 400, fontSize: 10, opacity: 0.95 }}>
+                    Crop in on just you
+                  </div>
+                </div>
+              )}
+
               <button
                 onClick={() => removePhoto(p.id)}
                 style={{
@@ -8531,6 +8569,31 @@ const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) 
           }}
         >
           One or more photos didn't upload. Remove them with the × and try again.
+        </div>
+      )}
+
+      {/* Group-photo push back (2026-09-23 per Kristi). A warning, not a
+          block — the customer decides — but it's plain and specific. */}
+      {photos.some((p) => p.multiFace && p.status === "done") && (
+        <div
+          style={{
+            marginTop: 16,
+            fontSize: 13,
+            color: "#7A1F1B",
+            background: "#FCE8E6",
+            border: "1px solid #E7B4AE",
+            borderRadius: 8,
+            padding: "10px 14px",
+            lineHeight: 1.5,
+          }}
+        >
+          <strong>
+            {photos.filter((p) => p.multiFace && p.status === "done").length === 1
+              ? "1 photo has more than one person in it."
+              : `${photos.filter((p) => p.multiFace && p.status === "done").length} photos have more than one person in them.`}
+          </strong>{" "}
+          For the best likeness, crop those photos so only you are in them,
+          then remove them with the × and upload the cropped version.
         </div>
       )}
 
@@ -21697,7 +21760,10 @@ export default function App() {
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
-      const data = (await response.json()) as { image: string };
+      const rawData = (await response.json()) as { image: string; url?: string | null };
+      // Prefer the small Blob URL over base64 (keeps Clarity recordings
+      // intact — 2026-09-23). Downstream code already handles https URLs.
+      const data = { image: rawData.url ?? rawData.image };
       setGeneratedImages((prev) => {
         // Stash the OLD URL as the undoable "previous" for this slot before
         // we overwrite it (2026-08-31 revert feature). Only stash a truthy
@@ -21929,9 +21995,9 @@ export default function App() {
         throw new Error(PAYWALL_EXPIRED_MESSAGE);
       }
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const data = (await response.json()) as { image?: string };
+      const data = (await response.json()) as { image?: string; url?: string | null };
       if (!data.image) throw new Error("no image");
-      const img = data.image;
+      const img = data.url ?? data.image; // small URL, not base64 (Clarity)
       setWildCards((prev) => {
         const next = [...prev];
         if (next[index]) next[index] = { ...next[index], image: img, failed: false };
@@ -22649,9 +22715,9 @@ export default function App() {
             }),
           });
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          const data = (await response.json()) as { image?: string };
+          const data = (await response.json()) as { image?: string; url?: string | null };
           if (!data.image) throw new Error("no image");
-          const img = data.image;
+          const img = data.url ?? data.image; // small URL, not base64 (Clarity)
           setWildCards((prev) => {
             const next = [...prev];
             if (next[i]) next[i] = { ...next[i], image: img };
@@ -22773,11 +22839,14 @@ export default function App() {
         }),
       });
       if (!response.ok) return;
-      const data = (await response.json()) as {
+      const rawRedo = (await response.json()) as {
         image?: string;
+        url?: string | null;
         faceDescriptor?: number[] | null;
       };
-      if (!data.image) return;
+      if (!rawRedo.image) return;
+      // Small URL, not base64 — keeps Clarity recordings intact. (2026-09-23)
+      const data = { ...rawRedo, image: rawRedo.url ?? rawRedo.image };
       const newDist =
         data.faceDescriptor && data.faceDescriptor.length === 128
           ? euclideanDistance(ref, data.faceDescriptor)

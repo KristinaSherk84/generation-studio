@@ -10,6 +10,10 @@
  * gave in the Sept survey) and extra body/background content leaks into
  * the output (the "blobs" case).
  *
+ * Group photos (2+ people) are NEVER cropped — we'd have to guess which
+ * face is the customer. They come back with reason "multiple_faces" and
+ * the upload screen asks the customer to crop in on themselves.
+ *
  * Called by the upload screen right after each photo finishes uploading,
  * so the work happens while the customer is choosing a style — it never
  * delays generation. ALWAYS best-effort: any failure (no face found, HEIC
@@ -60,8 +64,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!det) return keep("detect_failed");
     if (det.boxes.length === 0) return keep("no_face", 0);
 
-    const face = det.boxes[0]; // largest face = the subject
+    const face = det.boxes[0]; // largest face
     const { width: W, height: H } = det;
+
+    // Group photo? (2026-09-23 per Kristi) Count faces that are at least
+    // 40% as tall as the biggest one — real people in the shot, not tiny
+    // strangers far in the background. More than one → do NOT guess who
+    // the customer is. Leave the photo uncropped and tell the app, which
+    // asks the customer to crop in on themselves.
+    const people = det.boxes.filter((b) => b.height >= 0.4 * face.height).length;
+    if (people > 1) return keep("multiple_faces", people);
     if (face.height >= ALREADY_TIGHT * H) return keep("already_tight", det.boxes.length);
 
     // Head-and-shoulders box around the face, 4:5 portrait.
