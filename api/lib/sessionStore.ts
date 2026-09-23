@@ -198,21 +198,37 @@ export async function updateSessionSlot(
    * flag for this slot (a fresh regen puts the tile on the NEW shot).
    */
   previousUrl?: string | null,
-): Promise<boolean> {
-  if (!token || !/^[A-Za-z0-9]{16,48}$/.test(token)) return false;
+): Promise<{ ok: boolean; index?: number }> {
+  if (!token || !/^[A-Za-z0-9]{16,48}$/.test(token)) return { ok: false };
   // Cap raised from 7 to 63 (2026-08-24) so accumulated multi-batch grids can
-  // persist a per-slot regen beyond the first 8 shots. The real bound is the
-  // `index >= rec.generatedUrls.length` guard below.
-  if (!Number.isInteger(index) || index < 0 || index > 63) return false;
-  if (typeof url !== "string" || !/^https?:\/\//.test(url)) return false;
+  // persist a per-slot regen beyond the first 8 shots.
+  if (!Number.isInteger(index) || index < 0 || index > 63) return { ok: false };
+  if (typeof url !== "string" || !/^https?:\/\//.test(url)) return { ok: false };
   let rec: SavedSession | null;
   try {
     rec = (await redis.get<SavedSession>(key(token))) ?? null;
   } catch {
-    return false;
+    return { ok: false };
   }
-  if (!rec || !Array.isArray(rec.generatedUrls)) return false;
-  if (index >= rec.generatedUrls.length) return false;
+  if (!rec || !Array.isArray(rec.generatedUrls)) return { ok: false };
+  // 2026-09-23 fix (astrickerhume case): the saved grid drops any slot
+  // that was EMPTY at save time (e.g. a failed/blocked shot), so a 6-slot
+  // batch can be saved as 5. A later regen of that slot arrived with an
+  // index past the end and was silently REJECTED — Kristi's admin regens
+  // vanished. Now an out-of-range index APPENDS the shot instead, and we
+  // return where it landed so the client can patch that spot next time.
+  if (index >= rec.generatedUrls.length) {
+    rec.generatedUrls.push(url);
+    const landed = rec.generatedUrls.length - 1;
+    if (Array.isArray(rec.previousUrls)) {
+      while (rec.previousUrls.length < rec.generatedUrls.length) {
+        rec.previousUrls.push(null);
+      }
+    }
+    mergeIntoAllGenerated(rec, [url]);
+    await redis.set(key(token), rec, { ex: TTL_SECONDS });
+    return { ok: true, index: landed };
+  }
   rec.generatedUrls[index] = url;
   if (typeof previousUrl === "string" && /^https?:\/\//.test(previousUrl)) {
     const arr = Array.isArray(rec.previousUrls)
@@ -238,7 +254,7 @@ export async function updateSessionSlot(
     typeof previousUrl === "string" ? previousUrl : null,
   ]);
   await redis.set(key(token), rec, { ex: TTL_SECONDS });
-  return true;
+  return { ok: true, index };
 }
 
 /**

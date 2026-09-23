@@ -71,8 +71,13 @@ export default async function handler(
       ? body.previousUrl
       : null;
   try {
-    const ok = await updateSessionSlot(token, index, url, previousUrl);
-    res.status(200).json({ ok });
+    const result = await updateSessionSlot(token, index, url, previousUrl);
+    if (!result.ok) {
+      console.warn(
+        JSON.stringify({ type: "update_session_rejected", index }),
+      );
+    }
+    res.status(200).json(result);
   } catch (err) {
     console.warn(
       "[update-session] failed:",

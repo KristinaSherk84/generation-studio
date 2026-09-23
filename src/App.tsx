@@ -8672,6 +8672,18 @@ const STYLES: readonly StyleEntry[] = [
   { id: "realtor",    name: "Realtor",           swatch: "#C8B68E", silhouette: "#7A6A4A", visual: "realtor", comingSoon: true },
 ] as const;
 
+// Variety-pack slot → style (2026-09-23). Shared by the initial batch and
+// per-slot regens so regenerating a variety-pack shot keeps that slot's
+// style instead of falling back to the "executive" placeholder.
+const VARIETY_STYLE_ROTATION = [
+  "executive",
+  "urban",
+  "corporate",
+  "creative",
+  "healthcare",
+  "tech",
+] as const;
+
 // Colored bokeh orbs for the Creative Natural swatch — designed to evoke the
 // 3 nature backgrounds (green trees, pink/cream spring blossoms, gold/orange
 // fall foliage) at a glance. Updated 2026-05-01 from white-on-grey to
@@ -19491,6 +19503,13 @@ export default function App() {
   // additional batch is appended. Added to a per-slot regen's index so the
   // patch lands on the right photo in the growing grid, not an earlier batch's.
   const batchOffsetRef = useRef(0);
+  // Grid slot → saved-session index (2026-09-23). The saved grid skips any
+  // slot that was empty at save time, so after a gap the on-screen slot
+  // number no longer equals the saved position. null = "not mapped yet":
+  // resume sessions load the saved grid 1:1, so slot i is saved index i;
+  // in-session saves fill this in; an unsaved slot sends a large index so
+  // the server APPENDS it, and the landed index is written back here.
+  const slotMapRef = useRef<(number | undefined)[] | null>(null);
 
   // Admin "damage-control" fix mode (2026-08-10). Turns on when Kristi opens a
   // customer's resume link with her admin password appended (&fix=<pw>),
@@ -21197,7 +21216,13 @@ export default function App() {
     // suppressed every email after the first a browser ever sent.)
     if (readyEmailedThisBatchRef.current) return;
     readyEmailedThisBatchRef.current = true;
-    // Snapshot the finished grid at fire time.
+    // Snapshot the finished grid at fire time. Remember which on-screen
+    // slot each saved shot came from (empty slots are skipped), so later
+    // regens patch the right saved position. (2026-09-23)
+    const shotSlots: number[] = [];
+    generatedImages.forEach((s, i) => {
+      if (s) shotSlots.push(i);
+    });
     const shots = generatedImages.filter((s) => !!s);
     const refUrls = lastPhotoUrls;
     const sels = lastSelections;
@@ -21249,6 +21274,17 @@ export default function App() {
               // per-slot regen patches the correct photo (2026-08-24).
               batchOffsetRef.current =
                 typeof d.offset === "number" && d.offset >= 0 ? d.offset : 0;
+              // Build slot → saved-index map. Assumes every shot uploaded
+              // (the upload loop only skips unreadable images, rare).
+              if (urls.length === shotSlots.length) {
+                const map: (number | undefined)[] = [];
+                shotSlots.forEach((slot, pos) => {
+                  map[slot] = batchOffsetRef.current + pos;
+                });
+                slotMapRef.current = map;
+              } else {
+                slotMapRef.current = null;
+              }
               // Stash the resume token locally so a browser refresh (or a
               // return-trip from Stripe that doesn't come back with
               // ?resume= in the URL) can rehydrate the grid instead of
@@ -21559,16 +21595,28 @@ export default function App() {
       return next;
     });
 
+    // Variety-pack sessions: regen this slot in ITS style, not the
+    // "executive" placeholder stored on lastSelections. (2026-09-23 —
+    // Kristi's admin regens of the Creative + Tech slots all came back
+    // as Executive.)
+    const regenStyle = lastSelections.surpriseMode
+      ? VARIETY_STYLE_ROTATION[index % VARIETY_STYLE_ROTATION.length]
+      : lastSelections.style;
+    const regenBackground =
+      lastSelections.surpriseMode && regenStyle === "corporate"
+        ? "dark"
+        : lastSelections.background;
+
     try {
       const response = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           photoUrls: lastPhotoUrls,
-          style: lastSelections.style,
+          style: regenStyle,
           attire: lastSelections.attire,
           lighting: lastSelections.lighting,
-          background: lastSelections.background,
+          background: regenBackground,
           variationIndex: index,
           hasWideAngle: lastHasWideAngle,
           skin: lastSelections.skin,
@@ -21652,12 +21700,25 @@ export default function App() {
               );
               url = result.url;
             }
-            await fetch("/api/update-session", {
+            // Which saved-grid position to patch (2026-09-23). Mapped slot
+            // → its saved index. In-session slot that was empty at save
+            // time → 63 so the server APPENDS it. Resume session (no
+            // map) → the slot number itself (grid loaded 1:1); the server
+            // appends if it's past the end.
+            const map = slotMapRef.current;
+            const mapped = map ? map[index] : undefined;
+            const saveIndex =
+              mapped !== undefined
+                ? mapped
+                : map
+                  ? 63
+                  : batchOffsetRef.current + index;
+            const resp = await fetch("/api/update-session", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 token: tok,
-                index: batchOffsetRef.current + index,
+                index: saveIndex,
                 url,
                 // Send the pre-regen URL as the undoable "previous" so the
                 // toggle button works after a resume-link reload. Only pass
@@ -21668,6 +21729,22 @@ export default function App() {
                     : undefined,
               }),
             });
+            // Remember where this shot landed so a second regen of the
+            // same slot REPLACES it instead of appending again.
+            const out = (await resp.json().catch(() => null)) as {
+              ok?: boolean;
+              index?: number;
+            } | null;
+            if (out?.ok && typeof out.index === "number") {
+              // Resume session with no map yet: start from a 1:1 map of
+              // the loaded grid so other slots still resolve to themselves.
+              const base =
+                slotMapRef.current ??
+                generatedImages.map((_, i) => batchOffsetRef.current + i);
+              const next = [...base];
+              next[index] = out.index;
+              slotMapRef.current = next;
+            }
           } catch {
             /* best-effort — the customer still sees the new shot on screen */
           }
@@ -22082,6 +22159,8 @@ export default function App() {
     freeLimitHitRef.current = false;
     overLimitHitRef.current = false;
     readyEmailedThisBatchRef.current = false;
+    // New batch → old slot map no longer applies; save rebuilds it.
+    slotMapRef.current = null;
     // Persist selections + URLs so per-slot regeneration can reuse them
     // without asking the user to reselect anything.
     setLastSelections(selections);
@@ -22192,14 +22271,7 @@ export default function App() {
     // ends with IT/Tech so the 6-slot batch is one true representative
     // of each style Kristi offers. Slots are ignored when a specific
     // style was picked (surpriseMode === false).
-    const SURPRISE_STYLE_ROTATION = [
-      "executive",
-      "urban",
-      "corporate",
-      "creative",
-      "healthcare",
-      "tech",
-    ] as const;
+    const SURPRISE_STYLE_ROTATION = VARIETY_STYLE_ROTATION;
     const calls = Array.from({ length: slotCount }, async (_, index) => {
       // Each call waits its turn before firing. Promise.all below still
       // collects them in parallel — we're just delaying the START of the
