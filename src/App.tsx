@@ -9267,16 +9267,8 @@ const StyleScreen = ({
                 padding: 4,
                 border: `1.5px solid ${selected ? C.dark : C.border}`,
                 cursor: disabled ? "default" : "pointer",
-                transition: "border-color 0.15s, opacity 0.15s, filter 0.15s",
-                // When variety-pack mode is on, dim + desaturate the
-                // style cards so they visually recede — the customer
-                // gets an immediate signal that the pill below is
-                // what's driving generation, not any individual card.
-                // Tapping any card lifts them all back to full color +
-                // opacity (see setSurpriseMode(false) in onClick above).
-                // (2026-09-21 per Kristi)
-                opacity: disabled ? 0.5 : surpriseMode ? 0.42 : 1,
-                filter: !disabled && surpriseMode ? "grayscale(0.7)" : "none",
+                transition: "border-color 0.15s",
+                opacity: disabled ? 0.78 : 1,
               }}
             >
               <div
@@ -9554,7 +9546,7 @@ const StyleScreen = ({
           default. Kept small + inline (Kristi feedback 2026-09-21) so
           it reads as a peer option to the style cards, not a header
           banner. Full-width green banner was too visually heavy. */}
-      <div style={{ textAlign: "center", margin: "12px 0 0" }}>
+      <div style={{ textAlign: "left", margin: "12px 0 0" }}>
         <button
           type="button"
           onClick={() => {
@@ -12873,19 +12865,21 @@ const GridScreen = ({
               {" · body angle · expression · alternate angle"}
             </span>
           </div>
-          {/* Layout 2026-09-20 per Kristi: 2 tiles on the top row, 3rd
-              centered on the bottom row. Grid replaces the old flex row
-              (which sized each tile to 22% of the container width and
-              rendered them uselessly tiny on phones). Tiles are now
-              ~half the container wide — huge on mobile, still bounded
-              at ~230px on desktop by the outer maxWidth. */}
+          {/* Version-tile grid (2026-09-22 per Kristi):
+              - Desktop (>640px): 3 tiles in a single row.
+              - Mobile (≤640px): 2 tiles on the top row, 3rd centered
+                below at the same width as the top-row tiles.
+              Grid layout replaces the old flex row (22% tiles were
+              uselessly tiny on phones). */}
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+              gridTemplateColumns: isMobileGrid
+                ? "repeat(2, minmax(0, 1fr))"
+                : "repeat(3, minmax(0, 1fr))",
               gap: 12,
               marginBottom: 6,
-              maxWidth: 480,
+              maxWidth: isMobileGrid ? 480 : 720,
               marginLeft: "auto",
               marginRight: "auto",
             }}
@@ -12903,10 +12897,11 @@ const GridScreen = ({
                     overflow: "hidden",
                     background: C.lightGrey,
                     border: `1px solid ${C.border}`,
-                    // The 3rd tile spans both columns and centers itself
-                    // at the same width as the top-row tiles so the grid
-                    // reads 2-1 (not 3 stretched full width).
-                    ...(vi === 2
+                    // On mobile the 3rd tile spans both columns and
+                    // centers itself at the same width as the top-row
+                    // tiles so the grid reads 2-1. On desktop the 3rd
+                    // tile flows naturally into the third column.
+                    ...(vi === 2 && isMobileGrid
                       ? {
                           gridColumn: "1 / -1",
                           justifySelf: "center",
@@ -12971,10 +12966,12 @@ const GridScreen = ({
                       {/* Add-to-cart pill in the corner. Uses the same cart
                           mechanism (URL-based), so version shots move into
                           the same cart as main-grid shots. */}
-                      {/* Button sizes bumped from 26 to 40 (2026-09-20
-                          per Kristi) so the tap targets are usable on
-                          mobile — 40x40 is right at the Apple/Google
-                          minimum-touch-target recommendation. */}
+                      {/* Add-to-cart badge — matches the styling of the
+                          main-grid cart badge (2026-09-22 per Kristi:
+                          version-tile badges should look identical to
+                          the main tiles, not gold). Near-white circle
+                          with dark plus icon when unpicked; dark
+                          circle with white check when in cart. */}
                       {!cartIsFull || isCarted ? (
                         <button
                           onClick={(e) => {
@@ -12987,24 +12984,28 @@ const GridScreen = ({
                             position: "absolute",
                             top: 8,
                             right: 8,
-                            width: 40,
-                            height: 40,
+                            width: 28,
+                            height: 28,
                             borderRadius: "50%",
-                            background: isCarted ? C.dark : "#C9A961",
-                            color: C.white,
-                            border: "1.5px solid rgba(255,255,255,0.95)",
+                            background: isCarted
+                              ? C.dark
+                              : "rgba(255,255,255,0.92)",
+                            color: isCarted ? C.white : C.dark,
+                            border: isCarted
+                              ? "none"
+                              : "1.5px solid rgba(255,255,255,0.95)",
                             cursor: "pointer",
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
                             padding: 0,
-                            boxShadow: "0 1px 6px rgba(0,0,0,0.35)",
+                            boxShadow: "0 1px 4px rgba(0,0,0,0.3)",
                           }}
                         >
                           {isCarted ? (
-                            <Check size={20} strokeWidth={2.6} />
+                            <Check size={15} />
                           ) : (
-                            <Plus size={20} strokeWidth={2.6} />
+                            <Plus size={15} strokeWidth={2.4} />
                           )}
                         </button>
                       ) : null}
@@ -18650,6 +18651,11 @@ const AllShotsGallery = ({
           padding: "0 22px 24px",
         }}
       >
+        {/* Inner width cap (2026-09-22 per Kristi). Without this, on
+            desktop the 3-across grid stretches to the full viewport
+            and each tile becomes screen-fillingly huge — customers
+            miss the close X and hit browser-back, losing progress. */}
+      <div style={{ maxWidth: 760, margin: "0 auto" }}>
         {mainSlots.length > 0 && (
           <>
             {sectionLabel("Main Grid", mainSlots.length)}
@@ -18726,6 +18732,7 @@ const AllShotsGallery = ({
             </div>
           </>
         )}
+      </div>
       </div>
 
       {/* Sticky footer */}
@@ -18862,14 +18869,16 @@ const AllShotsGallery = ({
                     top: `${band.top}%`,
                     left: `calc(50% + ${band.offset}px)`,
                     transform: "translate(-50%, -50%) rotate(-30deg)",
-                    fontSize: 18,
-                    letterSpacing: 3,
-                    // 2026-09-07 per Kristi: lightbox watermark opacity
-                    // lowered from 0.4 → 0.25 so the face reads clearer.
-                    color: "rgba(255,255,255,0.25)",
+                    // 2026-09-22 per Kristi: bumped from 18 → 28 so the
+                    // watermark reads at the cabinet lightbox size (was
+                    // essentially invisible from a normal viewing
+                    // distance).
+                    fontSize: 28,
+                    letterSpacing: 4,
+                    color: "rgba(255,255,255,0.4)",
                     whiteSpace: "nowrap",
                     fontWeight: 700,
-                    textShadow: "0 1px 2px rgba(0,0,0,0.4)",
+                    textShadow: "0 1px 3px rgba(0,0,0,0.5)",
                   }}
                 >
                   INVISIBLE WATERMARK APPLIED
