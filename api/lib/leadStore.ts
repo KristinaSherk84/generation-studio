@@ -426,6 +426,57 @@ export async function unblacklistEmail(email: string): Promise<void> {
   }
 }
 
+// ---- Email unsubscribe list (2026-09-23) ----
+// Separate from the blacklist: an unsubscribed person can still USE the
+// app — they just never get marketing emails again (win-back reminders,
+// survey blasts, any future mass send). Their own transactional emails
+// (the "your headshots are ready" link after THEY generate, and the
+// delivery email after THEY buy) still go out, because they asked for
+// those by taking the action.
+const UNSUB_KEY = "email-unsubscribed";
+
+/** Mark an email as unsubscribed. Stores the Gmail-normalized form too. */
+export async function unsubscribeEmail(email: string): Promise<void> {
+  if (!looksLikeEmail(email)) return;
+  const lower = email.trim().toLowerCase();
+  const canon = gmailNormalize(lower);
+  await redis.sadd(UNSUB_KEY, lower);
+  if (canon !== lower) await redis.sadd(UNSUB_KEY, canon);
+}
+
+/** Undo an unsubscribe. */
+export async function resubscribeEmail(email: string): Promise<void> {
+  if (!looksLikeEmail(email)) return;
+  const lower = email.trim().toLowerCase();
+  const canon = gmailNormalize(lower);
+  await redis.srem(UNSUB_KEY, lower);
+  if (canon !== lower) await redis.srem(UNSUB_KEY, canon);
+}
+
+/** True if this email opted out of marketing email. Fail-CLOSED: on a
+ *  Redis error we treat the person as unsubscribed, so a KV blip can
+ *  never cause us to email someone who asked us to stop. */
+export async function isEmailUnsubscribed(email: string): Promise<boolean> {
+  if (!looksLikeEmail(email)) return false;
+  const lower = email.trim().toLowerCase();
+  const canon = gmailNormalize(lower);
+  try {
+    const [a, b] = await Promise.all([
+      redis.sismember(UNSUB_KEY, lower),
+      canon !== lower ? redis.sismember(UNSUB_KEY, canon) : Promise.resolve(0),
+    ]);
+    return a === 1 || b === 1;
+  } catch {
+    return true;
+  }
+}
+
+/** Full unsubscribe list (admin UI). */
+export async function listUnsubscribedEmails(): Promise<string[]> {
+  const arr = (await redis.smembers(UNSUB_KEY)) as string[] | null;
+  return arr ?? [];
+}
+
 /** Add a substring pattern (e.g. "kusuma") that will block ANY email
  *  containing it. Lowercased. Idempotent. */
 export async function blacklistPattern(pattern: string): Promise<void> {

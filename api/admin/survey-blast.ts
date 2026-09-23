@@ -23,6 +23,7 @@ import {
   isEmailBlacklisted,
   getEmailAliasMap,
   looksLikeEmail,
+  isEmailUnsubscribed,
 } from "../lib/leadStore.js";
 
 export const maxDuration = 300;
@@ -151,6 +152,7 @@ async function eligibleRecipients(exclude: Set<string>) {
 
   const skipped = {
     excludedByKristi: 0,
+    unsubscribed: 0,
     purchased: 0,
     paidInStripe: 0,
     blacklisted: 0,
@@ -171,6 +173,7 @@ async function eligibleRecipients(exclude: Set<string>) {
     if (paid.has(e) || paidCanonical.has(e)) { skipped.paidInStripe++; continue; }
     if (sentSet.has(e)) { skipped.alreadySent++; continue; }
     if (await isEmailBlacklisted(e)) { skipped.blacklisted++; continue; }
+    if (await isEmailUnsubscribed(e)) { skipped.unsubscribed++; continue; }
     eligible.push(e);
   }
   return { totalLeads: leads.length, eligible, skipped };

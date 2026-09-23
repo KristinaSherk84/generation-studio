@@ -28,7 +28,11 @@
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { listLeads, looksLikeEmail } from "../lib/leadStore.js";
+import {
+  listLeads,
+  looksLikeEmail,
+  isEmailUnsubscribed,
+} from "../lib/leadStore.js";
 import { Redis } from "@upstash/redis";
 
 export const maxDuration = 60;
@@ -256,6 +260,8 @@ export default async function handler(
     const errors: string[] = [];
     const newlySentLower: string[] = [];
     for (const to of toSend) {
+      // Skip anyone who unsubscribed. (2026-09-23)
+      if (await isEmailUnsubscribed(to)) continue;
       const r = await sendOne(to);
       if (r.ok) {
         sent++;

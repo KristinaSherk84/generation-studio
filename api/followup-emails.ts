@@ -34,6 +34,7 @@ import {
   markLeadFollowedUp,
   looksLikeEmail,
   getEmailResumeToken,
+  isEmailUnsubscribed,
 } from "./lib/leadStore.js";
 import { getSession } from "./lib/sessionStore.js";
 
@@ -75,7 +76,7 @@ function buildEmail(args: {
   const isBuyer = args.isBuyer === true;
   const subject = isBuyer
     ? "Your remaining headshots expire soon."
-    : "Urgent: your headshots expire soon.";
+    : "Your un-chosen headshots will be deleted!";
 
   const thumbs = args.generatedUrls
     .filter((u) => typeof u === "string" && /^https?:\/\//.test(u))
@@ -117,7 +118,7 @@ function buildEmail(args: {
   // they're gone"; non-buyers see the urgent-winback framing.
   const headline = isBuyer
     ? "Your remaining headshots expire soon."
-    : "Urgent: your headshots expire soon.";
+    : "Your un-chosen headshots will be deleted!";
   const introPara = isBuyer
     ? "Thanks again for your purchase! You had a few more headshots in your session that you didn't grab. They'll be deleted from my servers <strong>soon</strong> — here's one last look in case you want any of them too:"
     : "You made these but didn't grab any. They'll be deleted from my servers <strong>soon</strong> — here's one last look:";
@@ -228,7 +229,7 @@ ${discountCard}
         "Kristina",
       ].join("\n")
     : [
-        "Urgent: your headshots expire soon.",
+        "Your un-chosen headshots will be deleted!",
         "",
         "You made these but didn't grab any — they'll be deleted from my servers soon.",
         "",
@@ -337,6 +338,8 @@ export default async function handler(
   const eligible: Array<(typeof inWindow)[number] & { resolvedToken: string }> =
     [];
   for (const l of inWindow) {
+    // Never email anyone who unsubscribed. (2026-09-23)
+    if (await isEmailUnsubscribed(l.email)) continue;
     const token =
       (typeof l.resumeToken === "string" && l.resumeToken) ||
       (await getEmailResumeToken(l.email));

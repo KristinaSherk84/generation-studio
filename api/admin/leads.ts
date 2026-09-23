@@ -33,6 +33,7 @@ import {
   listFingerprintsForLead,
   listEmailsForFingerprint,
   listBlacklistedEmails,
+  listUnsubscribedEmails,
 } from "../lib/leadStore.js";
 import {
   getDailyStats,
@@ -477,6 +478,15 @@ export default async function handler(
     // to show a small banner at the top with the current blacklist. (2026-08-28)
     const blacklistedArr = await listBlacklistedEmails();
     const blacklistedSet = new Set(blacklistedArr.map((e) => e.toLowerCase()));
+    // Unsubscribed (no marketing email) — shown as a grey chip per row.
+    let unsubSet = new Set<string>();
+    try {
+      unsubSet = new Set(
+        (await listUnsubscribedEmails()).map((e) => e.toLowerCase()),
+      );
+    } catch {
+      /* chip is display-only; skip on error */
+    }
     // Substring pattern blacklist (2026-09-03). Rendered in the banner + a
     // small "Block by pattern" input so Kristi can add a substring like
     // "kusuma" that catches every current + future email containing it —
@@ -672,7 +682,10 @@ export default async function handler(
       const banBtn = blocked
         ? `<button class="unblockbtn" data-email="${esc(email)}" title="Currently BLOCKED from generating. Click to unblock.">🚫 unblock</button>`
         : `<button class="blockbtn" data-email="${esc(email)}" title="Block this email from generating any more headshots.">block</button>`;
-      return `${chips}<button class="aliasadd" data-email="${esc(email)}" title="Add an alt email that pays under this lead">+ alt</button>${banBtn}`;
+      const unsubChip = unsubSet.has(canonical)
+        ? `<span class="aliaschip" title="Unsubscribed — gets no marketing emails" style="background:#EDEBE6;color:#6E6E6A;">unsubscribed</span>`
+        : "";
+      return `${chips}${unsubChip}<button class="aliasadd" data-email="${esc(email)}" title="Add an alt email that pays under this lead">+ alt</button>${banBtn}`;
     };
 
     const rowsHtml = leads
