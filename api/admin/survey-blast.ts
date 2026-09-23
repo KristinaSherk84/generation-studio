@@ -129,7 +129,7 @@ async function stripePaidEmails(): Promise<Set<string> | null> {
   }
 }
 
-async function eligibleRecipients() {
+async function eligibleRecipients(exclude: Set<string>) {
   const leads = await listLeads();
   const paid = await stripePaidEmails();
   if (paid === null) {
@@ -150,6 +150,7 @@ async function eligibleRecipients() {
   const sentSet = new Set(alreadySent.map((e) => e.toLowerCase()));
 
   const skipped = {
+    excludedByKristi: 0,
     purchased: 0,
     paidInStripe: 0,
     blacklisted: 0,
@@ -165,6 +166,7 @@ async function eligibleRecipients() {
     seen.add(e);
     if (!looksLikeEmail(e)) { skipped.invalid++; continue; }
     if (INTERNAL.has(e)) { skipped.internal++; continue; }
+    if (exclude.has(e)) { skipped.excludedByKristi++; continue; }
     if (l.purchased || (l.entryUnlockUsd ?? 0) > 0) { skipped.purchased++; continue; }
     if (paid.has(e) || paidCanonical.has(e)) { skipped.paidInStripe++; continue; }
     if (sentSet.has(e)) { skipped.alreadySent++; continue; }
@@ -215,9 +217,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
+  // ?exclude=a@x.com,b@y.com — hand-picked people to leave out this run.
+  const exclude = new Set(
+    (typeof req.query.exclude === "string" ? req.query.exclude : "")
+      .split(",")
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean),
+  );
+
   let data;
   try {
-    data = await eligibleRecipients();
+    data = await eligibleRecipients(exclude);
   } catch (err) {
     res.status(500).json({ ok: false, error: String(err instanceof Error ? err.message : err) });
     return;
