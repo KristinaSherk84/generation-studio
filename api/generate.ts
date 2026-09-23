@@ -548,8 +548,19 @@ function buildBlock3Style(style: Style, variationIndex: number): string {
     // variations, alternating so the delivered grid mixes them.
     // Even indices (0, 2, 4) = green trees; odd indices (1, 3, 5) =
     // fall colored trees.
-    const bg =
-      variationIndex % 2 === 0 ? CREATIVE_BG_TREES : CREATIVE_BG_FALL_TREES;
+    // 2026-09-23: index 3 must be GREEN — the variety pack sends its
+    // Creative Natural shot on variationIndex 3, and Kristi wants that
+    // one on the classic green-tree background, not fall. Still a 3/3
+    // split for full Creative batches: green = 0, 2, 3; fall = 1, 4, 5.
+    const creativeBgs = [
+      CREATIVE_BG_TREES, // 0
+      CREATIVE_BG_FALL_TREES, // 1
+      CREATIVE_BG_TREES, // 2
+      CREATIVE_BG_TREES, // 3 (variety pack's Creative slot)
+      CREATIVE_BG_FALL_TREES, // 4
+      CREATIVE_BG_FALL_TREES, // 5
+    ];
+    const bg = creativeBgs[variationIndex] ?? CREATIVE_BG_TREES;
     return `${seg("style_creative", BLOCK_3_STYLE_BASE.creative)}\n\n${bg}`;
   }
 
@@ -947,37 +958,37 @@ type Flavor = {
 const FLAVORS: Flavor[] = [
   {
     expression: "subtle closed-mouth realistic smile, confident and composed — the mouth stays gentle, but the EYES smile clearly: slight crinkle at the outer corners, upper cheeks lifted, the unmistakable warm-eye Duchenne smile that reads as genuine joy. Under no circumstances flat, neutral, or blank eyes",
-    bodyPose: "body squared to camera, shoulders relaxed",
-    crop: "tighter crop — from just above the top of the head to the upper chest",
+    bodyPose: "body squared to camera, shoulders relaxed. Arms crossed at mid-chest with forearms horizontal, hands loosely tucked at the opposite forearm — a photographer-directed classic-headshot pose.",
+    crop: "tighter crop — the very top of the head touches the top edge of the frame with ZERO empty space above. The frame ends at the upper chest / just below the collarbone.",
     attireHint: "shirt or top in crisp white",
   },
   {
     expression: "soft realistic open smile, approachable",
-    bodyPose: "body VERY slightly angled toward the subject's left — barely off-square, both shoulders fully in frame with only a hair of asymmetry between them, head straight to the lens. Do NOT rotate the torso far. This is nearly a square-to-camera pose with just a whisper of angle. (2026-09-14: earlier '10 degree' spec was getting rendered as 40+ degrees by Gemini — describing the result instead of the angle.)",
+    bodyPose: "body VERY slightly angled toward the subject's left — barely off-square, both shoulders fully in frame with only a hair of asymmetry between them, head straight to the lens. Nearly a square-to-camera pose with just a whisper of angle. Hands clasped loosely in front of the body at low-waist level, below the frame — elbows soft and tucked in close to the torso, arms dropping straight down along the sides then meeting at the wrists.",
     crop: "medium crop — from just above the top of the head to the upper chest",
     attireHint: "shirt or top in a soft light or dark blue",
   },
   {
     expression: "warm realistic teeth-showing smile, genuine and bright, the EYES smile clearly: slight crinkle at the outer corners, upper cheeks lifted, warm-eyed jovial smile that reads as genuine joy. Under no circumstances flat, neutral, or blank eyes",
-    bodyPose: "body VERY slightly angled toward the subject's right — barely off-square, both shoulders fully in frame with only a hair of asymmetry between them, head straight to the lens. Do NOT rotate the torso far. This is nearly a square-to-camera pose with just a whisper of angle. (2026-09-14: earlier '10 degree' spec was getting rendered as 40+ degrees.)",
-    crop: "medium crop — from just above the top of the head to the upper chest",
+    bodyPose: "body VERY slightly angled toward the subject's right — barely off-square, both shoulders fully in frame with only a hair of asymmetry between them, head straight to the lens. Nearly a square-to-camera pose with just a whisper of angle. Arms crossed at mid-chest with forearms horizontal, hands loosely tucked at the opposite forearm.",
+    crop: "medium crop — the very top of the head touches the top edge of the frame with ZERO empty space above. The frame ends at the upper chest.",
     attireHint: "shirt or top in a soft pastel tone (blush, cream, or pale grey)",
   },
   {
     expression: "knowing realistic half-smile, confident and poised — mouth stays composed with a subtle lift on one side, but the EYES smile clearly: slight crinkle at the outer corners, upper cheeks lifted, warm Duchenne-style smile-eyes that read as engaged and in-on-the-moment. Under no circumstances flat, neutral, or blank eyes",
-    bodyPose: "body squared to camera, shoulders relaxed",
+    bodyPose: "body squared to camera, shoulders relaxed. Hands clasped loosely in front of the body at low-waist level, below the frame — elbows soft and tucked in close to the torso, arms dropping straight down along the sides then meeting at the wrists.",
     crop: "wider crop — from just above the top of the head down to include more shoulder and upper chest",
     attireHint: "a subtly different jacket or top in a mid-tone, well-tailored",
   },
   {
     expression: "confident warm realistic expression with professional small smile, engaged and kind confident eyes",
-    bodyPose: "body turned approximately 5 degrees to the subject's right",
+    bodyPose: "body turned approximately 5 degrees to the subject's right. Arms crossed at mid-chest with forearms horizontal, hands loosely tucked at the opposite forearm.",
     crop: "tighter crop — from just above the top of the head to the collarbone",
     attireHint: "a darker-tone option — charcoal or deep navy",
   },
   {
     expression: "natural easy realistic smile, relaxed and personable, confident.",
-    bodyPose: "body VERY slightly angled toward the subject's left — barely off-square, both shoulders fully in frame with only a hair of asymmetry between them, head straight to the lens. Do NOT rotate the torso far. This is nearly a square-to-camera pose with just a whisper of angle.",
+    bodyPose: "body VERY slightly angled toward the subject's left — barely off-square, both shoulders fully in frame with only a hair of asymmetry between them, head straight to the lens. Nearly a square-to-camera pose with just a whisper of angle. Hands clasped loosely in front of the body at low-waist level, below the frame — elbows soft and tucked in close to the torso, arms dropping straight down along the sides then meeting at the wrists.",
     crop: "medium crop — from just above the top of the head to the upper chest",
     attireHint: "a subtly textured dark colored blazer or cardigan.",
   },
