@@ -86,6 +86,9 @@ export type UploadedPhoto = {
   // guess which one is the customer — the thumbnail asks them to crop in
   // on themselves and re-upload. (2026-09-23)
   multiFace?: boolean;
+  // Fingerprint of the file's exact contents (2026-09-24). Used to skip
+  // the same photo being added twice, even under a different file name.
+  contentHash?: string;
   status: "uploading" | "done" | "error";
   errorMessage: string | null;
   // EXIF-derived wide-angle flag, read in the browser via `exifr` as soon as
@@ -8167,17 +8170,60 @@ const AdminScreen = () => {
   );
 };
 
+// Fingerprint a file's exact contents (2026-09-24). SHA-256 when the
+// browser supports it (all modern browsers on https); otherwise fall back
+// to name + size + last-modified, which still catches re-picking the same
+// file. Identical fingerprints = the same photo.
+async function fingerprintFile(file: File): Promise<string> {
+  try {
+    if (typeof crypto !== "undefined" && crypto.subtle) {
+      const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+      return Array.from(new Uint8Array(digest))
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
+    }
+  } catch {
+    /* fall through to the cheap fingerprint */
+  }
+  return `${file.name}|${file.size}|${file.lastModified}`;
+}
+
 const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) => {
+  // How many duplicate photos were skipped on the last add (0 = no notice).
+  const [dupSkipped, setDupSkipped] = useState(0);
   // Upload files one at a time to Vercel Blob via our /api/upload endpoint.
   // Each photo flows through three states: uploading → done (with blobUrl) or error.
-  const handleNewFiles = (incoming: File[]) => {
+  const handleNewFiles = async (incoming: File[]) => {
     const remainingSlots = 8 - photos.length;
     if (remainingSlots <= 0) return;
-    const batch = incoming.slice(0, remainingSlots);
+
+    // Skip exact duplicates (2026-09-24) — of photos already added AND of
+    // each other within this pick. A duplicate gives Gemini one fewer real
+    // angle of the person and double weight to that one shot.
+    const hashes = await Promise.all(incoming.map(fingerprintFile));
+    const seen = new Set(
+      photos.map((p) => p.contentHash).filter((h): h is string => !!h),
+    );
+    const unique: { file: File; hash: string }[] = [];
+    let dupes = 0;
+    incoming.forEach((file, i) => {
+      const hash = hashes[i];
+      if (seen.has(hash)) {
+        dupes++;
+        return;
+      }
+      seen.add(hash);
+      unique.push({ file, hash });
+    });
+    setDupSkipped(dupes);
+    const picked = unique.slice(0, remainingSlots);
+    const batch = picked.map((u) => u.file);
+    if (batch.length === 0) return;
 
     // Optimistically add placeholders so the thumbnails appear instantly.
-    const placeholders: UploadedPhoto[] = batch.map((file) => ({
+    const placeholders: UploadedPhoto[] = picked.map(({ file, hash }) => ({
       id: makePhotoId(),
+      contentHash: hash,
       localPreview: URL.createObjectURL(file),
       blobUrl: null,
       status: "uploading",
@@ -8569,6 +8615,28 @@ const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) 
           }}
         >
           One or more photos didn't upload. Remove them with the × and try again.
+        </div>
+      )}
+
+      {/* Duplicate-photo note (2026-09-24). Shown after an add that
+          skipped one or more exact copies; cleared on the next add. */}
+      {dupSkipped > 0 && (
+        <div
+          style={{
+            marginTop: 16,
+            fontSize: 13,
+            color: "#5A3E0A",
+            background: "#FFF7E5",
+            border: "1px solid #F3D593",
+            borderRadius: 8,
+            padding: "10px 14px",
+            lineHeight: 1.5,
+          }}
+        >
+          {dupSkipped === 1
+            ? "You already added that photo, so we skipped the copy."
+            : `You already added ${dupSkipped} of those photos, so we skipped the copies.`}{" "}
+          Different photos of you give the best likeness.
         </div>
       )}
 
