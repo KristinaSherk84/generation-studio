@@ -17462,8 +17462,18 @@ const GalleryFirstModal = ({ onViewGallery, onContinue, onClose }: GalleryFirstM
             margin: "2px 0 16px",
           }}
         >
-          Additional rounds of generations will cost{" "}
-          <span style={{ color: "#C9A961" }}>$3.99</span>
+          {/* Two price lines (2026-09-24 per Kristi) so the per-photo
+              price is clear up front — survey answer B. */}
+          <div>
+            Additional rounds of generations cost{" "}
+            <span style={{ color: "#C9A961" }}>$3.99</span>
+          </div>
+          <div style={{ marginTop: 4 }}>
+            Purchasing headshots start at{" "}
+            <span style={{ color: "#C9A961" }}>
+              ${(PHOTO_BASIC_CENTS / 100).toFixed(2)}
+            </span>
+          </div>
         </div>
         <p style={{ fontSize: 14, color: "#6E6E6A", fontStyle: "italic", margin: "2px 0 22px" }}>
           — Kristina, founder &amp; photographer
