@@ -608,7 +608,15 @@ export default async function handler(
     const totalEstCost = leads.reduce((s, l) => s + estCost(l), 0);
     const costPerPurchase =
       purchasedCount > 0 ? totalEstCost / purchasedCount : 0;
-    const abandonedEmails = abandoned.map((l) => l.email).join(", ");
+    // Unsubscribed people are left out of the copy-paste email list and the
+    // table below (2026-09-24 per Kristi). They still count in the totals
+    // and conversion rate, since they really did generate.
+    const isUnsub = (email: string) => unsubSet.has(email.trim().toLowerCase());
+    const abandonedEmails = abandoned
+      .filter((l) => !isUnsub(l.email))
+      .map((l) => l.email)
+      .join(", ");
+    const hiddenUnsubCount = leads.filter((l) => isUnsub(l.email)).length;
     const pwParam = encodeURIComponent(pw);
     const nowET = formatET(new Date().toISOString());
 
@@ -689,6 +697,7 @@ export default async function handler(
     };
 
     const rowsHtml = leads
+      .filter((l) => !isUnsub(l.email))
       .map(
         (l) => `<tr class="${l.purchased ? "bought" : "aband"}">
         <td class="email"><span class="emailtxt">${esc(l.email)}</span> ${aliasInlineHtml(l.email)}</td>
@@ -867,7 +876,7 @@ export default async function handler(
 <body>
 <div class="wrap">
   <h1>Leads &amp; abandoned sessions</h1>
-  <p class="meta">GenerAItion Headshots · as of ${esc(nowET)} ET · reload this page to refresh</p>
+  <p class="meta">GenerAItion Headshots · as of ${esc(nowET)} ET · reload this page to refresh · <a href="/feedback?pw=${pwParam}">Survey feedback →</a>${hiddenUnsubCount ? ` · ${hiddenUnsubCount} unsubscribed hidden from the list below` : ""}</p>
 
   <div class="cards">
     <div class="card"><div class="n">${total}</div><div class="l">Total leads</div></div>

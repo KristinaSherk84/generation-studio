@@ -7,6 +7,10 @@
     {
       "path": "/api/followup-emails",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/survey-auto",
+      "schedule": "30 * * * *"
     }
   ],
   "functions": {
@@ -27,6 +31,7 @@
     }
   },
   "rewrites": [
+    { "source": "/feedback", "destination": "/api/admin/feedback" },
     { "source": "/healthcare", "destination": "/index.html" },
     { "source": "/teams", "destination": "/index.html" },
     { "source": "/headshot-generator-gallery", "destination": "/index.html" },
