@@ -470,7 +470,7 @@ function buildBlockPet(variationIndex: number): string {
 const BLOCK_2_COMPOSITION = `Framing: professional business headshot. The specific body angle and crop are specified in the variation block at the end of this prompt.
 - Extremely minimal headroom above the top of the head. Only add 2–3% of the total frame height above the top of the head. The top of the head nearly touches the top of the frame.
 - Strong posture, shoulders back, puffed chest. Body angled, head rotated slightly back toward the lens.
-- HAND POSITION: Hands always rest down at the sides of the body, arms hanging naturally with elbows pointing toward the floor, forearms drawing a straight vertical line along the torso. An acceptable alternate: arms crossed at mid-chest with the forearms horizontal and the hands tucked loosely at the opposite forearm. Both positions read as calm, grounded, and photographer-directed.
+- HAND POSITION: Follow the hand position given in the variation block at the end of this prompt. When the variation block doesn't name one, hands rest down at the sides of the body, arms hanging naturally with elbows pointing toward the floor, forearms drawing a straight vertical line along the torso. Calm, grounded, and photographer-directed. (2026-09-24: removed "arms crossed" as a general alternate — it let crossed arms appear in half the batch; now only the one slot that asks for it gets it.)
 - CROP: The bottom edge of the frame sits at or just above the shoulder line (top of the collarbone). The rendered image contains head, neck, and a sliver of the top of the shoulders. Passport-photo tightness. Keep this crop consistent across the batch even when the variation block below uses the words "wider" or "medium" — those refer to subtle differences within the head-and-shoulders frame.
 - REFERENCE-PHOTO USE: Use the reference photos as the source for the subject's face, hair, skin, and identity. The body pose comes from the variation block below, with hands positioned as described above. (2026-09-21: rewritten to be entirely positive-language — earlier "no hands on hips" phrasings were being misconstrued by Gemini as reinforcement rather than prohibition.)`;
 
@@ -958,7 +958,7 @@ type Flavor = {
 const FLAVORS: Flavor[] = [
   {
     expression: "subtle closed-mouth realistic smile, confident and composed — the mouth stays gentle, but the EYES smile clearly: slight crinkle at the outer corners, upper cheeks lifted, the unmistakable warm-eye Duchenne smile that reads as genuine joy. Under no circumstances flat, neutral, or blank eyes",
-    bodyPose: "body squared to camera, shoulders relaxed. Arms crossed at mid-chest with forearms horizontal, hands loosely tucked at the opposite forearm — a photographer-directed classic-headshot pose.",
+    bodyPose: "body squared to camera, shoulders relaxed. Arms hang relaxed and straight down at the sides of the body, below the frame — elbows soft and close to the torso. (2026-09-24: was arms-crossed; crossed arms showed up in too many shots per batch, including the wild cards that reuse this slot.)",
     crop: "tighter crop — the very top of the head touches the top edge of the frame with ZERO empty space above. The frame ends at the upper chest / just below the collarbone.",
     attireHint: "shirt or top in crisp white",
   },
@@ -970,7 +970,7 @@ const FLAVORS: Flavor[] = [
   },
   {
     expression: "warm realistic teeth-showing smile, genuine and bright, the EYES smile clearly: slight crinkle at the outer corners, upper cheeks lifted, warm-eyed jovial smile that reads as genuine joy. Under no circumstances flat, neutral, or blank eyes",
-    bodyPose: "body VERY slightly angled toward the subject's right — barely off-square, both shoulders fully in frame with only a hair of asymmetry between them, head straight to the lens. Nearly a square-to-camera pose with just a whisper of angle. Arms crossed at mid-chest with forearms horizontal, hands loosely tucked at the opposite forearm.",
+    bodyPose: "body VERY slightly angled toward the subject's right — barely off-square, both shoulders fully in frame with only a hair of asymmetry between them, head straight to the lens. Nearly a square-to-camera pose with just a whisper of angle. Arms hang relaxed and straight down at the sides of the body, below the frame — elbows soft and close to the torso.",
     crop: "medium crop — the very top of the head touches the top edge of the frame with ZERO empty space above. The frame ends at the upper chest.",
     attireHint: "shirt or top in a soft pastel tone (blush, cream, or pale grey)",
   },
@@ -2354,6 +2354,24 @@ Do NOT change the crop. Do NOT change the outfit. Do NOT change the background. 
         typeof image === "string"
           ? /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/s.exec(image)
           : null;
+      // 2026-09-23: ALWAYS save to Blob and return a URL — not only for
+      // batch calls. Regens, wild cards, and identity redos have no
+      // batchId, so they used to come back as multi-MB base64 that the
+      // client dropped straight into the DOM. That blew Clarity's
+      // per-session recording budget and cut recordings off right when
+      // the retouch popup appears (same root cause as the 2026-08-28 fix,
+      // which only covered the initial 6).
+      if (m && !body.batchId) {
+        const buf = Buffer.from(m[2], "base64");
+        const ext = m[1] === "image/png" ? "png" : "jpg";
+        const slot = typeof body.variationIndex === "number" ? body.variationIndex : 0;
+        const blob = await put(`gen/${Date.now()}-${slot}.${ext}`, buf, {
+          access: "public",
+          contentType: m[1],
+          addRandomSuffix: true,
+        });
+        savedUrl = blob.url;
+      }
       if (body.batchId && m) {
         const buf = Buffer.from(m[2], "base64");
         const ext = m[1] === "image/png" ? "png" : "jpg";
