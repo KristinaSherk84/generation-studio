@@ -8876,6 +8876,7 @@ const ATTIRE = [
   { id: "polo", label: "Polo shirt" },
   { id: "medical", label: "🩺 Healthcare" },
   { id: "keep", label: "Keep my 1st Outfit" },
+  { id: "upload", label: "Upload Cropped Outfit" },
 ] as const;
 
 // "natural" was removed from the UI on 2026-05-22 — Kristi found it
@@ -8948,7 +8949,7 @@ const SectionLabel = ({ children, style = {} }: SectionLabelProps) => (
 // and Executive get their background direction from the style prompt itself.
 export type StyleSelections = {
   style: "corporate" | "creative" | "executive" | "urban" | "healthcare" | "tech";
-  attire: "formal" | "casual" | "keep" | "medical" | "polo";
+  attire: "formal" | "casual" | "keep" | "medical" | "polo" | "upload";
   lighting: "studio" | "natural" | "dramatic" | "golden";
   background?: "white" | "lightgrey" | "dark" | "black" | "blue" | "bluebright" | "green" | "red" | "rainbow";
   // Skin treatment toggle (added 2026-04-26, expanded 2026-05-01 to add glam).
@@ -8969,6 +8970,9 @@ export type StyleSelections = {
   // Customer-picked polo color (2026-08-12). Only used when attire === "polo".
   // Default "navy" when omitted server-side.
   poloColor?: PoloColor;
+  // Upload Cropped Outfit (2026-09-25). Blob URL of the customer's garment-only
+  // photo. Only used when attire === "upload"; sent to Gemini as the last image.
+  outfitUrl?: string;
   // Surprise-me mode (2026-09-21). When true, the customer didn't pick a
   // specific style — the generator rotates through one of each style for
   // the 6-slot batch (see SURPRISE_STYLE_ROTATION in App.handleGenerate).
@@ -9293,6 +9297,47 @@ const StyleScreen = ({
   const [scrubColor, setScrubColor] = useState<ScrubColor>("lightblue");
   // Polo color picker (2026-08-12) — only relevant when attire === "polo".
   const [poloColor, setPoloColor] = useState<PoloColor>("navy");
+  // Upload Cropped Outfit (2026-09-25). One garment-only photo. After upload
+  // we run face detection (/api/check-outfit); a face blocks Generate until
+  // the customer uploads a cropped version.
+  const [outfit, setOutfit] = useState<{
+    status: "idle" | "uploading" | "checking" | "ok" | "face" | "error";
+    url: string | null;
+    preview: string | null;
+  }>({ status: "idle", url: null, preview: null });
+  const outfitInputRef = useRef<HTMLInputElement | null>(null);
+  const handleOutfitFile = (file: File | undefined) => {
+    if (!file) return;
+    const preview = URL.createObjectURL(file);
+    setOutfit({ status: "uploading", url: null, preview });
+    upload(`outfit/${file.name}`, file, {
+      access: "public",
+      handleUploadUrl: "/api/upload",
+    })
+      .then(async (result) => {
+        setOutfit({ status: "checking", url: result.url, preview });
+        try {
+          const r = await fetch("/api/check-outfit", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url: result.url }),
+          });
+          const d = r.ok
+            ? ((await r.json()) as { checked?: boolean; faces?: number })
+            : null;
+          // A face → ask them to crop. Check failed → let them continue.
+          setOutfit({
+            status: d?.checked && (d.faces ?? 0) > 0 ? "face" : "ok",
+            url: result.url,
+            preview,
+          });
+        } catch {
+          setOutfit({ status: "ok", url: result.url, preview });
+        }
+      })
+      .catch(() => setOutfit({ status: "error", url: null, preview }));
+  };
+  const outfitReady = attire !== "upload" || (outfit.status === "ok" && !!outfit.url);
 
   // Center the horizontal style-card carousel on mount (2026-06-05) so
   // mobile users see partial Corporate on the left edge AND partial
@@ -9313,7 +9358,7 @@ const StyleScreen = ({
   // 2026-09-21: also allow Generate when surpriseMode is on and the
   // customer hasn't picked a specific style (surpriseMode makes the
   // style-per-slot decision at dispatch time in App.handleGenerate).
-  const canGenerate = Boolean((style || surpriseMode) && attire && lighting);
+  const canGenerate = Boolean((style || surpriseMode) && attire && lighting && outfitReady);
 
   return (
     <div style={{ maxWidth: 720, margin: "0 auto", padding: "48px 32px", ...font }}>
@@ -10059,6 +10104,105 @@ const StyleScreen = ({
         </>
       )}
 
+      {/* Upload Cropped Outfit (2026-09-25). Only when that attire is picked.
+          One garment-only photo; face detection runs after upload and a
+          face blocks Generate until they upload a cropped version. */}
+      {attire === "upload" && (
+        <>
+          <SectionLabel>Your outfit photo</SectionLabel>
+          <p style={{ fontSize: 13, color: C.dark, lineHeight: 1.5, margin: "0 0 10px", ...font }}>
+            Upload a <strong>CROPPED</strong> photo of a top body outfit you want to be used
+            for your headshots. No faces should be visible in the top body outfit image.
+          </p>
+          <input
+            ref={outfitInputRef}
+            type="file"
+            accept="image/*"
+            style={{ display: "none" }}
+            onChange={(e) => {
+              handleOutfitFile(e.target.files?.[0]);
+              e.target.value = "";
+            }}
+          />
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {outfit.preview && (
+              <div
+                style={{
+                  position: "relative",
+                  width: 84,
+                  height: 105,
+                  borderRadius: 8,
+                  overflow: "hidden",
+                  border: `2px solid ${outfit.status === "face" ? "#C0392B" : C.border}`,
+                  flexShrink: 0,
+                }}
+              >
+                <img
+                  src={outfit.preview}
+                  alt="Your outfit"
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
+                {(outfit.status === "uploading" || outfit.status === "checking") && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      background: "rgba(255,255,255,0.6)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Loader2 size={22} style={{ animation: "spin 1s linear infinite", color: C.dark }} />
+                  </div>
+                )}
+              </div>
+            )}
+            <div
+              onClick={() => outfitInputRef.current?.click()}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "8px 14px",
+                borderRadius: 999,
+                border: `1px solid ${C.dark}`,
+                background: C.white,
+                color: C.dark,
+                fontSize: 13,
+                cursor: "pointer",
+                userSelect: "none",
+                ...font,
+              }}
+            >
+              <Upload size={14} />
+              {outfit.preview ? "Replace outfit photo" : "Upload an Outfit"}
+            </div>
+          </div>
+          {(outfit.status === "uploading" || outfit.status === "checking") && (
+            <div style={{ fontSize: 12, color: C.mediumGrey, marginTop: 8, ...font }}>
+              Checking your outfit photo…
+            </div>
+          )}
+          {outfit.status === "face" && (
+            <div style={{ fontSize: 13, color: "#C0392B", marginTop: 8, lineHeight: 1.5, ...font }}>
+              <strong>We found a face in this photo.</strong> Please crop it out
+              (shoulders down), then re-upload.
+            </div>
+          )}
+          {outfit.status === "error" && (
+            <div style={{ fontSize: 13, color: "#C0392B", marginTop: 8, ...font }}>
+              Upload failed. Please try again.
+            </div>
+          )}
+          {outfit.status === "ok" && (
+            <div style={{ fontSize: 12, color: C.mediumGrey, marginTop: 8, ...font }}>
+              Looks good · all 6 headshots will wear this outfit
+            </div>
+          )}
+        </>
+      )}
+
       {/* Lighting */}
       <SectionLabel>Lighting</SectionLabel>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -10112,6 +10256,7 @@ const StyleScreen = ({
               // the same color.
               scrubColor: attire === "medical" ? scrubColor : undefined,
               poloColor: attire === "polo" ? poloColor : undefined,
+              outfitUrl: attire === "upload" ? outfit.url ?? undefined : undefined,
             });
           }}
           disabled={!canGenerate}
@@ -10123,6 +10268,12 @@ const StyleScreen = ({
             ? "Select a style"
             : !attire
             ? "Choose your attire"
+            : attire === "upload" && (outfit.status === "idle" || outfit.status === "error")
+            ? "Upload your outfit photo"
+            : attire === "upload" && (outfit.status === "uploading" || outfit.status === "checking")
+            ? "Checking your outfit photo…"
+            : attire === "upload" && outfit.status === "face"
+            ? "Crop the face out of your outfit photo"
             : !lighting
             ? "Choose your lighting"
             : "Generate 6 headshots"}
@@ -19638,6 +19789,11 @@ export default function App() {
   // each handleGenerate so every new generation sends a fresh email, but a
   // single batch never double-sends. (Kristi 2026-08-12)
   const readyEmailedThisBatchRef = useRef(false);
+  // How many NEW shots this batch actually produced (2026-09-25, Amy case).
+  // The save + "ready" email only fire when this is > 0, so a fully-blocked
+  // batch (every call 402'd, old grid restored) no longer sends a broken
+  // link-less email, and a new batch made inside a resumed session still saves.
+  const batchNewShotsRef = useRef(0);
   // "This round is on me" gallery-first popup: shown once per visit.
   const galleryPromptShownRef = useRef(false);
   const pendingStartRef = useRef<(() => void) | null>(null);
@@ -21380,7 +21536,11 @@ export default function App() {
   useEffect(() => {
     // Never re-fire on a restored (resume-link) session — it already has its
     // grid + token, and re-running would re-send the ready email.
-    if (resumedFromEmail) return;
+    // 2026-09-25: BUT a brand-new batch generated inside a resumed session
+    // must still save (Amy's 4 taster shots were lost from her link this way).
+    // Only save when this batch actually produced new shots — never for a
+    // restored grid, a blocked (all-402) batch, or a cancelled-checkout stash.
+    if (batchNewShotsRef.current === 0) return;
     // Wait for every initial call to return before snapshotting.
     if (initialBatchInFlight.size > 0) return;
     // Save whenever AT LEAST ONE shot came through (2026-09-02, per Kristi).
@@ -21492,11 +21652,15 @@ export default function App() {
       } catch {
         /* fall through — email will just link to the site */
       }
-      void fetch("/api/session-ready-email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: addr, resumeToken }),
-      }).catch(() => {});
+      // Only email when we have a real gallery link (2026-09-25). A link-less
+      // email just opens the homepage, which customers read as "broken".
+      if (resumeToken) {
+        void fetch("/api/session-ready-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: addr, resumeToken }),
+        }).catch(() => {});
+      }
     })();
   }, [readyCount, email, initialBatchInFlight, resumedFromEmail]);
 
@@ -21619,6 +21783,7 @@ export default function App() {
       skin: lastSelections.skin,
       scrubColor: lastSelections.scrubColor,
       poloColor: lastSelections.poloColor,
+      outfitUrl: lastSelections.outfitUrl,
       gender: lastGender,
       similarToUrl: sourceUrl,
       ...readUnlockRequestFields(),
@@ -21809,6 +21974,7 @@ export default function App() {
           // meaningful when attire is medical; server ignores otherwise.
           scrubColor: lastSelections.scrubColor,
           poloColor: lastSelections.poloColor,
+          outfitUrl: lastSelections.outfitUrl,
           gender: lastGender,
           ...readUnlockRequestFields(),
         }),
@@ -22058,6 +22224,7 @@ export default function App() {
           skin: lastSelections.skin,
           scrubColor: lastSelections.scrubColor,
           poloColor: lastSelections.poloColor,
+          outfitUrl: lastSelections.outfitUrl,
           ...readUnlockRequestFields(),
         }),
       });
@@ -22350,6 +22517,7 @@ export default function App() {
     freeLimitHitRef.current = false;
     overLimitHitRef.current = false;
     readyEmailedThisBatchRef.current = false;
+    batchNewShotsRef.current = 0;
     // New batch → old slot map no longer applies; save rebuilds it.
     slotMapRef.current = null;
     // Persist selections + URLs so per-slot regeneration can reuse them
@@ -22501,6 +22669,7 @@ export default function App() {
             // 6 matched-color healthcare headshots.
             scrubColor: selections.scrubColor,
             poloColor: selections.poloColor,
+            outfitUrl: selections.outfitUrl,
             // Ask the server to also return this shot's face descriptor so we
             // can score its likeness and auto-regenerate weak matches (best-
             // effort; server returns null if scoring fails). (2026-07-30)
@@ -22569,6 +22738,7 @@ export default function App() {
           return next;
         });
         setReadyCount((n) => n + 1);
+        batchNewShotsRef.current += 1;
         countBatchOnce(); // count the batch only now that a real image landed
         return imgOut;
       } catch {
@@ -22651,6 +22821,7 @@ export default function App() {
       const recovered = await tryRecoverBatch(currentBatchId);
       if (recovered && recovered.some(Boolean)) {
         setGeneratedImages(recovered);
+        batchNewShotsRef.current = recovered.filter(Boolean).length;
         setReadyCount(recovered.filter(Boolean).length);
         setScreen((sc) => (sc === "loading" ? "grid" : sc));
         return;
@@ -22789,6 +22960,7 @@ export default function App() {
               skin: selections.skin,
               scrubColor: selections.scrubColor,
               poloColor: selections.poloColor,
+              outfitUrl: selections.outfitUrl,
               ...readUnlockRequestFields(),
             }),
           });
@@ -22911,6 +23083,7 @@ export default function App() {
           skin: selections.skin,
           scrubColor: selections.scrubColor,
           poloColor: selections.poloColor,
+          outfitUrl: selections.outfitUrl,
           wantIdentityScore: true,
           gender: genderRef.current,
           ...readUnlockRequestFields(),

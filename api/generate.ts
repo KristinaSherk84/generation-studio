@@ -96,7 +96,7 @@ export const maxDuration = 300;
 //   urban        → "Urban Industrial" (NEW — combines the old Creative
 //                  industrial-office background with a new urban-street one)
 type Style = "corporate" | "creative" | "executive" | "urban" | "healthcare" | "tech";
-type Attire = "formal" | "casual" | "keep" | "medical" | "polo";
+type Attire = "formal" | "casual" | "keep" | "medical" | "polo" | "upload";
 type Lighting = "studio" | "natural" | "dramatic" | "golden";
 // Scrub colors (2026-06-05) — customer-pickable when attire === "medical".
 // All 6 generated headshots use the SAME scrub color (3 with lab coat,
@@ -174,6 +174,12 @@ const POLO_ATTIRE_DEFAULT = `A classic short-sleeve collared POLO SHIRT in {COLO
 // the generic variety attireHint, which for slots 5 & 6 pushed the polo toward
 // a charcoal/navy tone or a blazer. Editable in the prompt editor as
 // "Attire - Polo shirt - per-slot lock".
+// Upload Cropped Outfit (2026-09-25 per Kristi). The customer uploads a photo
+// of just a garment; it's attached as the LAST image in the Gemini request.
+// Editable in the prompt editor as "attire_upload" + "upload_outfit_lock".
+const UPLOAD_ATTIRE_DEFAULT = `Attire: OUTFIT IMAGE — The LAST image attached to this request is the customer's outfit photo. It shows a garment only (a top, blouse, shirt, sweater, or blazer). Dress the subject in this exact garment: the same garment type, color, fabric and texture, pattern, neckline, collar, lapels, buttons, and layering. Fit it naturally, tailored to the subject's own shoulders and frame. The outfit image contributes ONLY the clothing — the subject's face, hair, skin tone, body shape, and identity come entirely from the other reference photos.`;
+const UPLOAD_OUTFIT_LOCK_DEFAULT = `the garment from the outfit image (the last attached image) is the complete outfit for this image — the SAME garment in the EXACT same color, fabric, and pattern as every other image in this set, worn as the outer layer.`;
+
 const POLO_OUTFIT_LOCK_DEFAULT = `the polo shirt described above is the complete outfit for this image — the SAME collared knit polo in the EXACT same specified color as every other image in this set. Do NOT substitute a blazer, suit jacket, sport coat, cardigan, sweater, or woven dress shirt, and do NOT shift the polo's color (no charcoal, grey, or navy unless that is the specified color).`;
 
 function buildPoloAttire(poloColor: PoloColor): string {
@@ -285,6 +291,10 @@ type GenerateRequest = {
   // with a slightly WIDER crop. Identity still comes from the standard
   // reference photo set. See [[project_generate_similar]] roadmap for spec.
   similarToUrl?: string;
+  // Upload Cropped Outfit (2026-09-25). Blob URL of a customer-uploaded photo
+  // of just a garment (top / blouse / blazer, no face). Only used when
+  // attire === "upload". Attached as the LAST image sent to Gemini.
+  outfitUrl?: string;
 };
 
 type InlineImage = { mimeType: string; data: string };
@@ -597,6 +607,7 @@ const BLOCK_4_ATTIRE_STATIC: Record<Exclude<Attire, "medical" | "polo">, string>
 Well-tailored and intentional in either case — not boxy, not ill-fitting.`,
   casual: `Attire: Casual professional attire. Options: blazer over an open-collar shirt, knit polo, tailored sweater with crisp shirt collar underneath, or structured blouse. Relaxed but intentional. Attire that creates vertical lines guiding the viewer's eye toward the face — a suit jacket, a dark cardigan forming a V-shape, or a structured collar.`,
   keep: `Attire: Preserve the clothing visible in the first reference photo as faithfully as possible. Do not change the garment type, color, neckline, or style.`,
+  upload: UPLOAD_ATTIRE_DEFAULT,
 };
 
 // Medical attire — 6 distinct variants rotated across the 6-image batch
@@ -1045,6 +1056,8 @@ export const PROMPT_DEFAULTS: Record<string, string> = {
   attire_polo: POLO_ATTIRE_DEFAULT,
   polo_outfit_lock: POLO_OUTFIT_LOCK_DEFAULT,
   attire_keep: BLOCK_4_ATTIRE_STATIC.keep,
+  attire_upload: UPLOAD_ATTIRE_DEFAULT,
+  upload_outfit_lock: UPLOAD_OUTFIT_LOCK_DEFAULT,
   stethoscope: STETHOSCOPE_ANATOMY_DESCRIPTION,
   lighting_studio: BLOCK_5_LIGHTING.studio,
   lighting_natural: BLOCK_5_LIGHTING.natural,
@@ -1119,6 +1132,8 @@ export const PROMPT_SEGMENTS: PromptSegmentMeta[] = [
   { key: "attire_polo", label: "Attire — Polo shirt", group: "Attire", fires: { attire: "polo" }, note: "The {COLOR} token is auto-filled with the customer's picked polo color — keep it in the text." },
   { key: "polo_outfit_lock", label: "Attire — Polo shirt — per-slot lock", group: "Attire", fires: { attire: "polo" }, note: "Keeps every slot's polo the same garment + color. This is what blocks slots 5 & 6 from drifting to a grey polo or a blazer." },
   { key: "attire_keep", label: "Attire — Keep my outfit", group: "Attire", fires: { attire: "keep" } },
+  { key: "attire_upload", label: "Attire — Upload Cropped Outfit", group: "Attire", fires: { attire: "upload" }, note: "The customer's outfit photo is attached as the LAST image. Keep the wording that points Gemini at 'the last attached image'." },
+  { key: "upload_outfit_lock", label: "Attire — Upload Cropped Outfit — per-slot lock", group: "Attire", fires: { attire: "upload" }, note: "Keeps every slot in the same uploaded garment." },
   { key: "stethoscope", label: "Stethoscope (healthcare)", group: "Attire", fires: { attire: "medical" }, note: "Only appears on the medical variants that include a stethoscope." },
   { key: "lighting_studio", label: "Lighting — Studio", group: "Lighting", fires: { lighting: "studio" } },
   { key: "lighting_dramatic", label: "Lighting — Dramatic", group: "Lighting", fires: { lighting: "dramatic" } },
@@ -1184,7 +1199,9 @@ function buildBlock8(
           // a dark jacket over the scrubs). Reassert the medical attire
           // positively instead.
           `- Outfit: the medical attire described above is the complete outfit for this image — worn exactly as specified, in the specified color, as the outer layer.`
-        : attire === "polo"
+        : attire === "upload"
+          ? `- Outfit: ${seg("upload_outfit_lock", UPLOAD_OUTFIT_LOCK_DEFAULT)}`
+          : attire === "polo"
           ? // 2026-08-12 BUGFIX (same class as the medical fix above): polo is
             // fully specified by buildBlock4Attire (collared knit polo + the
             // customer's chosen color). Do NOT inject flavor.attireHint — the
@@ -2149,8 +2166,15 @@ export default async function handler(
   if (!body.style || !["corporate", "creative", "executive", "urban", "healthcare", "tech"].includes(body.style)) {
     return res.status(400).json({ error: "Invalid style" });
   }
-  if (!body.attire || !["formal", "casual", "keep", "medical", "polo"].includes(body.attire)) {
+  if (!body.attire || !["formal", "casual", "keep", "medical", "polo", "upload"].includes(body.attire)) {
     return res.status(400).json({ error: "Invalid attire" });
+  }
+  if (
+    body.attire === "upload" &&
+    !(typeof body.outfitUrl === "string" &&
+      /^https:\/\/[^/]*\.public\.blob\.vercel-storage\.com\//.test(body.outfitUrl))
+  ) {
+    return res.status(400).json({ error: "Missing outfit photo" });
   }
   if (
     !body.lighting ||
@@ -2232,9 +2256,18 @@ export default async function handler(
         );
       }
     }
+    // Upload Cropped Outfit (2026-09-25): attach the garment photo LAST so
+    // the prompt can point at "the last attached image". Skipped for Generate
+    // Versions — that path copies the outfit from the source shot instead.
+    let outfitImage: InlineImage | null = null;
+    if (!similarImage && body.attire === "upload" && typeof body.outfitUrl === "string") {
+      outfitImage = await fetchPhotoAsInlineData(body.outfitUrl);
+    }
     const imagesToSend: InlineImage[] = similarImage
       ? [similarImage, ...photos]
-      : photos;
+      : outfitImage
+        ? [...photos, outfitImage]
+        : photos;
 
     // ---- Assemble the prompt from Kristi's v2 framework ----
     try {
