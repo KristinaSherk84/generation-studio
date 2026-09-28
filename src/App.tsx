@@ -22650,6 +22650,9 @@ export default function App() {
         selections.surpriseMode && perSlotStyle === "corporate"
           ? "dark"
           : selections.background;
+      // True when the server answered with an error (nothing was made), so
+      // there's no point polling the batch store for this slot.
+      let serverRejected = false;
       try {
         const response = await fetch("/api/generate", {
           method: "POST",
@@ -22680,6 +22683,7 @@ export default function App() {
             ...readUnlockRequestFields(),
           }),
         });
+        if (!response.ok) serverRejected = true;
         if (response.status === 402) {
           const reason402 = await response
             .json()
@@ -22741,7 +22745,34 @@ export default function App() {
         batchNewShotsRef.current += 1;
         countBatchOnce(); // count the batch only now that a real image landed
         return imgOut;
-      } catch {
+      } catch (err) {
+        // 2026-09-28 (Danielle case): the server usually FINISHES the shot
+        // even when this tab's request fails (flaky phone connection, iCloud
+        // Private Relay dropping a long request). Before giving up on the
+        // slot, poll the batch store for it so it lands in the grid AND in
+        // the saved link. Skipped for paywall / cap errors (nothing was made).
+        void err;
+        const batchIdAtStart = currentBatchId;
+        // Partial "taster" batches reuse the first batch's id, so the store
+        // could hand back that batch's older shot — skip recovery there.
+        if (!serverRejected && !partialBatch && batchIdAtStart) {
+          for (let attempt = 0; attempt < 18; attempt++) {
+            const grid = await tryRecoverBatch(batchIdAtStart);
+            const url = grid?.[index];
+            if (url) {
+              setGeneratedImages((prev) => {
+                const next = [...prev];
+                next[index] = url;
+                return next;
+              });
+              setReadyCount((n) => n + 1);
+              batchNewShotsRef.current += 1;
+              countBatchOnce();
+              return url;
+            }
+            await staggerDelay(5000);
+          }
+        }
         // Swallow per-call errors — we'll surface them only if ALL 6 fail.
         return null;
       } finally {

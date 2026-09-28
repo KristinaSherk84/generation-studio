@@ -969,7 +969,7 @@ type Flavor = {
 const FLAVORS: Flavor[] = [
   {
     expression: "subtle closed-mouth realistic smile, confident and composed — the mouth stays gentle, but the EYES smile clearly: slight crinkle at the outer corners, upper cheeks lifted, the unmistakable warm-eye Duchenne smile that reads as genuine joy. Under no circumstances flat, neutral, or blank eyes",
-    bodyPose: "body squared to camera, shoulders relaxed. Arms hang relaxed and straight down at the sides of the body, below the frame — elbows soft and close to the torso. (2026-09-24: was arms-crossed; crossed arms showed up in too many shots per batch, including the wild cards that reuse this slot.)",
+    bodyPose: "body squared to camera, shoulders relaxed and dropped. Arms hang straight down, resting flush against the sides of the torso — the inner arm touches the ribcage and the elbows touch the waist, so the outline of each arm runs in one straight vertical line from the shoulder to the bottom edge of the frame. Relaxed, still, and natural. (2026-09-25: 'arms at the sides, below the frame' was rendering as hands-on-hips with elbows flared — now describes the arm silhouette against the torso.)",
     crop: "tighter crop — the very top of the head touches the top edge of the frame with ZERO empty space above. The frame ends at the upper chest / just below the collarbone.",
     attireHint: "shirt or top in crisp white",
   },
@@ -981,7 +981,7 @@ const FLAVORS: Flavor[] = [
   },
   {
     expression: "warm realistic teeth-showing smile, genuine and bright, the EYES smile clearly: slight crinkle at the outer corners, upper cheeks lifted, warm-eyed jovial smile that reads as genuine joy. Under no circumstances flat, neutral, or blank eyes",
-    bodyPose: "body VERY slightly angled toward the subject's right — barely off-square, both shoulders fully in frame with only a hair of asymmetry between them, head straight to the lens. Nearly a square-to-camera pose with just a whisper of angle. Arms hang relaxed and straight down at the sides of the body, below the frame — elbows soft and close to the torso.",
+    bodyPose: "body VERY slightly angled toward the subject's right — barely off-square, both shoulders fully in frame with only a hair of asymmetry between them, head straight to the lens. Nearly a square-to-camera pose with just a whisper of angle. Arms hang straight down, resting flush against the sides of the torso — the inner arm touches the ribcage and the elbows touch the waist, so the outline of each arm runs in one straight vertical line from the shoulder to the bottom edge of the frame. Relaxed, still, and natural.",
     crop: "medium crop — the very top of the head touches the top edge of the frame with ZERO empty space above. The frame ends at the upper chest.",
     attireHint: "shirt or top in a soft pastel tone (blush, cream, or pale grey)",
   },
