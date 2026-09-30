@@ -21755,7 +21755,10 @@ export default function App() {
     sourceUrl: string,
     sourceLabel?: string | null,
   ) => {
-    if (versionsUsedThisBatch || versionsGenerating) return;
+    // 2026-09-29: paid/unlocked customers get unlimited version rounds (the
+    // button already showed for them, but this guard silently blocked the
+    // click). Free customers still get one round per batch.
+    if ((versionsUsedThisBatch && !isUnlocked) || versionsGenerating) return;
     if (!lastSelections || lastPhotoUrls.length < 5) return;
     if (!sourceUrl || !/^https?:\/\//.test(sourceUrl)) {
       // We need an https URL to pass to the server as similarToUrl. Base64

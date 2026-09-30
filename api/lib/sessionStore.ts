@@ -399,16 +399,11 @@ export async function setSessionVersionShots(
     (u) => typeof u === "string" && /^https?:\/\//.test(u),
   );
   const priorV = Array.isArray(rec.versionShots) ? rec.versionShots : [];
-  const seenV = new Set<string>();
-  const mergedV: string[] = [];
-  for (const u of [...priorV, ...incoming]) {
-    if (seenV.has(u)) continue;
-    seenV.add(u);
-    mergedV.push(u);
-  }
-  rec.versionShots = mergedV.slice(0, 40);
-  // Mirror into the accumulating all-shots history (2026-09-09).
-  mergeIntoAllGenerated(rec, incoming);
+  // 2026-09-29 (Kristi): a NEW round of versions REPLACES the versions row;
+  // the previous round moves into the "every shot" gallery (all-shots
+  // history) so nothing is lost.
+  mergeIntoAllGenerated(rec, [...priorV, ...incoming]);
+  rec.versionShots = Array.from(new Set(incoming)).slice(0, 40);
   await redis.set(key(token), rec, { ex: TTL_SECONDS });
   return true;
 }
