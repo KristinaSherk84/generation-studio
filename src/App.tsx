@@ -13785,17 +13785,21 @@ const GridScreen = ({
           affordances at a glance and gives customers a nudge to hit refresh
           on shots that don't look like them. Camera glyph keeps the
           photographer's-voice feel. */}
-      {/* Collapsible legend (2026-09-01, Kristi). Default: just the three
-          icons close together with a "LEGEND" cap above — quiet, small,
-          non-distracting. Tap the group to expand into the labeled version +
-          the "Doesn't look like you?" note. Returning customers see the
-          tight version; first-timers can pop it open when they need labels. */}
+      {/* Legend & next steps (2026-09-30 redesign, Kristi). Collapsed: the
+          three icons under a "Legend & next steps" cap so customers know the
+          box explains what to do next. Expanded: a generic EXAMPLE headshot
+          with arrows labeling each corner icon (customers were tapping the
+          icons INSIDE the old legend expecting them to work), plus a picture
+          of the green versions pill with an explainer. Everything inside is
+          illustration only — the whole box just toggles open/closed. */}
       <div
         onClick={() => setLegendExpanded((v) => !v)}
         role="button"
         aria-expanded={legendExpanded}
         aria-label={
-          legendExpanded ? "Collapse legend" : "Expand legend to see labels"
+          legendExpanded
+            ? "Collapse legend and next steps"
+            : "Open legend and next steps"
         }
         style={{
           marginTop: 20,
@@ -13804,8 +13808,8 @@ const GridScreen = ({
           borderRadius: 10,
           padding: legendExpanded
             ? isMobileGrid
-              ? "10px 12px"
-              : "14px 18px"
+              ? "10px 10px 14px"
+              : "14px 18px 18px"
             : "8px 12px",
           cursor: "pointer",
           transition: "padding 0.15s",
@@ -13818,56 +13822,31 @@ const GridScreen = ({
             color: C.mediumGrey,
             textTransform: "uppercase",
             fontWeight: 500,
-            marginBottom: legendExpanded ? (isMobileGrid ? 8 : 10) : 4,
+            marginBottom: legendExpanded ? (isMobileGrid ? 6 : 8) : 4,
             textAlign: "center",
           }}
         >
-          Legend
+          {legendExpanded
+            ? "How your photos work · tap to close"
+            : "Legend & next steps · tap to open"}
         </div>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: legendExpanded
-              ? isMobileGrid
-                ? 6
-                : 16
-              : isMobileGrid
-                ? 10
-                : 14,
-            flexWrap: "wrap",
-            pointerEvents: "none",
-          }}
-        >
-          {[
-            {
-              icon: <Maximize2 size={isMobileGrid ? 14 : 18} />,
-              label: "View larger",
-            },
-            {
-              icon: (
-                <Plus
-                  size={isMobileGrid ? 15 : 20}
-                  strokeWidth={2.2}
-                />
-              ),
-              label: "Add to cart",
-            },
-            {
-              icon: <RefreshCw size={isMobileGrid ? 14 : 18} />,
-              label: "Regenerate",
-            },
-          ].map((item) => (
-            <div
-              key={item.label}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: legendExpanded ? (isMobileGrid ? 6 : 10) : 0,
-              }}
-            >
+        {!legendExpanded && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: isMobileGrid ? 10 : 14,
+              pointerEvents: "none",
+            }}
+          >
+            {[
+              <Maximize2 key="v" size={isMobileGrid ? 14 : 18} />,
+              <Plus key="p" size={isMobileGrid ? 15 : 20} strokeWidth={2.2} />,
+              <RefreshCw key="r" size={isMobileGrid ? 14 : 18} />,
+            ].map((icon, i) => (
               <div
+                key={i}
                 style={{
                   width: isMobileGrid ? 26 : 30,
                   height: isMobileGrid ? 26 : 30,
@@ -13878,63 +13857,105 @@ const GridScreen = ({
                   alignItems: "center",
                   justifyContent: "center",
                   color: C.dark,
-                  flexShrink: 0,
                 }}
               >
-                {item.icon}
+                {icon}
               </div>
-              {legendExpanded && (
-                <span
-                  style={{
-                    fontSize: isMobileGrid ? 11 : 13,
-                    color: C.dark,
-                    fontWeight: 500,
-                  }}
-                >
-                  {item.label}
-                </span>
-              )}
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
         {legendExpanded && (
-          <div
-            style={{
-              borderTop: `1px solid ${C.border}`,
-              marginTop: isMobileGrid ? 10 : 12,
-              paddingTop: isMobileGrid ? 8 : 10,
-              display: "flex",
-              alignItems: "flex-start",
-              gap: 8,
-            }}
-          >
-            <span
+          <div style={{ maxWidth: 360, margin: "0 auto", pointerEvents: "none" }}>
+            <svg
+              viewBox="0 0 280 200"
+              width="100%"
+              role="img"
+              aria-label="Example headshot: the plus icon adds a photo to your cart, the expand icon shows it full size, the circular arrow regenerates that one shot"
+            >
+              <defs>
+                <marker
+                  id="legendArrowHead"
+                  viewBox="0 0 10 10"
+                  refX="8"
+                  refY="5"
+                  markerWidth="6"
+                  markerHeight="6"
+                  orient="auto-start-reverse"
+                >
+                  <path
+                    d="M2 1L8 5L2 9"
+                    fill="none"
+                    stroke="#B8923F"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </marker>
+              </defs>
+              <g transform="translate(80,24)">
+                <rect width="120" height="150" rx="6" fill="#DCD8CE" />
+                <circle cx="60" cy="58" r="24" fill="#A9A59B" />
+                <path d="M14 150 C18 104 40 92 60 92 C80 92 102 104 106 150 Z" fill="#A9A59B" />
+                <text x="6" y="14" fontSize="9" fill="#6E6A60">EXAMPLE</text>
+                <circle cx="104" cy="16" r="10" fill="#fff" stroke="#D9D5CC" />
+                <path d="M104 11v10M99 16h10" stroke="#2A2A2A" strokeWidth="1.8" />
+                <circle cx="16" cy="134" r="10" fill="#fff" stroke="#D9D5CC" />
+                <path d="M12 138l8-8M15 130h5v5M12 133v5h5" fill="none" stroke="#2A2A2A" strokeWidth="1.3" />
+                <circle cx="104" cy="134" r="10" fill="#fff" stroke="#D9D5CC" />
+                <path d="M109 132a5 5 0 1 1-2-4.5M109 126v3.5h-3.5" fill="none" stroke="#2A2A2A" strokeWidth="1.4" />
+              </g>
+              <text x="276" y="20" fontSize="11" fontWeight="600" fill="#1B4332" textAnchor="end">Add to cart</text>
+              <text x="276" y="33" fontSize="9.5" fill="#6E6A60" textAnchor="end">pick this one</text>
+              <path d="M232 38 C225 42 206 42 196 40" fill="none" stroke="#B8923F" strokeWidth="1.4" markerEnd="url(#legendArrowHead)" />
+              <text x="4" y="176" fontSize="11" fontWeight="600" fill="#1B4332">View larger</text>
+              <text x="4" y="189" fontSize="9.5" fill="#6E6A60">see it full size</text>
+              <path d="M40 166 C52 160 70 160 84 158" fill="none" stroke="#B8923F" strokeWidth="1.4" markerEnd="url(#legendArrowHead)" />
+              <text x="276" y="176" fontSize="11" fontWeight="600" fill="#1B4332" textAnchor="end">Regenerate</text>
+              <text x="276" y="189" fontSize="9.5" fill="#6E6A60" textAnchor="end">redo this one shot</text>
+              <path d="M236 166 C226 160 210 160 198 158" fill="none" stroke="#B8923F" strokeWidth="1.4" markerEnd="url(#legendArrowHead)" />
+            </svg>
+            <div
               style={{
-                fontSize: isMobileGrid ? 14 : 16,
-                color: "#C9A961",
-                lineHeight: 1,
-                marginTop: 2,
+                fontSize: isMobileGrid ? 11 : 12,
+                color: C.mediumGrey,
+                textAlign: "center",
+                margin: "2px 0 12px",
               }}
+            >
+              Use the icons on your photos above
+            </div>
+            <div
+              style={{
+                textAlign: "center",
+                background: "#1B4332",
+                color: "#FFFFFF",
+                borderRadius: 999,
+                padding: "10px 12px",
+                fontSize: isMobileGrid ? 12 : 13,
+                boxShadow: "inset 0 -3px 0 #0F2A1F",
+              }}
+            >
+              Button under the grid
+            </div>
+            <svg
+              viewBox="0 0 20 18"
+              width="14"
+              height="13"
+              style={{ display: "block", margin: "6px auto 3px" }}
               aria-hidden="true"
             >
-              ✎
-            </span>
+              <path d="M10 17V4M4 9l6-6 6 6" fill="none" stroke="#B8923F" strokeWidth="2" strokeLinecap="round" />
+            </svg>
             <div
               style={{
                 fontSize: isMobileGrid ? 12 : 13,
-                color: "#444",
-                lineHeight: 1.5,
+                color: C.dark,
+                textAlign: "center",
+                lineHeight: 1.45,
               }}
             >
-              <span style={{ fontWeight: 500, color: C.dark }}>
-                Doesn't look like you?
-              </span>{" "}
-              Tap the{" "}
-              <RefreshCw
-                size={isMobileGrid ? 12 : 13}
-                style={{ verticalAlign: "-2px", display: "inline" }}
-            />{" "}
-            icon on that photo to regenerate it. Free for your first 2 tries.
+              <span style={{ fontWeight: 500 }}>Love one?</span> This button makes
+              3 new versions of your favorite — new angle, new expression
             </div>
           </div>
         )}

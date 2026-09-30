@@ -975,7 +975,7 @@ const FLAVORS: Flavor[] = [
   },
   {
     expression: "soft realistic open smile, approachable",
-    bodyPose: "body VERY slightly angled toward the subject's left — barely off-square, both shoulders fully in frame with only a hair of asymmetry between them, head straight to the lens. Nearly a square-to-camera pose with just a whisper of angle. Hands clasped loosely in front of the body at low-waist level, below the frame — elbows soft and tucked in close to the torso, arms dropping straight down along the sides then meeting at the wrists.",
+    bodyPose: "body VERY slightly angled toward the subject's left — barely off-square, both shoulders fully in frame with only a hair of asymmetry between them, head straight to the lens. Nearly a square-to-camera pose with just a whisper of angle. Elbows soft and tucked in close to the torso, arms dropping straight down along the sides then meeting at the wrists.",
     crop: "medium crop — from just above the top of the head to the upper chest",
     attireHint: "shirt or top in a soft light or dark blue",
   },
