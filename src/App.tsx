@@ -17778,9 +17778,111 @@ type FreeTierPaywallModalProps = {
   onPay: () => void;
   onRevert: () => void;
   canRevert: boolean;
+  // 2026-09-30 (Kristi): when set, the customer still has their free round of
+  // variations — lead with that instead of the $3.99 unlock.
+  onTryVariations?: () => void;
 };
 
-const FreeTierPaywallModal = ({ onClose, onPay, onRevert, canRevert }: FreeTierPaywallModalProps) => (
+const FreeTierPaywallModal = ({ onClose, onPay, onRevert, canRevert, onTryVariations }: FreeTierPaywallModalProps) =>
+  onTryVariations ? (
+  <div
+    style={{
+      position: "fixed",
+      inset: 0,
+      background: "rgba(44, 44, 42, 0.4)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      zIndex: 100,
+      padding: 24,
+      ...font,
+    }}
+  >
+    <div style={{ background: C.white, borderRadius: 8, padding: 28, maxWidth: 440 }}>
+      <div style={{ fontSize: 18, fontWeight: 500, color: C.dark }}>
+        You've used your free redos
+      </div>
+      <div
+        style={{
+          background: "#FBF8F0",
+          border: "1px solid #E8DFC6",
+          borderRadius: 8,
+          padding: "12px 14px",
+          marginTop: 14,
+        }}
+      >
+        <div style={{ fontSize: 15, fontWeight: 500, color: "#1B4332" }}>
+          Try free variations first
+        </div>
+        <div style={{ fontSize: 13, color: C.mediumGrey, marginTop: 4, lineHeight: 1.55 }}>
+          Pick your favorite shot and we'll make{" "}
+          <span style={{ fontWeight: 500, color: C.dark }}>3 new versions</span> of it —
+          new angle, new expression. One round is free.
+        </div>
+        <button
+          onClick={onTryVariations}
+          style={{
+            display: "block",
+            width: "100%",
+            marginTop: 10,
+            background: "#1B4332",
+            color: "#FFFFFF",
+            border: "none",
+            borderRadius: 999,
+            padding: "12px 14px",
+            fontSize: 14,
+            fontWeight: 500,
+            cursor: "pointer",
+            fontFamily: "inherit",
+            boxShadow: "inset 0 -3px 0 #0F2A1F",
+          }}
+        >
+          Make variations of my favorite →
+        </button>
+      </div>
+      <div style={{ fontSize: 13, color: C.mediumGrey, marginTop: 14, lineHeight: 1.55 }}>
+        Want more redos? $3.99 unlocks more generations for the rest of your
+        session. Your headshots stay right where they are.
+      </div>
+      <button
+        onClick={onPay}
+        style={{
+          display: "block",
+          width: "100%",
+          marginTop: 10,
+          background: "transparent",
+          border: `1.5px solid ${C.border}`,
+          borderRadius: 8,
+          color: C.dark,
+          fontSize: 14,
+          fontWeight: 600,
+          padding: "11px 8px",
+          cursor: "pointer",
+          fontFamily: "inherit",
+        }}
+      >
+        Unlock for $3.99
+      </button>
+      <button
+        onClick={canRevert ? onRevert : onClose}
+        style={{
+          display: "block",
+          width: "100%",
+          marginTop: 6,
+          background: "transparent",
+          border: "none",
+          color: C.mediumGrey,
+          fontSize: 13,
+          padding: 8,
+          cursor: "pointer",
+          fontFamily: "inherit",
+        }}
+      >
+        Go back to my headshots
+      </button>
+    </div>
+  </div>
+  ) : (
   <div
     style={{
       position: "fixed",
@@ -17857,7 +17959,7 @@ const FreeTierPaywallModal = ({ onClose, onPay, onRevert, canRevert }: FreeTierP
       </div>
     </div>
   </div>
-);
+  );
 
 // -------------------- Back-button warning --------------------
 //
@@ -19711,6 +19813,9 @@ export default function App() {
   );
   const [versionsUsedThisBatch, setVersionsUsedThisBatch] = useState(false);
   const [pickingVersionSource, setPickingVersionSource] = useState(false);
+  // Set when a variations round was refused by the server's free cap, so the
+  // out-of-redos popup stops offering free variations (no loop). 2026-09-30.
+  const versionsBlockedRef = useRef(false);
   const [versionsGenerating, setVersionsGenerating] = useState(false);
   // Wild Card bonus previews shown below the main grid (2026-08-04).
   const [wildCards, setWildCards] = useState<WildCardShot[]>([]);
@@ -21839,10 +21944,12 @@ export default function App() {
 
     const outputs: (string | null)[] = [null, null, null];
     let anyOk = false;
+    let any402 = false;
     for (let i = 0; i < settled.length; i++) {
       const r = settled[i];
       if (r.status !== "fulfilled") continue;
       const response = r.value;
+      if (response.status === 402) any402 = true;
       if (!response.ok) continue;
       try {
         const data = (await response.json()) as {
@@ -21861,7 +21968,13 @@ export default function App() {
     // Only "spend" the one-per-batch allowance if AT LEAST ONE version came
     // back. If both failed (network / server), let the customer try again.
     if (anyOk) setVersionsUsedThisBatch(true);
-    else
+    else if (any402) {
+      // Server says this IP is out of free generations — show the unlock
+      // (without re-offering free variations).
+      versionsBlockedRef.current = true;
+      setVersionShots([]);
+      setShowFreeTierPaywall(true);
+    } else
       setRegenError(
         "Couldn't generate versions right now. Please try again in a moment.",
       );
@@ -24078,6 +24191,27 @@ export default function App() {
           onPay={handleFreeTierUnlockPay}
           onRevert={handleRevertToRecentGrid}
           canRevert={generatedImages.filter(Boolean).length > 0}
+          onTryVariations={
+            screen === "grid" &&
+            !versionsUsedThisBatch &&
+            !versionsGenerating &&
+            !versionsBlockedRef.current &&
+            lastPhotoUrls.length >= 5 &&
+            generatedImages.some((u) => typeof u === "string" && /^https?:\/\//.test(u))
+              ? () => {
+                  // Close the paywall, restore the grid (same as "Go back to
+                  // my headshots"), then enter "pick your favorite" mode and
+                  // bring the photos into view so the next tap is obvious.
+                  handleRevertToRecentGrid();
+                  setPickingVersionSource(true);
+                  window.setTimeout(() => {
+                    document
+                      .querySelector(".gen-grid")
+                      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }, 60);
+                }
+              : undefined
+          }
         />
       )}
 
