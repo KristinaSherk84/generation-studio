@@ -4202,6 +4202,14 @@ const LandingV2 = ({
           <a href="/terms" style={{ color: BRAND.subText, textDecoration: "none" }}>
             Terms
           </a>
+          <a
+            href="https://www.linkedin.com/company/generation-headshots/"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: BRAND.subText, textDecoration: "none" }}
+          >
+            LinkedIn
+          </a>
           {!showPromoInput ? (
             <button
               onClick={() => setShowPromoInput(true)}
@@ -5145,7 +5153,15 @@ const HealthcareScreen = ({
           </span>
         </div>
         <p style={{ margin: 0, opacity: 0.6 }}>
-          Made by Kristina Sherk · KristinaSherk.com
+          Made by Kristina Sherk · KristinaSherk.com ·{" "}
+          <a
+            href="https://www.linkedin.com/company/generation-headshots/"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: "inherit" }}
+          >
+            Follow on LinkedIn
+          </a>
         </p>
 
         {/* Promo code affordance — mirrors the LandingV2 footer pattern.
@@ -5888,6 +5904,10 @@ const TeamsScreen = ({ onStart, onBackToHome }: TeamsScreenProps) => {
         ·{" "}
         <a href="mailto:kristi@kristinasherk.com" style={{ color: "rgba(255,255,255,0.9)" }}>
           kristi@kristinasherk.com
+        </a>{" "}
+        ·{" "}
+        <a href="https://www.linkedin.com/company/generation-headshots/" target="_blank" rel="noopener noreferrer" style={{ color: "rgba(255,255,255,0.9)" }}>
+          LinkedIn
         </a>
       </footer>
     </div>
@@ -6262,7 +6282,15 @@ const HowItWorksScreen = ({
           </span>
         </div>
         <p style={{ margin: 0, opacity: 0.6 }}>
-          Made by Kristina Sherk · KristinaSherk.com
+          Made by Kristina Sherk · KristinaSherk.com ·{" "}
+          <a
+            href="https://www.linkedin.com/company/generation-headshots/"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: "inherit" }}
+          >
+            Follow on LinkedIn
+          </a>
         </p>
       </footer>
     </div>
@@ -7244,7 +7272,15 @@ const FAQDetailScreen = ({
           </span>
         </div>
         <p style={{ margin: 0, opacity: 0.6 }}>
-          Made by Kristina Sherk · KristinaSherk.com
+          Made by Kristina Sherk · KristinaSherk.com ·{" "}
+          <a
+            href="https://www.linkedin.com/company/generation-headshots/"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: "inherit" }}
+          >
+            Follow on LinkedIn
+          </a>
         </p>
       </footer>
     </div>
