@@ -513,7 +513,7 @@ export async function sendCustomerDeliveryEmail(args: {
           I give refunds for social posts!
         </h1>
         <p style="font-size: 13.5px; line-height: 1.55; color: #555; margin: 12px auto 6px; max-width: 460px;">
-          <strong>How it works:</strong> download your before/after graphic below, post it publicly on <strong>LinkedIn</strong>, tag <strong>Generation Headshots</strong>, then reply to this email with a screenshot of your post. I'll refund <strong>$5</strong> to your card within 24 hours.
+          <strong>How it works:</strong> download your before/after graphic below, post it publicly on <strong>LinkedIn</strong>, tag <strong>Generation Headshots</strong>, then reply to this email with a screenshot of your post. <strong>I'll refund you $10 to your card within 24 hours.</strong>
         </p>
         <p style="font-size: 12px; line-height: 1.55; color: #888; margin: 4px auto 18px; max-width: 460px;">
           LinkedIn only. Must be a public post (not a private message or story). One refund per customer.
