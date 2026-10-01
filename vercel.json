@@ -41,6 +41,7 @@
     { "source": "/teams", "destination": "/index.html" },
     { "source": "/headshot-generator-gallery", "destination": "/index.html" },
     { "source": "/how-it-works", "destination": "/index.html" },
+    { "source": "/about", "destination": "/index.html" },
     { "source": "/faq", "destination": "/index.html" },
     { "source": "/faq/:slug", "destination": "/index.html" },
     { "source": "/admin", "destination": "/index.html" }

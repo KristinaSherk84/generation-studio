@@ -54,3 +54,36 @@ Client-side detection at Step 3 upload (before generation fires). Each uploaded 
 ### Non-goals
 - NOT a hard block. Never refuse to serve a paying customer.
 - NOT face-verification (that's the existing face-api.js check for "no face detected / multiple faces detected").
+
+---
+
+## Burned-in watermark previews (stop clean-image theft)
+
+**Status:** approved as a roadmap item by Kristi 2026-09-30, not built yet
+**Estimated build:** medium (touches generate, regen, versions, retouch, deliver)
+**Priority:** high — anyone can currently get the full clean 2K file for free
+
+### Why
+The preview watermark ("INVISIBLE WATERMARKS APPLIED TO PROTECT ARTIST") is an HTML text overlay, not part of the image. The `<img src>` behind it is the full-resolution, clean 2K Blob JPEG. Right-click and long-press are blocked, but anyone can open DevTools, copy the image URL, open it in a new tab, and download the unwatermarked headshot — no screenshot or AI watermark removal needed. Suspected abusers (e.g. the jamezgustov48 / yasinfelix252 / unchained6566 device, 45 free generations, $0 purchases) may be doing exactly this.
+
+### The fix
+At generation time, save TWO copies:
+1. **Clean original** — uploaded to Blob under an unguessable path; its URL is NEVER sent to the browser.
+2. **Preview** — downscaled (~1024px long edge) with the watermark burned into the pixels (sharp + SVG text composite, diagonal repeat, same look as today's overlay). This is the only URL the client ever receives.
+
+Store a server-side map `preview URL → original URL` (Redis, same TTL as the originals).
+
+### Everywhere that must map preview → original (server side)
+- `api/deliver.ts` — paid delivery must fetch/retouch the ORIGINAL.
+- `api/retouch.ts` — retouch passes run on the original.
+- `api/generate.ts` — Generate Versions `similarToUrl` should be mapped to the original before Gemini sees it (a watermarked source would leak watermark text into the versions).
+- Batch store / recover-batch / save-session / update-session / RTV links keep storing PREVIEW URLs only.
+- Admin tools (find-session, weekly-grads) should resolve originals for Kristi's own use.
+
+### Must-not-break checks
+- Every paid delivery ships the clean original at full 2K (test Basic + Deluxe tiers).
+- Old sessions (pre-change) have no map entry → fall back to treating the stored URL as the original.
+- Clarity recordings stay small (previews are smaller, so this helps).
+
+### Caveat
+A burned-in watermark can still be AI-erased, but that takes effort and yields a smaller, degraded image — versus today's 10-second clean 2K download. Pairs with the forensic-watermark idea in memory (project_watermark_defense).

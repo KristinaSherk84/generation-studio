@@ -4210,6 +4210,17 @@ const LandingV2 = ({
           >
             LinkedIn
           </a>
+          <a
+            href="https://www.facebook.com/profile.php?id=61595110405202"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: BRAND.subText, textDecoration: "none" }}
+          >
+            Facebook
+          </a>
+          <a href="/about" style={{ color: BRAND.subText, textDecoration: "none" }}>
+            About
+          </a>
           {!showPromoInput ? (
             <button
               onClick={() => setShowPromoInput(true)}
@@ -5908,6 +5919,354 @@ const TeamsScreen = ({ onStart, onBackToHome }: TeamsScreenProps) => {
         ·{" "}
         <a href="https://www.linkedin.com/company/generation-headshots/" target="_blank" rel="noopener noreferrer" style={{ color: "rgba(255,255,255,0.9)" }}>
           LinkedIn
+        </a>
+      </footer>
+    </div>
+  );
+};
+
+// -------------------- Screen 1d: About page --------------------
+//
+// /about (2026-10-01, Kristi). Short "who's behind this" page with links to
+// the Generation Headshots LinkedIn + Facebook pages. Same top nav + footer
+// treatment as /how-it-works. Reached from the home-page footer or by URL.
+const GH_LINKEDIN_URL = "https://www.linkedin.com/company/generation-headshots/";
+const GH_FACEBOOK_URL = "https://www.facebook.com/profile.php?id=61595110405202";
+// Google reviews share link (from Kristi, 2026-10-01).
+const GH_GOOGLE_REVIEWS_URL = "https://share.google/Yy9lpReew72XSYMj1";
+
+type AboutScreenProps = {
+  onStart: () => void;
+  onBackToHome: () => void;
+  onPromoUnlock: (code: string, kind: "full" | "generation") => void;
+  entryFeeEnabled: boolean;
+};
+
+const AboutScreen = ({ onStart, onBackToHome, onPromoUnlock, entryFeeEnabled }: AboutScreenProps) => {
+  // Promo code entry under the CTA — same validation as the home page.
+  const [showPromo, setShowPromo] = useState(false);
+  const [promoCode, setPromoCode] = useState("");
+  const [promoStatus, setPromoStatus] =
+    useState<"idle" | "submitting" | "success" | "error">("idle");
+  const [promoErrMsg, setPromoErrMsg] = useState("");
+  const submitPromo = async () => {
+    const trimmed = promoCode.trim();
+    if (!trimmed) return;
+    setPromoStatus("submitting");
+    setPromoErrMsg("");
+    try {
+      const resp = await fetch("/api/verify-promo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: trimmed }),
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = (await resp.json()) as { valid?: boolean; kind?: "full" | "generation" };
+      if (data.valid) {
+        setPromoStatus("success");
+        setTimeout(
+          () => onPromoUnlock(trimmed, data.kind === "generation" ? "generation" : "full"),
+          700,
+        );
+      } else {
+        setPromoStatus("error");
+        setPromoErrMsg("That code isn't recognized.");
+      }
+    } catch {
+      setPromoStatus("error");
+      setPromoErrMsg("Something went wrong. Try again in a moment.");
+    }
+  };
+  const [isMobile, setIsMobile] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia("(max-width: 640px)").matches;
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(max-width: 640px)");
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+
+  const socialBtn = {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    minWidth: 180,
+    padding: "12px 22px",
+    borderRadius: 999,
+    border: `1.5px solid ${BRAND.charcoal}`,
+    color: BRAND.charcoal,
+    background: BRAND.white,
+    textDecoration: "none",
+    fontSize: 14,
+    fontWeight: 500,
+    fontFamily: SANS_STACK,
+  } as const;
+
+  const para = {
+    fontSize: isMobile ? 15 : 17,
+    lineHeight: 1.7,
+    color: BRAND.bodyText,
+    margin: "0 0 18px",
+  } as const;
+
+  return (
+    <div
+      style={{
+        background: BRAND.white,
+        color: BRAND.bodyText,
+        fontFamily: SANS_STACK,
+        minHeight: "100vh",
+      }}
+    >
+      <nav
+        style={{
+          height: 52,
+          padding: "0 clamp(16px, 4vw, 56px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          borderBottom: `1px solid #EFEAE0`,
+          background: BRAND.white,
+        }}
+      >
+        <button
+          onClick={onBackToHome}
+          aria-label="Back to home"
+          style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center" }}
+        >
+          <Wordmark size={20} />
+        </button>
+        <button
+          onClick={onBackToHome}
+          style={{
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            fontSize: 14,
+            color: BRAND.charcoal,
+            borderBottom: `1px solid ${BRAND.gold}`,
+            fontFamily: SANS_STACK,
+            padding: 0,
+          }}
+        >
+          ← Back to home
+        </button>
+      </nav>
+
+      <section
+        style={{
+          maxWidth: 760,
+          margin: "0 auto",
+          padding: isMobile ? "48px 20px 32px" : "80px clamp(20px, 4vw, 56px) 48px",
+        }}
+      >
+        <div
+          style={{
+            fontSize: 11,
+            letterSpacing: 2.5,
+            textTransform: "uppercase",
+            color: BRAND.gold,
+            fontWeight: 600,
+            textAlign: "center",
+            marginBottom: 12,
+          }}
+        >
+          About
+        </div>
+        <h1
+          style={{
+            fontFamily: SERIF_STACK,
+            fontSize: isMobile ? 32 : "clamp(36px, 4vw, 48px)",
+            fontWeight: 400,
+            color: BRAND.charcoal,
+            lineHeight: 1.15,
+            letterSpacing: -0.5,
+            textAlign: "center",
+            margin: "0 0 32px",
+          }}
+        >
+          AI headshots made by a real photographer
+        </h1>
+        <p style={para}>
+          I'm Kristina Sherk — a portrait photographer with over 20 years behind the
+          camera and{" "}
+          <a
+            href={GH_GOOGLE_REVIEWS_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: BRAND.charcoal, fontWeight: 500 }}
+          >
+            400+ five-star Google reviews
+          </a>{" "}
+          on{" "}
+          <a
+            href="https://www.kristinasherk.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: BRAND.charcoal, fontWeight: 500 }}
+          >
+            KristinaSherk.com
+          </a>
+          . I've spent my career photographing executives, physicians, and
+          professionals, learning exactly what makes a headshot look confident,
+          approachable, and like you.
+        </p>
+        <p style={para}>
+          GenerAItion Headshots is that experience built into an AI headshot generator.
+          The lighting, posing, backgrounds, and retouching that make my in-person
+          headshots work are baked into every image this app creates — so you get a
+          professional headshot without booking a studio session.
+        </p>
+        <p style={para}>
+          Your first six previews are free, and you only pay for the headshots you
+          love. If something isn't right, I want to hear about it — I read every email.
+        </p>
+
+        <div style={{ marginTop: 32, textAlign: "center" }}>
+          <button
+            onClick={onStart}
+            style={{
+              background: "#1B4332",
+              color: "#FFFFFF",
+              border: "none",
+              borderRadius: 999,
+              padding: "14px 28px",
+              fontSize: 15,
+              fontWeight: 500,
+              cursor: "pointer",
+              fontFamily: SANS_STACK,
+              boxShadow: "inset 0 -3px 0 #0F2A1F",
+            }}
+          >
+            {entryFeeEnabled ? "Generate 6 headshots" : "Generate your first 6 free"}
+          </button>
+          <div style={{ marginTop: 12 }}>
+            {promoStatus === "success" ? (
+              <div style={{ fontSize: 13, color: BRAND.charcoal, fontWeight: 600 }}>
+                ✓ Promo code applied — your generations are on us.
+              </div>
+            ) : !showPromo ? (
+              <button
+                onClick={() => setShowPromo(true)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: BRAND.subText,
+                  fontSize: 13,
+                  cursor: "pointer",
+                  textDecoration: "underline",
+                  fontFamily: SANS_STACK,
+                  padding: 0,
+                }}
+              >
+                Have a promo code?
+              </button>
+            ) : (
+              <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "center" }}>
+                <input
+                  type="text"
+                  value={promoCode}
+                  onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+                  placeholder="Enter code"
+                  autoFocus
+                  style={{
+                    fontSize: 13,
+                    padding: "6px 10px",
+                    border: `1px solid ${BRAND.subText}`,
+                    borderRadius: 6,
+                    fontFamily: SANS_STACK,
+                    width: 140,
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") submitPromo();
+                  }}
+                />
+                <button
+                  onClick={submitPromo}
+                  disabled={promoStatus === "submitting" || !promoCode.trim()}
+                  style={{
+                    fontSize: 13,
+                    padding: "6px 14px",
+                    background: BRAND.charcoal,
+                    color: BRAND.white,
+                    border: "none",
+                    borderRadius: 6,
+                    cursor: "pointer",
+                    fontFamily: SANS_STACK,
+                  }}
+                >
+                  {promoStatus === "submitting" ? "..." : "Apply"}
+                </button>
+              </div>
+            )}
+            {promoStatus === "error" && (
+              <div style={{ marginTop: 8, fontSize: 12, color: "#B23A2E" }}>{promoErrMsg}</div>
+            )}
+          </div>
+        </div>
+
+        <div
+          style={{
+            marginTop: 40,
+            paddingTop: 32,
+            borderTop: "1px solid #EFEAE0",
+            textAlign: "center",
+          }}
+        >
+          <h2
+            style={{
+              fontFamily: SERIF_STACK,
+              fontSize: isMobile ? 24 : 28,
+              fontWeight: 400,
+              color: BRAND.charcoal,
+              margin: "0 0 8px",
+            }}
+          >
+            Follow along
+          </h2>
+          <p style={{ fontSize: 14, color: BRAND.subText, margin: "0 0 20px" }}>
+            Before-and-afters, tips, and new styles as they launch.
+          </p>
+          <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
+            <a href={GH_LINKEDIN_URL} target="_blank" rel="noopener noreferrer" style={socialBtn}>
+              LinkedIn →
+            </a>
+            <a href={GH_FACEBOOK_URL} target="_blank" rel="noopener noreferrer" style={socialBtn}>
+              Facebook →
+            </a>
+          </div>
+        </div>
+
+      </section>
+
+      <footer
+        style={{
+          background: BRAND.charcoal,
+          color: "rgba(255,255,255,0.7)",
+          padding: "40px 20px",
+          textAlign: "center",
+          fontSize: 13,
+        }}
+      >
+        Gener<span style={{ color: BRAND.gold, fontStyle: "italic", fontWeight: 600 }}>AI</span>tion Headshots · Built by{" "}
+        <a href="https://kristinasherk.com" target="_blank" rel="noreferrer" style={{ color: "rgba(255,255,255,0.9)" }}>
+          Kristina Sherk
+        </a>{" "}
+        ·{" "}
+        <a href="mailto:kristi@kristinasherk.com" style={{ color: "rgba(255,255,255,0.9)" }}>
+          kristi@kristinasherk.com
+        </a>{" "}
+        ·{" "}
+        <a href={GH_LINKEDIN_URL} target="_blank" rel="noopener noreferrer" style={{ color: "rgba(255,255,255,0.9)" }}>
+          LinkedIn
+        </a>{" "}
+        ·{" "}
+        <a href={GH_FACEBOOK_URL} target="_blank" rel="noopener noreferrer" style={{ color: "rgba(255,255,255,0.9)" }}>
+          Facebook
         </a>
       </footer>
     </div>
@@ -18289,6 +18648,7 @@ type Screen =
                  // pathname-on-mount + popstate effects below
   | "teams" // /teams landing — marketing page for companies/team-buyers.
             // Same URL-driven mount pattern as /healthcare.
+  | "about" // /about page (2026-10-01) — bio + LinkedIn/Facebook links
   | "how-it-works" // /how-it-works dedicated explainer page — same 3-step section
                    // from the home page + a FAQ block below. Reached via the
                    // "How it works" nav link or by direct URL.
@@ -19591,6 +19951,7 @@ export default function App() {
       if (path === "/teams" || path === "/teams/") return { screen: "teams" };
       if (path === "/headshot-generator-gallery" || path === "/headshot-generator-gallery/") return { screen: "gallery" };
       if (path === "/how-it-works" || path === "/how-it-works/") return { screen: "how-it-works" };
+      if (path === "/about" || path === "/about/") return { screen: "about" };
       const faqDetailMatch = path.match(FAQ_DETAIL_RE);
       if (faqDetailMatch) return { screen: "faq-detail", faqSlug: faqDetailMatch[1] };
       if (path === "/faq" || path === "/faq/") return { screen: "faq" };
@@ -23359,6 +23720,7 @@ export default function App() {
         screen !== "healthcare" &&
         screen !== "admin" &&
         screen !== "faq" &&
+        screen !== "about" &&
         screen !== "how-it-works" && (
           <Navbar
             cartCount={cart.length}
@@ -23558,6 +23920,19 @@ export default function App() {
         <HowItWorksScreen
           entryFeeEnabled={entryFeeEnabled}
           onStart={() => requestStart(handleStart)}
+          onBackToHome={() => {
+            setScreen("landing");
+            if (window.location.pathname !== "/") {
+              window.history.pushState({}, "", "/");
+            }
+          }}
+        />
+      )}
+      {screen === "about" && (
+        <AboutScreen
+          entryFeeEnabled={entryFeeEnabled}
+          onStart={() => requestStart(handleStart)}
+          onPromoUnlock={handlePromoUnlock}
           onBackToHome={() => {
             setScreen("landing");
             if (window.location.pathname !== "/") {
