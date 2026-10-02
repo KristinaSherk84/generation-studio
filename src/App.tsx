@@ -11396,6 +11396,9 @@ type GridScreenProps = {
   // Admin delete (2026-10-02): remove a bad shot from the customer's link.
   // Only rendered in admin fix mode.
   onAdminDeleteSlot?: (index: number) => void;
+  // Admin delete for the "headshots from earlier" extras (2026-10-02): by URL,
+  // since extras aren't slot-indexed.
+  onAdminDeleteUrl?: (url: string) => void;
   // Called when the user clicks "Check out" — passes the cart's URLs forward
   // to the retouch + checkout flow. Cart is URL-keyed, not index-keyed, so a
   // pick from a prior style/regen round is preserved even after Generate
@@ -11493,6 +11496,7 @@ const GridScreen = ({
   revertedSlots,
   onRevertSlot,
   onAdminDeleteSlot,
+  onAdminDeleteUrl,
   onDeliver,
   onBack,
   onRegenerateSlot,
@@ -14217,6 +14221,38 @@ const GridScreen = ({
                     >
                       <Maximize2 size={14} />
                     </button>
+                    {/* Admin delete (2026-10-02): trash button on extras,
+                        only in admin fix mode. */}
+                    {adminFixMode && onAdminDeleteUrl && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onAdminDeleteUrl(src);
+                        }}
+                        title="Admin: delete this shot from the customer's link"
+                        aria-label="Admin: delete this shot"
+                        style={{
+                          position: "absolute",
+                          bottom: 8,
+                          right: 8,
+                          width: 26,
+                          height: 26,
+                          borderRadius: "50%",
+                          background: "rgba(192, 57, 43, 0.92)",
+                          color: "#FFF",
+                          border: "none",
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          padding: 0,
+                          boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+                        }}
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -24308,6 +24344,41 @@ export default function App() {
           images={generatedImages}
           previousImages={previousImages}
           revertedSlots={revertedSlots}
+          onAdminDeleteUrl={
+            adminFixMode
+              ? (url) => {
+                  if (!url || !/^https?:\/\//.test(url)) return;
+                  if (!window.confirm("Delete this earlier shot from the customer's link? This can't be undone.")) return;
+                  let pw = "";
+                  try {
+                    pw = window.localStorage.getItem("gen_admin_fix_pw") ?? "";
+                  } catch {
+                    /* ignore */
+                  }
+                  const tok = resumeTokenRef.current;
+                  // Scrub it from every client-side pool the extras section reads.
+                  setGeneratedImages((prev) => prev.map((u) => (u === url ? "" : u)));
+                  setPreviousImages((pp) => pp.map((u) => (u === url ? null : u)));
+                  setAllGeneratedUrls((prev) => prev.filter((u) => u !== url));
+                  setVersionShots((vs) => vs.filter((u) => u !== url));
+                  setWildCards((wcs) => wcs.filter((w) => w.image !== url));
+                  if (tok && pw) {
+                    void fetch("/api/update-session", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ token: tok, index: 0, action: "remove", url, pw }),
+                    })
+                      .then((r) => r.json())
+                      .then((d: { ok?: boolean; reason?: string }) => {
+                        if (!d?.ok) setRegenError(`Admin delete didn't save (${d?.reason ?? "unknown"}).`);
+                      })
+                      .catch(() => setRegenError("Admin delete didn't save — network error."));
+                  } else {
+                    setRegenError("Admin delete only works from a customer's resume link in admin fix mode.");
+                  }
+                }
+              : undefined
+          }
           onAdminDeleteSlot={
             adminFixMode
               ? (index) => {
