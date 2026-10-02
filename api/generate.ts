@@ -291,6 +291,12 @@ type GenerateRequest = {
   // with a slightly WIDER crop. Identity still comes from the standard
   // reference photo set. See [[project_generate_similar]] roadmap for spec.
   similarToUrl?: string;
+  // Identity redo (2026-10-02). When the app's likeness check flags a shot,
+  // it sends that shot here. The server then runs a FACE-FIX pass: the weak
+  // shot goes in as IMAGE 1, the references follow, and the prompt says
+  // "replace the face with this person's, change nothing else" — far more
+  // reliable than regenerating from scratch. Uses IDENTITY_REDO_MODEL.
+  fixFaceUrl?: string;
   // Upload Cropped Outfit (2026-09-25). Blob URL of a customer-uploaded photo
   // of just a garment (top / blouse / blazer, no face). Only used when
   // attire === "upload". Attached as the LAST image sent to Gemini.
@@ -351,6 +357,8 @@ type InlineImage = { mimeType: string; data: string };
 // 3.1 toward generic stock-photo output (see Ken's bad-render incident
 // 2026-05-19).
 const BLOCK_1_IDENTITY = `Generate a professional headshot of the person shown in the reference photos.
+
+PRIMARY IDENTITY REFERENCE: The FIRST attached image is the primary identity reference — it is the sharpest, most frontal photo of the subject. Build the face from IMAGE 1 first: face shape, eye shape and spacing, nose, lips, jawline, skin tone, and every natural asymmetry. The remaining reference images reinforce that same identity from other angles and expressions; use them to confirm details, never to average the face into someone new.
 
 REFERENCE PHOTOS ARE FOR IDENTITY ONLY: The reference photos give you exactly one thing — the subject's face, hair, skin, and personal likeness. The generated output contains exactly one person (the subject), framed as a professional head-and-shoulders headshot, standing in front of the background described in the STYLE and BACKGROUND direction later in this prompt.
 
@@ -1028,6 +1036,19 @@ const GLAM_OVERRIDE_DEFAULT = `GLAM-TIER FINAL OVERRIDE: The expression above cr
 const IDENTITY_LOCK_HERO_DEFAULT = `HERO-SHOT LIKENESS LOCK (this is the FIRST image the customer sees, so likeness matters most here): Rebuild the face from the reference photos as THE SAME SPECIFIC PERSON — not a look-alike, not an idealized version. Match, to scale, the face width-to-height ratio, the spacing between the eyes, the eye shape, size, tilt and color, the eyebrow shape and thickness, the nose width, length and bridge, the lip shape and fullness, the jawline, the chin, the hairline, and every mole, freckle, and distinguishing mark that is present in the references (and invent NONE that are not). Preserve every asymmetry and so-called imperfection exactly — those ARE the identity. Do NOT beautify, slim, smooth away, symmetrize, or drift the features toward a generic-attractive or stock-professional face; that averaging is the single most common failure. A close friend or family member must recognize this exact person in under one second. Likeness overrides expression, pose, styling, and lighting.`;
 const IDENTITY_LOCK_ALL_DEFAULT = `LIKENESS LOCK: Rebuild the face from the reference photos as THE SAME SPECIFIC PERSON — not a look-alike, not an idealized version. Match, to scale, the face width-to-height ratio, the spacing between the eyes, the eye shape, size, tilt and color, the eyebrow shape and thickness, the nose width, length and bridge, the lip shape and fullness, the jawline, the chin, the hairline, and every mole, freckle, and distinguishing mark that is present in the references (and invent NONE that are not — do not add marks the references do not show). Preserve every asymmetry and so-called imperfection exactly — those ARE the identity. Do NOT beautify, slim, smooth away, symmetrize, or drift the features toward a generic-attractive or stock-professional face; that averaging is the single most common failure and is what makes a shot look like a different person. A close friend or family member must recognize this exact person in under one second. Likeness overrides expression, pose, styling, and lighting.`;
 const REFERENCE_PHOTO_RULE_DEFAULT = `REFERENCE PHOTO USAGE RULE: The uploaded reference photos are provided ONLY so you can learn the subject's facial likeness — face shape, features, hair, skin tone. You MUST NOT copy, sample, or draw inspiration from the reference photos' backgrounds, environments, colors, lighting, or scenes. The new photograph's background and lighting come ENTIRELY from the direction in the prompt above — ignore anything visible behind or around the subject in the reference photos.`;
+// Face-fix pass for identity redos (2026-10-02). IMAGE 1 = the generated
+// shot that didn't look enough like the customer; IMAGES 2+ = references.
+const IDENTITY_FIX_DEFAULT = `You are an image editor. You will receive:
+- IMAGE 1: a finished professional headshot whose FACE does not look enough like the real person.
+- IMAGES 2+: reference photos of the real person. IMAGE 2 is the primary identity reference; the rest reinforce it.
+
+Your output is IMAGE 1 with the face corrected to be unmistakably the real person from IMAGES 2+:
+- FACE: rebuild the face from the references — face shape and width, eye shape, spacing and color, brows, nose bridge and width, lips, jawline and chin, skin tone and texture, and every natural asymmetry. Do not beautify, slim, symmetrize, or age-shift the face. A friend must recognize them instantly.
+- HAIR: match the real person's hair color, texture, and hairline from the references, keeping the style and length seen in IMAGE 1 if they are consistent with the references.
+- KEEP FROM IMAGE 1 EXACTLY: outfit, pose, body angle, framing and crop, background, lighting direction and quality, expression type (smile vs closed mouth), and image size. Nothing else in the picture changes.
+
+The result must look like the same photograph as IMAGE 1, now showing the correct person. Output only the corrected image.`;
+
 const FINAL_IDENTITY_CHECK_DEFAULT = `FINAL IDENTITY CHECK (most important rule in this entire prompt): Above all else, the face in this output must look UNMISTAKABLY like the person in the reference photos — same face shape, same bone structure, same eye shape, spacing and color, same nose width and bridge, same mouth and lips, same jawline and chin, same hairline, same ethnicity, same distinguishing marks, same natural asymmetries. Before finalizing, compare your face to the reference faces feature by feature — eye spacing, nose width, lip shape, overall face width, jaw, chin, and any asymmetry — and correct any feature that has drifted toward a more generic, more symmetrical, or more conventionally attractive shape. The single most common failure is quietly averaging the face toward a good-looking stranger — do NOT do this. If the generated face wouldn't be recognized instantly by a friend or family member, you have failed this image. The style, lighting, and outfit directives above NEVER override identity. Do NOT default to a generic professional-headshot face. Do NOT blend toward stock-photo proportions. This is THIS SPECIFIC PERSON in a new setting, not a generic professional in their general age and ethnic range.`;
 const OUTPUT_CONSTRAINT_DEFAULT = `IMPORTANT OUTPUT CONSTRAINT: Return exactly ONE single photograph. Do NOT return a grid, contact sheet, collage, multi-panel image, side-by-side comparison, or any composition containing more than one headshot. One photo only.`;
 
@@ -1105,6 +1126,7 @@ export const PROMPT_DEFAULTS: Record<string, string> = {
   identity_lock_all: IDENTITY_LOCK_ALL_DEFAULT,
   reference_photo_rule: REFERENCE_PHOTO_RULE_DEFAULT,
   final_identity_check: FINAL_IDENTITY_CHECK_DEFAULT,
+  identity_fix: IDENTITY_FIX_DEFAULT,
   output_constraint: OUTPUT_CONSTRAINT_DEFAULT,
 };
 
@@ -1173,6 +1195,7 @@ export const PROMPT_SEGMENTS: PromptSegmentMeta[] = [
   { key: "identity_lock_hero", label: "Likeness lock — hero (slot 1)", group: "Identity", fires: {}, note: "Only the first slot." },
   { key: "identity_lock_all", label: "Likeness lock — other slots", group: "Identity", fires: {}, note: "Slots 2-6." },
   { key: "final_identity_check", label: "Final identity check", group: "Identity", fires: {} },
+  { key: "identity_fix", label: "Identity redo — face-fix pass", group: "Identity", fires: {}, note: "Replaces the whole prompt for automatic likeness redos. IMAGE 1 is the weak shot, IMAGE 2 the best reference." },
   { key: "reference_photo_rule", label: "Reference-photo usage rule", group: "Core", fires: {} },
   { key: "output_constraint", label: "Output constraint (one photo)", group: "Core", fires: {} },
 ];
@@ -1484,10 +1507,15 @@ async function fetchPhotoAsInlineData(
 // success latency.
 const PER_ATTEMPT_TIMEOUT_MS = 60_000;
 
+// Default generation model. Identity redos may use a stronger one (see
+// IDENTITY_REDO_MODEL env; falls back to this on error).
+const DEFAULT_IMAGE_MODEL = "gemini-3.1-flash-image-preview";
+
 async function generateOneHeadshot(
   ai: GoogleGenAI,
   prompt: string,
   photos: InlineImage[],
+  model: string = DEFAULT_IMAGE_MODEL,
 ): Promise<string> {
   const apiCall = ai.models.generateContent({
     // Model history on this project:
@@ -1513,7 +1541,7 @@ async function generateOneHeadshot(
     //    2026-04-20 → 2026-05-07. Hedges on Glam smoothing directives but
     //    is at least reliable. Glam smoothing problem still open — need
     //    a different solution approach.
-    model: "gemini-3.1-flash-image-preview",
+    model,
     contents: [
       {
         role: "user",
@@ -1637,11 +1665,12 @@ async function generateOneHeadshotWithRetry(
   //   Backoffs: 500ms, 1000ms, 2000ms (3 backoffs between 4 attempts).
   // Versus Vercel maxDuration: 300s. Safety margin: ~56s.
   maxAttempts = 4,
+  model: string = DEFAULT_IMAGE_MODEL,
 ): Promise<string> {
   let lastError: unknown;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      return await generateOneHeadshot(ai, prompt, photos);
+      return await generateOneHeadshot(ai, prompt, photos, model);
     } catch (error) {
       lastError = error;
       // Give up immediately if this isn't the kind of error that benefits from
@@ -2263,11 +2292,29 @@ export default async function handler(
     if (!similarImage && body.attire === "upload" && typeof body.outfitUrl === "string") {
       outfitImage = await fetchPhotoAsInlineData(body.outfitUrl);
     }
+    // Identity redo face-fix pass (2026-10-02): the weak shot goes FIRST.
+    let fixFaceImage: InlineImage | null = null;
+    if (
+      !similarImage &&
+      typeof body.fixFaceUrl === "string" &&
+      /^https:\/\/[^/]*\.public\.blob\.vercel-storage\.com\//.test(body.fixFaceUrl)
+    ) {
+      try {
+        fixFaceImage = await fetchPhotoAsInlineData(body.fixFaceUrl);
+      } catch (err) {
+        console.warn(
+          "[generate] fixFaceUrl fetch failed, falling back to a fresh redo:",
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+    }
     const imagesToSend: InlineImage[] = similarImage
       ? [similarImage, ...photos]
-      : outfitImage
-        ? [...photos, outfitImage]
-        : photos;
+      : fixFaceImage
+        ? [fixFaceImage, ...photos]
+        : outfitImage
+          ? [...photos, outfitImage]
+          : photos;
 
     // ---- Assemble the prompt from Kristi's v2 framework ----
     try {
@@ -2370,11 +2417,42 @@ Do NOT change the crop. Do NOT change the outfit. Do NOT change the background. 
           : variant0Prompt;
     }
 
+    if (fixFaceImage) {
+      prompt = seg("identity_fix", IDENTITY_FIX_DEFAULT);
+    }
+
     // ---- Generate ONE headshot. The frontend calls this six times in
     //      parallel so it can show real per-image progress to the user. The
     //      retry wrapper absorbs transient 503/429 hiccups from Google. ----
     const ai = new GoogleGenAI({ apiKey });
-    const image = await generateOneHeadshotWithRetry(ai, prompt, imagesToSend);
+    let image: string;
+    if (fixFaceImage) {
+      // Identity redos try the stronger model first (Nano Banana Pro by
+      // default — set IDENTITY_REDO_MODEL in Vercel to change, or to
+      // DEFAULT_IMAGE_MODEL to turn it off). Any failure falls back to the
+      // regular model so a redo never fails just because Pro is busy.
+      const redoModel = process.env.IDENTITY_REDO_MODEL || "gemini-3-pro-image-preview";
+      try {
+        image =
+          redoModel === DEFAULT_IMAGE_MODEL
+            ? await generateOneHeadshotWithRetry(ai, prompt, imagesToSend)
+            : await generateOneHeadshotWithRetry(ai, prompt, imagesToSend, 2, redoModel);
+        console.log(JSON.stringify({ type: "identity_redo", model: redoModel, ok: true }));
+      } catch (err) {
+        console.warn(
+          JSON.stringify({
+            type: "identity_redo",
+            model: redoModel,
+            ok: false,
+            fallback: DEFAULT_IMAGE_MODEL,
+            error: err instanceof Error ? err.message.slice(0, 200) : String(err),
+          }),
+        );
+        image = await generateOneHeadshotWithRetry(ai, prompt, imagesToSend);
+      }
+    } else {
+      image = await generateOneHeadshotWithRetry(ai, prompt, imagesToSend);
+    }
 
     // Never lose a generated shot to a dropped browser connection (Phase A,
     // 2026-08-17): save it server-side the instant it's made, keyed to the

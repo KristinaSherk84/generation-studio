@@ -43,6 +43,57 @@ const CROP_FACE_HEIGHTS = 2.3;
 const HEADROOM_FACE_HEIGHTS = 0.55;
 const MAX_OUTPUT_SIDE = 1600;
 
+/**
+ * Reference-quality score 0–100 (2026-10-02, likeness work). Higher = a
+ * better identity reference for Gemini. Blends: face size in pixels (more
+ * face detail), sharpness of the face region (Laplacian variance), face
+ * exposure (not too dark / blown out), and how frontal the face is (the
+ * detector's box gets narrow on profiles). The app sends the top 6.
+ */
+async function scoreReference(
+  bytes: Buffer,
+  face: { x: number; y: number; width: number; height: number },
+  W: number,
+  H: number,
+): Promise<number> {
+  try {
+    const left = Math.max(0, Math.round(face.x));
+    const top = Math.max(0, Math.round(face.y));
+    const width = Math.max(8, Math.min(Math.round(face.width), W - left));
+    const height = Math.max(8, Math.min(Math.round(face.height), H - top));
+    const grey = sharp(bytes).rotate().extract({ left, top, width, height }).greyscale();
+    const [stats, lap] = await Promise.all([
+      grey.clone().stats(),
+      grey
+        .clone()
+        .resize(256, 256, { fit: "inside", withoutEnlargement: true })
+        .convolve({ width: 3, height: 3, kernel: [0, 1, 0, 1, -4, 1, 0, 1, 0] })
+        .raw()
+        .toBuffer({ resolveWithObject: true }),
+    ]);
+    // Sharpness: variance of the Laplacian response.
+    const px = lap.data;
+    let sum = 0;
+    for (let i = 0; i < px.length; i++) sum += px[i];
+    const mean = sum / px.length;
+    let v = 0;
+    for (let i = 0; i < px.length; i++) v += (px[i] - mean) ** 2;
+    const lapVar = v / px.length; // ~0 (blurry) … 2000+ (very sharp)
+    const sharp01 = Math.min(1, Math.log1p(lapVar) / Math.log1p(1500));
+    // Face size: 250px face ≈ full marks.
+    const size01 = Math.min(1, face.height / 250);
+    // Exposure: face mean brightness, best around 90–170 of 255.
+    const m = stats.channels[0]?.mean ?? 128;
+    const expo01 = m < 90 ? m / 90 : m > 170 ? Math.max(0, 1 - (m - 170) / 85) : 1;
+    // Frontal-ness: frontal boxes are ~0.72–0.9 wide-to-tall; profiles narrower.
+    const ar = face.width / Math.max(1, face.height);
+    const front01 = ar >= 0.72 ? 1 : Math.max(0, (ar - 0.45) / 0.27);
+    return Math.round(100 * (0.35 * sharp01 + 0.3 * size01 + 0.15 * expo01 + 0.2 * front01));
+  } catch {
+    return 50;
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
@@ -56,8 +107,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.status(400).json({ url, cropped: false, reason: "bad_url" });
     return;
   }
-  const keep = (reason: string, faces?: number) =>
-    res.status(200).json({ url, cropped: false, reason, faces });
+  const keep = (reason: string, faces?: number, quality?: number) =>
+    res.status(200).json({ url, cropped: false, reason, faces, quality });
 
   try {
     const r = await fetch(url);
@@ -66,7 +117,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const det = await detectFaceBoxes(bytes);
     if (!det) return keep("detect_failed");
-    if (det.boxes.length === 0) return keep("no_face", 0);
+    if (det.boxes.length === 0) return keep("no_face", 0, 5);
 
     const face = det.boxes[0]; // largest face
     const { width: W, height: H } = det;
@@ -77,8 +128,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // the customer is. Leave the photo uncropped and tell the app, which
     // asks the customer to crop in on themselves.
     const people = det.boxes.filter((b) => b.height >= 0.4 * face.height).length;
-    if (people > 1) return keep("multiple_faces", people);
-    if (face.height >= ALREADY_TIGHT * H) return keep("already_tight", det.boxes.length);
+    if (people > 1) return keep("multiple_faces", people, 10);
+    const quality = await scoreReference(bytes, face, W, H);
+    if (face.height >= ALREADY_TIGHT * H) return keep("already_tight", det.boxes.length, quality);
 
     // Head-and-shoulders box around the face, 4:5 portrait.
     let cropH = face.height * CROP_FACE_HEIGHTS;
@@ -119,7 +171,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       contentType: "image/jpeg",
       addRandomSuffix: true,
     });
-    res.status(200).json({ url: blob.url, cropped: true, faces: det.boxes.length });
+    res.status(200).json({ url: blob.url, cropped: true, faces: det.boxes.length, quality });
   } catch (err) {
     console.warn(
       "[crop-reference] failed:",

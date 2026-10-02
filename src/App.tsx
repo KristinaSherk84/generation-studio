@@ -86,6 +86,10 @@ export type UploadedPhoto = {
   // guess which one is the customer — the thumbnail asks them to crop in
   // on themselves and re-upload. (2026-09-23)
   multiFace?: boolean;
+  // Reference-quality score 0–100 from /api/crop-reference (2026-10-02):
+  // face size + sharpness + exposure + frontal-ness. Used to put the best
+  // photo first (Gemini's primary identity reference) and cap at 6.
+  quality?: number;
   // Fingerprint of the file's exact contents (2026-09-24). Used to skip
   // the same photo being added twice, even under a different file name.
   contentHash?: string;
@@ -8654,7 +8658,13 @@ const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) 
             body: JSON.stringify({ url: result.url }),
           })
             .then((r) => (r.ok ? r.json() : null))
-            .then((d: { url?: string; cropped?: boolean; reason?: string } | null) => {
+            .then((d: { url?: string; cropped?: boolean; reason?: string; quality?: number } | null) => {
+              if (typeof d?.quality === "number") {
+                const q = d.quality;
+                setPhotos((prev) =>
+                  prev.map((p) => (p.id === placeholder.id ? { ...p, quality: q } : p)),
+                );
+              }
               if (d?.reason === "multiple_faces") {
                 setPhotos((prev) =>
                   prev.map((p) =>
@@ -22930,9 +22940,18 @@ export default function App() {
     const usablePhotos = photos.filter(
       (p) => p.status === "done" && p.blobUrl,
     );
-    // Use the face-cropped copy when it's ready, else the original.
-    // (2026-09-23 — likeness boost; see /api/crop-reference.)
-    let photoUrls = usablePhotos.map(
+    // Best references first, capped at 6 (2026-10-02 likeness work):
+    // Gemini's fidelity is best with ≤6 reference images, and the FIRST
+    // image is named as the primary identity anchor in the prompt, so sort
+    // by the server's quality score (unscored photos sort last, original
+    // order otherwise). Use the face-cropped copy when it's ready.
+    const MAX_REFS_TO_SEND = 6;
+    const ranked = usablePhotos
+      .map((p, i) => ({ p, i }))
+      .sort((a, b) => (b.p.quality ?? -1) - (a.p.quality ?? -1) || a.i - b.i)
+      .map((x) => x.p)
+      .slice(0, MAX_REFS_TO_SEND);
+    let photoUrls = ranked.map(
       (p) => p.croppedUrl ?? (p.blobUrl as string),
     );
     // Wide-angle flag: true if ANY usable reference photo was detected as
@@ -23634,6 +23653,16 @@ export default function App() {
     try {
       const oldDesc = slotDescriptorsRef.current[index];
       const oldDist = oldDesc ? euclideanDistance(ref, oldDesc) : Infinity;
+      // Face-fix pass (2026-10-02): send the weak shot itself so the server
+      // can correct just the face and keep pose/outfit/background. Read the
+      // latest grid value (not a stale closure) via a no-op state update.
+      let weakUrl: string | undefined;
+      setGeneratedImages((prev) => {
+        const u = prev[index];
+        if (typeof u === "string" && /^https?:\/\//.test(u)) weakUrl = u;
+        return prev;
+      });
+      await new Promise((r) => setTimeout(r, 0));
       const response = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -23649,6 +23678,7 @@ export default function App() {
           scrubColor: selections.scrubColor,
           poloColor: selections.poloColor,
           outfitUrl: selections.outfitUrl,
+          fixFaceUrl: weakUrl,
           wantIdentityScore: true,
           gender: genderRef.current,
           ...readUnlockRequestFields(),
