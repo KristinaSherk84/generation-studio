@@ -10159,6 +10159,26 @@ const StyleScreen = ({
         </div>
       </div>
 
+      {/* Hot text under the Background cards → opens the example-backgrounds
+          popup. Moved ABOVE the variety-pack pill 2026-10-02 per Kristi. */}
+      <button
+        type="button"
+        onClick={() => setShowBgExamples(true)}
+        style={{
+          background: "none",
+          border: "none",
+          padding: 0,
+          margin: "10px 0 0",
+          color: BRAND.gold,
+          fontSize: 13,
+          fontWeight: 600,
+          cursor: "pointer",
+          textDecoration: "underline",
+          fontFamily: SANS_STACK,
+        }}
+      >
+        See example backgrounds →
+      </button>
       {/* Variety-pack pill (2026-09-21). Lives directly below the STYLE
           row, at the same tier as picking an individual style. On by
           default. Kept small + inline (Kristi feedback 2026-09-21) so
@@ -10219,25 +10239,6 @@ const StyleScreen = ({
         </button>
       </div>
 
-      {/* Hot text under the Background cards → opens the example-backgrounds popup */}
-      <button
-        type="button"
-        onClick={() => setShowBgExamples(true)}
-        style={{
-          background: "none",
-          border: "none",
-          padding: 0,
-          margin: "12px 0 0",
-          color: BRAND.gold,
-          fontSize: 13,
-          fontWeight: 600,
-          cursor: "pointer",
-          textDecoration: "underline",
-          fontFamily: SANS_STACK,
-        }}
-      >
-        See example backgrounds →
-      </button>
       <BackgroundExamplesModal
         open={showBgExamples}
         onClose={() => setShowBgExamples(false)}
