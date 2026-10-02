@@ -32,11 +32,15 @@ const BLOB_URL_RE = /^https:\/\/[^/]*\.public\.blob\.vercel-storage\.com\//;
 
 // Skip cropping when the face already fills this much of the photo's
 // height — it's already a close-up and cropping would only cost detail.
-const ALREADY_TIGHT = 0.33;
-// Output crop is head + neck + shoulders: this many face-heights tall,
-// 4:5 aspect, with this many face-heights of room above the face box.
-const CROP_FACE_HEIGHTS = 3.0;
-const HEADROOM_FACE_HEIGHTS = 0.8;
+// 2026-10-02 (Kristi: "crop in more"): raised from 0.33 so more photos
+// get tightened.
+const ALREADY_TIGHT = 0.42;
+// Output crop is head + neck + top of shoulders: this many face-heights
+// tall, 4:5 aspect, with this many face-heights of room above the face
+// box (face box ≈ brow to chin). 2026-10-02: tightened from 3.0 / 0.8 —
+// the face now fills ~43% of the crop height instead of ~33%.
+const CROP_FACE_HEIGHTS = 2.3;
+const HEADROOM_FACE_HEIGHTS = 0.55;
 const MAX_OUTPUT_SIDE = 1600;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
