@@ -23022,14 +23022,22 @@ export default function App() {
     // by the server's quality score (unscored photos sort last, original
     // order otherwise). Use the face-cropped copy when it's ready.
     const MAX_REFS_TO_SEND = 6;
+    // "Keep my 1st outfit" (2026-10-02 fix): the prompt copies the clothing
+    // from the FIRST reference photo, so that photo must stay first AND go
+    // uncropped (the face crop cuts the outfit off). Everything else is
+    // ranked + cropped as usual.
+    const keepOutfit = selections.attire === "keep";
+    const firstUpload = keepOutfit ? usablePhotos[0] : undefined;
     const ranked = usablePhotos
+      .filter((p) => p !== firstUpload)
       .map((p, i) => ({ p, i }))
       .sort((a, b) => (b.p.quality ?? -1) - (a.p.quality ?? -1) || a.i - b.i)
       .map((x) => x.p)
-      .slice(0, MAX_REFS_TO_SEND);
-    let photoUrls = ranked.map(
-      (p) => p.croppedUrl ?? (p.blobUrl as string),
-    );
+      .slice(0, firstUpload ? MAX_REFS_TO_SEND - 1 : MAX_REFS_TO_SEND);
+    let photoUrls = [
+      ...(firstUpload ? [firstUpload.blobUrl as string] : []),
+      ...ranked.map((p) => p.croppedUrl ?? (p.blobUrl as string)),
+    ];
     // Wide-angle flag: true if ANY usable reference photo was detected as
     // wide via EXIF. `null` (EXIF unreadable) and `false` (confirmed ≥40mm)
     // both count as "not wide" — the server will fall back to Block 1's
