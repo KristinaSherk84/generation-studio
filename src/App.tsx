@@ -22520,14 +22520,6 @@ export default function App() {
           scrubColor: lastSelections.scrubColor,
           poloColor: lastSelections.poloColor,
           outfitUrl: lastSelections.outfitUrl,
-          // Admin fix (2026-10-02): Kristi only presses this when the face
-          // is wrong, so run the face-fix pass on the existing shot (keeps
-          // pose/outfit/background, uses the Pro model) instead of a fresh
-          // generation. Customer redos stay fresh generations.
-          fixFaceUrl:
-            admin && typeof preRegenUrl === "string" && /^https?:\/\//.test(preRegenUrl)
-              ? preRegenUrl
-              : undefined,
           gender: lastGender,
           ...readUnlockRequestFields(),
         }),
@@ -23662,16 +23654,10 @@ export default function App() {
     try {
       const oldDesc = slotDescriptorsRef.current[index];
       const oldDist = oldDesc ? euclideanDistance(ref, oldDesc) : Infinity;
-      // Face-fix pass (2026-10-02): send the weak shot itself so the server
-      // can correct just the face and keep pose/outfit/background. Read the
-      // latest grid value (not a stale closure) via a no-op state update.
-      let weakUrl: string | undefined;
-      setGeneratedImages((prev) => {
-        const u = prev[index];
-        if (typeof u === "string" && /^https?:\/\//.test(u)) weakUrl = u;
-        return prev;
-      });
-      await new Promise((r) => setTimeout(r, 0));
+      // 2026-10-02: the "face-fix pass" (sending the weak shot back as the
+      // image to correct) was REMOVED the same day — it made each redo a
+      // copy of a copy (pose/eyes frozen, colour and skin degrading every
+      // round). Redos are fresh generations from the reference photos.
       const response = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -23687,7 +23673,6 @@ export default function App() {
           scrubColor: selections.scrubColor,
           poloColor: selections.poloColor,
           outfitUrl: selections.outfitUrl,
-          fixFaceUrl: weakUrl,
           wantIdentityScore: true,
           gender: genderRef.current,
           ...readUnlockRequestFields(),
