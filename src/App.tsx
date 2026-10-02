@@ -22519,6 +22519,14 @@ export default function App() {
           scrubColor: lastSelections.scrubColor,
           poloColor: lastSelections.poloColor,
           outfitUrl: lastSelections.outfitUrl,
+          // Admin fix (2026-10-02): Kristi only presses this when the face
+          // is wrong, so run the face-fix pass on the existing shot (keeps
+          // pose/outfit/background, uses the Pro model) instead of a fresh
+          // generation. Customer redos stay fresh generations.
+          fixFaceUrl:
+            admin && typeof preRegenUrl === "string" && /^https?:\/\//.test(preRegenUrl)
+              ? preRegenUrl
+              : undefined,
           gender: lastGender,
           ...readUnlockRequestFields(),
         }),
