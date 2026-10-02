@@ -11393,6 +11393,9 @@ type GridScreenProps = {
   // the icon direction: ↷ (forward) if in this set, ↶ (back) if not.
   revertedSlots: Set<number>;
   onRevertSlot: (index: number) => void;
+  // Admin delete (2026-10-02): remove a bad shot from the customer's link.
+  // Only rendered in admin fix mode.
+  onAdminDeleteSlot?: (index: number) => void;
   // Called when the user clicks "Check out" — passes the cart's URLs forward
   // to the retouch + checkout flow. Cart is URL-keyed, not index-keyed, so a
   // pick from a prior style/regen round is preserved even after Generate
@@ -11489,6 +11492,7 @@ const GridScreen = ({
   previousImages,
   revertedSlots,
   onRevertSlot,
+  onAdminDeleteSlot,
   onDeliver,
   onBack,
   onRegenerateSlot,
@@ -13240,6 +13244,41 @@ const GridScreen = ({
                     </button>
                   );
                 })()
+              )}
+              {/* Admin delete (2026-10-02, Kristi): trash button, bottom-centre
+                  of the tile, only in admin fix mode. Removes this shot from
+                  the customer's saved link everywhere it appears. */}
+              {adminFixMode && src && onAdminDeleteSlot && !regenerating && !perfecting && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAdminDeleteSlot(i);
+                  }}
+                  title="Admin: delete this shot from the customer's link"
+                  aria-label="Admin: delete this shot"
+                  style={{
+                    position: "absolute",
+                    bottom: 10,
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                    background: "rgba(192, 57, 43, 0.92)",
+                    color: "#FFF",
+                    border: "none",
+                    borderRadius: "50%",
+                    width: 32,
+                    height: 32,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: "pointer",
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+                    padding: 0,
+                    zIndex: 3,
+                  }}
+                >
+                  <Trash2 size={15} />
+                </button>
               )}
               {/* Revert / redo toggle button — top-LEFT corner. Shows only
                   when this slot has an OTHER version stashed (from a prior
@@ -24269,6 +24308,56 @@ export default function App() {
           images={generatedImages}
           previousImages={previousImages}
           revertedSlots={revertedSlots}
+          onAdminDeleteSlot={
+            adminFixMode
+              ? (index) => {
+                  const url = generatedImages[index];
+                  if (!url || !/^https?:\/\//.test(url)) return;
+                  if (!window.confirm(`Delete shot ${index + 1} from this customer's link? This can't be undone.`)) return;
+                  let pw = "";
+                  try {
+                    pw = window.localStorage.getItem("gen_admin_fix_pw") ?? "";
+                  } catch {
+                    /* ignore */
+                  }
+                  const tok = resumeTokenRef.current;
+                  // Remove on screen first: fall back to the previous version
+                  // if there is one, else leave the slot empty.
+                  setGeneratedImages((prev) => {
+                    const next = [...prev];
+                    const stashed = previousImages[index];
+                    next[index] = stashed && stashed !== url ? stashed : "";
+                    return next;
+                  });
+                  setPreviousImages((pp) => {
+                    const nn = [...pp];
+                    nn[index] = null;
+                    return nn;
+                  });
+                  setAllGeneratedUrls((prev) => prev.filter((u) => u !== url));
+                  setRevertedSlots((s) => {
+                    if (!s.has(index)) return s;
+                    const n = new Set(s);
+                    n.delete(index);
+                    return n;
+                  });
+                  if (tok && pw) {
+                    void fetch("/api/update-session", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ token: tok, index, action: "remove", url, pw }),
+                    })
+                      .then((r) => r.json())
+                      .then((d: { ok?: boolean; reason?: string }) => {
+                        if (!d?.ok) setRegenError(`Admin delete didn't save (${d?.reason ?? "unknown"}).`);
+                      })
+                      .catch(() => setRegenError("Admin delete didn't save — network error."));
+                  } else {
+                    setRegenError("Admin delete only works from a customer's resume link in admin fix mode.");
+                  }
+                }
+              : undefined
+          }
           onRevertSlot={(index) => {
             // SWAP current ↔ previous for this slot (no destruction), so the
             // customer can toggle back-and-forth between the two versions.

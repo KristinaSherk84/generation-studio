@@ -300,6 +300,66 @@ export async function revertSessionSlot(
 }
 
 /**
+ * Admin delete (2026-10-02, Kristi). Remove ONE shot from a saved session
+ * everywhere it appears: the main grid (swapping in the slot's previous
+ * version if there is one, else leaving the slot empty), the undo stash,
+ * wild cards, versions, and the all-shots history. The file itself stays in
+ * Blob storage — this only takes it off the customer's link.
+ */
+export async function removeSessionUrl(
+  token: string,
+  url: string,
+): Promise<{ ok: boolean; reason?: string; removedFrom?: string[] }> {
+  if (!token || !/^[A-Za-z0-9]{16,48}$/.test(token))
+    return { ok: false, reason: "bad_token" };
+  if (typeof url !== "string" || !/^https?:\/\//.test(url))
+    return { ok: false, reason: "bad_url" };
+  let rec: SavedSession | null;
+  try {
+    rec = (await redis.get<SavedSession>(key(token))) ?? null;
+  } catch {
+    return { ok: false, reason: "read_error" };
+  }
+  if (!rec) return { ok: false, reason: "no_session" };
+  const removedFrom: string[] = [];
+  const prev = Array.isArray(rec.previousUrls) ? [...rec.previousUrls] : [];
+  const grid = Array.isArray(rec.generatedUrls) ? [...rec.generatedUrls] : [];
+  for (let i = 0; i < grid.length; i++) {
+    if (grid[i] === url) {
+      const stashed = prev[i];
+      grid[i] = stashed && stashed !== url ? stashed : "";
+      if (prev[i] !== undefined) prev[i] = null;
+      removedFrom.push("grid");
+    }
+  }
+  for (let i = 0; i < prev.length; i++) {
+    if (prev[i] === url) {
+      prev[i] = null;
+      removedFrom.push("undo");
+    }
+  }
+  rec.generatedUrls = grid;
+  rec.previousUrls = prev;
+  if (Array.isArray(rec.wildCards)) {
+    const before = rec.wildCards.length;
+    rec.wildCards = rec.wildCards.filter((w) => w.url !== url);
+    if (rec.wildCards.length !== before) removedFrom.push("wildcards");
+  }
+  if (Array.isArray(rec.versionShots)) {
+    const before = rec.versionShots.length;
+    rec.versionShots = rec.versionShots.filter((u) => u !== url);
+    if (rec.versionShots.length !== before) removedFrom.push("versions");
+  }
+  if (Array.isArray(rec.allGeneratedUrls)) {
+    const before = rec.allGeneratedUrls.length;
+    rec.allGeneratedUrls = rec.allGeneratedUrls.filter((u) => u !== url);
+    if (rec.allGeneratedUrls.length !== before) removedFrom.push("history");
+  }
+  await redis.set(key(token), rec, { ex: TTL_SECONDS });
+  return { ok: true, removedFrom };
+}
+
+/**
  * Attach the finished Wild Card previews to a saved session so the resume link
  * shows them. Patches the existing record (keeps the grid + refreshes TTL).
  * Returns false if the session is gone. (2026-08-10)

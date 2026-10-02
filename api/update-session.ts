@@ -14,7 +14,7 @@
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { updateSessionSlot, revertSessionSlot } from "./lib/sessionStore.js";
+import { updateSessionSlot, revertSessionSlot, removeSessionUrl } from "./lib/sessionStore.js";
 
 export const maxDuration = 10;
 
@@ -38,6 +38,28 @@ export default async function handler(
   const action = typeof body.action === "string" ? body.action : "patch";
   if (!token || !Number.isInteger(index)) {
     res.status(400).json({ ok: false, reason: "bad_input" });
+    return;
+  }
+
+  // Admin delete branch (2026-10-02). Requires the admin password so a
+  // customer can't remove shots from their own link by accident/intent.
+  if (action === "remove") {
+    const pw = typeof (body as { pw?: unknown }).pw === "string" ? (body as { pw: string }).pw : "";
+    if (!process.env.ADMIN_PASSWORD || pw !== process.env.ADMIN_PASSWORD) {
+      res.status(401).json({ ok: false, reason: "unauthorized" });
+      return;
+    }
+    const removeUrl = typeof body.url === "string" ? body.url : "";
+    try {
+      const result = await removeSessionUrl(token, removeUrl);
+      res.status(200).json(result);
+    } catch (err) {
+      console.warn(
+        "[update-session] remove failed:",
+        err instanceof Error ? err.message : String(err),
+      );
+      res.status(200).json({ ok: false, reason: "store_error" });
+    }
     return;
   }
 
