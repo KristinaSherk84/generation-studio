@@ -2610,14 +2610,15 @@ const LandingV2 = ({
                 >
                   Specialty
                 </div>
-                <button
-                  type="button"
+                <a href="/healthcare"
                   role="menuitem"
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.preventDefault();
                     setMobileMenuOpen(false);
                     onNavigateHealthcare();
                   }}
                   style={{
+                textDecoration: "none",
                     display: "block",
                     width: "100%",
                     textAlign: "left",
@@ -2632,7 +2633,7 @@ const LandingV2 = ({
                   }}
                 >
                   Healthcare
-                </button>
+                </a>
                 <button
                   type="button"
                   role="menuitem"
@@ -2678,14 +2679,15 @@ const LandingV2 = ({
                     margin: "6px 6px",
                   }}
                 />
-                <button
-                  type="button"
+                <a href="/teams"
                   role="menuitem"
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.preventDefault();
                     setMobileMenuOpen(false);
                     onNavigateTeams();
                   }}
                   style={{
+                textDecoration: "none",
                     display: "block",
                     width: "100%",
                     textAlign: "left",
@@ -2700,15 +2702,16 @@ const LandingV2 = ({
                   }}
                 >
                   Teams
-                </button>
-                <button
-                  type="button"
+                </a>
+                <a href="/how-it-works"
                   role="menuitem"
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.preventDefault();
                     setMobileMenuOpen(false);
                     onNavigateHowItWorks();
                   }}
                   style={{
+                textDecoration: "none",
                     display: "block",
                     width: "100%",
                     textAlign: "left",
@@ -2723,15 +2726,16 @@ const LandingV2 = ({
                   }}
                 >
                   How it works
-                </button>
-                <button
-                  type="button"
+                </a>
+                <a href="/faq"
                   role="menuitem"
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.preventDefault();
                     setMobileMenuOpen(false);
                     onNavigateFAQ();
                   }}
                   style={{
+                textDecoration: "none",
                     display: "block",
                     width: "100%",
                     textAlign: "left",
@@ -2746,15 +2750,16 @@ const LandingV2 = ({
                   }}
                 >
                   FAQ
-                </button>
-                <button
-                  type="button"
+                </a>
+                <a href="/headshot-generator-gallery"
                   role="menuitem"
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.preventDefault();
                     setMobileMenuOpen(false);
                     onShowGallery();
                   }}
                   style={{
+                textDecoration: "none",
                     display: "block",
                     width: "100%",
                     textAlign: "left",
@@ -2769,7 +2774,7 @@ const LandingV2 = ({
                   }}
                 >
                   Examples
-                </button>
+                </a>
               </div>
             )}
           </div>
@@ -2824,10 +2829,10 @@ const LandingV2 = ({
                     zIndex: 50,
                   }}
                 >
-                  <button
-                    type="button"
+                  <a href="/healthcare"
                     role="menuitem"
-                    onClick={() => {
+                    onClick={(e) => {
+                    e.preventDefault();
                       setSpecialtyOpen(false);
                       onNavigateHealthcare();
                     }}
@@ -2838,6 +2843,7 @@ const LandingV2 = ({
                       e.currentTarget.style.background = "transparent";
                     }}
                     style={{
+                textDecoration: "none",
                       display: "block",
                       width: "100%",
                       textAlign: "left",
@@ -2853,7 +2859,7 @@ const LandingV2 = ({
                     }}
                   >
                     Healthcare
-                  </button>
+                  </a>
                   <button
                     type="button"
                     role="menuitem"
@@ -2894,9 +2900,10 @@ const LandingV2 = ({
                 </div>
               )}
             </div>
-            <button
-              onClick={onNavigateTeams}
+            <a href="/teams"
+              onClick={(e) => { e.preventDefault(); onNavigateTeams(); }}
               style={{
+                textDecoration: "none",
                 background: "none",
                 border: "none",
                 cursor: "pointer",
@@ -2909,10 +2916,11 @@ const LandingV2 = ({
               }}
             >
               Teams
-            </button>
-            <button
-              onClick={onNavigateHowItWorks}
+            </a>
+            <a href="/how-it-works"
+              onClick={(e) => { e.preventDefault(); onNavigateHowItWorks(); }}
               style={{
+                textDecoration: "none",
                 background: "none",
                 border: "none",
                 cursor: "pointer",
@@ -2925,10 +2933,11 @@ const LandingV2 = ({
               }}
             >
               How it works
-            </button>
-            <button
-              onClick={onShowGallery}
+            </a>
+            <a href="/headshot-generator-gallery"
+              onClick={(e) => { e.preventDefault(); onShowGallery(); }}
               style={{
+                textDecoration: "none",
                 background: "none",
                 border: "none",
                 cursor: "pointer",
@@ -2941,7 +2950,7 @@ const LandingV2 = ({
               }}
             >
               Examples
-            </button>
+            </a>
           </div>
         )}
       </nav>
@@ -3401,8 +3410,8 @@ const LandingV2 = ({
         >
           <img
             src="/marketing/gallery-teaser-composite.jpg"
-            alt="Six AI headshot transformations — view the full gallery"
-            loading="lazy"
+            alt="Six AI headshot before-and-after examples from GenerAItion Headshots — view the full gallery"
+            fetchPriority="high"
             decoding="async"
             style={{
               display: "block",
