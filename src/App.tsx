@@ -9675,11 +9675,12 @@ const StyleScreen = ({
   batchesUsed,
   maxBatches,
 }: StyleScreenProps) => {
-  // Default style: null now that the "variety pack" pill is selected by
-  // default (2026-09-21). A defaultStyle override (e.g. a /healthcare
-  // vertical arriving with defaultStyle="healthcare") still wins and
-  // implicitly turns variety-pack mode off in the effect below.
-  const [style, setStyle] = useState<string | null>(defaultStyle ?? null);
+  // Default style: EXECUTIVE again (2026-10-04, Kristi). The variety-pack
+  // default (2026-09-21) coincided with try-to-buy dropping from ~23% to
+  // ~15%, so it's back to a pre-selected style; the variety pack pill is
+  // still available as an opt-in. A defaultStyle override (e.g. /healthcare)
+  // still wins.
+  const [style, setStyle] = useState<string | null>(defaultStyle ?? "executive");
   // Paper/color (corporate) background default = the graduated dark-grey
   // spotlight swatch (id "dark"), per Kristi 2026-08-07.
   const [background, setBackground] = useState<string>("dark");
@@ -9691,7 +9692,9 @@ const StyleScreen = ({
   // they tap the pill again. Falls back to OFF when a defaultStyle prop
   // is supplied (e.g. a /healthcare vertical entry) so those visitors
   // arrive on a pre-selected specific style, not the variety pack.
-  const [surpriseMode, setSurpriseMode] = useState<boolean>(!defaultStyle);
+  // OFF by default since 2026-10-04 (see the style default note above); the
+  // customer opts in by tapping the variety pack pill.
+  const [surpriseMode, setSurpriseMode] = useState<boolean>(false);
   const [attire, setAttire] = useState<string | null>(defaultAttire ?? null);
   const [lighting, setLighting] = useState<string | null>(null);
   // "See example backgrounds" popup (opens from hot text under the Background picker)
