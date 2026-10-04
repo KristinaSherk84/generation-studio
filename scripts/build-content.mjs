@@ -22,7 +22,8 @@ const CONTENT = path.join(ROOT, "content");
 const DIST = path.join(ROOT, "dist");
 const SITE = "https://generationheadshots.com";
 const SITE_NAME = "GenerAItion Headshots";
-const INCLUDE_DRAFTS = process.env.INCLUDE_DRAFTS === "1";
+// Drafts show in the local preview but never on Vercel (production).
+const INCLUDE_DRAFTS = process.env.INCLUDE_DRAFTS === "1" || process.env.VERCEL !== "1";
 
 if (!fs.existsSync(DIST)) {
   console.error("dist/ not found — run `vite build` first.");
@@ -202,7 +203,11 @@ const AUTHOR = `<aside class="author">
   <div class="who"><b>Kristina Sherk</b>Professional headshot photographer in Washington, DC for 20 years. 400+ five-star Google reviews. Built GenerAItion Headshots so the AI version actually looks like you. <a href="https://www.kristinasherk.com/" target="_blank" rel="noopener">KristinaSherk.com</a></div>
 </aside>`;
 
-const ORG = { "@type": "Organization", "@id": `${SITE}/#organization`, "name": SITE_NAME, "url": SITE + "/", "logo": `${SITE}/logo.png` };
+// Same Organization block as every app page (written by scripts/prerender.mjs from src/seo.ts).
+const orgFile = path.join(DIST, "_org.json");
+const ORG = fs.existsSync(orgFile)
+  ? JSON.parse(fs.readFileSync(orgFile, "utf8"))
+  : { "@type": "Organization", "@id": `${SITE}/#organization`, "name": SITE_NAME, "url": SITE + "/", "logo": `${SITE}/logo.png` };
 const PERSON = { "@type": "Person", "name": "Kristina Sherk", "url": "https://www.kristinasherk.com/", "jobTitle": "Professional Headshot Photographer" };
 
 function writeFile(rel, html) {
@@ -268,7 +273,12 @@ if (posts.length) {
 // ---------- standalone pages ----------
 for (const p of readDir("pages")) {
   const url = `${SITE}/${p.slug}/`;
-  const jsonLd = { "@context": "https://schema.org", "@type": "WebPage", "@id": url, "name": p.meta.title, "description": p.meta.description, "url": url, "isPartOf": { "@type": "WebSite", "name": SITE_NAME, "url": SITE + "/" }, "author": PERSON, "dateModified": p.meta.updated || p.meta.date };
+  const jsonLd = { "@context": "https://schema.org", "@graph": [
+    ORG,
+    { "@type": "WebPage", "@id": url, "name": p.meta.title, "description": p.meta.description, "url": url, "isPartOf": { "@type": "WebSite", "name": SITE_NAME, "url": SITE + "/" }, "about": { "@id": `${SITE}/#organization` }, "author": PERSON, "dateModified": p.meta.updated || p.meta.date,
+      "breadcrumb": { "@type": "BreadcrumbList", "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Home", "item": SITE + "/" },
+        { "@type": "ListItem", "position": 2, "name": p.meta.title, "item": url } ] } } ] };
   const body = `<main class="wrap">
   <header class="hero">${p.meta.eyebrow ? `<p class="eyebrow">${esc(p.meta.eyebrow)}</p>` : ""}<h1>${esc(p.meta.title)}</h1>${p.meta.description ? `<p class="lede">${esc(p.meta.description)}</p>` : ""}
     <p style="margin:26px 0 0"><a class="pill lg" href="/">${esc(p.meta.cta || "Generate my free headshots")}</a></p>
@@ -282,9 +292,13 @@ for (const p of readDir("pages")) {
 }
 
 // ---------- sitemap: app routes + every content page ----------
-const APP_ROUTES = ["/", "/about", "/how-it-works", "/headshot-generator-gallery", "/faq", "/healthcare", "/teams"];
+// App routes come from the prerender step (dist/_routes.json, includes every
+// /faq/<slug> page); fall back to the known list if it hasn't run.
+const FALLBACK_ROUTES = ["/", "/about", "/how-it-works", "/headshot-generator-gallery", "/faq", "/healthcare", "/teams"];
+const routesFile = path.join(DIST, "_routes.json");
+const APP_ROUTES = fs.existsSync(routesFile) ? JSON.parse(fs.readFileSync(routesFile, "utf8")).map((r) => r.path) : FALLBACK_ROUTES;
 const today = new Date().toISOString().slice(0, 10);
-const all = [...APP_ROUTES.map((r) => ({ loc: SITE + r, lastmod: today })), ...urls];
+const all = [...APP_ROUTES.map((r) => ({ loc: SITE + (r === "/" ? "/" : r), lastmod: today })), ...urls];
 const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
   all.map((u) => `  <url><loc>${u.loc}</loc>${u.lastmod ? `<lastmod>${u.lastmod}</lastmod>` : ""}</url>`).join("\n") + `\n</urlset>\n`;
 fs.writeFileSync(path.join(DIST, "sitemap.xml"), xml);

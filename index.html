@@ -38,33 +38,66 @@
       "@context": "https://schema.org",
       "@graph": [
         {
-          "@type": ["Organization", "OnlineBusiness"],
+          "@type": [
+            "Organization",
+            "OnlineBusiness"
+          ],
           "@id": "https://generationheadshots.com/#organization",
           "name": "GenerAItion Headshots",
+          "legalName": "GenerAItion Headshots",
           "alternateName": [
             "Generation Headshots",
             "GenerationHeadshots",
             "Generaition Headshots",
-            "Gen AI Headshots"
+            "Gen AI Headshots",
+            "GenerAItion"
           ],
-          "areaServed": "Worldwide",
           "url": "https://generationheadshots.com/",
-          "logo": "https://generationheadshots.com/logo.png",
+          "logo": {
+            "@type": "ImageObject",
+            "url": "https://generationheadshots.com/logo.png"
+          },
+          "image": "https://generationheadshots.com/og-image.jpg",
+          "description": "AI headshot generator built by a professional headshot photographer with 20 years of experience. Upload a few selfies, get 6 realistic headshots in about a minute, and only pay for the ones that look like you.",
+          "slogan": "AI headshots made by a real photographer. Only pay for what looks like you.",
+          "foundingDate": "2026-04",
           "founder": {
             "@type": "Person",
+            "@id": "https://generationheadshots.com/#kristina-sherk",
             "name": "Kristina Sherk",
             "jobTitle": "Professional Headshot Photographer",
+            "description": "Washington, DC headshot photographer for 20 years, retouching educator, and the photographer behind GenerAItion Headshots.",
             "url": "https://www.kristinasherk.com/",
             "sameAs": [
               "https://www.linkedin.com/in/kristinasherk/",
-              "https://www.kristinasherk.com/"
+              "https://www.kristinasherk.com/",
+              "https://www.washingtondcheadshots.com/"
             ]
           },
           "sameAs": [
-            "https://www.kristinasherk.com/ai-headshots",
             "https://www.linkedin.com/company/generation-headshots/",
-            "https://www.facebook.com/profile.php?id=61595110405202"
-          ]
+            "https://www.facebook.com/profile.php?id=61595110405202",
+            "https://www.kristinasherk.com/ai-headshots"
+          ],
+          "contactPoint": {
+            "@type": "ContactPoint",
+            "contactType": "customer service",
+            "email": "kristi@kristinasherk.com",
+            "availableLanguage": "English"
+          },
+          "areaServed": "Worldwide",
+          "knowsAbout": [
+            "AI headshots",
+            "professional headshot photography",
+            "LinkedIn headshots",
+            "corporate headshots",
+            "portrait retouching"
+          ],
+          "priceRange": "$14.99-$17.99",
+          "brand": {
+            "@type": "Brand",
+            "name": "GenerAItion Headshots"
+          }
         },
         {
           "@type": "Product",

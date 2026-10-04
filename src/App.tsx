@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties, type MouseEvent, type 
 import { Upload, Check, X, ArrowLeft, RefreshCw, Loader2, Download, Maximize2, ChevronDown, User, Sparkles, CircleUser, ArrowDown, ArrowRight, Menu, Plus, ShoppingBag, Trash2, Lock, Unlock, Undo2, Redo2, Folder } from "lucide-react";
 import { upload } from "@vercel/blob/client";
 import exifr from "exifr";
+import { seoForPath, SITE } from "./seo";
 
 // GA4 / Google Ads conversion tracking helper (2026-06-11).
 // Fires once per Stripe payment_intent.id so refreshing the success page
@@ -6736,7 +6737,7 @@ const readWideAngleFromFile = async (file: File): Promise<boolean | null> => {
 // no punctuation), stable (never renamed once live — breaks external links
 // and Google indexing), and keyword-rich for SEO. Order-independent —
 // FAQDetailScreen looks up by slug, not index.
-const FAQ_QUESTIONS: { slug: string; q: string; a: string }[] = [
+export const FAQ_QUESTIONS: { slug: string; q: string; a: string }[] = [
   {
     slug: "how-generation-headshots-works",
     q: "How does Generation Headshots work?",
@@ -6755,7 +6756,7 @@ const FAQ_QUESTIONS: { slug: string; q: string; a: string }[] = [
   {
     slug: "how-much-does-it-cost",
     q: "How much does it cost?",
-    a: "It's $3.99 to start a session — that unlocks the AI and lets you generate 6 headshots in your chosen style. After you preview the results, you pay per headshot you want to keep: $14.99 for Basic (realistic version only) or $17.99 for the Glow Up Bundle (realistic + polished + glam — three retouching levels of the same photo). No subscriptions, no monthly fees, no surprise charges.",
+    a: "Your first 6 headshots are free to preview. Keep the ones you love for $14.99 each (Realistic) or $17.99 (Glow Up Bundle: realistic, polished and glam versions of the same photo). Want more rounds after the free 6? $3.99 unlocks them. No subscriptions, no monthly fees.",
   },
   {
     slug: "how-long-does-it-take",
@@ -19957,8 +19958,37 @@ const AllShotsGallery = ({
   );
 };
 
+const FAQ_DETAIL_RE = /^\/faq\/([a-z0-9-]+)\/?$/;
+
+// Maps a URL path to the screen that should render. Module-level so the
+// very first render already shows the right page (no landing-page flash) and
+// so the build-time prerender (src/entry-prerender.tsx) can pick a route.
+export function screenForPath(path: string): { screen: Screen; faqSlug?: string } | null {
+    if (path === "/healthcare" || path === "/healthcare/") return { screen: "healthcare" };
+    if (path === "/teams" || path === "/teams/") return { screen: "teams" };
+    if (path === "/headshot-generator-gallery" || path === "/headshot-generator-gallery/") return { screen: "gallery" };
+    if (path === "/how-it-works" || path === "/how-it-works/") return { screen: "how-it-works" };
+    if (path === "/about" || path === "/about/") return { screen: "about" };
+    const faqDetailMatch = path.match(FAQ_DETAIL_RE);
+    if (faqDetailMatch) return { screen: "faq-detail", faqSlug: faqDetailMatch[1] };
+    if (path === "/faq" || path === "/faq/") return { screen: "faq" };
+    if (path === "/admin" || path === "/admin/") return { screen: "admin" };
+    if (path === "/" || path === "") return { screen: "landing" };
+    return null;
+}
+
+// The path to render first: the prerender sets globalThis.__PRERENDER_PATH__;
+// in the browser it is the real URL.
+function initialRoute(): { screen: Screen; faqSlug?: string } {
+  const p = (globalThis as { __PRERENDER_PATH__?: string }).__PRERENDER_PATH__
+    ?? (typeof window !== "undefined" && window.location ? window.location.pathname : "/");
+  return screenForPath(p) ?? { screen: "landing" };
+}
+
+const screenForPathModule = screenForPath;
+
 export default function App() {
-  const [screen, setScreen] = useState<Screen>("landing");
+  const [screen, setScreen] = useState<Screen>(() => initialRoute().screen);
 
   // Scroll-to-top on every screen change (2026-09-21 per Kristi). Without
   // this, navigating from a screen the customer has scrolled DOWN (e.g.
@@ -20033,27 +20063,14 @@ export default function App() {
   // on /faq/{slug}, we set screen="faq-detail" AND stash the slug here so
   // FAQDetailScreen knows which question to render. Null on any other
   // screen. Populated on initial mount + updated by popstate.
-  const [activeFaqSlug, setActiveFaqSlug] = useState<string | null>(null);
+  const [activeFaqSlug, setActiveFaqSlug] = useState<string | null>(() => initialRoute().faqSlug ?? null);
 
   useEffect(() => {
     // FAQ slug regex: matches /faq/{lowercase-hyphens-only-slug}.
     // Non-matching paths (like /faq/invalid.CAPS or /faq/) fall through
     // to the "faq" screen (index page) rather than faq-detail.
-    const FAQ_DETAIL_RE = /^\/faq\/([a-z0-9-]+)\/?$/;
 
-    const screenForPath = (path: string): { screen: Screen; faqSlug?: string } | null => {
-      if (path === "/healthcare" || path === "/healthcare/") return { screen: "healthcare" };
-      if (path === "/teams" || path === "/teams/") return { screen: "teams" };
-      if (path === "/headshot-generator-gallery" || path === "/headshot-generator-gallery/") return { screen: "gallery" };
-      if (path === "/how-it-works" || path === "/how-it-works/") return { screen: "how-it-works" };
-      if (path === "/about" || path === "/about/") return { screen: "about" };
-      const faqDetailMatch = path.match(FAQ_DETAIL_RE);
-      if (faqDetailMatch) return { screen: "faq-detail", faqSlug: faqDetailMatch[1] };
-      if (path === "/faq" || path === "/faq/") return { screen: "faq" };
-      if (path === "/admin" || path === "/admin/") return { screen: "admin" };
-      if (path === "/" || path === "") return { screen: "landing" };
-      return null;
-    };
+    const screenForPath = screenForPathModule;
 
     const applyPath = (path: string) => {
       const result = screenForPath(path);
@@ -20091,6 +20108,24 @@ export default function App() {
   // after entry payment) — surfacing the warning is the preventive
   // half; the recovery half (localStorage unlock survival) is roadmap
   // item #19.
+  // Per-page title / description / canonical while navigating inside the app
+  // (the static HTML already has the right ones on first load — see src/seo.ts).
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const meta = seoForPath(window.location.pathname, FAQ_QUESTIONS);
+    if (!meta) return;
+    document.title = meta.title;
+    const setContent = (sel: string, value: string) => {
+      const el = document.querySelector(sel);
+      if (el) el.setAttribute("content", value);
+    };
+    setContent('meta[name="description"]', meta.description);
+    setContent('meta[property="og:title"]', meta.title);
+    setContent('meta[property="og:description"]', meta.description);
+    const canon = document.querySelector('link[rel="canonical"]');
+    if (canon) canon.setAttribute("href", SITE + (meta.path === "/" ? "/" : meta.path));
+  }, [screen, activeFaqSlug]);
+
   useEffect(() => {
     const isProtected =
       screen === "grid" || screen === "retouch" || screen === "checkout";
@@ -20632,7 +20667,10 @@ export default function App() {
   // the landing page to AFTER the customer's free 6-photo batch + 2 free
   // single-photo regens. entryFeeEnabled is fetched from /api/config on
   // mount; the fallback of `true` matches classic behavior if config fails.
-  const [entryFeeEnabled, setEntryFeeEnabled] = useState(true);
+  // Default false = the free-to-try flow that production runs today
+  // (ENTRY_FEE_ENABLED is "false" in Vercel). /api/config overrides on load.
+  // Matters for the prerendered HTML too: Google reads this first paint.
+  const [entryFeeEnabled, setEntryFeeEnabled] = useState(false);
   // Cap for free-tier single-photo regens before the paywall. 2 keeps max
   // free session cost at (6 + 2) × $0.101 ≈ $0.81 baseline, ≈$0.97 with
   // typical 20% retry multiplier.
@@ -23836,6 +23874,9 @@ export default function App() {
         screen !== "healthcare" &&
         screen !== "admin" &&
         screen !== "faq" &&
+        screen !== "faq-detail" &&
+        screen !== "teams" &&
+        screen !== "gallery" &&
         screen !== "about" &&
         screen !== "how-it-works" && (
           <Navbar

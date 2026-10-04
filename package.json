@@ -5,11 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build && node scripts/build-content.mjs",
+    "build": "tsc -b && vite build && vite build --ssr src/entry-prerender.tsx --outDir dist-ssr && node scripts/prerender.mjs && node scripts/build-content.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "postinstall": "node scripts/download-face-api-models.mjs",
-    "content": "node scripts/build-content.mjs"
+    "content": "node scripts/build-content.mjs",
+    "prerender": "vite build --ssr src/entry-prerender.tsx --outDir dist-ssr && node scripts/prerender.mjs && node scripts/build-content.mjs"
   },
   "dependencies": {
     "@google/genai": "^1.50.1",
