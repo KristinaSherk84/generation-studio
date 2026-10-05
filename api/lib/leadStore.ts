@@ -193,7 +193,11 @@ export async function getLeadCallCounts(
 // Written once (NX) from /api/save-session; later batches never overwrite it.
 // Stored as display labels (what the customer saw), not internal ids.
 export type LeadChoice = { background: string; outfit: string; at: string };
-const CHOICE_PREFIX = "leadchoice:";
+// "leadchoice2:" (2026-10-05): the first "leadchoice:" keys included guesses
+// filled in from saved sessions, which hold a person's LATEST batch, not their
+// first (wrong for Susan Caruana and Emily Olsen). v2 starts clean: only real
+// first-batch writes from save-session, plus Kristi's manual edits.
+const CHOICE_PREFIX = "leadchoice2:";
 const CHOICE_TTL_SEC = 60 * 60 * 24 * 400;
 
 // Labels mirror the STYLES / STUDIO_BGS / ATTIRE lists in src/App.tsx, shortened
@@ -263,6 +267,35 @@ export async function recordFirstLeadChoice(
   }
 }
 
+/** Choices offered in the leads-page edit dropdowns (same labels as above). */
+export const BACKGROUND_OPTIONS: string[] = [
+  ...["executive", "creative", "urban", "healthcare", "tech"].map(
+    (k) => STYLE_LABELS[k],
+  ),
+  "Variety pack",
+  ...Object.values(BG_LABELS).map((c) => `${STYLE_LABELS.corporate} · ${c}`),
+];
+export const OUTFIT_OPTIONS: string[] = Object.values(OUTFIT_LABELS);
+
+/** Kristi's manual edit from the leads page. Overwrites (unlike the NX first-
+ *  batch write). Empty value clears that field. */
+export async function setLeadChoiceField(
+  email: string,
+  field: "background" | "outfit",
+  value: string,
+): Promise<void> {
+  if (!looksLikeEmail(email)) return;
+  const key = CHOICE_PREFIX + email.trim().toLowerCase();
+  const existing = (await redis.get<LeadChoice>(key)) ?? null;
+  const next: LeadChoice = {
+    background: existing?.background ?? "",
+    outfit: existing?.outfit ?? "",
+    at: existing?.at ?? new Date().toISOString(),
+  };
+  next[field] = value.slice(0, 60);
+  await redis.set(key, next, { ex: CHOICE_TTL_SEC });
+}
+
 /** First choices for a set of emails (lowercased -> choice). Missing = absent. */
 export async function getLeadChoices(
   emails: string[],
@@ -282,30 +315,6 @@ export async function getLeadChoices(
     });
   } catch {
     /* display-only - blank columns on error */
-  }
-  return out;
-}
-
-/** Resume-token pointers for a set of emails (lowercased -> token). Used to
- *  fill in choices for recent leads from their still-saved sessions. */
-export async function getEmailResumeTokens(
-  emails: string[],
-): Promise<Record<string, string>> {
-  const out: Record<string, string> = {};
-  const uniq = Array.from(
-    new Set(emails.map((e) => e.trim().toLowerCase()).filter(Boolean)),
-  );
-  if (uniq.length === 0) return out;
-  try {
-    const vals = await redis.mget<(string | null)[]>(
-      ...uniq.map((e) => TOKEN_PTR_PREFIX + e),
-    );
-    uniq.forEach((e, i) => {
-      const v = vals[i];
-      if (typeof v === "string" && v) out[e] = v;
-    });
-  } catch {
-    /* ignore */
   }
   return out;
 }

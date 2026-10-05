@@ -35,12 +35,11 @@ import {
   listBlacklistedEmails,
   listUnsubscribedEmails,
   getLeadChoices,
-  getEmailResumeTokens,
-  choiceFromSelections,
-  recordFirstLeadChoice,
+  setLeadChoiceField,
+  BACKGROUND_OPTIONS,
+  OUTFIT_OPTIONS,
 } from "../lib/leadStore.js";
 import type { LeadChoice } from "../lib/leadStore.js";
-import { getSession } from "../lib/sessionStore.js";
 import {
   getDailyStats,
   setDailySpend,
@@ -79,6 +78,28 @@ const FOUND_VIA_OPTIONS = [
 // acquisition source when she learns the real one from Clarity (2026-08-04).
 // Preserves any existing custom value as its own selected option, and offers
 // a "Custom…" choice that prompts for free text client-side.
+// 1st background / 1st outfit cell (2026-10-05): shows the recorded value
+// (Paper/color color on its own line) with a small ✎ that swaps in a dropdown
+// so Kristi can correct or fill in a value by hand.
+function choiceCell(
+  email: string,
+  field: "background" | "outfit",
+  current: string,
+  options: string[],
+): string {
+  const shown = current ? esc(current).replace(" · ", "<br>") : "—";
+  const opts = [
+    `<option value=""${current === "" ? " selected" : ""}>— clear —</option>`,
+    ...options.map(
+      (o) => `<option${o === current ? " selected" : ""}>${esc(o)}</option>`,
+    ),
+    current !== "" && !options.includes(current)
+      ? `<option selected>${esc(current)}</option>`
+      : "",
+  ].join("");
+  return `<span class="chv">${shown}</span> <a href="#" class="chedit" title="Edit">✎</a><select class="chsel" data-email="${esc(email)}" data-field="${field}" style="display:none;font:inherit;font-size:12px;max-width:150px;">${opts}</select>`;
+}
+
 function foundViaSelect(email: string, current: string | null | undefined): string {
   const cur = current ?? "";
   const inList = FOUND_VIA_OPTIONS.includes(cur);
@@ -384,6 +405,23 @@ export default async function handler(
       }
       return;
     }
+    if (body.action === "setChoice" && typeof body.email === "string") {
+      const b = body as { field?: unknown; value?: unknown };
+      const field = b.field === "background" || b.field === "outfit" ? b.field : null;
+      const value = typeof b.value === "string" ? b.value : "";
+      if (!field) {
+        res.status(400).json({ ok: false, error: "Bad field" });
+        return;
+      }
+      try {
+        await setLeadChoiceField(body.email, field, value);
+        res.status(200).json({ ok: true });
+      } catch (err) {
+        console.error("[admin/leads] setChoice failed:", err);
+        res.status(500).json({ ok: false, error: "Failed to save" });
+      }
+      return;
+    }
     if (body.action === "setFoundVia" && typeof body.email === "string") {
       const fv = typeof body.foundVia === "string" ? body.foundVia : "";
       try {
@@ -529,36 +567,10 @@ export default async function handler(
     // predate this counter can't be backfilled).
     const callCounts = await getLeadCallCounts(leads.map((l) => l.email));
     // First background + outfit per person (2026-10-05). Recorded at their
-    // first saved batch. For recent leads that predate this column, fill it in
-    // once from their still-saved session (sessions live ~4 days), then store
-    // it so it sticks. Display-only and best-effort.
+    // first saved batch (save-session), or set by hand with the ✎ edit.
     const choices: Record<string, LeadChoice> = await getLeadChoices(
       leads.map((l) => l.email),
     );
-    try {
-      const recentCutoff = Date.now() - 5 * 24 * 3600 * 1000;
-      const missing = leads
-        .map((l) => l.email.trim().toLowerCase())
-        .filter((e, i) => {
-          const seen = Date.parse(leads[i].lastSeenAt ?? "");
-          return !choices[e] && !Number.isNaN(seen) && seen >= recentCutoff;
-        });
-      if (missing.length > 0) {
-        const tokens = await getEmailResumeTokens(missing);
-        await Promise.all(
-          Object.entries(tokens).map(async ([e, token]) => {
-            const sess = await getSession(token);
-            const c = sess ? choiceFromSelections(sess.selections) : null;
-            if (c) {
-              choices[e] = c;
-              await recordFirstLeadChoice(e, c);
-            }
-          }),
-        );
-      }
-    } catch {
-      /* columns stay blank on error */
-    }
     const choiceFor = (email: string) =>
       choices[email.trim().toLowerCase()] ?? null;
     const shownCalls = (l: {
@@ -770,8 +782,8 @@ export default async function handler(
             : `<button class="mkbtn" data-email="${esc(l.email)}">Mark purchased</button>`
         }</td>
         <td>${esc(formatDateET(l.purchasedAt))}</td>
-        <td class="choice">${esc(choiceFor(l.email)?.background ?? "").replace(" · ", "<br>")}</td>
-        <td class="choice">${esc(choiceFor(l.email)?.outfit ?? "")}</td>
+        <td class="choice">${choiceCell(l.email, "background", choiceFor(l.email)?.background ?? "", BACKGROUND_OPTIONS)}</td>
+        <td class="choice">${choiceCell(l.email, "outfit", choiceFor(l.email)?.outfit ?? "", OUTFIT_OPTIONS)}</td>
         <td>${foundViaSelect(l.email, l.foundVia)}</td>
       </tr>`,
       )
@@ -894,9 +906,12 @@ export default async function handler(
   table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:10px;overflow:hidden;font-size:13px;}
   th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap;}
   th{background:#F3EEE4;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--sub);position:sticky;top:0;}
-  td.email{font-weight:600;white-space:normal;max-width:250px;}
+  td.email{font-weight:600;white-space:normal;max-width:250px;min-width:190px;}
   td.email .emailtxt{word-break:break-all;}
   td.choice{white-space:nowrap;font-size:12px;line-height:1.3;}
+  td.choice .chv{display:inline-block;vertical-align:middle;}
+  td.choice .chedit{color:var(--sub);text-decoration:none;font-size:11px;margin-left:2px;vertical-align:middle;}
+  td.choice .chedit:hover{color:var(--forest);}
   td.num,th.num{text-align:right;}
   tr.aband{background:var(--amber);}
   tr.bought td.status{color:var(--forest);font-weight:600;}
@@ -1017,7 +1032,7 @@ export default async function handler(
         ? `<table>
       <thead><tr>
         <th>Email</th><th>First seen (ET)</th><th>Last seen (ET)</th>
-        <th class="num" title="Total AI image calls made for this person - the real cost driver. Includes the 6 they see plus automatic likeness redos, bonus shots, and any regenerations (~10-13 per round). Counting started 2026-08-14.">Calls</th><th class="num">Est. $</th><th class="num">Paid</th><th>Status</th><th>Purchased</th><th title="Background (style) they picked on their FIRST batch. Started 2026-10-05; recent leads filled in from saved sessions.">1st background</th><th title="Outfit they picked on their FIRST batch.">1st outfit</th><th>Found via</th>
+        <th class="num" title="Total AI image calls made for this person - the real cost driver. Includes the 6 they see plus automatic likeness redos, bonus shots, and any regenerations (~10-13 per round). Counting started 2026-08-14.">Calls</th><th class="num">Est. $</th><th class="num">Paid</th><th>Status</th><th>Purchased</th><th title="Background (style) they picked on their FIRST batch. Recorded from 2026-10-05 on. Click ✎ to fix or fill in by hand.">1st background</th><th title="Outfit they picked on their FIRST batch.">1st outfit</th><th>Found via</th>
       </tr></thead>
       <tbody>${rowsHtml}</tbody>
     </table>`
@@ -1042,6 +1057,34 @@ export default async function handler(
           else { b.disabled = false; b.textContent = 'Mark purchased'; alert('Failed: ' + ((d && d.error) || 'unknown')); }
         })
         .catch(function () { b.disabled = false; b.textContent = 'Mark purchased'; alert('Network error'); });
+    });
+  });
+  document.querySelectorAll('.chedit').forEach(function (a) {
+    a.addEventListener('click', function (e) {
+      e.preventDefault();
+      var td = a.parentNode;
+      td.querySelector('.chv').style.display = 'none';
+      a.style.display = 'none';
+      var sel = td.querySelector('.chsel');
+      sel.style.display = 'inline-block';
+      sel.focus();
+    });
+  });
+  document.querySelectorAll('.chsel').forEach(function (sel) {
+    var prev = sel.value;
+    sel.addEventListener('change', function () {
+      sel.disabled = true;
+      fetch('/api/admin/leads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'setChoice', pw: PW, email: sel.dataset.email, field: sel.dataset.field, value: sel.value }),
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d && d.ok) { location.reload(); }
+          else { sel.disabled = false; sel.value = prev; alert('Failed: ' + ((d && d.error) || 'unknown')); }
+        })
+        .catch(function () { sel.disabled = false; sel.value = prev; alert('Network error'); });
     });
   });
   document.querySelectorAll('.fvsel').forEach(function (sel) {
