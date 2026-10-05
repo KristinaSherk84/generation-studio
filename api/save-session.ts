@@ -23,6 +23,8 @@ import {
   setLeadResumeToken,
   setEmailResumeToken,
   getEmailResumeToken,
+  choiceFromSelections,
+  recordFirstLeadChoice,
 } from "./lib/leadStore.js";
 
 export const maxDuration = 10;
@@ -148,9 +150,13 @@ export default async function handler(
       // AND the atomic email->token pointer (the reliable source the win-back
       // reads - immune to the lead not existing yet or a clobbering race that
       // was silently losing the token and starving the expiry email). 2026-08-15
+      // Third write (2026-10-05): this person's FIRST background + outfit for
+      // the leads form. NX inside, so later batches never overwrite it.
+      const choice = choiceFromSelections(body.selections);
       await Promise.all([
         setLeadResumeToken(email, token),
         setEmailResumeToken(email, token),
+        choice ? recordFirstLeadChoice(email, choice) : Promise.resolve(),
       ]);
     } catch {
       /* don't fail the save if a lead write hiccups */

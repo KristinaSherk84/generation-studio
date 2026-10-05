@@ -34,7 +34,13 @@ import {
   listEmailsForFingerprint,
   listBlacklistedEmails,
   listUnsubscribedEmails,
+  getLeadChoices,
+  getEmailResumeTokens,
+  choiceFromSelections,
+  recordFirstLeadChoice,
 } from "../lib/leadStore.js";
+import type { LeadChoice } from "../lib/leadStore.js";
+import { getSession } from "../lib/sessionStore.js";
 import {
   getDailyStats,
   setDailySpend,
@@ -187,6 +193,19 @@ function formatET(iso: string | null): string {
     minute: "2-digit",
     second: "2-digit",
     hour12: false,
+  }).format(d);
+}
+
+/** Date only, US Eastern (e.g. 10/05/26). Empty for null/blank. (2026-10-05) */
+function formatDateET(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "2-digit",
+    month: "2-digit",
+    day: "2-digit",
   }).format(d);
 }
 
@@ -509,6 +528,39 @@ export default async function handler(
     // the live counter. Old leads read 0 until they generate again (calls that
     // predate this counter can't be backfilled).
     const callCounts = await getLeadCallCounts(leads.map((l) => l.email));
+    // First background + outfit per person (2026-10-05). Recorded at their
+    // first saved batch. For recent leads that predate this column, fill it in
+    // once from their still-saved session (sessions live ~4 days), then store
+    // it so it sticks. Display-only and best-effort.
+    const choices: Record<string, LeadChoice> = await getLeadChoices(
+      leads.map((l) => l.email),
+    );
+    try {
+      const recentCutoff = Date.now() - 5 * 24 * 3600 * 1000;
+      const missing = leads
+        .map((l) => l.email.trim().toLowerCase())
+        .filter((e, i) => {
+          const seen = Date.parse(leads[i].lastSeenAt ?? "");
+          return !choices[e] && !Number.isNaN(seen) && seen >= recentCutoff;
+        });
+      if (missing.length > 0) {
+        const tokens = await getEmailResumeTokens(missing);
+        await Promise.all(
+          Object.entries(tokens).map(async ([e, token]) => {
+            const sess = await getSession(token);
+            const c = sess ? choiceFromSelections(sess.selections) : null;
+            if (c) {
+              choices[e] = c;
+              await recordFirstLeadChoice(e, c);
+            }
+          }),
+        );
+      }
+    } catch {
+      /* columns stay blank on error */
+    }
+    const choiceFor = (email: string) =>
+      choices[email.trim().toLowerCase()] ?? null;
     const shownCalls = (l: {
       email: string;
       callCountOverride?: number | null;
@@ -573,6 +625,8 @@ export default async function handler(
         "purchasedAt (ET)",
         "followedUp",
         "foundVia",
+        "firstBackground",
+        "firstOutfit",
       ];
       const rows = leads.map((l) =>
         [
@@ -586,6 +640,8 @@ export default async function handler(
           formatET(l.purchasedAt),
           l.followedUp,
           l.foundVia ?? "",
+          choiceFor(l.email)?.background ?? "",
+          choiceFor(l.email)?.outfit ?? "",
         ]
           .map(csvCell)
           .join(","),
@@ -713,7 +769,9 @@ export default async function handler(
             ? "✅ Purchased"
             : `<button class="mkbtn" data-email="${esc(l.email)}">Mark purchased</button>`
         }</td>
-        <td>${esc(formatET(l.purchasedAt))}</td>
+        <td>${esc(formatDateET(l.purchasedAt))}</td>
+        <td class="choice">${esc(choiceFor(l.email)?.background ?? "").replace(" · ", "<br>")}</td>
+        <td class="choice">${esc(choiceFor(l.email)?.outfit ?? "")}</td>
         <td>${foundViaSelect(l.email, l.foundVia)}</td>
       </tr>`,
       )
@@ -836,7 +894,9 @@ export default async function handler(
   table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:10px;overflow:hidden;font-size:13px;}
   th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap;}
   th{background:#F3EEE4;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--sub);position:sticky;top:0;}
-  td.email{font-weight:600;white-space:normal;}
+  td.email{font-weight:600;white-space:normal;max-width:250px;}
+  td.email .emailtxt{word-break:break-all;}
+  td.choice{white-space:nowrap;font-size:12px;line-height:1.3;}
   td.num,th.num{text-align:right;}
   tr.aband{background:var(--amber);}
   tr.bought td.status{color:var(--forest);font-weight:600;}
@@ -957,7 +1017,7 @@ export default async function handler(
         ? `<table>
       <thead><tr>
         <th>Email</th><th>First seen (ET)</th><th>Last seen (ET)</th>
-        <th class="num" title="Total AI image calls made for this person - the real cost driver. Includes the 6 they see plus automatic likeness redos, bonus shots, and any regenerations (~10-13 per round). Counting started 2026-08-14.">Calls</th><th class="num">Est. $</th><th class="num">Paid</th><th>Status</th><th>Purchased (ET)</th><th>Found via</th>
+        <th class="num" title="Total AI image calls made for this person - the real cost driver. Includes the 6 they see plus automatic likeness redos, bonus shots, and any regenerations (~10-13 per round). Counting started 2026-08-14.">Calls</th><th class="num">Est. $</th><th class="num">Paid</th><th>Status</th><th>Purchased</th><th title="Background (style) they picked on their FIRST batch. Started 2026-10-05; recent leads filled in from saved sessions.">1st background</th><th title="Outfit they picked on their FIRST batch.">1st outfit</th><th>Found via</th>
       </tr></thead>
       <tbody>${rowsHtml}</tbody>
     </table>`

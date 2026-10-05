@@ -187,6 +187,129 @@ export async function getLeadCallCounts(
   return out;
 }
 
+// ---- First background + outfit choice per person (2026-10-05) ------------
+// Kristi wants the leads form to show which background and outfit each person
+// picked on their FIRST finished batch, so she can compare buy rates by choice.
+// Written once (NX) from /api/save-session; later batches never overwrite it.
+// Stored as display labels (what the customer saw), not internal ids.
+export type LeadChoice = { background: string; outfit: string; at: string };
+const CHOICE_PREFIX = "leadchoice:";
+const CHOICE_TTL_SEC = 60 * 60 * 24 * 400;
+
+// Labels mirror the STYLES / STUDIO_BGS / ATTIRE lists in src/App.tsx, shortened
+// for the leads table (Kristi 2026-10-05: "Exec", "Biz formal/casual").
+const STYLE_LABELS: Record<string, string> = {
+  corporate: "Paper/color",
+  creative: "Creative Natural",
+  executive: "Exec",
+  urban: "Urban Industrial",
+  healthcare: "Healthcare",
+  tech: "IT/Tech",
+  realtor: "Realtor",
+};
+const BG_LABELS: Record<string, string> = {
+  white: "White",
+  lightgrey: "Light grey",
+  dark: "Dark",
+  black: "Black",
+  blue: "Navy blue",
+  bluebright: "Bright blue",
+  green: "Soft green",
+  red: "Red",
+  rainbow: "Rainbow",
+};
+const OUTFIT_LABELS: Record<string, string> = {
+  formal: "Biz formal",
+  casual: "Biz casual",
+  polo: "Polo shirt",
+  medical: "Healthcare",
+  keep: "Keep my 1st outfit",
+  upload: "Uploaded outfit",
+};
+
+/** Turn a saved StyleSelections object into the two labels the leads form shows.
+ *  Background = the style's look; for Paper/color it adds the picked color. */
+export function choiceFromSelections(selections: unknown): LeadChoice | null {
+  if (!selections || typeof selections !== "object") return null;
+  const s = selections as Record<string, unknown>;
+  const str = (v: unknown) => (typeof v === "string" ? v : "");
+  let background = "";
+  if (s.surpriseMode === true) {
+    background = "Variety pack";
+  } else if (str(s.style)) {
+    background = STYLE_LABELS[str(s.style)] ?? str(s.style);
+    if (str(s.style) === "corporate" && str(s.background)) {
+      background += ` · ${BG_LABELS[str(s.background)] ?? str(s.background)}`;
+    }
+  }
+  const outfit = OUTFIT_LABELS[str(s.attire)] ?? str(s.attire);
+  if (!background && !outfit) return null;
+  return { background, outfit, at: new Date().toISOString() };
+}
+
+/** Save this person's FIRST background/outfit choice. Never overwrites. */
+export async function recordFirstLeadChoice(
+  email: string,
+  choice: LeadChoice,
+): Promise<void> {
+  if (!looksLikeEmail(email)) return;
+  try {
+    await redis.set(CHOICE_PREFIX + email.trim().toLowerCase(), choice, {
+      nx: true,
+      ex: CHOICE_TTL_SEC,
+    });
+  } catch {
+    /* best-effort - never block a save on a stats write */
+  }
+}
+
+/** First choices for a set of emails (lowercased -> choice). Missing = absent. */
+export async function getLeadChoices(
+  emails: string[],
+): Promise<Record<string, LeadChoice>> {
+  const out: Record<string, LeadChoice> = {};
+  const uniq = Array.from(
+    new Set(emails.map((e) => e.trim().toLowerCase()).filter(Boolean)),
+  );
+  if (uniq.length === 0) return out;
+  try {
+    const vals = await redis.mget<(LeadChoice | null)[]>(
+      ...uniq.map((e) => CHOICE_PREFIX + e),
+    );
+    uniq.forEach((e, i) => {
+      const v = vals[i];
+      if (v && typeof v === "object") out[e] = v;
+    });
+  } catch {
+    /* display-only - blank columns on error */
+  }
+  return out;
+}
+
+/** Resume-token pointers for a set of emails (lowercased -> token). Used to
+ *  fill in choices for recent leads from their still-saved sessions. */
+export async function getEmailResumeTokens(
+  emails: string[],
+): Promise<Record<string, string>> {
+  const out: Record<string, string> = {};
+  const uniq = Array.from(
+    new Set(emails.map((e) => e.trim().toLowerCase()).filter(Boolean)),
+  );
+  if (uniq.length === 0) return out;
+  try {
+    const vals = await redis.mget<(string | null)[]>(
+      ...uniq.map((e) => TOKEN_PTR_PREFIX + e),
+    );
+    uniq.forEach((e, i) => {
+      const v = vals[i];
+      if (typeof v === "string" && v) out[e] = v;
+    });
+  } catch {
+    /* ignore */
+  }
+  return out;
+}
+
 /**
  * Record a PURCHASE against an email — creating the lead if it doesn't exist
  * yet. This is the fix for buyers who never generated under their checkout /
