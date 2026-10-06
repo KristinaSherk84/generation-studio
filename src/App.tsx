@@ -20066,6 +20066,7 @@ export default function App() {
   useEffect(() => {
     if (screen === "upload") {
       setCart([]);
+      setRemovedFromCart([]);
       // Phase 4 (2026-06-03). Going back to upload = changing source
       // photos = fresh session for cost-budget purposes too. Reset the
       // batch counter so the customer gets their full MAX_FULL_BATCHES
@@ -20792,7 +20793,15 @@ export default function App() {
       return [...prev, url];
     });
   };
-  const removeFromCart = (url: string) => {
+  // Photos the customer put in the cart and later took out, most recent first
+  // (2026-10-06 per Kristi). They lead the last-chance upsell list - the
+  // customer already liked them once - even if they came from an earlier batch
+  // or a version shot that's no longer in the 6-photo grid.
+  const [removedFromCart, setRemovedFromCart] = useState<string[]>([]);
+  const removeFromCart = (url: string, opts?: { track?: boolean }) => {
+    if (opts?.track !== false && cart.includes(url)) {
+      setRemovedFromCart((prev) => [url, ...prev.filter((u) => u !== url)].slice(0, 30));
+    }
     setCart((prev) => (prev.includes(url) ? prev.filter((u) => u !== url) : prev));
     // Drop any last-chance upsell discount flag when the item leaves the cart.
     setDiscountedUrls((prev) => {
@@ -21887,6 +21896,7 @@ export default function App() {
     // Clear cart (Phase 1, 2026-06-03). Reset means new session, new source
     // photos — prior cart URLs no longer reference anything meaningful.
     setCart([]);
+    setRemovedFromCart([]);
     // Clear last-chance upsell state along with the cart (2026-08-20).
     setDiscountedUrls(new Set());
     setShowUpsell(false);
@@ -22410,7 +22420,9 @@ export default function App() {
     setDiscountedUrls((prev) => new Set(prev).add(url));
   };
   const handleUpsellRemove = (url: string) => {
-    removeFromCart(url); // also clears the discount flag (see removeFromCart)
+    // track:false - removing a last-chance add isn't a "changed my mind"
+    // signal, and re-ordering the open popup's list would be confusing.
+    removeFromCart(url, { track: false }); // also clears the discount flag (see removeFromCart)
     setSelectedImageUrls((prev) => prev.filter((u) => u !== url));
     setRetouchTiers((prev) => {
       if (!(url in prev)) return prev;
@@ -24732,6 +24744,14 @@ export default function App() {
           );
           const seen = new Set<string>();
           const pool: string[] = [];
+          // Photos they put in the cart and later removed lead the list
+          // (2026-10-06). Includes shots from earlier batches / versions.
+          for (const u of removedFromCart) {
+            if (u && !original.has(u) && !seen.has(u)) {
+              seen.add(u);
+              pool.push(u);
+            }
+          }
           for (const u of generatedImages) {
             if (u && !original.has(u) && !seen.has(u)) {
               seen.add(u);
