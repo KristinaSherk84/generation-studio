@@ -117,6 +117,10 @@ export type DeliveredHeadshot = {
   realistic: string;
   polished?: string;
   glam?: string;
+  // Glow Up versions that failed and fell back to the Realistic photo, with a
+  // plain-English reason (2026-10-06). Shown in Kristi's alert email so she can
+  // see what didn't work and why, and fix it by hand.
+  touchupFailures?: { version: "polished" | "glam"; reason: string }[];
 };
 
 export type DeliveryManifest = {
@@ -169,9 +173,41 @@ const BLOB_URL_HOST_RE = /^https?:\/\/[^/]*\.public\.blob\.vercel-storage\.com\/
 // worst case still stay well under the 300s function maxDuration.
 const PRO_PER_ATTEMPT_TIMEOUT_MS = 90_000;
 
+// "Google is busy" retries (2026-10-06). Lorne Gold's Deluxe order got 503
+// "This model is currently experiencing high demand" on 7 of 8 Pro passes;
+// 2 quick tries 500ms apart both hit the same spike, so he was emailed the
+// Realistic photo 3x per headshot. Overload errors (503 / 429 / UNAVAILABLE /
+// RESOURCE_EXHAUSTED) fail fast, so they get more tries with growing waits.
+// Timeouts and other errors keep the old 2-try limit. A deadline keeps the
+// whole pass inside the function's 300s ceiling.
+const PRO_OVERLOAD_BACKOFF_MS = [3_000, 6_000, 12_000, 20_000];
+const PRO_OTHER_MAX_ATTEMPTS = 2;
+const RETOUCH_PASS_DEADLINE_MS = 200_000;
+function friendlyRetouchReason(msg: string): string {
+  if (/\b429\b|RESOURCE_EXHAUSTED/i.test(msg)) return "Google rate limit (429) - too many requests at once";
+  if (isProOverloadError(msg)) return "Google was busy (503 \"high demand\") - still busy after every retry";
+  if (/timeout/i.test(msg)) return "Google took too long (timed out)";
+  return msg.length > 160 ? msg.slice(0, 160) + "…" : msg;
+}
+
+function isProOverloadError(msg: string): boolean {
+  return /\b(503|429)\b|UNAVAILABLE|RESOURCE_EXHAUSTED|high demand|overloaded/i.test(msg);
+}
+
 // Human-sortable, URL-safe delivery id — e.g. "2026-04-21T09-15-22-a1b2c3".
 // The timestamp prefix means browsing /deliveries in the Blob dashboard lists
 // newest-last (or newest-first after a simple reverse) without any metadata.
+/** How many Deluxe sub-tier versions fell back to the Realistic photo. */
+export function countFailedTouchups(manifest: DeliveryManifest): number {
+  let n = 0;
+  for (const h of manifest.deliveredHeadshots) {
+    if (h.tier !== "deluxe") continue;
+    if (!h.polished || h.polished === h.realistic) n++;
+    if (!h.glam || h.glam === h.realistic) n++;
+  }
+  return n;
+}
+
 function newDeliveryId(): string {
   const ts = new Date().toISOString().replace(/[:.]/g, "-").replace("Z", "");
   const rand = Math.random().toString(36).slice(2, 8);
@@ -201,7 +237,7 @@ function escapeHtml(s: string): string {
 //     marketing, and a preview of the V2 auto-composited share graphic).
 //   - A direct link to the manifest JSON on Blob is included for audit / later
 //     pairing with the before-after-headshot skill.
-async function sendUsageAlertEmail(args: {
+export async function sendUsageAlertEmail(args: {
   manifest: DeliveryManifest;
   manifestUrl: string;
 }): Promise<void> {
@@ -218,6 +254,32 @@ async function sendUsageAlertEmail(args: {
 
   const { manifest, manifestUrl } = args;
 
+  // Touch-ups that fell back to the original photo (2026-10-06). Kristi wants
+  // to SEE what didn't work and why, and fix it by hand - nothing automatic
+  // goes to the customer. Lists each photo, the failed version(s), and reason.
+  const failedTouchups = countFailedTouchups(manifest);
+  const failRows = manifest.deliveredHeadshots
+    .map((h, i) => ({ h, i }))
+    .filter(({ h }) => h.tier === "deluxe" && (h.touchupFailures?.length || h.polished === h.realistic || h.glam === h.realistic))
+    .map(({ h, i }) => {
+      const reasons = h.touchupFailures?.length
+        ? h.touchupFailures
+            .map((f) => `<strong>${f.version === "polished" ? "Polished" : "Glam"}:</strong> ${escapeHtml(f.reason)}`)
+            .join("<br/>")
+        : "Fell back to the original photo (no reason recorded)";
+      return `<tr>
+          <td style="padding:6px 10px 6px 0;vertical-align:top;"><a href="${escapeHtml(h.realistic)}"><img src="${escapeHtml(h.realistic)}" alt="Photo ${i + 1}" style="width:70px;height:88px;object-fit:cover;border-radius:4px;border:1px solid #ddd;" /></a></td>
+          <td style="padding:6px 0;vertical-align:top;font-size:13px;"><strong>Photo ${i + 1}</strong><br/>${reasons}<br/><a href="${escapeHtml(h.realistic)}" style="color:#7A1F1F;font-size:12px;">original file</a></td>
+        </tr>`;
+    })
+    .join("");
+  const failBanner = failedTouchups
+    ? `<div style="background:#FDECEC;border:1px solid #E0A0A0;border-radius:8px;padding:12px 14px;margin:0 0 16px 0;color:#7A1F1F;">
+        <strong>⚠️ ${failedTouchups} Glow Up touch-up${failedTouchups === 1 ? "" : "s"} failed.</strong> The customer received the original photo in place of these versions:
+        <table style="margin-top:8px;border-collapse:collapse;">${failRows}</table>
+      </div>`
+    : "";
+
   // Small thumbnail strip helper — renders a flex-wrap row of <img> tags with
   // fixed max sizes. Email clients strip most CSS, so keep styling inline and
   // conservative (no flexbox — fall back to table-like wrapping via inline-block).
@@ -231,6 +293,7 @@ async function sendUsageAlertEmail(args: {
 
   const html = `
     <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#2c2c2a;max-width:640px;">
+      ${failBanner}
       <h2 style="margin:0 0 8px 0;font-weight:500;">Someone just used the AI Generator</h2>
       <p style="margin:0 0 16px 0;color:#666;">
         <strong>Name:</strong> ${escapeHtml(manifest.customerName)}<br/>
@@ -275,7 +338,7 @@ async function sendUsageAlertEmail(args: {
         // Subject includes the customer name so Kristi can see at a glance
         // in her Gmail list who used the generator without opening the
         // email. Kept the "$$$" prefix so existing filter rules still match.
-        subject: `$$$-AI-Generator-Used — ${manifest.customerName}`,
+        subject: `${failedTouchups ? "⚠️ TOUCH-UPS FAILED — " : ""}$$$-AI-Generator-Used — ${manifest.customerName}`,
         html,
       }),
     });
@@ -768,11 +831,16 @@ async function generateShareGraphics(args: {
 // concurrently via Promise.all. For 6 all-deluxe photos that's 12
 // simultaneous Pro calls. Tier 2 rate limits accommodate this. Total
 // wall-clock is dominated by the slowest individual call (~15-25s).
-async function applyRetouchPass(
+export async function applyRetouchPass(
   photoUrls: string[],
   tiers: RetouchTier[],
   deliveryId: string,
 ): Promise<DeliveredHeadshot[]> {
+  const passStartedAt = Date.now();
+  const failures: Record<number, { version: "polished" | "glam"; reason: string }[]> = {};
+  const noteFailure = (i: number, version: RetouchSubTier, reason: string) => {
+    (failures[i] ??= []).push({ version: version as "polished" | "glam", reason });
+  };
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     console.warn(
@@ -809,7 +877,8 @@ async function applyRetouchPass(
         },
       ];
       // Pro Image Preview can occasionally hang silently. Race each call
-      // against a hard timeout (PRO_PER_ATTEMPT_TIMEOUT_MS) and retry once.
+      // against a hard timeout (PRO_PER_ATTEMPT_TIMEOUT_MS) and retry -
+      // see PRO_OVERLOAD_BACKOFF_MS for the "Google is busy" schedule.
       // imageConfig.aspectRatio "3:4" is kept (prevents recompose); imageSize
       // is intentionally NOT set — see 2026-05-22 finding in
       // feedback_gemini_pro_imageconfig that pinning size constrained the
@@ -817,16 +886,13 @@ async function applyRetouchPass(
       let resp: Awaited<
         ReturnType<typeof ai.models.generateContent>
       > | null = null;
-      for (let attempt = 1; attempt <= 2; attempt++) {
+      for (let attempt = 1; ; attempt++) {
         try {
           const apiCall = ai.models.generateContent({
             model: RETOUCH_MODEL,
             contents: [{ role: "user", parts }],
             config: { imageConfig: { aspectRatio: "3:4" } },
           });
-          // Count this billable Gemini 3 Pro retouch call (each attempt = one
-          // Pro image call) for the admin's flash-vs-pro daily cost split.
-          void bumpProCall();
           const timeoutPromise = new Promise<never>((_, reject) => {
             setTimeout(
               () =>
@@ -839,6 +905,11 @@ async function applyRetouchPass(
             );
           });
           resp = await Promise.race([apiCall, timeoutPromise]);
+          // Count this billable Gemini 3 Pro retouch call for the admin's
+          // flash-vs-pro daily cost split. Only successful calls are billed by
+          // Google - 503 "busy" refusals are free - so count after success.
+          // (2026-10-06; it used to count every attempt.)
+          void bumpProCall();
           break;
         } catch (err) {
           const errMsg = err instanceof Error ? err.message : String(err);
@@ -852,15 +923,27 @@ async function applyRetouchPass(
               error: errMsg,
             }),
           );
-          if (attempt >= 2) throw err;
-          // Brief backoff before retry — a transient hang sometimes
-          // clears if the second call routes to a different worker.
-          await new Promise((r) => setTimeout(r, 500));
+          // Overload (Google busy): up to 5 tries with growing waits.
+          // Anything else (timeout, bad response): the original 2 tries.
+          const overload = isProOverloadError(errMsg);
+          const wait = overload
+            ? PRO_OVERLOAD_BACKOFF_MS[attempt - 1]
+            : attempt < PRO_OTHER_MAX_ATTEMPTS
+              ? 500
+              : undefined;
+          if (
+            wait === undefined ||
+            Date.now() - passStartedAt + wait > RETOUCH_PASS_DEADLINE_MS
+          ) {
+            throw err;
+          }
+          await new Promise((r) => setTimeout(r, wait));
         }
       }
       if (!resp) {
         // Unreachable in practice (the loop either sets resp or throws),
         // but TypeScript needs the guard before we deref candidates.
+        noteFailure(photoIndex, subTier, "No response from Google");
         return sourceUrl;
       }
 
@@ -930,6 +1013,7 @@ async function applyRetouchPass(
           subTier,
         }),
       );
+      noteFailure(photoIndex, subTier, "Google answered but sent back no image");
       return sourceUrl;
     } catch (err) {
       console.warn(
@@ -940,6 +1024,11 @@ async function applyRetouchPass(
           subTier,
           error: err instanceof Error ? err.message : String(err),
         }),
+      );
+      noteFailure(
+        photoIndex,
+        subTier,
+        friendlyRetouchReason(err instanceof Error ? err.message : String(err)),
       );
       return sourceUrl;
     }
@@ -971,6 +1060,8 @@ async function applyRetouchPass(
           // Soft-fall: deluxe degrades to basic if we can't even fetch
           // the source. Customer gets the Realistic version 3x. Better
           // than failing the whole delivery.
+          noteFailure(i, "polished", `Couldn't load the photo (HTTP ${fetchResp.status})`);
+          noteFailure(i, "glam", `Couldn't load the photo (HTTP ${fetchResp.status})`);
           return {
             tier: "deluxe",
             realistic: url,
@@ -1004,6 +1095,9 @@ async function applyRetouchPass(
           }),
         );
         // Catastrophic fall: deluxe photo degrades to all-realistic.
+        const why = friendlyRetouchReason(err instanceof Error ? err.message : String(err));
+        noteFailure(i, "polished", why);
+        noteFailure(i, "glam", why);
         return {
           tier: "deluxe",
           realistic: url,
@@ -1014,7 +1108,11 @@ async function applyRetouchPass(
     },
   );
 
-  return Promise.all(tasks);
+  const results = await Promise.all(tasks);
+  // Attach any failure reasons so they land in the manifest + alert email.
+  return results.map((h, i) =>
+    failures[i]?.length ? { ...h, touchupFailures: failures[i] } : h,
+  );
 }
 
 // -------------------- Handler --------------------
