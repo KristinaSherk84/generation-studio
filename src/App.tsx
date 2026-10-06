@@ -19239,6 +19239,16 @@ type AllShotsGalleryProps = {
 };
 const BASIC_PRICE_PER_PHOTO = 14.99;
 
+// Shared between the "Every shot" gallery and the grid's back-button guard
+// (2026-10-06). The gallery adds its own history entry so browser-back closes
+// it. Without this, the grid's guard also heard those history moves and showed
+// "Going back will replace the headshots on screen" when a customer simply
+// tapped "Back to grid" (Clarity, Kristi 2026-10-06).
+//   open         - gallery is on screen; its own listener handles browser-back.
+//   suppressPops - history.back() calls the gallery made itself while closing;
+//                  the guard swallows that many popstate events.
+const allShotsHistory = { open: false, suppressPops: 0 };
+
 const AllShotsGallery = ({
   mainImages,
   wildCards,
@@ -19331,25 +19341,34 @@ const AllShotsGallery = ({
   // app (2026-09-10 per Kristi — a customer hit the browser back arrow to
   // exit the gallery and lost the whole session). We push a synthetic
   // history entry on mount; popstate on that entry fires onClose.
+  // onClose is a new function on every parent render; keep the latest in a ref
+  // so this effect runs ONCE per open. (It used to re-run on every render -
+  // e.g. each "+ add to cart" - and each re-run rewound history, which tripped
+  // the grid's leave-warning. 2026-10-06)
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   useEffect(() => {
     if (typeof window === "undefined") return;
+    allShotsHistory.open = true;
     // Marker so we only intercept OUR entry, not a real navigation.
     window.history.pushState({ __allShotsGallery: true }, "");
     const onPop = () => {
-      onClose();
+      onCloseRef.current();
     };
     window.addEventListener("popstate", onPop);
     return () => {
       window.removeEventListener("popstate", onPop);
-      // If the entry is still there when the gallery unmounts via the X
-      // (not via back), rewind it silently so we don't leave a dangling
-      // history entry behind. Guarded so we don't rewind twice on a
-      // back-triggered close.
+      allShotsHistory.open = false;
+      // If the entry is still there when the gallery unmounts via the X or
+      // "Back to grid" (not via browser-back), rewind it silently so we don't
+      // leave a dangling history entry behind - and tell the grid's guard to
+      // ignore the popstate this rewind causes.
       if (window.history.state && (window.history.state as { __allShotsGallery?: boolean }).__allShotsGallery) {
+        allShotsHistory.suppressPops += 1;
         window.history.back();
       }
     };
-  }, [onClose]);
+  }, []);
 
   const totalShots = flat.length;
   const cartTotal = (cart.length * BASIC_PRICE_PER_PHOTO).toFixed(2);
@@ -20145,6 +20164,14 @@ export default function App() {
 
     const onPopState = () => {
       if (!protectedScreenGuardActiveRef.current) return;
+      // The "Every shot" gallery manages its own history entry: browser-back
+      // while it's open just closes it, and its own rewind on close is not
+      // the customer leaving. Neither should show the leave-warning.
+      if (allShotsHistory.open) return;
+      if (allShotsHistory.suppressPops > 0) {
+        allShotsHistory.suppressPops -= 1;
+        return;
+      }
       // Surface the warning, then re-push the marker so the user visually
       // stays on the protected screen until they confirm or dismiss.
       setShowBackWarning(true);
