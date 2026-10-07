@@ -270,6 +270,11 @@
           if (q === "0") localStorage.removeItem("gh_notrack");
           if (localStorage.getItem("gh_notrack") === "1") on = false;
         } catch (e) {}
+        // Robots and automated browsers (crawlers, link scanners, headless
+        // Chrome) never load tracking: they open every page as a brand-new
+        // "user" and inflated Clarity live counts after the 2026-10-04 switch
+        // to real nav links. (2026-10-07)
+        try { if(navigator.webdriver||/HeadlessChrome|PhantomJS|Lighthouse|PageSpeed|Google-InspectionTool|Googlebot|bingbot|BingPreview|YandexBot|DuckDuckBot|Baiduspider|AhrefsBot|SemrushBot|MJ12bot|DotBot|PetalBot|facebookexternalhit|LinkedInBot|Slackbot|Twitterbot|Applebot|GPTBot|ClaudeBot|PerplexityBot|crawler|spider/i.test(navigator.userAgent||""))on=false; } catch (e) {}
         window.__ghTrack = on;
       })();
     </script>
