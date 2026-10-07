@@ -251,6 +251,29 @@
       rel="stylesheet"
     />
 
+    <!-- Tracking guard (2026-10-07). Clarity, GA4 and LinkedIn load ONLY on
+         the real site, and never in a browser marked as Kristi's own:
+         visit generationheadshots.com/?notrack=1 once on each of her devices
+         (?notrack=0 undoes it). Replaces relying on Clarity's IP block, which
+         IPv6 and phone hotspots slip past. Local previews (localhost) never
+         track. The small stubs below still define clarity()/gtag()/lintrk so
+         app code calling them is harmless when tracking is off. -->
+    <script type="text/javascript">
+      (function () {
+        var h = location.hostname;
+        var on = /(^|\.)generationheadshots\.com$/.test(h) ||
+          /(^|\.)generaitionheadshots\.com$/.test(h) ||
+          h === "generation-studio-gamma.vercel.app";
+        try {
+          var q = new URLSearchParams(location.search).get("notrack");
+          if (q === "1") localStorage.setItem("gh_notrack", "1");
+          if (q === "0") localStorage.removeItem("gh_notrack");
+          if (localStorage.getItem("gh_notrack") === "1") on = false;
+        } catch (e) {}
+        window.__ghTrack = on;
+      })();
+    </script>
+
     <!-- Microsoft Clarity (added 2026-04-29) — same project ID as
          kristinasherk.com so the Vercel app feeds into the same Clarity
          project. Lets us follow a user from /ai-headshots on Squarespace
@@ -260,6 +283,7 @@
     <script type="text/javascript">
       (function(c,l,a,r,i,t,y){
           c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+          if(!c.__ghTrack)return;
           t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
           y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
       })(window, document, "clarity", "script", "le4fbqvztl");
@@ -295,8 +319,13 @@
          tracked as their own property rather than as a sub-domain of
          the main Kristina Sherk Analytics flow. Data starts populating
          within 24-48 hours of first hit. -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-4ZHCF8TYLX"></script>
     <script>
+      if (window.__ghTrack) {
+        var __ga = document.createElement("script");
+        __ga.async = true;
+        __ga.src = "https://www.googletagmanager.com/gtag/js?id=G-4ZHCF8TYLX";
+        document.head.appendChild(__ga);
+      }
       window.dataLayer = window.dataLayer || [];
       function gtag(){dataLayer.push(arguments);}
       gtag('js', new Date());
@@ -318,6 +347,7 @@
       (function(l) {
       if (!l){window.lintrk = function(a,b){window.lintrk.q.push([a,b])};
       window.lintrk.q=[]}
+      if (!window.__ghTrack) return;
       var s = document.getElementsByTagName("script")[0];
       var b = document.createElement("script");
       b.type = "text/javascript";b.async = true;

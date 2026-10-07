@@ -129,12 +129,11 @@ footer .links a{color:var(--sub);text-decoration:none}
 `;
 
 const ANALYTICS = `
-<script type="text/javascript">(function(c,l,a,r,i,t,y){c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);})(window, document, "clarity", "script", "le4fbqvztl");</script>
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-4ZHCF8TYLX"></script>
-<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-4ZHCF8TYLX');</script>
+<script type="text/javascript">(function(){var h=location.hostname;var on=/(^|\\.)generationheadshots\\.com$/.test(h)||/(^|\\.)generaitionheadshots\\.com$/.test(h);try{var q=new URLSearchParams(location.search).get("notrack");if(q==="1")localStorage.setItem("gh_notrack","1");if(q==="0")localStorage.removeItem("gh_notrack");if(localStorage.getItem("gh_notrack")==="1")on=false;}catch(e){}window.__ghTrack=on;})();</script>
+<script type="text/javascript">(function(c,l,a,r,i,t,y){c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};if(!c.__ghTrack)return;t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);})(window, document, "clarity", "script", "le4fbqvztl");</script>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}if(window.__ghTrack){var g=document.createElement("script");g.async=true;g.src="https://www.googletagmanager.com/gtag/js?id=G-4ZHCF8TYLX";document.head.appendChild(g);gtag('js',new Date());gtag('config','G-4ZHCF8TYLX');}</script>
 <script type="text/javascript">_linkedin_partner_id="9735570";window._linkedin_data_partner_ids=window._linkedin_data_partner_ids||[];window._linkedin_data_partner_ids.push(_linkedin_partner_id);</script>
-<script type="text/javascript">(function(l){if(!l){window.lintrk=function(a,b){window.lintrk.q.push([a,b])};window.lintrk.q=[]}var s=document.getElementsByTagName("script")[0];var b=document.createElement("script");b.type="text/javascript";b.async=true;b.src="https://snap.licdn.com/li.lms-analytics/insight.min.js";s.parentNode.insertBefore(b,s);})(window.lintrk);</script>
-<noscript><img height="1" width="1" style="display:none;" alt="" src="https://px.ads.linkedin.com/collect/?pid=9735570&fmt=gif" /></noscript>`;
+<script type="text/javascript">(function(l){if(!l){window.lintrk=function(a,b){window.lintrk.q.push([a,b])};window.lintrk.q=[]}if(!window.__ghTrack)return;var s=document.getElementsByTagName("script")[0];var b=document.createElement("script");b.type="text/javascript";b.async=true;b.src="https://snap.licdn.com/li.lms-analytics/insight.min.js";s.parentNode.insertBefore(b,s);})(window.lintrk);</script>`;
 
 const WORDMARK = `<a class="wordmark" href="/">Gener<em>AI</em>tion <b>Headshots</b></a>`;
 
@@ -273,8 +272,13 @@ if (posts.length) {
 // ---------- standalone pages ----------
 for (const p of readDir("pages")) {
   const url = `${SITE}/${p.slug}/`;
+  // FAQ schema from "**Question?** answer" paragraphs in the page body.
+  const faqs = [...p.html.matchAll(/<p><strong>([^<]*\?)<\/strong>\s*([\s\S]*?)<\/p>/g)]
+    .map((m) => ({ q: m[1].trim(), a: m[2].replace(/<[^>]+>/g, "").trim() }));
+  const faqNode = faqs.length ? { "@type": "FAQPage", "mainEntity": faqs.map((f) => ({ "@type": "Question", "name": f.q, "acceptedAnswer": { "@type": "Answer", "text": f.a } })) } : null;
   const jsonLd = { "@context": "https://schema.org", "@graph": [
     ORG,
+    ...(faqNode ? [faqNode] : []),
     { "@type": "WebPage", "@id": url, "name": p.meta.title, "description": p.meta.description, "url": url, "isPartOf": { "@type": "WebSite", "name": SITE_NAME, "url": SITE + "/" }, "about": { "@id": `${SITE}/#organization` }, "author": PERSON, "dateModified": p.meta.updated || p.meta.date,
       "breadcrumb": { "@type": "BreadcrumbList", "itemListElement": [
         { "@type": "ListItem", "position": 1, "name": "Home", "item": SITE + "/" },
