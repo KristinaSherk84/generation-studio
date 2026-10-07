@@ -114,7 +114,7 @@ function foundViaSelect(email: string, current: string | null | undefined): stri
     cur !== "" && !inList ? `<option selected>${esc(cur)}</option>` : "",
     `<option value="__custom__">✏️ Custom…</option>`,
   ].join("");
-  return `<select class="fvsel" data-email="${esc(email)}" style="font:inherit;width:132px;max-width:132px;padding:2px 4px;">${optionEls}</select>`;
+  return `<select class="fvsel" data-email="${esc(email)}" style="font:inherit;width:122px;max-width:122px;padding:2px 4px;">${optionEls}</select>`;
 }
 
 // Live Stripe revenue — total AND per-customer, keyed by the email the
@@ -606,16 +606,10 @@ export default async function handler(
     // Daily activity (2026-08-14): API calls (Gemini image calls) + distinct
     // people who generated, per ET day, plus the Google spend Kristi types in.
     const dailyStats = await getDailyStats(lastEtDates(14));
-    // Share campaign chips + button (2026-10-07).
-    const shareCell = (l: { email: string; shareAskSentAt?: string | null; shareRewardSentAt?: string | null; shareRewardCode?: string | null }) => {
-      const asked = l.shareAskSentAt
-        ? `<div class="sharechip">📨 asked ${esc(formatDateET(l.shareAskSentAt))}</div>`
-        : "";
-      const reward = l.shareRewardSentAt
-        ? `<div class="sharechip">🎁 reward sent ${esc(formatDateET(l.shareRewardSentAt))} · ${esc((l.shareRewardCode ?? "").toUpperCase())}</div>`
-        : `<div><button class="sharebtn" data-email="${esc(l.email)}">🎁 Send share reward</button></div>`;
-      return asked + reward;
-    };
+    // Share campaign summary for the top box (2026-10-07). Kept out of the
+    // table rows so the columns fit (Kristi).
+    const shareAskedCount = leads.filter((l) => l.shareAskSentAt).length;
+    const shareRewarded = leads.filter((l) => l.shareRewardSentAt);
     const paidFor = (email: string) =>
       paidByEmail[email.trim().toLowerCase()] ?? 0;
     // What to show in the Paid column: the Stripe amount matched by checkout
@@ -841,7 +835,7 @@ export default async function handler(
         }</td>
         <td class="status">${
           l.purchased
-            ? "✅ Purchased" + shareCell(l)
+            ? "✅ Purchased"
             : `<button class="mkbtn" data-email="${esc(l.email)}">Mark purchased</button>`
         }</td>
         <td>${esc(formatDateET(l.purchasedAt))}</td>
@@ -955,7 +949,7 @@ export default async function handler(
   *{box-sizing:border-box;}
   body{margin:0;background:var(--cream);color:var(--ink);
     font-family:system-ui,-apple-system,'Segoe UI',Inter,sans-serif;padding:24px;}
-  .wrap{max-width:1360px;margin:0 auto;}
+  .wrap{max-width:1480px;margin:0 auto;}
   h1{font-size:22px;margin:0 0 4px;}
   .meta{font-size:13px;color:var(--sub);margin:0 0 18px;}
   .cards{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:20px;}
@@ -983,7 +977,7 @@ export default async function handler(
   summary{cursor:pointer;font-weight:600;font-size:14px;}
   textarea{width:100%;height:90px;margin-top:10px;font-size:12px;padding:8px;border:1px solid var(--line);border-radius:8px;font-family:ui-monospace,monospace;}
   .empty{padding:40px;text-align:center;color:var(--sub);}
-  .sharechip{font-size:11px;color:#6E6E6A;margin-top:3px;white-space:nowrap}.sharebtn{margin-top:4px;font-size:11px;padding:3px 8px;border:1px solid #CFE6C4;background:#F1FAEC;border-radius:6px;cursor:pointer}
+
   .mkbtn{background:#fff;color:var(--forest);border:1px solid var(--forest);border-radius:6px;
     font-size:11px;font-weight:600;padding:4px 9px;cursor:pointer;white-space:nowrap;}
   .mkbtn:disabled{opacity:.6;cursor:default;}
@@ -1090,6 +1084,19 @@ export default async function handler(
     </div>
   </div>
 
+  <div style="margin:18px 0;padding:14px 16px;border:1px solid #E2E0DA;border-radius:10px;background:#fff">
+    <div style="font-weight:600;font-size:14px;margin-bottom:4px;color:#2C2C2A">🎁 Send a share reward</div>
+    <div style="font-size:13px;color:#888780;margin-bottom:8px">When a buyer BCCs you or tags the LinkedIn page, type their email. They get a code for 30 more generations + 1 free headshot. Share asks sent so far: ${shareAskedCount}. Rewards sent: ${shareRewarded.length}${
+      shareRewarded.length
+        ? " (" + shareRewarded.map((l) => esc(l.email) + " · " + esc((l.shareRewardCode ?? "").toUpperCase())).join(", ") + ")"
+        : ""
+    }.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <input id="shareemail" type="email" placeholder="buyer@example.com" style="flex:1;min-width:200px;padding:8px 10px;border:1px solid #E2E0DA;border-radius:8px;font:inherit" />
+      <button class="btn" id="sharebtn">Send share reward</button>
+    </div>
+  </div>
+
   <div class="tablewrap">
     ${
       total
@@ -1106,23 +1113,28 @@ export default async function handler(
 </div>
 <script>
   var PW = ${JSON.stringify(pw)};
-  document.querySelectorAll('.sharebtn').forEach(function (b) {
+  (function () {
+    var b = document.getElementById('sharebtn');
+    var inp = document.getElementById('shareemail');
+    if (!b || !inp) return;
     b.addEventListener('click', function () {
-      if (!confirm('Send ' + b.dataset.email + ' a share-reward code (30 generations + 1 free headshot)?')) return;
+      var em = (inp.value || '').trim();
+      if (!/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(em)) { alert('Enter the email address.'); return; }
+      if (!confirm('Send ' + em + ' a share-reward code (30 generations + 1 free headshot)?')) return;
       b.disabled = true; b.textContent = 'Sending…';
       fetch('/api/admin/leads', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'sendShareReward', pw: PW, email: b.dataset.email }),
+        body: JSON.stringify({ action: 'sendShareReward', pw: PW, email: em }),
       })
         .then(function (r) { return r.json(); })
         .then(function (d) {
           if (d && d.ok) { alert('Sent! Code ' + String(d.code).toUpperCase()); location.reload(); }
-          else { b.disabled = false; b.textContent = '🎁 Send share reward'; alert('Failed: ' + ((d && d.error) || 'unknown')); }
+          else { b.disabled = false; b.textContent = 'Send share reward'; alert('Failed: ' + ((d && d.error) || 'unknown')); }
         })
-        .catch(function () { b.disabled = false; b.textContent = '🎁 Send share reward'; alert('Network error'); });
+        .catch(function () { b.disabled = false; b.textContent = 'Send share reward'; alert('Network error'); });
     });
-  });
+  })();
   document.querySelectorAll('.mkbtn').forEach(function (b) {
     b.addEventListener('click', function () {
       if (!confirm('Mark ' + b.dataset.email + ' as purchased? They will stop receiving win-back emails.')) return;
