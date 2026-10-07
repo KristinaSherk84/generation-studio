@@ -44,75 +44,61 @@ const firstName = (name?: string | null) => {
   const f = (name ?? "").trim().split(/\s+/)[0] ?? "";
   return f.length >= 2 ? f.charAt(0).toUpperCase() + f.slice(1) : "";
 };
-const nl2br = (s: string) => esc(s).replace(/\n/g, "<br/>");
 
-const shell = (inner: string, to: string) => `<!doctype html><html><body style="margin:0;background:#FAF8F4;font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;color:#2C2C2A;">
-<div style="max-width:560px;margin:0 auto;padding:28px 20px;">
-<div style="background:#ffffff;border:1px solid #E8E4DB;border-radius:12px;padding:28px 24px;font-size:15px;line-height:1.6;">
-${inner}
-</div>
-<p style="margin:16px 0 0;font-size:12px;color:#888780;text-align:center;">Don't want emails like this? <a href="${unsubscribeUrl(to)}" style="color:#888780;">Unsubscribe</a></p>
-</div></body></html>`;
-
-const button = (href: string, label: string) =>
-  `<a href="${esc(href)}" style="display:inline-block;background:#1B4332;color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;padding:11px 18px;border-radius:999px;margin:6px 0 2px;">${esc(label)}</a>`;
-
-const copyBox = (title: string, body: string) =>
-  `<div style="margin:14px 0 0;padding:14px 16px;background:#FAF8F4;border:1px dashed #D3D1C7;border-radius:8px;">
-<div style="font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:#888780;margin-bottom:8px;">${esc(title)}</div>
-<div style="font-size:14px;color:#2C2C2A;">${nl2br(body)}</div></div>`;
+// Plain, personal-looking email (2026-10-07, Kristi: "no formatting at all,
+// like a regular email from a person"). Paragraphs are plain text; the only
+// markup is <br> line breaks and ordinary links. No cards, buttons or boxes.
+type Para = string | { text: string; href: string };
+const plainHtml = (paras: Para[][], to: string) =>
+  `<div>` +
+  paras
+    .map(
+      (line) =>
+        line
+          .map((part) =>
+            typeof part === "string"
+              ? esc(part).replace(/\n/g, "<br>")
+              : `<a href="${esc(part.href)}">${esc(part.text)}</a>`,
+          )
+          .join("") ,
+    )
+    .join("<br><br>") +
+  `<br><br><br><span style="font-size:11px;color:#999999;">Don't want emails like this? <a href="${unsubscribeUrl(to)}" style="color:#999999;">Unsubscribe</a></span></div>`;
+const plainText = (paras: Para[][], to: string) =>
+  paras
+    .map((line) => line.map((part) => (typeof part === "string" ? part : `${part.text} (${part.href})`)).join(""))
+    .join("\n\n") + `\n\n\nUnsubscribe: ${unsubscribeUrl(to)}`;
 
 /** The automatic "trade me a share for a free headshot" email. */
 export function buildShareAskEmail(p: { to: string; name?: string | null }) {
   const fn = firstName(p.name);
-  const hi = fn ? `Hi ${esc(fn)},` : "Hi there,";
   const mailto =
     `mailto:?bcc=${encodeURIComponent(KRISTI_EMAIL)}` +
     `&subject=${encodeURIComponent(FRIEND_EMAIL_SUBJECT)}` +
     `&body=${encodeURIComponent(friendEmailBody(fn))}`;
   const linkedinCompose = `https://www.linkedin.com/feed/?shareActive=true&text=${encodeURIComponent(LINKEDIN_POST)}`;
   const subject = "20 seconds of help for a free headshot?";
-  const html = shell(
-    `<p style="margin:0 0 14px;">${hi}</p>
-<p style="margin:0 0 14px;">Since your shiny new headshot is getting you noticed on LinkedIn, I'm wondering if I could ask for 20 seconds of your help, <strong>in exchange for a code for a free additional headshot!</strong></p>
-<p style="margin:18px 0 6px;font-weight:600;">Two ways to qualify:</p>
-<p style="margin:0 0 4px;"><strong>1. Email two friends</strong> the note below, and BCC me. They will NOT be added to an email list.</p>
-${button(mailto, "Open the email, ready to send")}
-<p style="margin:4px 0 16px;font-size:12.5px;color:#888780;">The button fills in the note and BCCs me for you. Just add two friends.</p>
-<p style="margin:0 0 4px;"><strong>2. Share GenerAItion Headshots on LinkedIn</strong> and tag our page, @GenerAItion Headshots.</p>
-${button(linkedinCompose, "Open LinkedIn with the post ready")}
-<p style="margin:4px 0 0;font-size:12.5px;color:#888780;">To tag us, type @GenerAItion Headshots and pick the page from the list. Adding your new headshot to the post makes it shine. <a href="${LINKEDIN_PAGE}" style="color:#888780;">Our LinkedIn page</a></p>
-<p style="margin:20px 0 0;">I've written the shareable text for you below to make it even easier.</p>
-${copyBox("Email for your friends", `Subject: ${FRIEND_EMAIL_SUBJECT}\n\n${friendEmailBody(fn)}`)}
-${copyBox("LinkedIn post", LINKEDIN_POST)}
-<p style="margin:20px 0 0;">So what do you think? Will you trade me a social share for another headshot in a different style?</p>
-<p style="margin:18px 0 0;">Kristina</p>`,
-    p.to,
-  );
-  const text = `${fn ? `Hi ${fn},` : "Hi there,"}
-
-Since your shiny new headshot is getting you noticed on LinkedIn, I'm wondering if I could ask for 20 seconds of your help, in exchange for a code for a free additional headshot!
-
-Two ways to qualify:
-1. Email two friends the note below, and BCC me (${KRISTI_EMAIL}). They will NOT be added to an email list.
-2. Share GenerAItion Headshots on LinkedIn and tag our page, @GenerAItion Headshots: ${LINKEDIN_PAGE}
-
-I've written the shareable text for you to make it even easier.
-
---- Email for your friends ---
-Subject: ${FRIEND_EMAIL_SUBJECT}
-
-${friendEmailBody(fn)}
-
---- LinkedIn post ---
-${LINKEDIN_POST}
-
-So what do you think? Will you trade me a social share for another headshot in a different style?
-
-Kristina
-
-Unsubscribe: ${unsubscribeUrl(p.to)}`;
-  return { subject, html, text };
+  const paras: Para[][] = [
+    [fn ? `Hi ${fn},` : "Hi there,"],
+    ["Since your shiny new headshot is getting you noticed on LinkedIn, I'm wondering if I could ask for 20 seconds of your help, in exchange for a code for a free additional headshot!"],
+    ["Two ways to qualify:"],
+    [
+      `1. Email two friends the note below, and BCC me (${KRISTI_EMAIL}). They will NOT be added to an email list. Here's a shortcut that writes the email and adds the BCC for you: `,
+      { text: "open the email", href: mailto },
+    ],
+    [
+      "2. Share GenerAItion Headshots with your network on LinkedIn and tag our page, @GenerAItion Headshots (type it and pick the page from the list). Here's a shortcut with the post already written: ",
+      { text: "open LinkedIn", href: linkedinCompose },
+      ". Our page is here: ",
+      { text: "GenerAItion Headshots on LinkedIn", href: LINKEDIN_PAGE },
+    ],
+    ["I've written the shareable text for you below to make it even easier."],
+    ["So what do you think? Will you trade me a social share for another headshot in a different style?"],
+    ["Kristina"],
+    [`----------\nEmail for your friends\n\nSubject: ${FRIEND_EMAIL_SUBJECT}\n\n${friendEmailBody(fn)}`],
+    [`----------\nLinkedIn post\n\n${LINKEDIN_POST}`],
+  ];
+  return { subject, html: plainHtml(paras, p.to), text: plainText(paras, p.to) };
 }
 
 /** The thank-you email carrying the share-reward code. */
@@ -120,36 +106,19 @@ export function buildShareRewardEmail(p: { to: string; name?: string | null; cod
   const fn = firstName(p.name);
   const code = p.code.toUpperCase();
   const subject = "Thank you! Here's your free headshot code";
-  const html = shell(
-    `<p style="margin:0 0 14px;">${fn ? `Hi ${esc(fn)},` : "Hi there,"}</p>
-<p style="margin:0 0 14px;">Thank you so much for sharing. It truly helps a small, photographer-run business like mine.</p>
-<p style="margin:0 0 6px;">Here's your code:</p>
-<div style="font-family:Menlo,Consolas,monospace;font-size:24px;font-weight:700;letter-spacing:2px;background:#F1FAEC;border:1px solid #CFE6C4;border-radius:8px;padding:12px 16px;text-align:center;margin:0 0 16px;">${esc(code)}</div>
-<p style="margin:0 0 6px;">It gives you:</p>
-<ul style="margin:0 0 16px;padding-left:20px;">
-<li><strong>30 more headshots</strong> to generate, in any style</li>
-<li><strong>1 headshot of your choice, free</strong> to download</li>
-</ul>
-<p style="margin:0 0 14px;">To use it, go to <a href="${SITE}/?utm_source=email&utm_medium=email&utm_campaign=share_reward" style="color:#1B4332;">generationheadshots.com</a>, tap <strong>"Have a promo code?"</strong> under the green button, and enter your code.</p>
-<p style="margin:18px 0 0;">Kristina</p>`,
-    p.to,
-  );
-  const text = `${fn ? `Hi ${fn},` : "Hi there,"}
-
-Thank you so much for sharing. It truly helps a small, photographer-run business like mine.
-
-Your code: ${code}
-
-It gives you:
-- 30 more headshots to generate, in any style
-- 1 headshot of your choice, free to download
-
-To use it, go to ${SITE}, tap "Have a promo code?" under the green button, and enter your code.
-
-Kristina
-
-Unsubscribe: ${unsubscribeUrl(p.to)}`;
-  return { subject, html, text };
+  const paras: Para[][] = [
+    [fn ? `Hi ${fn},` : "Hi there,"],
+    ["Thank you so much for sharing. It truly helps a small, photographer-run business like mine."],
+    [`Here's your code: ${code}`],
+    ["It gives you 30 more headshots to generate in any style, plus 1 headshot of your choice free to download."],
+    [
+      "To use it, go to ",
+      { text: "generationheadshots.com", href: `${SITE}/?utm_source=email&utm_medium=email&utm_campaign=share_reward` },
+      ', tap "Have a promo code?" under the green button, and enter your code.',
+    ],
+    ["Kristina"],
+  ];
+  return { subject, html: plainHtml(paras, p.to), text: plainText(paras, p.to) };
 }
 
 /** Send one email through Resend. Returns true when Resend accepts it. */
