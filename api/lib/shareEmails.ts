@@ -36,7 +36,7 @@ export const LINKEDIN_POST = `New headshot! I made it with GenerAItion Headshots
 
 If yours needs an update, your first 6 are free: ${LINKEDIN_LINK}
 
-@Generation Headshots`;
+@GenerAItion Headshots`;
 
 const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -79,9 +79,9 @@ export function buildShareAskEmail(p: { to: string; name?: string | null }) {
 <p style="margin:0 0 4px;"><strong>1. Email two friends</strong> the note below, and BCC me. They will NOT be added to an email list.</p>
 ${button(mailto, "Open the email, ready to send")}
 <p style="margin:4px 0 16px;font-size:12.5px;color:#888780;">The button fills in the note and BCCs me for you. Just add two friends.</p>
-<p style="margin:0 0 4px;"><strong>2. Share GenerAItion Headshots on LinkedIn</strong> and tag our page, @Generation Headshots.</p>
+<p style="margin:0 0 4px;"><strong>2. Share GenerAItion Headshots on LinkedIn</strong> and tag our page, @GenerAItion Headshots.</p>
 ${button(linkedinCompose, "Open LinkedIn with the post ready")}
-<p style="margin:4px 0 0;font-size:12.5px;color:#888780;">To tag us, type @Generation Headshots and pick the page from the list. Adding your new headshot to the post makes it shine. <a href="${LINKEDIN_PAGE}" style="color:#888780;">Our LinkedIn page</a></p>
+<p style="margin:4px 0 0;font-size:12.5px;color:#888780;">To tag us, type @GenerAItion Headshots and pick the page from the list. Adding your new headshot to the post makes it shine. <a href="${LINKEDIN_PAGE}" style="color:#888780;">Our LinkedIn page</a></p>
 <p style="margin:20px 0 0;">I've written the shareable text for you below to make it even easier.</p>
 ${copyBox("Email for your friends", `Subject: ${FRIEND_EMAIL_SUBJECT}\n\n${friendEmailBody(fn)}`)}
 ${copyBox("LinkedIn post", LINKEDIN_POST)}
@@ -95,7 +95,7 @@ Since your shiny new headshot is getting you noticed on LinkedIn, I'm wondering 
 
 Two ways to qualify:
 1. Email two friends the note below, and BCC me (${KRISTI_EMAIL}). They will NOT be added to an email list.
-2. Share GenerAItion Headshots on LinkedIn and tag our page, @Generation Headshots: ${LINKEDIN_PAGE}
+2. Share GenerAItion Headshots on LinkedIn and tag our page, @GenerAItion Headshots: ${LINKEDIN_PAGE}
 
 I've written the shareable text for you to make it even easier.
 
