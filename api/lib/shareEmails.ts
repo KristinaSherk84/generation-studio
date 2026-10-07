@@ -70,7 +70,7 @@ const plainText = (paras: Para[][], to: string) =>
     .join("\n\n") + `\n\n\nUnsubscribe: ${unsubscribeUrl(to)}`;
 
 /** The automatic "trade me a share for a free headshot" email. */
-export function buildShareAskEmail(p: { to: string; name?: string | null }) {
+export function buildShareAskEmail(p: { to: string; name?: string | null; past?: boolean }) {
   const fn = firstName(p.name);
   const mailto =
     `mailto:?bcc=${encodeURIComponent(KRISTI_EMAIL)}` +
@@ -80,7 +80,12 @@ export function buildShareAskEmail(p: { to: string; name?: string | null }) {
   const subject = "20 seconds of help for a free headshot?";
   const paras: Para[][] = [
     [fn ? `Hi ${fn},` : "Hi there,"],
-    ["Since your shiny new headshot is getting you noticed on LinkedIn, I'm wondering if I could ask for 20 seconds of your help, in exchange for a code for a free additional headshot!"],
+    [
+      (p.past
+        ? "I hope your headshot from GenerAItion Headshots has been working hard for you on LinkedIn."
+        : "Since your shiny new headshot is getting you noticed on LinkedIn,") +
+        " I'm wondering if I could ask for 20 seconds of your help, in exchange for a code for a free additional headshot!",
+    ],
     ["Two ways to qualify:"],
     [
       `1. Email two friends the note below, and BCC me (${KRISTI_EMAIL}). They will NOT be added to an email list. Here's a shortcut that writes the email and adds the BCC for you: `,
