@@ -1096,7 +1096,7 @@ export default async function handler(
         ? `<table>
       <thead><tr>
         <th>Email</th><th>First seen (ET)</th><th>Last seen (ET)</th>
-        <th class="num" title="Total AI image calls made for this person - the real cost driver. Includes the 6 they see plus automatic likeness redos, bonus shots, and any regenerations (~10-13 per round). Counting started 2026-08-14.">Calls</th><th class="num">Est. $</th><th class="num">Paid</th><th>Status</th><th>Purchased</th><th title="Background (style) they picked on their FIRST batch. Recorded from 2026-10-05 on. Click ✎ to fix or fill in by hand.">1st background</th><th title="Outfit they picked on their FIRST batch.">1st outfit</th><th>Found via</th>
+        <th class="num" title="Total AI image calls made for this person - the real cost driver. Includes the 6 they see plus automatic likeness redos, bonus shots, and any regenerations (~10-13 per round). Counting started 2026-08-14.">Calls</th><th class="num">Est. $</th><th class="num">Paid</th><th>Status</th><th>Purchased</th><th title="Background (style) they picked on their FIRST batch. Recorded from 2026-10-05 on. Click ✎ to fix or fill in by hand.">1st BG</th><th title="Outfit they picked on their FIRST batch.">1st outfit</th><th>Found via</th>
       </tr></thead>
       <tbody>${rowsHtml}</tbody>
     </table>`
