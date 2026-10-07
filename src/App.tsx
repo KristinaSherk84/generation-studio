@@ -4,6 +4,12 @@ import { upload } from "@vercel/blob/client";
 import exifr from "exifr";
 import { seoForPath, SITE } from "./seo";
 
+// Promo code flavors (mirrors api/lib/promoStore.ts). "share" = share-reward
+// code: 30 generations + one free headshot download (2026-10-07).
+type PromoKind = "full" | "generation" | "share";
+const normalizePromoKind = (k: unknown): PromoKind =>
+  k === "generation" || k === "share" ? k : "full";
+
 // GA4 / Google Ads conversion tracking helper (2026-06-11).
 // Fires once per Stripe payment_intent.id so refreshing the success page
 // (or repeated polls of /api/verify-checkout) don't double-count.
@@ -1470,7 +1476,7 @@ type LandingProps = {
   // the paywall as unlocked in sessionStorage and advances to Upload.
   // Fires after a valid promo code is verified server-side. Receives the
   // validated code so the App can persist it for /api/generate re-verification.
-  onPromoUnlock: (code: string, kind: "full" | "generation") => void;
+  onPromoUnlock: (code: string, kind: PromoKind) => void;
 };
 
 
@@ -2405,7 +2411,7 @@ const LandingV2 = ({
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data = (await resp.json()) as {
         valid?: boolean;
-        kind?: "full" | "generation";
+        kind?: PromoKind;
       };
       if (data.valid) {
         setPromoStatus("success");
@@ -2416,7 +2422,7 @@ const LandingV2 = ({
           () =>
             onPromoUnlock(
               trimmed,
-              data.kind === "generation" ? "generation" : "full",
+              normalizePromoKind(data.kind),
             ),
           700,
         );
@@ -4556,7 +4562,7 @@ type HealthcareScreenProps = {
   // Wired to App.tsx's handlePromoUnlock — same handler LandingV2 uses.
   // Lets a healthcare-vertical visitor enter a promo code without having
   // to detour through the home page. Added 2026-05-27.
-  onPromoUnlock: (code: string, kind: "full" | "generation") => void;
+  onPromoUnlock: (code: string, kind: PromoKind) => void;
   // Free-tier CTA copy flag (2026-07-03).
   entryFeeEnabled: boolean;
 };
@@ -4591,7 +4597,7 @@ const HealthcareScreen = ({
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data = (await resp.json()) as {
         valid?: boolean;
-        kind?: "full" | "generation";
+        kind?: PromoKind;
       };
       if (data.valid) {
         setPromoStatus("success");
@@ -4601,7 +4607,7 @@ const HealthcareScreen = ({
           () =>
             onPromoUnlock(
               trimmed,
-              data.kind === "generation" ? "generation" : "full",
+              normalizePromoKind(data.kind),
             ),
           700,
         );
@@ -5952,7 +5958,7 @@ const GH_GOOGLE_REVIEWS_URL = "https://share.google/Yy9lpReew72XSYMj1";
 type AboutScreenProps = {
   onStart: () => void;
   onBackToHome: () => void;
-  onPromoUnlock: (code: string, kind: "full" | "generation") => void;
+  onPromoUnlock: (code: string, kind: PromoKind) => void;
   entryFeeEnabled: boolean;
 };
 
@@ -5975,11 +5981,11 @@ const AboutScreen = ({ onStart, onBackToHome, onPromoUnlock, entryFeeEnabled }: 
         body: JSON.stringify({ code: trimmed }),
       });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const data = (await resp.json()) as { valid?: boolean; kind?: "full" | "generation" };
+      const data = (await resp.json()) as { valid?: boolean; kind?: PromoKind };
       if (data.valid) {
         setPromoStatus("success");
         setTimeout(
-          () => onPromoUnlock(trimmed, data.kind === "generation" ? "generation" : "full"),
+          () => onPromoUnlock(trimmed, normalizePromoKind(data.kind)),
           700,
         );
       } else {
@@ -7682,7 +7688,7 @@ type PromoRecordClient = {
   code: string;
   // "full" = free everything; "generation" = free generations only (pay to
   // download). Optional/absent on legacy codes → treat as "full".
-  kind?: "full" | "generation";
+  kind?: PromoKind;
   createdAt: string;
   createdBy: string;
   notes: string;
@@ -7709,7 +7715,7 @@ const AdminScreen = () => {
   const [actionError, setActionError] = useState<string | null>(null);
   const [createNotes, setCreateNotes] = useState("");
   // Which kind of code the "Mint a new code" button generates (2026-08-01).
-  const [createKind, setCreateKind] = useState<"full" | "generation">("full");
+  const [createKind, setCreateKind] = useState<PromoKind>("full");
   const [recentlyCreatedCode, setRecentlyCreatedCode] = useState<string | null>(null);
   // Live search query (2026-06-05). Filters the codes table by code text
   // OR notes. Case-insensitive substring match. No submit needed — filter
@@ -8105,6 +8111,11 @@ const AdminScreen = () => {
               label: "Generation only",
               sub: "Free to generate; pays to download",
             },
+            {
+              value: "share" as const,
+              label: "Share reward",
+              sub: "30 generations + 1 free headshot",
+            },
           ]).map((opt) => {
             const active = createKind === opt.value;
             return (
@@ -8195,7 +8206,9 @@ const AdminScreen = () => {
             —{" "}
             {createKind === "generation"
               ? "free generations only (they pay to download)"
-              : "free everything, incl. downloads"}
+              : createKind === "share"
+                ? "share reward: 30 generations + 1 free headshot"
+                : "free everything, incl. downloads"}
             . Share with one person.
           </div>
         )}
@@ -8511,7 +8524,7 @@ const AdminScreen = () => {
                         : "Full — free generations and free downloads"
                     }
                   >
-                    {c.kind === "generation" ? "Gen only" : "Full"}
+                    {c.kind === "generation" ? "Gen only" : c.kind === "share" ? "Share reward" : "Full"}
                   </span>
                 </div>
                 <div style={{ color: c.notes ? C.dark : C.mediumGrey }}>
@@ -16515,7 +16528,30 @@ const CheckoutScreen = ({
           }
         })()
       : null;
-  const isPromoUnlock = unlockSource === "promo" && promoKind !== "generation";
+  const isPromoUnlock =
+    unlockSource === "promo" && (promoKind === null || promoKind === "full");
+  // Share-reward code (2026-10-07): one free headshot, then normal prices.
+  // The server re-checks the credit at checkout and at delivery; this flag
+  // only drives what the screen shows and whether Stripe is skipped.
+  const shareCode =
+    unlockSource === "promo" && promoKind === "share" && typeof window !== "undefined"
+      ? (() => {
+          try {
+            return window.localStorage.getItem("promo_code");
+          } catch {
+            return null;
+          }
+        })()
+      : null;
+  const shareCreditOpen =
+    !!shareCode &&
+    (() => {
+      try {
+        return window.localStorage.getItem("share_credit_used") !== "1";
+      } catch {
+        return true;
+      }
+    })();
 
   // Glow Up Deluxe pricing (2026-05-18). Mixed totals supported per
   // photo — see retouchTiers prop.
@@ -16529,12 +16565,19 @@ const CheckoutScreen = ({
   // flagged in discounted[]. Computed per-photo in cents and rounded the same
   // way the server does (create-photo-checkout-session.ts) so the on-screen
   // total EXACTLY matches what Stripe charges.
-  const chargedCents = retouchTiers.reduce((sum, t, i) => {
+  const perPhotoCents = retouchTiers.map((t, i) => {
     const base = centsForTier(t);
-    return sum + (discounted[i] ? centsAfterUpsell(base) : base);
-  }, 0);
-  const totalOwed = chargedCents / 100;
-  const savings = Math.max(0, subtotal - totalOwed);
+    return discounted[i] ? centsAfterUpsell(base) : base;
+  });
+  const chargedCents = perPhotoCents.reduce((a, b) => a + b, 0);
+  // Share reward comps the single most expensive photo (same rule as the
+  // server in create-photo-checkout-session.ts).
+  const shareCompCents =
+    shareCreditOpen && perPhotoCents.length > 0 ? Math.max(...perPhotoCents) : 0;
+  const totalOwed = (chargedCents - shareCompCents) / 100;
+  const savings = Math.max(0, subtotal - chargedCents / 100);
+  // One photo + an unused share credit = free order: skip Stripe entirely.
+  const shareFreeCheckout = shareCreditOpen && retouchTiers.length === 1;
   const fmt = (n: number) => `$${n.toFixed(2)}`;
 
   const submit = async () => {
@@ -16601,7 +16644,7 @@ const CheckoutScreen = ({
       //     handler picks up after Stripe redirects back and calls
       //     /api/deliver from there.
       // -----------------------------------------------------------------
-      if (isPromoUnlock) {
+      if (isPromoUnlock || shareFreeCheckout) {
         setProgressLabel("Finalizing delivery…");
         const response = await fetch("/api/deliver", {
           method: "POST",
@@ -16626,8 +16669,17 @@ const CheckoutScreen = ({
             // Pulled at call time from localStorage; for promo users
             // this is undefined and the server skips the metadata write.
             ...readUnlockRequestFields(),
+            // Free share-reward headshot: server claims the credit first.
+            ...(shareFreeCheckout ? { shareFree: true } : {}),
           }),
         });
+        if (shareFreeCheckout) {
+          try {
+            window.localStorage.setItem("share_credit_used", "1");
+          } catch {
+            /* display-only flag */
+          }
+        }
         if (!response.ok) {
           const err = (await response.json().catch(() => ({}))) as {
             error?: string;
@@ -16699,6 +16751,9 @@ const CheckoutScreen = ({
                 return false;
               }
             })(),
+            // Share reward: server comps the most expensive photo if the
+            // code's free-headshot credit is still unused. (2026-10-07)
+            ...(shareCreditOpen && shareCode ? { shareCode } : {}),
           }),
         },
       );
@@ -16813,6 +16868,20 @@ const CheckoutScreen = ({
             >
               <span>Last-chance discount (30% off add-ons)</span>
               <span>−{fmt(savings)}</span>
+            </div>
+          )}
+          {shareCompCents > 0 && (
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                color: "#1B6B4C",
+                fontSize: 13,
+                marginTop: 6,
+              }}
+            >
+              <span>Thank-you for sharing: 1 free headshot</span>
+              <span>−{fmt(shareCompCents / 100)}</span>
             </div>
           )}
           <div
@@ -16984,11 +17053,11 @@ const CheckoutScreen = ({
         <Button onClick={submit} disabled={!emailLooksValid || !nameLooksValid || processing} full>
           {processing
             ? progressLabel || "Preparing your download…"
-            : isPromoUnlock
+            : isPromoUnlock || shareFreeCheckout
               ? "Take me to my photos"
               : `Pay ${fmt(totalOwed)} → unlock downloads`}
         </Button>
-        {!isPromoUnlock && !processing && (
+        {!isPromoUnlock && !shareFreeCheckout && !processing && (
           <div
             style={{
               marginTop: 8,
@@ -21374,7 +21443,7 @@ export default function App() {
   // it on every call (server enforces; client doesn't trust the flag).
   const markPromoUnlocked = (
     code: string,
-    kind: "full" | "generation" = "full",
+    kind: PromoKind = "full",
   ) => {
     if (typeof window !== "undefined") {
       try {
@@ -21385,6 +21454,8 @@ export default function App() {
         // "generation" only unlocks free generating — the download flow
         // reads this so generation-only users still pay to download.
         window.localStorage.setItem("promo_kind", kind);
+        // A freshly redeemed code starts with its own credit unused.
+        window.localStorage.removeItem("share_credit_used");
       } catch {}
     }
     setIsUnlocked(true);
@@ -21424,6 +21495,7 @@ export default function App() {
         window.localStorage.removeItem("unlock_expires_at");
         window.localStorage.removeItem("promo_code");
         window.localStorage.removeItem("promo_kind");
+        window.localStorage.removeItem("share_credit_used");
       } catch {}
     }
     setUnlockExpiresAt(null);
@@ -21809,6 +21881,15 @@ export default function App() {
           }),
         });
         if (!deliverResp.ok) throw new Error(`HTTP ${deliverResp.status}`);
+        // A share-reward code's free headshot was comped on this paid order
+        // (the server spent the credit in /api/deliver). (2026-10-07)
+        try {
+          if (window.localStorage.getItem("promo_kind") === "share") {
+            window.localStorage.setItem("share_credit_used", "1");
+          }
+        } catch {
+          /* display-only flag */
+        }
         const deliverData = (await deliverResp.json()) as {
           photoUrls: string[];
           shareGraphicUrls?: string[];
@@ -22069,7 +22150,7 @@ export default function App() {
   // get free everything). Friends skip both fees.
   const handlePromoUnlock = (
     code: string,
-    kind: "full" | "generation" = "full",
+    kind: PromoKind = "full",
   ) => {
     // Persist the validated promo code so /api/generate can re-verify it
     // server-side on every call. The server is the actual gate; this

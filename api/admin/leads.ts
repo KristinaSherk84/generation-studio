@@ -15,6 +15,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import {
   listLeads,
+  setLeadShareFields,
   markLeadPurchased,
   recordPurchase,
   setLeadFoundVia,
@@ -40,6 +41,8 @@ import {
   OUTFIT_OPTIONS,
 } from "../lib/leadStore.js";
 import type { LeadChoice } from "../lib/leadStore.js";
+import { createCode, generateCode } from "../lib/promoStore.js";
+import { buildShareRewardEmail, sendViaResend } from "../lib/shareEmails.js";
 import {
   getDailyStats,
   setDailySpend,
@@ -255,6 +258,56 @@ export default async function handler(
     const expectedPw = process.env.ADMIN_PASSWORD ?? "";
     if (!expectedPw || !safeEquals(bpw, expectedPw)) {
       res.status(401).json({ ok: false, error: "Unauthorized" });
+      return;
+    }
+    // Share reward (2026-10-07): mint a "share" code (30 generations + 1 free
+    // headshot) and email it. Kristi clicks this after seeing the BCC or the
+    // LinkedIn tag. Refuses a second reward for the same lead.
+    if (body.action === "sendShareReward" && typeof body.email === "string") {
+      try {
+        const lead = (await listLeads()).find(
+          (l) => l.email.trim().toLowerCase() === String(body.email).trim().toLowerCase(),
+        );
+        if (!lead) {
+          res.status(404).json({ ok: false, error: "Lead not found" });
+          return;
+        }
+        if (lead.shareRewardSentAt) {
+          res.status(409).json({ ok: false, error: `Already sent (${lead.shareRewardCode ?? "code"})` });
+          return;
+        }
+        let code = "";
+        for (let i = 0; i < 5 && !code; i++) {
+          try {
+            code = (await createCode({
+              code: generateCode(),
+              createdBy: "leads-page",
+              notes: `share reward: ${lead.email}`,
+              kind: "share",
+            })).code;
+          } catch {
+            /* collision: try another */
+          }
+        }
+        if (!code) {
+          res.status(500).json({ ok: false, error: "Could not mint a code" });
+          return;
+        }
+        const mail = buildShareRewardEmail({ to: lead.email, name: lead.name, code });
+        const sent = await sendViaResend({ to: lead.email, ...mail });
+        if (!sent.ok) {
+          res.status(502).json({ ok: false, error: `Email failed (code ${code} was created): ${sent.body ?? sent.status}` });
+          return;
+        }
+        await setLeadShareFields(lead.email, {
+          shareRewardCode: code,
+          shareRewardSentAt: new Date().toISOString(),
+        });
+        res.status(200).json({ ok: true, code });
+      } catch (err) {
+        console.error("[admin/leads] sendShareReward failed:", err);
+        res.status(500).json({ ok: false, error: "Failed to send reward" });
+      }
       return;
     }
     if (body.action === "markPurchased" && typeof body.email === "string") {
@@ -553,6 +606,16 @@ export default async function handler(
     // Daily activity (2026-08-14): API calls (Gemini image calls) + distinct
     // people who generated, per ET day, plus the Google spend Kristi types in.
     const dailyStats = await getDailyStats(lastEtDates(14));
+    // Share campaign chips + button (2026-10-07).
+    const shareCell = (l: { email: string; shareAskSentAt?: string | null; shareRewardSentAt?: string | null; shareRewardCode?: string | null }) => {
+      const asked = l.shareAskSentAt
+        ? `<div class="sharechip">📨 asked ${esc(formatDateET(l.shareAskSentAt))}</div>`
+        : "";
+      const reward = l.shareRewardSentAt
+        ? `<div class="sharechip">🎁 reward sent ${esc(formatDateET(l.shareRewardSentAt))} · ${esc((l.shareRewardCode ?? "").toUpperCase())}</div>`
+        : `<div><button class="sharebtn" data-email="${esc(l.email)}">🎁 Send share reward</button></div>`;
+      return asked + reward;
+    };
     const paidFor = (email: string) =>
       paidByEmail[email.trim().toLowerCase()] ?? 0;
     // What to show in the Paid column: the Stripe amount matched by checkout
@@ -778,7 +841,7 @@ export default async function handler(
         }</td>
         <td class="status">${
           l.purchased
-            ? "✅ Purchased"
+            ? "✅ Purchased" + shareCell(l)
             : `<button class="mkbtn" data-email="${esc(l.email)}">Mark purchased</button>`
         }</td>
         <td>${esc(formatDateET(l.purchasedAt))}</td>
@@ -920,6 +983,7 @@ export default async function handler(
   summary{cursor:pointer;font-weight:600;font-size:14px;}
   textarea{width:100%;height:90px;margin-top:10px;font-size:12px;padding:8px;border:1px solid var(--line);border-radius:8px;font-family:ui-monospace,monospace;}
   .empty{padding:40px;text-align:center;color:var(--sub);}
+  .sharechip{font-size:11px;color:#6E6E6A;margin-top:3px;white-space:nowrap}.sharebtn{margin-top:4px;font-size:11px;padding:3px 8px;border:1px solid #CFE6C4;background:#F1FAEC;border-radius:6px;cursor:pointer}
   .mkbtn{background:#fff;color:var(--forest);border:1px solid var(--forest);border-radius:6px;
     font-size:11px;font-weight:600;padding:4px 9px;cursor:pointer;white-space:nowrap;}
   .mkbtn:disabled{opacity:.6;cursor:default;}
@@ -1042,6 +1106,23 @@ export default async function handler(
 </div>
 <script>
   var PW = ${JSON.stringify(pw)};
+  document.querySelectorAll('.sharebtn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      if (!confirm('Send ' + b.dataset.email + ' a share-reward code (30 generations + 1 free headshot)?')) return;
+      b.disabled = true; b.textContent = 'Sending…';
+      fetch('/api/admin/leads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'sendShareReward', pw: PW, email: b.dataset.email }),
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d && d.ok) { alert('Sent! Code ' + String(d.code).toUpperCase()); location.reload(); }
+          else { b.disabled = false; b.textContent = '🎁 Send share reward'; alert('Failed: ' + ((d && d.error) || 'unknown')); }
+        })
+        .catch(function () { b.disabled = false; b.textContent = '🎁 Send share reward'; alert('Network error'); });
+    });
+  });
   document.querySelectorAll('.mkbtn').forEach(function (b) {
     b.addEventListener('click', function () {
       if (!confirm('Mark ' + b.dataset.email + ' as purchased? They will stop receiving win-back emails.')) return;

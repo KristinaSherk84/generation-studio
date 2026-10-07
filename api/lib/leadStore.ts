@@ -54,6 +54,13 @@ export type LeadRecord = {
   foundVia?: string | null;
   // Loose context for debugging / segmentation (style picked, etc.).
   source: string;
+  // Name typed at checkout (2026-10-07), for "Hi Name" in follow-up emails.
+  name?: string | null;
+  // Share-ask email (5 days after purchase) and the share reward code Kristi
+  // sent from the leads page. (2026-10-07)
+  shareAskSentAt?: string | null;
+  shareRewardCode?: string | null;
+  shareRewardSentAt?: string | null;
   // Most recent saved-session resume token (2026-08-05). Set by
   // /api/save-session when a finished batch is persisted, so the 12-hour
   // win-back email can link the customer straight back to their saved grid
@@ -332,7 +339,7 @@ export async function getLeadChoices(
  */
 export async function recordPurchase(
   email: string,
-  opts?: { gens?: number; calls?: number; estCostUsd?: number },
+  opts?: { gens?: number; calls?: number; estCostUsd?: number; name?: string },
 ): Promise<void> {
   if (!looksLikeEmail(email)) return;
   const key = recordKey(email);
@@ -360,6 +367,9 @@ export async function recordPurchase(
   }
   if (opts?.estCostUsd != null && Number.isFinite(opts.estCostUsd)) {
     rec.estCostOverrideUsd = Math.max(0, opts.estCostUsd);
+  }
+  if (opts?.name && opts.name.trim().length >= 2) {
+    rec.name = opts.name.trim().slice(0, 120);
   }
   await redis.set(key, rec);
   await redis.sadd(INDEX_KEY, email.trim().toLowerCase());
@@ -799,4 +809,17 @@ export async function listLeads(): Promise<LeadRecord[]> {
   return records
     .filter((r): r is LeadRecord => !!r)
     .sort((a, b) => (a.lastSeenAt < b.lastSeenAt ? 1 : -1));
+}
+
+
+/** Patch share-campaign fields on a lead (2026-10-07). No-op if missing. */
+export async function setLeadShareFields(
+  email: string,
+  patch: Partial<Pick<LeadRecord, "shareAskSentAt" | "shareRewardCode" | "shareRewardSentAt">>,
+): Promise<void> {
+  if (!looksLikeEmail(email)) return;
+  const key = recordKey(email);
+  const existing = (await redis.get<LeadRecord>(key)) ?? null;
+  if (!existing) return;
+  await redis.set(key, { ...existing, ...patch });
 }

@@ -35,6 +35,7 @@ import { GoogleGenAI, type Part } from "@google/genai";
 import sharp from "sharp";
 import { buildShareGraphic } from "./lib/compositeBeforeAfter.js";
 import { recordPurchase } from "./lib/leadStore.js";
+import { useShareCredit } from "./lib/promoStore.js";
 import {
   buildRetouchPrompt,
   setActiveRetouchOverrides,
@@ -95,6 +96,13 @@ type DeliverRequest = {
   // users won't have one, and skipping the metadata write for them is
   // intentional (Tiffany etc. keep their unlock permanently).
   stripeSessionId?: string;
+  // Promo code the customer unlocked with (sent on every call by the app).
+  // For a share-reward code, a successful delivery spends its one free
+  // headshot credit. (2026-10-07)
+  promoCode?: string;
+  // True when this delivery is the FREE one-headshot share-reward order (no
+  // Stripe payment). The credit must still be available or we refuse.
+  shareFree?: boolean;
   // Per-photo retouch tier (Glow Up Deluxe pivot 2026-05-18). Same index
   // as photoUrls.
   //   "basic"  — Realistic only, no retouching. $14.99 per photo.
@@ -1179,6 +1187,21 @@ export default async function handler(
     return res.status(400).json({ error: "Invalid skin" });
   }
 
+  // Share reward (2026-10-07): a free one-headshot order must claim the
+  // code's credit BEFORE any retouch spend, so a reused code is refused.
+  const shareCode =
+    typeof body.promoCode === "string" ? body.promoCode.trim().toLowerCase() : "";
+  let shareCreditClaimed = false;
+  if (body.shareFree === true) {
+    if (!shareCode || body.photoUrls.length !== 1 || !(await useShareCredit(shareCode))) {
+      return res.status(402).json({
+        error: "Your free headshot credit has already been used. Additional headshots are $14.99.",
+        reason: "share_credit_used",
+      });
+    }
+    shareCreditClaimed = true;
+  }
+
   const deliveryId = newDeliveryId();
   const timestamp = new Date().toISOString();
 
@@ -1294,7 +1317,10 @@ export default async function handler(
     //      different-email buyers still show as purchased) and is a no-op for
     //      invalid emails. ----
     try {
-      await recordPurchase(body.email);
+      await recordPurchase(body.email, { name: customerNameTrimmed });
+      // Paid order that Stripe already comped one headshot on: spend the
+      // credit now (no-op for codes without one / other kinds of code).
+      if (shareCode && !shareCreditClaimed) await useShareCredit(shareCode);
     } catch (err) {
       console.error("[deliver] markLeadPurchased failed:", err);
     }

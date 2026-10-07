@@ -19,6 +19,7 @@
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import {
+  parsePromoKind,
   createCode,
   deleteCode,
   generateCode,
@@ -113,7 +114,7 @@ export default async function handler(
       // belt-and-suspenders for the case where the index somehow gets
       // very dense.
       const kind: PromoKind =
-        body.kind === "generation" ? "generation" : "full";
+        parsePromoKind(body.kind);
       let attempt: PromoRecord | null = null;
       for (let i = 0; i < 5 && !attempt; i++) {
         try {
@@ -146,7 +147,7 @@ export default async function handler(
           .json({ error: "Company required, count must be 1-500" });
       }
       const kind: PromoKind =
-        body.kind === "generation" ? "generation" : "full";
+        parsePromoKind(body.kind);
       const minted: PromoRecord[] = [];
       const errors: string[] = [];
       for (let seat = 1; seat <= count; seat++) {

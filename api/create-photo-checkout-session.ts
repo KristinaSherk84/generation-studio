@@ -30,6 +30,7 @@
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { shareCreditStatus } from "./lib/promoStore.js";
 
 export const maxDuration = 15;
 
@@ -69,6 +70,10 @@ type CreatePhotoCheckoutBody = {
   // per-photo charge by 0.9 (rounded per photo, same pattern as the upsell
   // discount above) so nothing about the tier / count math changes downstream.
   winback?: boolean;
+  // Share-reward code (2026-10-07). When it still has its free-download
+  // credit, the most expensive headshot in the cart is comped. The credit is
+  // only SPENT later, in /api/deliver, once the order is actually delivered.
+  shareCode?: string;
 };
 
 type CreatePhotoCheckoutResponse = {
@@ -138,13 +143,31 @@ export default async function handler(
   // upsell add, minus another 10% if this is a win-back checkout. Multipliers
   // stack (0.7 × 0.9 = 0.63 for an upsell+winback photo). Rounded PER PHOTO so
   // it matches the client's on-screen total exactly.
-  const totalCents = tiers.reduce((sum, t, i) => {
+  const perPhotoCents = tiers.map((t, i) => {
     const base = priceCentsForTier(t);
     let charged = base;
     if (discounted[i]) charged = Math.round(charged * (1 - UPSELL_DISCOUNT));
     if (winback) charged = Math.round(charged * (1 - WINBACK_DISCOUNT));
-    return sum + charged;
-  }, 0);
+    return charged;
+  });
+  // Share reward: comp the single most expensive photo (server decides, so
+  // the client can't pick which one or claim a spent credit).
+  let compedCents = 0;
+  const shareCode =
+    typeof body?.shareCode === "string" ? body.shareCode.trim().toLowerCase() : "";
+  if (shareCode) {
+    const status = await shareCreditStatus(shareCode);
+    if (status.isShareCode && status.creditsLeft > 0) {
+      compedCents = Math.max(...perPhotoCents);
+    }
+  }
+  const totalCents = perPhotoCents.reduce((a, b) => a + b, 0) - compedCents;
+  // A one-photo share-reward order is free and never reaches Stripe (the app
+  // delivers it directly). If one shows up here anyway, refuse rather than
+  // creating a $0 Stripe session, which Stripe rejects.
+  if (totalCents <= 0) {
+    return res.status(400).json({ error: "Nothing to charge", free: true });
+  }
 
   const host = req.headers.host;
   if (!host) {
@@ -168,6 +191,9 @@ export default async function handler(
   if (winback) {
     itemName += ` · 10% off (winback)`;
   }
+  if (compedCents > 0) {
+    itemName += ` · 1 free (share reward)`;
+  }
 
   const formBody = new URLSearchParams();
   formBody.append("mode", "payment");
@@ -178,6 +204,10 @@ export default async function handler(
     String(totalCents),
   );
   formBody.append("line_items[0][quantity]", "1");
+  if (compedCents > 0) {
+    formBody.append("metadata[share_code]", shareCode);
+    formBody.append("metadata[share_comped_cents]", String(compedCents));
+  }
   formBody.append(
     "success_url",
     `${origin}/?photo_paid=1&session_id={CHECKOUT_SESSION_ID}`,

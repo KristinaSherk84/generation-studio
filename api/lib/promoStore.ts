@@ -37,7 +37,16 @@ const redis = new Redis({
 //   - "generation": unlimited free generations only. The customer still pays
 //                   to download the ones they like. Used for the 12h win-back
 //                   email ("try again on me").
-export type PromoKind = "full" | "generation";
+//   - "share":      share reward (2026-10-07). Up to SHARE_GEN_CAP image calls
+//                   (30 ≈ $3 of Gemini) PLUS one free headshot download. Minted
+//                   from the leads page after a buyer emails friends / posts
+//                   on LinkedIn. Extra headshots beyond the free one are paid.
+export type PromoKind = "full" | "generation" | "share";
+
+/** Image calls a share-reward code may make (30 × ~$0.10 ≈ $3). */
+export const SHARE_GEN_CAP = Number(process.env.SHARE_GEN_CAP ?? "30");
+/** Free headshot downloads a share-reward code includes. */
+export const SHARE_DOWNLOAD_CREDITS = 1;
 
 // A single promo code record. `code` is the human-readable string the
 // customer enters; the index field uses it as the unique identifier.
@@ -68,6 +77,12 @@ export type PromoRecord = {
   // Optional explicit revoke flag. Manually flipped by admin. Cannot be
   // redeemed even if not consumed.
   revoked: boolean;
+  // Share-reward codes only (2026-10-07): image-call cap and free downloads.
+  // The running image-call count lives in its own counter key (gensKey) so
+  // concurrent generate calls can INCR it without racing the record.
+  genCap?: number;
+  downloadCredits?: number;
+  downloadsUsed?: number;
 };
 
 const KEY_PREFIX = "promo:";
@@ -76,10 +91,18 @@ const INDEX_KEY = "promo:_index";
 function recordKey(code: string): string {
   return `${KEY_PREFIX}${code.toLowerCase()}`;
 }
+function gensKey(code: string): string {
+  return `${KEY_PREFIX}gens:${code.toLowerCase()}`;
+}
 
 /** Backward-compat reader: a record with no `kind` is a legacy "full" code. */
 export function promoKindOf(rec: Pick<PromoRecord, "kind">): PromoKind {
-  return rec.kind === "generation" ? "generation" : "full";
+  return rec.kind === "generation" || rec.kind === "share" ? rec.kind : "full";
+}
+
+/** Normalize an untrusted kind value from a request body. */
+export function parsePromoKind(v: unknown): PromoKind {
+  return v === "generation" || v === "share" ? v : "full";
 }
 
 /**
@@ -116,9 +139,13 @@ export async function createCode(params: {
   const existing = await redis.get<PromoRecord>(recordKey(code));
   if (existing) throw new Error("Code already exists");
 
+  const kind = parsePromoKind(params.kind);
   const record: PromoRecord = {
     code,
-    kind: params.kind === "generation" ? "generation" : "full",
+    kind,
+    ...(kind === "share"
+      ? { genCap: SHARE_GEN_CAP, downloadCredits: SHARE_DOWNLOAD_CREDITS, downloadsUsed: 0 }
+      : {}),
     createdAt: new Date().toISOString(),
     createdBy: params.createdBy,
     notes: params.notes,
@@ -179,6 +206,12 @@ export async function isCodeActiveForGenerate(
     if (!existing) return false;
     if (existing.revoked) return false;
     if (!existing.consumed) return false; // not yet activated
+    // Share-reward codes stop unlocking generation once their image-call cap
+    // is spent; the customer then falls back to the normal free/paid limits.
+    if (promoKindOf(existing) === "share") {
+      const used = Number((await redis.get<number>(gensKey(code))) ?? 0);
+      if (used >= (existing.genCap ?? SHARE_GEN_CAP)) return false;
+    }
     return true;
   } catch {
     // KV unavailable — fail closed (return false). The caller falls
@@ -276,4 +309,76 @@ export async function redeemCode(params: {
   // Return the code's kind so the client knows whether this unlock also
   // comps the download ("full") or only free generations ("generation").
   return { valid: true, kind: promoKindOf(existing) };
+}
+
+
+// ---------------------------------------------------------------------------
+// Share-reward helpers (2026-10-07)
+// ---------------------------------------------------------------------------
+
+/**
+ * Count one image call against a share-reward code. Called by /api/generate
+ * after the call clears the paywall. No-op for other kinds. Best-effort:
+ * never throws, so a Redis blip can't block a generation.
+ */
+export async function countPromoGeneration(code: string): Promise<void> {
+  if (!code) return;
+  try {
+    const rec = await redis.get<PromoRecord>(recordKey(code));
+    if (!rec || promoKindOf(rec) !== "share") return;
+    await redis.incr(gensKey(code));
+  } catch {
+    /* best-effort */
+  }
+}
+
+export type ShareCreditStatus = {
+  isShareCode: boolean;
+  creditsLeft: number;
+  gensUsed: number;
+  genCap: number;
+};
+
+/** Read-only status of a share-reward code's free download + image calls. */
+export async function shareCreditStatus(code: string): Promise<ShareCreditStatus> {
+  const none = { isShareCode: false, creditsLeft: 0, gensUsed: 0, genCap: 0 };
+  if (!code) return none;
+  try {
+    const rec = await redis.get<PromoRecord>(recordKey(code.toLowerCase()));
+    if (!rec || rec.revoked || promoKindOf(rec) !== "share") return none;
+    const credits = rec.downloadCredits ?? SHARE_DOWNLOAD_CREDITS;
+    const used = rec.downloadsUsed ?? 0;
+    const gensUsed = Number((await redis.get<number>(gensKey(code))) ?? 0);
+    return {
+      isShareCode: true,
+      creditsLeft: Math.max(0, credits - used),
+      gensUsed,
+      genCap: rec.genCap ?? SHARE_GEN_CAP,
+    };
+  } catch {
+    return none;
+  }
+}
+
+/**
+ * Spend one free-download credit. Returns true only if a credit was available
+ * and this call claimed it (same read / write / re-read version check as
+ * redeemCode, so two simultaneous deliveries can't both claim it).
+ */
+export async function useShareCredit(code: string): Promise<boolean> {
+  if (!code) return false;
+  const key = recordKey(code.toLowerCase());
+  try {
+    const rec = await redis.get<PromoRecord>(key);
+    if (!rec || rec.revoked || promoKindOf(rec) !== "share") return false;
+    const credits = rec.downloadCredits ?? SHARE_DOWNLOAD_CREDITS;
+    const used = rec.downloadsUsed ?? 0;
+    if (used >= credits) return false;
+    const next: PromoRecord = { ...rec, downloadsUsed: used + 1, version: rec.version + 1 };
+    await redis.set(key, next);
+    const verify = await redis.get<PromoRecord>(key);
+    return !!verify && verify.version === next.version;
+  } catch {
+    return false;
+  }
 }

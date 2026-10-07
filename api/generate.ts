@@ -27,7 +27,7 @@
 
 import { GoogleGenAI } from "@google/genai";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { isCodeActiveForGenerate } from "./lib/promoStore.js";
+import { isCodeActiveForGenerate, countPromoGeneration } from "./lib/promoStore.js";
 import {
   checkFreeBatchLimit,
   checkPurchaseBatchCredit,
@@ -2073,6 +2073,11 @@ export default async function handler(
   // but best-effort (never throws) so the number is reliable without the
   // serverless function freezing before a fire-and-forget write lands.
   await bumpApiCall(clientIp);
+  // Share-reward codes are capped at SHARE_GEN_CAP image calls (2026-10-07).
+  // No-op for every other kind of code. Best-effort, never throws.
+  if (typeof body.promoCode === "string" && body.promoCode.trim()) {
+    await countPromoGeneration(body.promoCode.trim().toLowerCase());
+  }
   // Per-person attribution (2026-08-14): also count this billable image call
   // against the email the customer generated under, so the leads form shows a
   // real per-person image-call total (not just rounds started). bumpLeadCalls
