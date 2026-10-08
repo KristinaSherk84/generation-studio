@@ -1050,7 +1050,65 @@ The result must look like the same photograph as IMAGE 1, now showing the correc
 const FINAL_IDENTITY_CHECK_DEFAULT = `FINAL IDENTITY CHECK (most important rule in this entire prompt): Above all else, the face in this output must look UNMISTAKABLY like the person in the reference photos — same face shape, same bone structure, same eye shape, spacing and color, same nose width and bridge, same mouth and lips, same jawline and chin, same hairline, same ethnicity, same distinguishing marks, same natural asymmetries. Before finalizing, compare your face to the reference faces feature by feature — eye spacing, nose width, lip shape, overall face width, jaw, chin, and any asymmetry — and correct any feature that has drifted toward a more generic, more symmetrical, or more conventionally attractive shape. The single most common failure is quietly averaging the face toward a good-looking stranger — do NOT do this. If the generated face wouldn't be recognized instantly by a friend or family member, you have failed this image. The style, lighting, and outfit directives above NEVER override identity. Do NOT default to a generic professional-headshot face. Do NOT blend toward stock-photo proportions. This is THIS SPECIFIC PERSON in a new setting, not a generic professional in their general age and ethnic range.`;
 const OUTPUT_CONSTRAINT_DEFAULT = `IMPORTANT OUTPUT CONSTRAINT: Return exactly ONE single photograph. Do NOT return a grid, contact sheet, collage, multi-panel image, side-by-side comparison, or any composition containing more than one headshot. One photo only.`;
 
+// Generate Versions prompts (moved into the prompt editor 2026-10-08 per
+// Kristi's standing rule). Each REPLACES the whole prompt for one of the
+// three version tiles. IMAGE 1 = the source shot, IMAGES 2+ = references.
+// Version 1: expand framing + body angle
+const VERSION_0_DEFAULT = `You are an image editor. You will receive:
+- IMAGE 1: the TARGET SHOT — a finished professional headshot. This is what your output must look like.
+- IMAGES 2+: identity reference photos of the same person. Use these ONLY to reinforce facial identity (face shape, jawline, eyes, skin tone). Do NOT copy their outfit, background, framing, or pose.
+Your output must be a NEW image, a variant of IMAGE 1 with the framing expanded slightly:
+- OUTFIT: copy from IMAGE 1 exactly. Same garment, same color, same neckline — DO NOT SWAP or change THE OUTFIT.
+- BACKGROUND: copy from IMAGE 1 exactly. Same color, same environment, same depth-of-field. If IMAGE 1 is on a solid dark studio backdrop, keep the solid dark studio backdrop. Do NOT introduce an office/building/outdoor environment from the identity photos.
+- HAIR: copy from IMAGE 1 exactly. Identical hair to image 1.
+- LIGHTING: copy from IMAGE 1 exactly. Same direction, same intensity, same shadow shape.
+- FRAMING / CROP: expand framing, slightly. Expand photo framing moderately as if you are un-cropping the headshot, showing a little more of the shoulders and body than IMAGE 1 shows.
+- FACE IDENTITY: unmistakably the same person as in the identity photos (IMAGES 2+). Cross-check jawline, brow, eyes, skin tone.
+- BODY ANGLE: rotate the shoulders and torso 25–35° to one side (pick a natural direction). The head can turn with the shoulders or stay looking at the camera.`;
+
+// Version 2: expression change
+const VERSION_1_DEFAULT = `You are an image editor. You will receive:
+- IMAGE 1: the TARGET SHOT — a finished professional headshot the customer already picked. This is what your output must look like almost exactly.
+- IMAGES 2+: identity reference photos of the same person. Use these ONLY to reinforce facial identity (face shape, jawline, eyes, skin tone). Do NOT copy their outfit, background, framing, or pose.
+
+Your output must be a NEW image that is functionally a variant of IMAGE 1:
+
+- OUTFIT: copy from IMAGE 1 exactly. Same garment, same color, same neckline. If IMAGE 1 shows a black t-shirt, output a black t-shirt. Do NOT change to a suit/blazer/tie/shirt just because the identity photos show one. This is the single most common failure mode — DO NOT SWAP THE OUTFIT.
+- BACKGROUND: copy from IMAGE 1 exactly. Same color, same environment, same depth-of-field. If IMAGE 1 is on a solid dark studio backdrop, keep the solid dark studio backdrop. Do NOT introduce an office/building/outdoor environment from the identity photos.
+- HAIR: copy from IMAGE 1 exactly. Same style, same length, same color.
+- LIGHTING: copy from IMAGE 1 exactly. Same direction, same intensity, same shadow shape.
+- FRAMING / CROP: copy from IMAGE 1 exactly. The head must occupy the SAME PERCENTAGE of the frame as it does in IMAGE 1. The top of the head, the bottom of the crop, and the head's position within the frame must match IMAGE 1. Do NOT widen. Do NOT zoom out. Do NOT show more of the body than IMAGE 1 shows. If IMAGE 1 crops at the mid-chest, output crops at the mid-chest.
+- FACE IDENTITY: unmistakably the same person as in the identity photos (IMAGES 2+). Cross-check jawline, brow, eyes, skin tone.
+
+The ONE thing you WILL change from IMAGE 1:
+- EXPRESSION: shift the mouth and eye energy. If IMAGE 1 has a broad open-mouth smile, output a softer closed-lip smile. If IMAGE 1 has a subtle closed smile, output a brighter teeth-showing smile. Pull the exact expression flavor from the identity photos (IMAGES 2+), not from IMAGE 1. Everything else — outfit, background, hair, lighting, framing, body angle — stays identical to IMAGE 1.
+
+Do NOT change the crop. Do NOT change the outfit. Do NOT change the background. The output is IMAGE 1 with a different expression. Nothing else.`;
+
+// Version 3: opposite body angle
+const VERSION_2_DEFAULT = `You are an image editor. You will receive:
+- IMAGE 1: the TARGET SHOT — a finished professional headshot.
+- IMAGES 2+: identity reference photos of the same person. Use these ONLY to reinforce facial identity (face shape, jawline, eyes, skin tone). Do NOT copy their outfit, background, framing, or pose.
+
+Your output must be a variant of IMAGE 1:
+
+- OUTFIT: copy from IMAGE 1 exactly. Same garment, same color, same neckline — DO NOT SWAP the outfit.
+- BACKGROUND: copy from IMAGE 1 exactly. Same color, same environment, same depth-of-field.
+- HAIR: copy from IMAGE 1 exactly. Identical hair style, length, color.
+- LIGHTING: copy from IMAGE 1 exactly. Same direction, same intensity, same shadow shape.
+- EXPRESSION: match the target reference's expression closely.
+- FRAMING / CROP: copy from IMAGE 1 exactly. Same head size, same head position, same crop line.
+- FACE IDENTITY: unmistakably the same person as in the identity photos.
+
+The ONE thing you WILL change from IMAGE 1:
+- BODY ANGLE: rotate the shoulders and torso 25–35° so the subject faces the opposite direction from IMAGE 1. If IMAGE 1 is straight to camera, rotate to the LEFT. If IMAGE 1 is angled to the right, rotate to face fully LEFT. The head can turn with the shoulders or stay looking at the camera. Everything else stays identical to IMAGE 1.
+
+Do NOT change the crop. Do NOT change the outfit. Do NOT change the background. The output is IMAGE 1 with the body rotated in the opposite direction. Nothing else.`;
+
 export const PROMPT_DEFAULTS: Record<string, string> = {
+  version_0: VERSION_0_DEFAULT,
+  version_1: VERSION_1_DEFAULT,
+  version_2: VERSION_2_DEFAULT,
   identity: BLOCK_1_IDENTITY,
   under_eye: BLOCK_UNDER_EYE,
   under_eye_male: BLOCK_UNDER_EYE,
@@ -1194,6 +1252,9 @@ export const PROMPT_SEGMENTS: PromptSegmentMeta[] = [
   { key: "identity_lock_all", label: "Likeness lock — other slots", group: "Identity", fires: {}, note: "Slots 2-6." },
   { key: "final_identity_check", label: "Final identity check", group: "Identity", fires: {} },
   { key: "identity_fix", label: "Identity redo — face-fix pass", group: "Identity", fires: {}, note: "Replaces the whole prompt for automatic likeness redos. IMAGE 1 is the weak shot, IMAGE 2 the best reference." },
+  { key: "version_0", label: "Version 1 — expand framing + body angle", group: "Generate Versions", fires: {}, note: "Replaces the whole prompt for the first 'make more versions' tile. IMAGE 1 is the customer's chosen shot." },
+  { key: "version_1", label: "Version 2 — expression change", group: "Generate Versions", fires: {}, note: "Replaces the whole prompt for the second version tile." },
+  { key: "version_2", label: "Version 3 — opposite body angle", group: "Generate Versions", fires: {}, note: "Replaces the whole prompt for the third version tile." },
   { key: "reference_photo_rule", label: "Reference-photo usage rule", group: "Core", fires: {} },
   { key: "output_constraint", label: "Output constraint (one photo)", group: "Core", fires: {} },
 ];
@@ -2356,36 +2417,10 @@ export default async function handler(
       // AND rotate body angle in one go. Kept as a complete standalone
       // prompt (not shared-header + delta) so the wording flows exactly
       // as she wrote it — no assembly-drift.
-      const variant0Prompt = `You are an image editor. You will receive:
-- IMAGE 1: the TARGET SHOT — a finished professional headshot. This is what your output must look like.
-- IMAGES 2+: identity reference photos of the same person. Use these ONLY to reinforce facial identity (face shape, jawline, eyes, skin tone). Do NOT copy their outfit, background, framing, or pose.
-Your output must be a slightly zoomed out, NEW image, a wider variant of IMAGE 1:
-- OUTFIT: copy from IMAGE 1 exactly. Same garment, same color, same neckline — DO NOT SWAP or change THE OUTFIT.
-- BACKGROUND: copy from IMAGE 1 exactly. Same color, same environment, same depth-of-field. If IMAGE 1 is on a solid dark studio backdrop, keep the solid dark studio backdrop. Do NOT introduce an office/building/outdoor environment from the identity photos.
-- HAIR: copy from IMAGE 1 exactly. Identical hair to image 1.
-- LIGHTING: copy from IMAGE 1 exactly. Same direction, same intensity, same shadow shape.
-- FRAMING / CROP: widen slightly, zoom out by 10 percent. copy base from IMAGE 1, then slightly expand frame. show a tiny bit more of the body than IMAGE 1 shows.
-- FACE IDENTITY: unmistakably the same person as in the identity photos (IMAGES 2+). Cross-check jawline, brow, eyes, skin tone.
-- BODY ANGLE: rotate the shoulders and torso 25–35° to one side (pick a natural direction). The head can turn with the shoulders or stay looking at the camera.`;
+      const variant0Prompt = seg("version_0", VERSION_0_DEFAULT);
 
       // Variant 1 — expression change. Unchanged from 2026-09-10 rewrite.
-      const variant1Prompt = `You are an image editor. You will receive:
-- IMAGE 1: the TARGET SHOT — a finished professional headshot the customer already picked. This is what your output must look like almost exactly.
-- IMAGES 2+: identity reference photos of the same person. Use these ONLY to reinforce facial identity (face shape, jawline, eyes, skin tone). Do NOT copy their outfit, background, framing, or pose.
-
-Your output must be a NEW image that is functionally a variant of IMAGE 1:
-
-- OUTFIT: copy from IMAGE 1 exactly. Same garment, same color, same neckline. If IMAGE 1 shows a black t-shirt, output a black t-shirt. Do NOT change to a suit/blazer/tie/shirt just because the identity photos show one. This is the single most common failure mode — DO NOT SWAP THE OUTFIT.
-- BACKGROUND: copy from IMAGE 1 exactly. Same color, same environment, same depth-of-field. If IMAGE 1 is on a solid dark studio backdrop, keep the solid dark studio backdrop. Do NOT introduce an office/building/outdoor environment from the identity photos.
-- HAIR: copy from IMAGE 1 exactly. Same style, same length, same color.
-- LIGHTING: copy from IMAGE 1 exactly. Same direction, same intensity, same shadow shape.
-- FRAMING / CROP: copy from IMAGE 1 exactly. The head must occupy the SAME PERCENTAGE of the frame as it does in IMAGE 1. The top of the head, the bottom of the crop, and the head's position within the frame must match IMAGE 1. Do NOT widen. Do NOT zoom out. Do NOT show more of the body than IMAGE 1 shows. If IMAGE 1 crops at the mid-chest, output crops at the mid-chest.
-- FACE IDENTITY: unmistakably the same person as in the identity photos (IMAGES 2+). Cross-check jawline, brow, eyes, skin tone.
-
-The ONE thing you WILL change from IMAGE 1:
-- EXPRESSION: shift the mouth and eye energy. If IMAGE 1 has a broad open-mouth smile, output a softer closed-lip smile. If IMAGE 1 has a subtle closed smile, output a brighter teeth-showing smile. Pull the exact expression flavor from the identity photos (IMAGES 2+), not from IMAGE 1. Everything else — outfit, background, hair, lighting, framing, body angle — stays identical to IMAGE 1.
-
-Do NOT change the crop. Do NOT change the outfit. Do NOT change the background. The output is IMAGE 1 with a different expression. Nothing else.`;
+      const variant1Prompt = seg("version_1", VERSION_1_DEFAULT);
 
       // Variant 2 — body angle change, opposite direction of V0
       // (2026-09-13 simplified per Kristi — the earlier hair+expression+
@@ -2394,24 +2429,7 @@ Do NOT change the crop. Do NOT change the outfit. Do NOT change the background. 
       // Now V2 is a SINGLE clean delta like V0/V1: body rotates the
       // OPPOSITE way from V0 so the customer visually sees left-turned,
       // straight-on (via V1), and right-turned across the three shots.).
-      const variant2Prompt = `You are an image editor. You will receive:
-- IMAGE 1: the TARGET SHOT — a finished professional headshot.
-- IMAGES 2+: identity reference photos of the same person. Use these ONLY to reinforce facial identity (face shape, jawline, eyes, skin tone). Do NOT copy their outfit, background, framing, or pose.
-
-Your output must be a variant of IMAGE 1:
-
-- OUTFIT: copy from IMAGE 1 exactly. Same garment, same color, same neckline — DO NOT SWAP the outfit.
-- BACKGROUND: copy from IMAGE 1 exactly. Same color, same environment, same depth-of-field.
-- HAIR: copy from IMAGE 1 exactly. Identical hair style, length, color.
-- LIGHTING: copy from IMAGE 1 exactly. Same direction, same intensity, same shadow shape.
-- EXPRESSION: match the target reference's expression closely.
-- FRAMING / CROP: copy from IMAGE 1 exactly. Same head size, same head position, same crop line.
-- FACE IDENTITY: unmistakably the same person as in the identity photos.
-
-The ONE thing you WILL change from IMAGE 1:
-- BODY ANGLE: rotate the shoulders and torso 25–35° so the subject faces the opposite direction from IMAGE 1. If IMAGE 1 is straight to camera, rotate to the LEFT. If IMAGE 1 is angled to the right, rotate to face fully LEFT. The head can turn with the shoulders or stay looking at the camera. Everything else stays identical to IMAGE 1.
-
-Do NOT change the crop. Do NOT change the outfit. Do NOT change the background. The output is IMAGE 1 with the body rotated in the opposite direction. Nothing else.`;
+      const variant2Prompt = seg("version_2", VERSION_2_DEFAULT);
 
       prompt = isPortraitCropVariant
         ? variant2Prompt
