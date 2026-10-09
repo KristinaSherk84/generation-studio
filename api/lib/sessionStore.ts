@@ -64,6 +64,10 @@ export type SavedSession = {
   // batches, capped for record size. Missing on records saved before this
   // field existed; those sessions just show no variations on the RTV link.
   versionShots?: string[];
+  // Which "Generate Versions" round versionShots belongs to, and its shots by
+  // version number (0-3), when the server saved them itself (2026-10-09).
+  versionRound?: string;
+  versionSlots?: (string | null)[];
   // Complete generation history (2026-09-09, per Kristi). Every image URL
   // this session ever produced, in first-seen order — main-batch shots,
   // regens, wild cards, variations, and shots that were later replaced by
@@ -348,6 +352,9 @@ export async function removeSessionUrl(
   if (Array.isArray(rec.versionShots)) {
     const before = rec.versionShots.length;
     rec.versionShots = rec.versionShots.filter((u) => u !== url);
+    if (Array.isArray(rec.versionSlots)) {
+      rec.versionSlots = rec.versionSlots.map((u) => (u === url ? null : u));
+    }
     if (rec.versionShots.length !== before) removedFrom.push("versions");
   }
   if (Array.isArray(rec.allGeneratedUrls)) {
@@ -466,6 +473,54 @@ export async function setSessionVersionShots(
   rec.versionShots = Array.from(new Set(incoming)).slice(0, 40);
   await redis.set(key(token), rec, { ex: TTL_SECONDS });
   return true;
+}
+
+/**
+ * Save ONE "Generate Versions" shot to a saved session straight from
+ * /api/generate (2026-10-09). The browser used to save versions only after all
+ * 4 came back, so a customer who left for the cart mid-round lost them from
+ * their RTV link (teamvigilantehq, Oct 9). The 4 calls finish within seconds
+ * of each other, so a short Redis lock keeps them from overwriting each other.
+ * A new `round` replaces the versions row; the old round moves into the
+ * every-shot history. Best-effort; returns false if it could not save.
+ */
+export async function addSessionVersionShot(
+  token: string,
+  round: string,
+  versionIndex: number,
+  url: string,
+): Promise<boolean> {
+  if (!token || !/^[A-Za-z0-9]{16,48}$/.test(token)) return false;
+  if (!/^[A-Za-z0-9_-]{1,40}$/.test(round) || !/^https?:\/\//.test(url)) return false;
+  if (!Number.isInteger(versionIndex) || versionIndex < 0 || versionIndex > 7) return false;
+  const lockKey = `${key(token)}:vlock`;
+  let locked = false;
+  for (let i = 0; i < 40 && !locked; i++) {
+    locked = (await redis.set(lockKey, "1", { nx: true, px: 5000 })) === "OK";
+    if (!locked) await new Promise((r) => setTimeout(r, 150));
+  }
+  if (!locked) return false;
+  try {
+    const rec = (await redis.get<SavedSession>(key(token))) ?? null;
+    if (!rec) return false;
+    let slots: (string | null)[];
+    if (rec.versionRound === round && Array.isArray(rec.versionSlots)) {
+      slots = [...rec.versionSlots];
+    } else {
+      mergeIntoAllGenerated(rec, rec.versionShots ?? []);
+      slots = [];
+    }
+    while (slots.length <= versionIndex) slots.push(null);
+    slots[versionIndex] = url;
+    rec.versionRound = round;
+    rec.versionSlots = slots;
+    rec.versionShots = slots.filter((u): u is string => !!u);
+    mergeIntoAllGenerated(rec, [url]);
+    await redis.set(key(token), rec, { ex: TTL_SECONDS });
+    return true;
+  } finally {
+    await redis.del(lockKey);
+  }
 }
 
 /**

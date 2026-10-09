@@ -22551,6 +22551,10 @@ export default function App() {
     setVersionsGenerating(true);
     setVersionShots([null, null, null, null]);
     setRegenError(null);
+    // The server saves each version to the RTV link itself, so they stick
+    // even if the customer leaves for the cart mid-round. (2026-10-09)
+    const versionRound = `v${Date.now()}`;
+    const versionResumeToken = resumeTokenRef.current;
 
     const buildBody = (variationIndex: number) => ({
       photoUrls: lastPhotoUrls,
@@ -22566,6 +22570,9 @@ export default function App() {
       outfitUrl: lastSelections.outfitUrl,
       gender: lastGender,
       similarToUrl: sourceUrl,
+      ...(versionResumeToken
+        ? { resumeToken: versionResumeToken, versionRound }
+        : {}),
       ...readUnlockRequestFields(),
     });
 

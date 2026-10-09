@@ -44,6 +44,7 @@ import {
 } from "./lib/leadStore.js";
 import { put } from "@vercel/blob";
 import { recordBatchImage } from "./lib/batchStore.js";
+import { addSessionVersionShot } from "./lib/sessionStore.js";
 import {
   getPromptOverrides,
   seedPromptCatalog,
@@ -291,6 +292,11 @@ type GenerateRequest = {
   // with a slightly WIDER crop. Identity still comes from the standard
   // reference photo set. See [[project_generate_similar]] roadmap for spec.
   similarToUrl?: string;
+  // With similarToUrl (2026-10-09): the customer's saved-session token and an
+  // id for this round of versions, so the server saves each version to the
+  // RTV link itself even if the customer leaves the page mid-round.
+  resumeToken?: string;
+  versionRound?: string;
   // Identity redo (2026-10-02). When the app's likeness check flags a shot,
   // it sends that shot here. The server then runs a FACE-FIX pass: the weak
   // shot goes in as IMAGE 1, the references follow, and the prompt says
@@ -2570,6 +2576,21 @@ export default async function handler(
           },
           hasWideAngle: body.hasWideAngle === true,
         });
+      }
+      if (
+        savedUrl &&
+        typeof body.similarToUrl === "string" &&
+        typeof body.resumeToken === "string" &&
+        typeof body.versionRound === "string" &&
+        typeof body.variationIndex === "number"
+      ) {
+        const okV = await addSessionVersionShot(
+          body.resumeToken,
+          body.versionRound,
+          body.variationIndex,
+          savedUrl,
+        );
+        if (!okV) console.warn("[generate] version not saved to session");
       }
     } catch (persistErr) {
       console.warn(
