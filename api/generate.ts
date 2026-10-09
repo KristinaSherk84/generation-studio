@@ -1105,10 +1105,31 @@ The ONE thing you WILL change from IMAGE 1:
 
 Do NOT change the crop. Do NOT change the outfit. Do NOT change the background. The output is IMAGE 1 with the body rotated in the opposite direction. Nothing else.`;
 
+// Version 4: sly Duchenne smile (added 2026-10-09, Kristi's wording)
+const VERSION_3_DEFAULT = `You are an image editor. You will receive:
+- IMAGE 1: the TARGET SHOT — a finished professional headshot the customer already picked.
+- IMAGES 2+: identity reference photos of the same person. Use these ONLY to reinforce facial identity (face shape, jawline, eyes, skin tone).
+
+Your output is a variant of IMAGE 1 with a new expression:
+
+- OUTFIT: the same garment, color and neckline as IMAGE 1.
+- BACKGROUND: the same color, environment and depth-of-field as IMAGE 1.
+- HAIR: identical to IMAGE 1 — same style, length and color.
+- LIGHTING: the same direction, intensity and shadow shape as IMAGE 1.
+- POSE / BODY ANGLE: the same as IMAGE 1.
+- FRAMING / CROP: the same as IMAGE 1 — same head size, same head position, same crop line.
+- FACE IDENTITY: unmistakably the same person as in the identity photos. Cross-check jawline, brow, eyes, skin tone.
+
+The ONE thing you WILL change from IMAGE 1:
+- EXPRESSION: a sly Duchenne smile with fierce eyes, smiling mysteriously and intensely. The mouth holds a subtle, knowing smile; the eyes carry it — a slight crinkle at the outer corners, cheeks gently lifted, and a confident, intense, magnetic gaze straight into the lens.
+
+The output is IMAGE 1 with this sly, fierce-eyed smile. Everything else matches IMAGE 1.`;
+
 export const PROMPT_DEFAULTS: Record<string, string> = {
   version_0: VERSION_0_DEFAULT,
   version_1: VERSION_1_DEFAULT,
   version_2: VERSION_2_DEFAULT,
+  version_3: VERSION_3_DEFAULT,
   identity: BLOCK_1_IDENTITY,
   under_eye: BLOCK_UNDER_EYE,
   under_eye_male: BLOCK_UNDER_EYE,
@@ -1255,6 +1276,7 @@ export const PROMPT_SEGMENTS: PromptSegmentMeta[] = [
   { key: "version_0", label: "Version 1 — expand framing + body angle", group: "Generate Versions", fires: {}, note: "Replaces the whole prompt for the first 'make more versions' tile. IMAGE 1 is the customer's chosen shot." },
   { key: "version_1", label: "Version 2 — expression change", group: "Generate Versions", fires: {}, note: "Replaces the whole prompt for the second version tile." },
   { key: "version_2", label: "Version 3 — opposite body angle", group: "Generate Versions", fires: {}, note: "Replaces the whole prompt for the third version tile." },
+  { key: "version_3", label: "Version 4 — sly smile, fierce eyes", group: "Generate Versions", fires: {}, note: "Replaces the whole prompt for the fourth version tile (added 2026-10-09)." },
   { key: "reference_photo_rule", label: "Reference-photo usage rule", group: "Core", fires: {} },
   { key: "output_constraint", label: "Output constraint (one photo)", group: "Core", fires: {} },
 ];
@@ -2427,6 +2449,7 @@ export default async function handler(
     if (similarImage) {
       const isExpressionVariant = body.variationIndex === 1;
       const isPortraitCropVariant = body.variationIndex === 2;
+      const isSlySmileVariant = body.variationIndex === 3;
 
       // Variant 0 — Kristi's rewrite (2026-09-10). Widen crop by ~10%
       // AND rotate body angle in one go. Kept as a complete standalone
@@ -2445,8 +2468,11 @@ export default async function handler(
       // OPPOSITE way from V0 so the customer visually sees left-turned,
       // straight-on (via V1), and right-turned across the three shots.).
       const variant2Prompt = seg("version_2", VERSION_2_DEFAULT);
+      const variant3Prompt = seg("version_3", VERSION_3_DEFAULT);
 
-      prompt = isPortraitCropVariant
+      prompt = isSlySmileVariant
+        ? variant3Prompt
+        : isPortraitCropVariant
         ? variant2Prompt
         : isExpressionVariant
           ? variant1Prompt

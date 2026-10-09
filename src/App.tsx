@@ -13628,8 +13628,8 @@ const GridScreen = ({
               }}
             >
               {isUnlocked
-                ? "3 variations (body angle · expression · alternate angle)"
-                : "1 free per batch · 3 variations (body angle · expression · alternate angle)"}
+                ? "4 variations (body angle · expression · alternate angle · sly smile)"
+                : "1 free per batch · 4 variations (body angle · expression · alternate angle · sly smile)"}
             </div>
           </div>
         )
@@ -13674,7 +13674,7 @@ const GridScreen = ({
             >
               Variations of your source shot
               {versionsSourceLabel ? ` · from ${versionsSourceLabel}` : ""}
-              {" · body angle · expression · alternate angle"}
+              {" · body angle · expression · alternate angle · sly smile"}
             </span>
           </div>
           {/* Version-tile grid (2026-09-22 per Kristi):
@@ -13688,15 +13688,15 @@ const GridScreen = ({
               display: "grid",
               gridTemplateColumns: isMobileGrid
                 ? "repeat(2, minmax(0, 1fr))"
-                : "repeat(3, minmax(0, 1fr))",
+                : "repeat(4, minmax(0, 1fr))",
               gap: 12,
               marginBottom: 6,
-              maxWidth: isMobileGrid ? 480 : 720,
+              maxWidth: isMobileGrid ? 480 : 900,
               marginLeft: "auto",
               marginRight: "auto",
             }}
           >
-            {[0, 1, 2].map((vi) => {
+            {[0, 1, 2, 3].map((vi) => {
               const vsrc = versionShots[vi];
               const isCarted = !!vsrc && cartSet.has(vsrc);
               return (
@@ -13713,13 +13713,8 @@ const GridScreen = ({
                     // centers itself at the same width as the top-row
                     // tiles so the grid reads 2-1. On desktop the 3rd
                     // tile flows naturally into the third column.
-                    ...(vi === 2 && isMobileGrid
-                      ? {
-                          gridColumn: "1 / -1",
-                          justifySelf: "center",
-                          width: "calc(50% - 6px)",
-                        }
-                      : {}),
+                    // 4 versions (2026-10-09): 2 x 2 on phones, one row of
+                    // 4 on desktop, so no tile needs special centering.
                   }}
                 >
                   {vsrc ? (
@@ -20771,10 +20766,10 @@ export default function App() {
   // (ENTRY_FEE_ENABLED is "false" in Vercel). /api/config overrides on load.
   // Matters for the prerendered HTML too: Google reads this first paint.
   const [entryFeeEnabled, setEntryFeeEnabled] = useState(false);
-  // Cap for free-tier single-photo regens before the paywall. 2 keeps max
-  // free session cost at (6 + 2) × $0.101 ≈ $0.81 baseline, ≈$0.97 with
-  // typical 20% retry multiplier.
-  const MAX_FREE_REGENS = 4;
+  // Cap for free-tier single-photo regens before the paywall. 6 since
+  // 2026-10-09 (was 4), affordable after the switch to Nano Banana 2.1 at
+  // ~$0.05/image. Server backstop: FREE_CALLS_PER_IP in api/lib/freeGenLimit.ts.
+  const MAX_FREE_REGENS = 6;
   // "You have 1 more free regen" nudge modal — fires after regenCount = 1.
   const [showFreeRegenWarning, setShowFreeRegenWarning] = useState(false);
   // Post-generation $3.99 paywall (free-tier only) — fires when the customer
@@ -21011,8 +21006,11 @@ export default function App() {
     if (
       !entryFeeEnabled &&
       !isUnlocked &&
-      regenCount === 1
+      regenCount === MAX_FREE_REGENS - 1
     ) {
+      // One free redo left (2026-10-09: was "after the 1st redo", a leftover
+      // from when the cap was 2 — it told customers they were nearly out
+      // when they still had several).
       setShowFreeRegenWarning(true);
     }
   }, [regenCount, entryFeeEnabled, isUnlocked]);
@@ -22551,7 +22549,7 @@ export default function App() {
     setPickingVersionSource(false);
     setVersionsSourceLabel(sourceLabel ?? null);
     setVersionsGenerating(true);
-    setVersionShots([null, null, null]);
+    setVersionShots([null, null, null, null]);
     setRegenError(null);
 
     const buildBody = (variationIndex: number) => ({
@@ -22577,25 +22575,18 @@ export default function App() {
     //   0 → body-angle rotate + slight wider crop
     //   1 → expression change (softer or brighter than source)
     //   2 → hair + expression + body-angle change, SAME crop
-    const settled = await Promise.allSettled([
-      fetch("/api/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildBody(0)),
-      }),
-      fetch("/api/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildBody(1)),
-      }),
-      fetch("/api/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildBody(2)),
-      }),
-    ]);
+    //   3 → sly Duchenne smile, fierce eyes (added 2026-10-09 per Kristi: 4th version)
+    const settled = await Promise.allSettled(
+      [0, 1, 2, 3].map((vi) =>
+        fetch("/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(buildBody(vi)),
+        }),
+      ),
+    );
 
-    const outputs: (string | null)[] = [null, null, null];
+    const outputs: (string | null)[] = [null, null, null, null];
     let anyOk = false;
     let any402 = false;
     for (let i = 0; i < settled.length; i++) {
