@@ -34,7 +34,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { GoogleGenAI, type Part } from "@google/genai";
 import sharp from "sharp";
 import { buildShareGraphic } from "./lib/compositeBeforeAfter.js";
-import { recordPurchase } from "./lib/leadStore.js";
+import { recordPurchase, addLeadAlias } from "./lib/leadStore.js";
 import { useShareCredit } from "./lib/promoStore.js";
 import {
   buildRetouchPrompt,
@@ -75,6 +75,8 @@ type Skin = "realistic" | "polished" | "glam";
 
 type DeliverRequest = {
   email: string;
+  // The email they generated under, when it differs from the checkout email.
+  genLeadEmail?: string;
   // Customer full name (added 2026-05-22). Required. Captured on the
   // CheckoutScreen alongside email so Kristi can track customers down by
   // name if a support request comes in — email alone isn't always enough.
@@ -1317,7 +1319,21 @@ export default async function handler(
     //      different-email buyers still show as purchased) and is a no-op for
     //      invalid emails. ----
     try {
-      await recordPurchase(body.email, { name: customerNameTrimmed });
+      // A customer who checks out under a different email than the one they
+      // generated under (e.g. a new Proton "hide my email" alias) is logged on
+      // their ORIGINAL lead row, and the checkout email is linked to it so the
+      // Stripe payment folds onto that row too. (2026-10-09, Kristi)
+      const checkoutEmail = String(body.email).trim().toLowerCase();
+      const genLeadEmail =
+        typeof body.genLeadEmail === "string" && EMAIL_REGEX.test(body.genLeadEmail)
+          ? body.genLeadEmail.trim().toLowerCase()
+          : "";
+      if (genLeadEmail && genLeadEmail !== checkoutEmail) {
+        await recordPurchase(genLeadEmail, { name: customerNameTrimmed });
+        await addLeadAlias(genLeadEmail, checkoutEmail);
+      } else {
+        await recordPurchase(body.email, { name: customerNameTrimmed });
+      }
       // Paid order that Stripe already comped one headshot on: spend the
       // credit now (no-op for codes without one / other kinds of code).
       if (shareCode && !shareCreditClaimed) await useShareCredit(shareCode);

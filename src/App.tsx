@@ -396,6 +396,17 @@ function browserFingerprint(): string | undefined {
   }
 }
 
+// The email the customer generated under (stored at batch time), or "" if
+// unknown. Sent to /api/deliver so a purchase made under a different checkout
+// email still lands on their original lead row. (2026-10-09)
+function readGenLeadEmail(): string {
+  try {
+    return window.localStorage.getItem("gen_lead_email") || "";
+  } catch {
+    return "";
+  }
+}
+
 function readUnlockRequestFields(): {
   stripeSessionId?: string;
   promoCode?: string;
@@ -16277,16 +16288,15 @@ const RetouchScreen = ({
                           }}
                         >
                           {(() => {
-                            // Combine upsell (30% off flagged photos) with
-                            // winback (10% off entire order) — same math the
-                            // server does. Stacks: base × 0.7 × 0.9 when both.
+                            // Upsell (30% off flagged photos) OR winback (10%
+                            // off the rest) — never both (2026-10-09, Kristi).
+                            // Same math the server does.
                             const base = centsForTier(t.tier);
-                            const withUpsell = discountedUrls.has(url)
+                            const final = discountedUrls.has(url)
                               ? centsAfterUpsell(base)
-                              : base;
-                            const final = winbackActive
-                              ? Math.round(withUpsell * 0.9)
-                              : withUpsell;
+                              : winbackActive
+                                ? Math.round(base * 0.9)
+                                : base;
                             if (final === base) return t.price;
                             return (
                               <>
@@ -16560,17 +16570,34 @@ const CheckoutScreen = ({
   // flagged in discounted[]. Computed per-photo in cents and rounded the same
   // way the server does (create-photo-checkout-session.ts) so the on-screen
   // total EXACTLY matches what Stripe charges.
-  const perPhotoCents = retouchTiers.map((t, i) => {
+  // Win-back 10% off (2026-10-09): the server already charged it, but this
+  // screen showed full price, so a win-back customer saw $14.99 here and
+  // $13.49 on Stripe. Same per-photo rounding as the server.
+  const winbackOn = (() => {
+    try {
+      return window.localStorage.getItem("winback_discount") === "1";
+    } catch {
+      return false;
+    }
+  })();
+  const upsellCents = retouchTiers.map((t, i) => {
     const base = centsForTier(t);
     return discounted[i] ? centsAfterUpsell(base) : base;
   });
+  // Discounts never stack: add-ons keep 30% off the original price; the
+  // win-back 10% applies only to the other photos (same as the server).
+  const perPhotoCents = upsellCents.map((c, i) =>
+    winbackOn && !discounted[i] ? Math.round(c * 0.9) : c,
+  );
   const chargedCents = perPhotoCents.reduce((a, b) => a + b, 0);
+  const winbackSavings =
+    (upsellCents.reduce((a, b) => a + b, 0) - chargedCents) / 100;
   // Share reward comps the single most expensive photo (same rule as the
   // server in create-photo-checkout-session.ts).
   const shareCompCents =
     shareCreditOpen && perPhotoCents.length > 0 ? Math.max(...perPhotoCents) : 0;
   const totalOwed = (chargedCents - shareCompCents) / 100;
-  const savings = Math.max(0, subtotal - chargedCents / 100);
+  const savings = Math.max(0, subtotal - chargedCents / 100 - winbackSavings);
   // One photo + an unused share credit = free order: skip Stripe entirely.
   const shareFreeCheckout = shareCreditOpen && retouchTiers.length === 1;
   const fmt = (n: number) => `$${n.toFixed(2)}`;
@@ -16645,7 +16672,6 @@ const CheckoutScreen = ({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            email,
             customerName: customerName.trim(),
             photoUrls: uploadedUrls,
             referencePhotoUrls,
@@ -16666,6 +16692,10 @@ const CheckoutScreen = ({
             ...readUnlockRequestFields(),
             // Free share-reward headshot: server claims the credit first.
             ...(shareFreeCheckout ? { shareFree: true } : {}),
+            // Checkout email wins over the generating email in the spread
+            // above (see the paid path). (2026-10-09)
+            email,
+            genLeadEmail: readGenLeadEmail(),
           }),
         });
         if (shareFreeCheckout) {
@@ -16863,6 +16893,20 @@ const CheckoutScreen = ({
             >
               <span>Last-chance discount (30% off add-ons)</span>
               <span>−{fmt(savings)}</span>
+            </div>
+          )}
+          {winbackSavings > 0.005 && (
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                color: "#1B6B4C",
+                fontSize: 13,
+                marginTop: 6,
+              }}
+            >
+              <span>Welcome-back discount (10% off)</span>
+              <span>−{fmt(winbackSavings)}</span>
             </div>
           )}
           {shareCompCents > 0 && (
@@ -21859,7 +21903,6 @@ export default function App() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            email: stash.email,
             // Customer name (added 2026-05-22). Falls back to empty string
             // for stashes that predate this field — server-side validation
             // will reject those with a clear error, prompting the customer
@@ -21876,6 +21919,12 @@ export default function App() {
             // Burn the entry unlock (Stripe metadata flip) when delivery
             // succeeds. Promo users have no sessionId; server skips them.
             ...readUnlockRequestFields(),
+            // The spread above carries the email they GENERATED under as
+            // `email`; the checkout email must win so the photos go where the
+            // customer asked. The generating email rides along separately so
+            // the purchase lands on their original lead row. (2026-10-09)
+            email: stash.email,
+            genLeadEmail: readGenLeadEmail(),
           }),
         });
         if (!deliverResp.ok) throw new Error(`HTTP ${deliverResp.status}`);

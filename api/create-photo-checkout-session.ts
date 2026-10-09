@@ -140,14 +140,16 @@ export default async function handler(
   const winback = body?.winback === true;
 
   // Mixed total: each photo at its tier price, minus 30% for any flagged as an
-  // upsell add, minus another 10% if this is a win-back checkout. Multipliers
-  // stack (0.7 × 0.9 = 0.63 for an upsell+winback photo). Rounded PER PHOTO so
+  // upsell add, or minus 10% if this is a win-back checkout (never both).
+  // Rounded PER PHOTO so
   // it matches the client's on-screen total exactly.
   const perPhotoCents = tiers.map((t, i) => {
     const base = priceCentsForTier(t);
     let charged = base;
+    // Discounts never stack (2026-10-09, Kristi): an add-on photo is 30% off
+    // the ORIGINAL price; the win-back 10% applies only to the other photos.
     if (discounted[i]) charged = Math.round(charged * (1 - UPSELL_DISCOUNT));
-    if (winback) charged = Math.round(charged * (1 - WINBACK_DISCOUNT));
+    else if (winback) charged = Math.round(charged * (1 - WINBACK_DISCOUNT));
     return charged;
   });
   // Share reward: comp the single most expensive photo (server decides, so
