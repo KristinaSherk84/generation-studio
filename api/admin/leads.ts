@@ -58,6 +58,13 @@ export const maxDuration = 10;
 // regens), so cost ≈ calls × this. Matches the ~$0.10/call Kristi used for the
 // Everett estimate. (2026-08-14 — replaced the old per-batch estimate.)
 const PER_CALL_COST_USD = 0.1;
+// Per-lead rate after the 2026-10-09 switch to Nano Banana 2.1 ($0.0504 per
+// 2K image). Leads FIRST SEEN at/after the switch use it; earlier leads keep
+// $0.10 (their calls ran on Nano Banana 2). (Kristi 2026-10-09)
+const PER_CALL_COST_AFTER_SWITCH_USD = 0.0504;
+const MODEL_SWITCH_AT_ISO = "2026-10-09T13:25:00Z"; // 9:25 AM ET
+const perCallRateFor = (createdAt: string | null | undefined) =>
+  createdAt && createdAt >= MODEL_SWITCH_AT_ISO ? PER_CALL_COST_AFTER_SWITCH_USD : PER_CALL_COST_USD;
 // Google's per-image prices at the app's 2K / 3:4 resolution (2026-08-16, from
 // ai.google.dev/gemini-api/docs/pricing): flash preview vs Pro retouch. Used
 // for the daily "Est. cost" column.
@@ -648,12 +655,13 @@ export default async function handler(
     // real image-call count × the per-call rate.
     const estCost = (l: {
       email: string;
+      createdAt?: string | null;
       callCountOverride?: number | null;
       estCostOverrideUsd?: number | null;
     }) =>
       l.estCostOverrideUsd != null
         ? l.estCostOverrideUsd
-        : shownCalls(l) * PER_CALL_COST_USD;
+        : shownCalls(l) * perCallRateFor(l.createdAt);
 
     // ---- Revenue-by-source branch (2026-08-15) ----
     // Aggregates paidShown per foundVia so channel ROI (e.g. the "Best
@@ -1115,7 +1123,7 @@ export default async function handler(
         ? `<table>
       <thead><tr>
         <th>Email</th><th>First seen (ET)</th><th>Last seen (ET)</th>
-        <th class="num" title="Total AI image calls made for this person - the real cost driver. Includes the 6 they see plus automatic likeness redos, bonus shots, and any regenerations (~10-13 per round). Counting started 2026-08-14.">Calls</th><th class="num">Est. $</th><th class="num">Paid</th><th>Status</th><th>Purchased</th><th title="Background (style) they picked on their FIRST batch. Recorded from 2026-10-05 on. Click ✎ to fix or fill in by hand.">1st BG</th><th title="Outfit they picked on their FIRST batch.">1st outfit</th><th>Found via</th>
+        <th class="num" title="Total AI image calls made for this person - the real cost driver. Includes the 6 they see plus automatic likeness redos, bonus shots, and any regenerations (~10-13 per round). Counting started 2026-08-14.">Calls</th><th class="num" title="Estimated AI cost: image calls × $0.050 for people first seen after the Nano Banana 2.1 switch (Oct 9, 9:25 AM ET), × $0.10 before. A manual override wins when set.">Est. $</th><th class="num">Paid</th><th>Status</th><th>Purchased</th><th title="Background (style) they picked on their FIRST batch. Recorded from 2026-10-05 on. Click ✎ to fix or fill in by hand.">1st BG</th><th title="Outfit they picked on their FIRST batch.">1st outfit</th><th>Found via</th>
       </tr></thead>
       <tbody>${rowsHtml}</tbody>
     </table>`
