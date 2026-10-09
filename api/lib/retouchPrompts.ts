@@ -52,7 +52,10 @@ export type AgeBand = "young" | "mature" | "older";
 // Gemini model — Pro Image Preview ("Nano Banana Pro"). Slower (~10-15s
 // per call) but produces editorial-grade retouching that Flash 3.1 can't
 // match. Cost: ~$0.30-0.40 per image on Tier 2.
-export const RETOUCH_MODEL = "gemini-3-pro-image-preview";
+// Nano Banana Pro, permanent (non-preview) name since 2026-10-09: the
+// "-preview" id is past Google's earliest shutdown date. Override in Vercel
+// with RETOUCH_MODEL if ever needed.
+export const RETOUCH_MODEL = process.env.RETOUCH_MODEL || "gemini-3-pro-image";
 
 // IDENTITY_ANCHOR v4 2026-05-18: added JAW AND CHIN STRUCTURE LOCK and
 // MOUTH AND SMILE LOCK clauses. Kristi's Glam test produced an open-mouth-

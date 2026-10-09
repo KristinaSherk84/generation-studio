@@ -1568,7 +1568,10 @@ const PER_ATTEMPT_TIMEOUT_MS = 60_000;
 
 // Default generation model. Identity redos may use a stronger one (see
 // IDENTITY_REDO_MODEL env; falls back to this on error).
-const DEFAULT_IMAGE_MODEL = "gemini-3.1-flash-image-preview";
+// Main headshot model. IMAGE_MODEL in Vercel switches it with no deploy
+// (2026-10-09), e.g. "gemini-nano-banana-2.1" after the side-by-side test;
+// delete the setting to fall back to Nano Banana 2.
+const DEFAULT_IMAGE_MODEL = process.env.IMAGE_MODEL || "gemini-3.1-flash-image-preview";
 
 async function generateOneHeadshot(
   ai: GoogleGenAI,
@@ -2452,7 +2455,7 @@ export default async function handler(
       // default — set IDENTITY_REDO_MODEL in Vercel to change, or to
       // DEFAULT_IMAGE_MODEL to turn it off). Any failure falls back to the
       // regular model so a redo never fails just because Pro is busy.
-      const redoModel = process.env.IDENTITY_REDO_MODEL || "gemini-3-pro-image-preview";
+      const redoModel = process.env.IDENTITY_REDO_MODEL || "gemini-3-pro-image";
       try {
         image =
           redoModel === DEFAULT_IMAGE_MODEL
