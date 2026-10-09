@@ -48,5 +48,8 @@ export default function handler(
   return res.status(200).json({
     entryFeeEnabled,
     identityCheckEnabled,
+    // Which headshot model is active (2026-10-09) — lets a curl confirm an
+    // IMAGE_MODEL switch without paying for a generation. Not secret.
+    imageModel: (process.env.IMAGE_MODEL || "").trim() || "gemini-3.1-flash-image-preview",
   });
 }

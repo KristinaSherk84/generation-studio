@@ -62,6 +62,13 @@ const PER_CALL_COST_USD = 0.1;
 // ai.google.dev/gemini-api/docs/pricing): flash preview vs Pro retouch. Used
 // for the daily "Est. cost" column.
 const FLASH_IMG_COST_USD = 0.101;
+// Headshot model switch (2026-10-09, Kristi): Nano Banana 2 ($0.101/2K image)
+// -> Nano Banana 2.1 ($0.0504/2K image). Days from the switch date on use the
+// new rate in the "Est. cost" column; earlier days keep the old one.
+const MODEL_SWITCH_DATE = "2026-10-09";
+const FLASH_IMG_COST_AFTER_SWITCH_USD = 0.0504;
+const flashRateFor = (date: string) =>
+  date >= MODEL_SWITCH_DATE ? FLASH_IMG_COST_AFTER_SWITCH_USD : FLASH_IMG_COST_USD;
 const PRO_IMG_COST_USD = 0.134;
 const fmtUsd = (n: number) => `$${n.toFixed(2)}`;
 
@@ -850,11 +857,15 @@ export default async function handler(
       .map((d) => {
         const totalCalls = d.apiCalls + d.proCalls;
         const estCost =
-          d.apiCalls * FLASH_IMG_COST_USD + d.proCalls * PRO_IMG_COST_USD;
+          d.apiCalls * flashRateFor(d.date) + d.proCalls * PRO_IMG_COST_USD;
         const cpc =
           d.spendUsd != null && totalCalls > 0 ? d.spendUsd / totalCalls : null;
         return `<tr>
-        <td>${esc(d.date)}</td>
+        <td>${esc(d.date)}${
+          d.date === MODEL_SWITCH_DATE
+            ? ` <span title="Headshots switched from Nano Banana 2 to Nano Banana 2.1 around 1:30 PM ET" style="font-size:11px;color:#8A6D1B;background:#FBF3E2;border:1px solid #EAD9A8;border-radius:4px;padding:1px 5px;white-space:nowrap">→ Nano Banana 2.1</span>`
+            : ""
+        }</td>
         <td class="num">${d.apiCalls.toLocaleString()}</td>
         <td class="num">${d.proCalls.toLocaleString()}</td>
         <td class="num"><input class="peopleinput" data-date="${esc(
@@ -927,7 +938,8 @@ export default async function handler(
 
     const dailyTableHtml = `
   <h2 style="font-size:16px;font-weight:600;margin:24px 0 4px;color:#2C2C2A">Daily activity <span style="font-weight:400;color:#888780;font-size:13px">(ET · last 14 days)</span></h2>
-  <p class="meta" style="margin:0 0 10px">Flash calls = preview generations (~$0.10 each); Pro calls = retouch renders that run when someone buys a Deluxe photo (~$0.13 each). Est. cost = flash x $0.101 + pro x $0.134 — compare it to the real Google spend you type in; a big gap usually means retried/overloaded generations. Each is still a Gemini image call that hit the model (each ≈ one unit of Google spend). People generated = distinct email addresses that got a “ready to view” email that day (older days fall back to distinct IPs). The box is editable — type a number to override it, or clear the box to go back to the automatic count. Type the day's real spend from <a href="https://aistudio.google.com/spend?project=gen-lang-client-0496086422" target="_blank" rel="noopener">your Google AI Studio spend page ↗</a> and cost-per-call fills in.</p>
+  <div style="margin:0 0 10px;padding:10px 12px;background:#FBF3E2;border:1px solid #EAD9A8;border-radius:8px;font-size:13px;color:#5C4A12;line-height:1.5"><b>Note, Oct 9, 2026:</b> headshots switched from Nano Banana 2 ($0.101 per image) to <b>Nano Banana 2.1 ($0.050 per image)</b> around 1:30 PM ET. Google spend per day should drop by roughly half from Oct 10 on. Oct 9 is a mix of both. Retouch (Pro) calls are unchanged at $0.134.</div>
+  <p class="meta" style="margin:0 0 10px">Flash calls = preview generations (~$0.05 each since Oct 9; ~$0.10 before); Pro calls = retouch renders that run when someone buys a Deluxe photo (~$0.13 each). Est. cost = flash x $0.050 (before Oct 9: $0.101) + pro x $0.134 — compare it to the real Google spend you type in; a big gap usually means retried/overloaded generations. Each is still a Gemini image call that hit the model (each ≈ one unit of Google spend). People generated = distinct email addresses that got a “ready to view” email that day (older days fall back to distinct IPs). The box is editable — type a number to override it, or clear the box to go back to the automatic count. Type the day's real spend from <a href="https://aistudio.google.com/spend?project=gen-lang-client-0496086422" target="_blank" rel="noopener">your Google AI Studio spend page ↗</a> and cost-per-call fills in.</p>
   <div class="tablewrap">
     <table>
       <thead><tr>

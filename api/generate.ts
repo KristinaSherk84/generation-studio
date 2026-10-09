@@ -1571,7 +1571,8 @@ const PER_ATTEMPT_TIMEOUT_MS = 60_000;
 // Main headshot model. IMAGE_MODEL in Vercel switches it with no deploy
 // (2026-10-09), e.g. "gemini-nano-banana-2.1" after the side-by-side test;
 // delete the setting to fall back to Nano Banana 2.
-const DEFAULT_IMAGE_MODEL = process.env.IMAGE_MODEL || "gemini-3.1-flash-image-preview";
+const FALLBACK_IMAGE_MODEL = "gemini-3.1-flash-image-preview";
+const DEFAULT_IMAGE_MODEL = (process.env.IMAGE_MODEL || "").trim() || FALLBACK_IMAGE_MODEL;
 
 async function generateOneHeadshot(
   ai: GoogleGenAI,
@@ -1735,6 +1736,17 @@ async function generateOneHeadshotWithRetry(
       return await generateOneHeadshot(ai, prompt, photos, model);
     } catch (error) {
       lastError = error;
+      // Safety net (2026-10-09): if the configured model is rejected outright
+      // (bad IMAGE_MODEL value, model retired), fall back to Nano Banana 2 so
+      // customers still get headshots.
+      const rejectMsg = error instanceof Error ? error.message : String(error);
+      if (
+        model !== FALLBACK_IMAGE_MODEL &&
+        /not found|NOT_FOUND|\b404\b|is not supported|unknown model|invalid model/i.test(rejectMsg)
+      ) {
+        console.error(`[generate] model ${model} rejected (${rejectMsg.slice(0, 160)}); falling back to ${FALLBACK_IMAGE_MODEL}`);
+        return generateOneHeadshotWithRetry(ai, prompt, photos, maxAttempts, FALLBACK_IMAGE_MODEL);
+      }
       // Give up immediately if this isn't the kind of error that benefits from
       // a retry, or if we're already on the last attempt.
       if (attempt === maxAttempts || !isRetryableGeminiError(error)) {
