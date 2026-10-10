@@ -11494,6 +11494,10 @@ type GridScreenProps = {
   versionsUsedThisBatch: boolean;
   pickingVersionSource: boolean;
   versionsGenerating: boolean;
+  // Per-tile "loading" / "failed" / null, and the retry for a failed tile
+  // (2026-10-10). See versionSlotStatus in App.
+  versionSlotStatus: ("loading" | "failed" | null)[];
+  onRetryVersion: (vi: number) => void;
   onStartPickVersionSource: () => void;
   onCancelPickVersionSource: () => void;
   // Accepts a source URL + display label (e.g. "photo 3" or "wild card").
@@ -11560,6 +11564,8 @@ const GridScreen = ({
   versionsUsedThisBatch,
   pickingVersionSource,
   versionsGenerating,
+  versionSlotStatus,
+  onRetryVersion,
   onStartPickVersionSource,
   onCancelPickVersionSource,
   onPickVersionSource,
@@ -13564,7 +13570,7 @@ const GridScreen = ({
             }}
           >
             <div style={{ fontSize: 14, color: C.dark, fontWeight: 500 }}>
-              Tap the shot you love — I'll make 3 more variations of it.
+              Tap the shot you love — I'll make 4 more variations of it.
             </div>
             <button
               onClick={onCancelPickVersionSource}
@@ -13647,8 +13653,10 @@ const GridScreen = ({
       )}
 
       {/* Versions strip — appears below the grid once the customer has picked
-          a source and 2 versions have been generated (or are generating). */}
-      {(versionsGenerating || versionShots.some((u) => !!u)) && (
+          a source and its 4 versions have been generated (or are generating). */}
+      {(versionsGenerating ||
+        versionShots.some((u) => !!u) ||
+        versionSlotStatus.some((st) => st === "failed")) && (
         <div
           style={{
             marginTop: 20,
@@ -13688,12 +13696,9 @@ const GridScreen = ({
               {" · body angle · expression · alternate angle · sly smile"}
             </span>
           </div>
-          {/* Version-tile grid (2026-09-22 per Kristi):
-              - Desktop (>640px): 3 tiles in a single row.
-              - Mobile (≤640px): 2 tiles on the top row, 3rd centered
-                below at the same width as the top-row tiles.
-              Grid layout replaces the old flex row (22% tiles were
-              uselessly tiny on phones). */}
+          {/* Version-tile grid: 4 tiles in one row on desktop, 2 x 2 on
+              phones (2026-10-09). Grid layout replaces the old flex row
+              (22% tiles were uselessly tiny on phones). */}
           <div
             style={{
               display: "grid",
@@ -13710,6 +13715,10 @@ const GridScreen = ({
             {[0, 1, 2, 3].map((vi) => {
               const vsrc = versionShots[vi];
               const isCarted = !!vsrc && cartSet.has(vsrc);
+              const vStatus = versionSlotStatus[vi] ?? null;
+              // Empty slot that isn't loading or retryable (e.g. an older
+              // 3-version round restored from the email link): no tile.
+              if (!vsrc && !vStatus) return null;
               return (
                 <div
                   key={vi}
@@ -13720,12 +13729,6 @@ const GridScreen = ({
                     overflow: "hidden",
                     background: C.lightGrey,
                     border: `1px solid ${C.border}`,
-                    // On mobile the 3rd tile spans both columns and
-                    // centers itself at the same width as the top-row
-                    // tiles so the grid reads 2-1. On desktop the 3rd
-                    // tile flows naturally into the third column.
-                    // 4 versions (2026-10-09): 2 x 2 on phones, one row of
-                    // 4 on desktop, so no tile needs special centering.
                   }}
                 >
                   {vsrc ? (
@@ -13829,7 +13832,7 @@ const GridScreen = ({
                       ) : null}
                       {/* Expand button, bottom-left. Sets
                           previewVersionIndex (not previewIndex) so the
-                          lightbox cycles through the 3 variation tiles
+                          lightbox cycles through the variation tiles
                           instead of the main-grid images. */}
                       <button
                         onClick={(e) => {
@@ -13860,6 +13863,40 @@ const GridScreen = ({
                         <Maximize2 size={18} strokeWidth={2.2} />
                       </button>
                     </>
+                  ) : vStatus === "failed" ? (
+                    // This version came back empty (usually the image AI
+                    // timing out). Let the customer re-run just this one.
+                    <button
+                      type="button"
+                      onClick={() => onRetryVersion(vi)}
+                      disabled={versionsGenerating}
+                      aria-label="This version didn't come out. Tap to try again"
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 8,
+                        padding: 12,
+                        background: "transparent",
+                        border: "none",
+                        color: C.dark,
+                        cursor: versionsGenerating ? "default" : "pointer",
+                        opacity: versionsGenerating ? 0.5 : 1,
+                        fontFamily: "inherit",
+                        textAlign: "center",
+                      }}
+                    >
+                      <RefreshCw size={22} strokeWidth={2} />
+                      <span style={{ fontSize: 12, fontWeight: 500, lineHeight: 1.3 }}>
+                        This one didn't come out
+                      </span>
+                      <span style={{ fontSize: 11, color: C.mediumGrey, lineHeight: 1.3 }}>
+                        Tap to try again
+                      </span>
+                    </button>
                   ) : (
                     <div
                       style={{
@@ -13871,14 +13908,10 @@ const GridScreen = ({
                         color: C.mediumGrey,
                       }}
                     >
-                      {versionsGenerating ? (
-                        <Loader2
-                          size={22}
-                          style={{ animation: "spin 1s linear infinite" }}
-                        />
-                      ) : (
-                        <span style={{ fontSize: 11 }}>—</span>
-                      )}
+                      <Loader2
+                        size={22}
+                        style={{ animation: "spin 1s linear infinite" }}
+                      />
                     </div>
                   )}
                 </div>
@@ -20437,6 +20470,8 @@ export default function App() {
   // preserving identity from the standard reference set, with a slightly
   // wider crop. Full spec: [[project_generate_similar]].
   const [versionShots, setVersionShots] = useState<(string | null)[]>([]);
+  const versionShotsRef = useRef(versionShots);
+  versionShotsRef.current = versionShots;
   // Complete generation history (2026-09-09, per Kristi). Every URL this
   // session ever produced across the RTV lifecycle — main batches, regens,
   // wild cards, versions, and prior shots that were overwritten by
@@ -20483,6 +20518,21 @@ export default function App() {
   // out-of-redos popup stops offering free variations (no loop). 2026-09-30.
   const versionsBlockedRef = useRef(false);
   const [versionsGenerating, setVersionsGenerating] = useState(false);
+  // Per-tile state for the versions row (2026-10-10): "loading" while that
+  // version is being made, "failed" when it came back empty (shows a "tap to
+  // try again" tile), null when done. Each tile now fills in as soon as its
+  // own call returns instead of waiting for the slowest of the 4 (a customer
+  // stared at 4 spinners for ~4 min on Oct 10 while one version timed out).
+  const [versionSlotStatus, setVersionSlotStatus] = useState<
+    ("loading" | "failed" | null)[]
+  >([]);
+  // The source shot + round of the current versions row, so a failed tile can
+  // be retried into the same slot (and the server saves it to the same round).
+  const versionRoundRef = useRef<{
+    sourceUrl: string;
+    round: string;
+    token: string | null;
+  } | null>(null);
   // Wild Card bonus previews shown below the main grid (2026-08-04).
   const [wildCards, setWildCards] = useState<WildCardShot[]>([]);
   // Mirror live client state into the accumulating allGeneratedUrls pool
@@ -21210,6 +21260,7 @@ export default function App() {
         // so map to a compatible shape.
         if (Array.isArray(d.versionShots) && d.versionShots.length > 0) {
           setVersionShots(d.versionShots);
+          setVersionSlotStatus([]);
           // A restored version set counts as "used" for the one-per-batch
           // rule so a resumed session doesn't hand out a free extra pair.
           setVersionsUsedThisBatch(true);
@@ -22599,107 +22650,171 @@ export default function App() {
     setVersionsSourceLabel(sourceLabel ?? null);
     setVersionsGenerating(true);
     setVersionShots([null, null, null, null]);
+    setVersionSlotStatus(["loading", "loading", "loading", "loading"]);
     setRegenError(null);
     // The server saves each version to the RTV link itself, so they stick
     // even if the customer leaves for the cart mid-round. (2026-10-09)
-    const versionRound = `v${Date.now()}`;
-    const versionResumeToken = resumeTokenRef.current;
+    const ctx = {
+      sourceUrl,
+      round: `v${Date.now()}`,
+      token: resumeTokenRef.current,
+    };
+    versionRoundRef.current = ctx;
 
-    const buildBody = (variationIndex: number) => ({
-      photoUrls: lastPhotoUrls,
-      style: lastSelections.style,
-      attire: lastSelections.attire,
-      lighting: lastSelections.lighting,
-      background: lastSelections.background,
-      variationIndex,
-      hasWideAngle: lastHasWideAngle,
-      skin: lastSelections.skin,
-      scrubColor: lastSelections.scrubColor,
-      poloColor: lastSelections.poloColor,
-      outfitUrl: lastSelections.outfitUrl,
-      gender: lastGender,
-      similarToUrl: sourceUrl,
-      ...(versionResumeToken
-        ? { resumeToken: versionResumeToken, versionRound }
-        : {}),
-      ...readUnlockRequestFields(),
-    });
-
-    // Fire 3 parallel variants (2026-09-13 per Kristi — bumped from 2 to
-    // 3 to give the customer more visual variety and improve conversion
-    // on the "make more like this" moment):
+    // Fire 4 parallel variants:
     //   0 → body-angle rotate + slight wider crop
     //   1 → expression change (softer or brighter than source)
-    //   2 → hair + expression + body-angle change, SAME crop
+    //   2 → body angle the opposite way, SAME crop
     //   3 → sly Duchenne smile, fierce eyes (added 2026-10-09 per Kristi: 4th version)
-    const settled = await Promise.allSettled(
-      [0, 1, 2, 3].map((vi) =>
-        fetch("/api/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(buildBody(vi)),
-        }),
-      ),
+    // Each tile fills in the moment its own call returns (2026-10-10).
+    const results = await Promise.all(
+      [0, 1, 2, 3].map(async (vi) => {
+        const r = await fetchVersionShot(ctx, vi);
+        if (r.url) {
+          setVersionShots((prev) => {
+            const next = [...prev];
+            next[vi] = r.url;
+            return next;
+          });
+        }
+        setVersionSlotStatus((prev) => {
+          const next = [...prev];
+          next[vi] = r.url ? null : "failed";
+          return next;
+        });
+        return r;
+      }),
     );
 
-    const outputs: (string | null)[] = [null, null, null, null];
-    let anyOk = false;
-    let any402 = false;
-    for (let i = 0; i < settled.length; i++) {
-      const r = settled[i];
-      if (r.status !== "fulfilled") continue;
-      const response = r.value;
-      if (response.status === 402) any402 = true;
-      if (!response.ok) continue;
-      try {
-        const data = (await response.json()) as {
-          image?: string;
-          url?: string | null;
-        };
-        if (!data.image) continue;
-        outputs[i] = data.url ?? data.image;
-        anyOk = true;
-      } catch {
-        /* skip this one */
-      }
-    }
-    setVersionShots(outputs);
+    const outputs = results.map((r) => r.url);
+    const anyOk = outputs.some((u) => !!u);
+    const any402 = results.some((r) => r.is402);
     setVersionsGenerating(false);
     // Only "spend" the one-per-batch allowance if AT LEAST ONE version came
-    // back. If both failed (network / server), let the customer try again.
+    // back. If all failed (network / server), let the customer try again.
     if (anyOk) setVersionsUsedThisBatch(true);
     else if (any402) {
       // Server says this IP is out of free generations — show the unlock
       // (without re-offering free variations).
       versionsBlockedRef.current = true;
       setVersionShots([]);
+      setVersionSlotStatus([]);
       setShowFreeTierPaywall(true);
-    } else
+    } else {
+      setVersionShots([]);
+      setVersionSlotStatus([]);
       setRegenError(
         "Couldn't generate versions right now. Please try again in a moment.",
       );
+    }
     // Persist any successful version shots to the saved session so they
     // show on the RTV email resume link (2026-09-04, per Kristi report:
     // customer generated 2 variations but they weren't included in the
     // saved session so the RTV email link didn't show them). Best-effort.
-    const persistedTokenNow = resumeTokenRef.current;
-    if (persistedTokenNow && anyOk) {
-      const filled = outputs.filter((u): u is string => !!u);
-      if (filled.length > 0) {
-        try {
-          void fetch("/api/session-versions", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              token: persistedTokenNow,
-              versionShots: filled,
-            }),
-          });
-        } catch {
-          /* best-effort */
-        }
-      }
+    if (anyOk) saveVersionShotsToSession(outputs);
+  };
+
+  // One "Generate Versions" call for tile `vi` of a round. Returns the shot's
+  // URL, or null if it failed (is402 = the server's free cap said no).
+  const fetchVersionShot = async (
+    ctx: { sourceUrl: string; round: string; token: string | null },
+    vi: number,
+  ): Promise<{ url: string | null; is402: boolean }> => {
+    if (!lastSelections) return { url: null, is402: false };
+    try {
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          photoUrls: lastPhotoUrls,
+          style: lastSelections.style,
+          attire: lastSelections.attire,
+          lighting: lastSelections.lighting,
+          background: lastSelections.background,
+          variationIndex: vi,
+          hasWideAngle: lastHasWideAngle,
+          skin: lastSelections.skin,
+          scrubColor: lastSelections.scrubColor,
+          poloColor: lastSelections.poloColor,
+          outfitUrl: lastSelections.outfitUrl,
+          gender: lastGender,
+          similarToUrl: ctx.sourceUrl,
+          ...(ctx.token
+            ? { resumeToken: ctx.token, versionRound: ctx.round }
+            : {}),
+          ...readUnlockRequestFields(),
+        }),
+      });
+      if (response.status === 402) return { url: null, is402: true };
+      if (!response.ok) return { url: null, is402: false };
+      const data = (await response.json()) as {
+        image?: string;
+        url?: string | null;
+      };
+      if (!data.image) return { url: null, is402: false };
+      return { url: data.url ?? data.image, is402: false };
+    } catch {
+      return { url: null, is402: false };
     }
+  };
+
+  // Browser-side copy of the versions row to the saved session. Only needed
+  // when the server could not save them itself (no resume token yet when the
+  // round started). Best-effort.
+  const saveVersionShotsToSession = (shots: (string | null)[]) => {
+    const token = resumeTokenRef.current;
+    const filled = shots.filter((u): u is string => !!u);
+    if (!token || filled.length === 0) return;
+    try {
+      void fetch("/api/session-versions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, versionShots: filled }),
+      });
+    } catch {
+      /* best-effort */
+    }
+  };
+
+  // "Tap to try again" on a version tile that came back empty (2026-10-10).
+  // Re-runs just that one version into the same slot. Allowed even after the
+  // free round is used, since it replaces a shot that never arrived; the
+  // server's free-call cap is still the backstop.
+  const handleRetryVersionSlot = async (vi: number) => {
+    const ctx = versionRoundRef.current;
+    if (!ctx || versionsGenerating) return;
+    if (!lastSelections || lastPhotoUrls.length < 5) return;
+    setVersionsGenerating(true);
+    setRegenError(null);
+    setVersionSlotStatus((prev) => {
+      const next = [...prev];
+      next[vi] = "loading";
+      return next;
+    });
+    const r = await fetchVersionShot(ctx, vi);
+    const shotsNow = [...versionShotsRef.current];
+    if (r.url) {
+      while (shotsNow.length <= vi) shotsNow.push(null);
+      shotsNow[vi] = r.url;
+      setVersionShots(shotsNow);
+    }
+    setVersionSlotStatus((prev) => {
+      const next = [...prev];
+      next[vi] = r.url ? null : "failed";
+      return next;
+    });
+    setVersionsGenerating(false);
+    if (r.is402) {
+      versionsBlockedRef.current = true;
+      setShowFreeTierPaywall(true);
+    } else if (!r.url) {
+      setRegenError(
+        "That version didn't come out again. Please try once more in a minute.",
+      );
+    }
+    // The server saved it already if the round had a token; otherwise save
+    // the whole row from the browser.
+    if (r.url && !ctx.token) saveVersionShotsToSession(shotsNow);
   };
 
   // Regenerate a SINGLE thumbnail slot, reusing the most recently-submitted
@@ -23346,6 +23461,8 @@ export default function App() {
     // Fresh batch → clear Generate Versions state so the customer gets their
     // one free "make versions" use back.
     setVersionShots([]);
+    setVersionSlotStatus([]);
+    versionRoundRef.current = null;
     setVersionsSourceLabel(null);
     setVersionsUsedThisBatch(false);
     setPickingVersionSource(false);
@@ -24588,7 +24705,7 @@ export default function App() {
                   setGeneratedImages((prev) => prev.map((u) => (u === url ? "" : u)));
                   setPreviousImages((pp) => pp.map((u) => (u === url ? null : u)));
                   setAllGeneratedUrls((prev) => prev.filter((u) => u !== url));
-                  setVersionShots((vs) => vs.filter((u) => u !== url));
+                  setVersionShots((vs) => vs.map((u) => (u === url ? null : u)));
                   setWildCards((wcs) => wcs.filter((w) => w.image !== url));
                   if (tok && pw) {
                     void fetch("/api/update-session", {
@@ -24726,6 +24843,10 @@ export default function App() {
           versionsUsedThisBatch={versionsUsedThisBatch}
           pickingVersionSource={pickingVersionSource}
           versionsGenerating={versionsGenerating}
+          versionSlotStatus={versionSlotStatus}
+          onRetryVersion={(vi) => {
+            void handleRetryVersionSlot(vi);
+          }}
           onStartPickVersionSource={() => setPickingVersionSource(true)}
           onCancelPickVersionSource={() => setPickingVersionSource(false)}
           onPickVersionSource={(sourceUrl, sourceLabel) => {
