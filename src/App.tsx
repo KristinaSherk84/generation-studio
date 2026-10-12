@@ -11420,7 +11420,22 @@ const LoadingScreen = ({
 
 // -------------------- Screen 4: Pick & Cart --------------------
 
+// Already-purchased tiles (2026-10-12, Kristi): green check in the top-right
+// corner + a green rim, everywhere a generated shot is shown. The rim is the
+// tile's own border plus an outer ring, so the photo can't cover it and tile
+// sizes don't shift.
+const PURCHASED_GREEN = "#1B6B4C";
+const purchasedRim = (bought: boolean): CSSProperties =>
+  bought
+    ? {
+        border: `2px solid ${PURCHASED_GREEN}`,
+        boxShadow: `0 0 0 2px ${PURCHASED_GREEN}`,
+      }
+    : {};
+
 type GridScreenProps = {
+  // Shots this customer already bought (green check + rim). (2026-10-12)
+  purchased?: string[];
   images: string[]; // base64 data URIs returned from /api/generate, one per card
   // Per-slot undo history (2026-08-31). A non-null value in slot N means the
   // customer can revert that tile back to its previous image (before the
@@ -11574,7 +11589,9 @@ const GridScreen = ({
   onUnlockMoreGenerations,
   onOpenAllShots,
   allGeneratedUrls = [],
+  purchased = [],
 }: GridScreenProps) => {
+  const purchasedSet = new Set(purchased);
   // Cart is App-level URLs (Phase 1, 2026-06-03 revised) — lifted out of
   // GridScreen's useState so it survives the user backing out to the Style
   // screen and re-generating. URL-keyed so a pick from a prior style
@@ -12231,6 +12248,7 @@ const GridScreen = ({
                   flexShrink: 0,
                   backgroundColor: C.lightGrey,
                   boxShadow: "0 1px 3px rgba(0,0,0,0.12)",
+                  ...purchasedRim(purchasedSet.has(url)),
                 }}
                 aria-label={`Cart item ${i + 1}`}
                 onContextMenu={(e) => e.preventDefault()}
@@ -12415,6 +12433,7 @@ const GridScreen = ({
             <div className="wildcard-thumbs">
             {wildCards.map((wc, i) => {
               const wcPicked = !!wc.image && cartSet.has(wc.image);
+              const wcBought = !!wc.image && purchasedSet.has(wc.image);
               return (
                 <div key={i} className="wildcard-thumb" style={{ order: i === 0 ? 1 : 3 }}>
                   <div
@@ -12442,6 +12461,7 @@ const GridScreen = ({
                       background: C.lightGrey,
                       cursor: wc.image ? "pointer" : "default",
                       border: `2px solid ${wcPicked ? C.dark : "transparent"}`,
+                      ...purchasedRim(wcBought),
                     }}
                   >
                     {wc.image ? (
@@ -12504,11 +12524,13 @@ const GridScreen = ({
                             right: 10,
                             background: wcPicked
                               ? C.dark
+                              : wcBought
+                              ? PURCHASED_GREEN
                               : cartIsFull
                               ? "rgba(255, 255, 255, 0.4)"
                               : "rgba(255, 255, 255, 0.92)",
-                            color: wcPicked ? C.white : C.dark,
-                            border: wcPicked
+                            color: wcPicked || wcBought ? C.white : C.dark,
+                            border: wcPicked || wcBought
                               ? "none"
                               : "1.5px solid rgba(255, 255, 255, 0.95)",
                             boxShadow: "0 1px 4px rgba(0,0,0,0.3)",
@@ -12521,7 +12543,7 @@ const GridScreen = ({
                             pointerEvents: "none",
                           }}
                         >
-                          {wcPicked ? (
+                          {wcPicked || wcBought ? (
                             <Check size={17} />
                           ) : (
                             <Plus size={17} strokeWidth={2.4} />
@@ -12688,6 +12710,7 @@ const GridScreen = ({
         {photos.map((i) => {
           const src = images[i]; // may be undefined if this slot failed to generate
           const picked = !!src && cartSet.has(src);
+          const bought = !!src && purchasedSet.has(src);
           const regenerating = regeneratingSlots.has(i);
           const perfecting = perfectingSlots.has(i);
           const blocked = blockedSlots.has(i);
@@ -12751,6 +12774,7 @@ const GridScreen = ({
                 overflow: "hidden",
                 border: `2px solid ${picked ? C.dark : "transparent"}`,
                 transition: "border-color 0.15s",
+                ...purchasedRim(bought),
               }}
             >
               {blocked ? (
@@ -13192,11 +13216,13 @@ const GridScreen = ({
                     right: 10,
                     background: picked
                       ? C.dark
+                      : bought
+                      ? PURCHASED_GREEN
                       : cartIsFull
                       ? "rgba(255, 255, 255, 0.4)"
                       : "rgba(255, 255, 255, 0.92)",
-                    color: picked ? C.white : C.dark,
-                    border: picked ? "none" : "1.5px solid rgba(255, 255, 255, 0.95)",
+                    color: picked || bought ? C.white : C.dark,
+                    border: picked || bought ? "none" : "1.5px solid rgba(255, 255, 255, 0.95)",
                     boxShadow: "0 1px 4px rgba(0,0,0,0.3)",
                     borderRadius: "50%",
                     width: 30,
@@ -13205,10 +13231,11 @@ const GridScreen = ({
                     alignItems: "center",
                     justifyContent: "center",
                     transition: "background 0.15s, transform 0.15s",
-                    opacity: !picked && cartIsFull ? 0.55 : 1,
+                    opacity: !picked && !bought && cartIsFull ? 0.55 : 1,
                   }}
+                  title={bought && !picked ? "Already purchased" : undefined}
                 >
-                  {picked ? <Check size={17} /> : <Plus size={17} strokeWidth={2.4} />}
+                  {picked || bought ? <Check size={17} /> : <Plus size={17} strokeWidth={2.4} />}
                 </div>
               )}
               {/* Per-slot regenerate button — bottom-right corner. Always
@@ -13715,6 +13742,7 @@ const GridScreen = ({
             {[0, 1, 2, 3].map((vi) => {
               const vsrc = versionShots[vi];
               const isCarted = !!vsrc && cartSet.has(vsrc);
+              const vBought = !!vsrc && purchasedSet.has(vsrc);
               const vStatus = versionSlotStatus[vi] ?? null;
               // Empty slot that isn't loading or retryable (e.g. an older
               // 3-version round restored from the email link): no tile.
@@ -13729,6 +13757,7 @@ const GridScreen = ({
                     overflow: "hidden",
                     background: C.lightGrey,
                     border: `1px solid ${C.border}`,
+                    ...purchasedRim(vBought),
                   }}
                 >
                   {vsrc ? (
@@ -13800,7 +13829,7 @@ const GridScreen = ({
                             if (isCarted) onRemoveFromCart(vsrc);
                             else onAddToCart(vsrc);
                           }}
-                          aria-label={isCarted ? "Remove from cart" : "Add to cart"}
+                          aria-label={isCarted ? "Remove from cart" : vBought ? "Already purchased" : "Add to cart"}
                           style={{
                             position: "absolute",
                             top: 8,
@@ -13810,9 +13839,11 @@ const GridScreen = ({
                             borderRadius: "50%",
                             background: isCarted
                               ? C.dark
+                              : vBought
+                              ? PURCHASED_GREEN
                               : "rgba(255,255,255,0.92)",
-                            color: isCarted ? C.white : C.dark,
-                            border: isCarted
+                            color: isCarted || vBought ? C.white : C.dark,
+                            border: isCarted || vBought
                               ? "none"
                               : "1.5px solid rgba(255,255,255,0.95)",
                             cursor: "pointer",
@@ -13823,7 +13854,7 @@ const GridScreen = ({
                             boxShadow: "0 1px 4px rgba(0,0,0,0.3)",
                           }}
                         >
-                          {isCarted ? (
+                          {isCarted || vBought ? (
                             <Check size={15} />
                           ) : (
                             <Plus size={15} strokeWidth={2.4} />
@@ -14121,6 +14152,7 @@ const GridScreen = ({
                 if (!src) return null;
                 const globalIndex = idx + 6;
                 const picked = cartSet.has(src);
+                const bought = purchasedSet.has(src);
                 const isFailed = failedUrls.has(src);
                 return (
                   <div
@@ -14139,6 +14171,7 @@ const GridScreen = ({
                       cursor: src && !isFailed ? "pointer" : "default",
                       border: `2px solid ${picked ? C.dark : "transparent"}`,
                       transition: "border-color 0.15s",
+                      ...purchasedRim(bought),
                     }}
                   >
                     {!loadedUrls.has(src) && !isFailed && (
@@ -14230,11 +14263,13 @@ const GridScreen = ({
                         right: 8,
                         background: picked
                           ? C.dark
+                          : bought
+                          ? PURCHASED_GREEN
                           : cartIsFull
                           ? "rgba(255, 255, 255, 0.4)"
                           : "rgba(255, 255, 255, 0.92)",
-                        color: picked ? C.white : C.dark,
-                        border: picked
+                        color: picked || bought ? C.white : C.dark,
+                        border: picked || bought
                           ? "none"
                           : "1.5px solid rgba(255, 255, 255, 0.95)",
                         boxShadow: "0 1px 4px rgba(0,0,0,0.3)",
@@ -14247,7 +14282,7 @@ const GridScreen = ({
                         pointerEvents: "none",
                       }}
                     >
-                      {picked ? (
+                      {picked || bought ? (
                         <Check size={15} />
                       ) : (
                         <Plus size={15} strokeWidth={2.4} />
@@ -15958,6 +15993,8 @@ void _RETAIN_INTRO_RETOUCH_MODAL;
 
 // The retouch screen itself.
 type RetouchScreenProps = {
+  // Shots already bought — flagged so nobody pays twice. (2026-10-12)
+  purchased?: string[];
   // URLs of the images the customer added to their cart on the grid screen.
   // These are the photos they're going to pay for and retouch. Cart may hold
   // images from multiple generation rounds; URL is the only stable handle.
@@ -15995,7 +16032,9 @@ const RetouchScreen = ({
   onRemovePick,
   discountedUrls,
   winbackActive = false,
+  purchased = [],
 }: RetouchScreenProps) => {
+  const purchasedSet = new Set(purchased);
   // Formatting helpers for the winback discount (2026-09-06). When active,
   // every tier price shows as "$original crossed through" + "$discounted" so
   // the customer SEES the 10% off in the app before the Stripe redirect.
@@ -16155,6 +16194,7 @@ const RetouchScreen = ({
           // Default to "basic" — the cheaper option, safest for cost and
           // the most conservative customer assumption.
           const currentTier = retouchTiers[url] ?? "basic";
+          const bought = purchasedSet.has(url);
           return (
             <div
               key={url}
@@ -16190,6 +16230,7 @@ const RetouchScreen = ({
                   position: "relative",
                   flexShrink: 0,
                   backgroundColor: C.lightGrey,
+                  ...purchasedRim(bought),
                 }}
                 onContextMenu={(e) => e.preventDefault()}
                 aria-label={`Headshot ${position + 1}`}
@@ -16249,6 +16290,22 @@ const RetouchScreen = ({
                   rows fit on a single phone screen and customers don't
                   have to scroll to compare. */}
               <div className="retouch-tiers" style={{ flex: 1, minWidth: 140 }}>
+                {bought && (
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      color: PURCHASED_GREEN,
+                      fontSize: 13,
+                      fontWeight: 600,
+                      marginBottom: 4,
+                    }}
+                  >
+                    <Check size={15} strokeWidth={2.6} />
+                    You already bought this one
+                  </div>
+                )}
                 {RETOUCH_TIER_DESCRIPTIONS.map((t) => {
                   const selected = currentTier === t.tier;
                   return (
@@ -16762,6 +16819,9 @@ const CheckoutScreen = ({
       setProgressLabel("Redirecting to secure checkout…");
       const stash = {
         email,
+        // The cart URLs exactly as the grid shows them, so the return trip
+        // can mark these tiles as purchased. (2026-10-12)
+        sourceUrls: selectedImages.filter((u) => /^https?:\/\//.test(u)),
         // Full name (added 2026-05-22). Same reason as retouchTiers: the
         // Stripe redirect blows React state away, and we need the name on
         // the return trip so /api/deliver can include it on Kristi's
@@ -19357,6 +19417,7 @@ const UpsellModal = ({
 // on the RetouchScreen after Check out; Kristi's call 2026-09-04 to show
 // concrete Basic pricing here rather than a range.
 type AllShotsGalleryProps = {
+  purchased?: string[];
   mainImages: string[]; // first 6 are the main grid; slice(6) is accumulated extras
   wildCards: WildCardShot[];
   versionShots: (string | null)[];
@@ -19402,8 +19463,10 @@ const AllShotsGallery = ({
   onRemoveFromCart,
   onCheckout,
   onClose,
+  purchased = [],
 }: AllShotsGalleryProps) => {
   const cartSet = new Set(cart);
+  const purchasedSet = new Set(purchased);
   const cartFull = cart.length >= maxCartSize;
   const toggle = (src: string | null) => {
     if (!src) return;
@@ -19517,6 +19580,7 @@ const AllShotsGallery = ({
   // Reusable tile renderer for uniform look across all four sections.
   const tile = (src: string, key: string) => {
     const picked = cartSet.has(src);
+    const bought = purchasedSet.has(src);
     return (
       <div
         key={key}
@@ -19530,6 +19594,7 @@ const AllShotsGallery = ({
           cursor: "pointer",
           border: `2px solid ${picked ? C.dark : "transparent"}`,
           transition: "border-color 0.15s",
+          ...purchasedRim(bought),
         }}
       >
         <img
@@ -19599,9 +19664,11 @@ const AllShotsGallery = ({
             borderRadius: "50%",
             background: picked
               ? C.dark
-              : cartFull
-                ? "rgba(180,180,180,0.85)"
-                : "#C9A961",
+              : bought
+                ? PURCHASED_GREEN
+                : cartFull
+                  ? "rgba(180,180,180,0.85)"
+                  : "#C9A961",
             color: C.white,
             border: "1.5px solid rgba(255,255,255,0.95)",
             boxShadow: "0 1px 6px rgba(0,0,0,0.35)",
@@ -19611,7 +19678,7 @@ const AllShotsGallery = ({
             pointerEvents: "none",
           }}
         >
-          {picked ? <Check size={16} /> : <Plus size={16} strokeWidth={2.6} />}
+          {picked || bought ? <Check size={16} /> : <Plus size={16} strokeWidth={2.6} />}
         </div>
         {/* Expand — bottom-left */}
         <button
@@ -20944,6 +21011,48 @@ export default function App() {
     () => new Set(),
   );
   const [showUpsell, setShowUpsell] = useState(false);
+  // Shots this customer already bought (2026-10-12, Kristi: a customer went
+  // back to her cart after checkout, saw the same photos still there, and
+  // paid for them again). Tiles show a green check + green rim. Kept in
+  // localStorage on this browser and on the saved session (for the email
+  // link), merged on resume.
+  const PURCHASED_STORAGE_KEY = "purchased_v1";
+  const [purchasedUrls, setPurchasedUrls] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = window.localStorage.getItem(PURCHASED_STORAGE_KEY);
+      const parsed = raw ? (JSON.parse(raw) as unknown) : [];
+      return Array.isArray(parsed)
+        ? parsed.filter((u): u is string => typeof u === "string")
+        : [];
+    } catch {
+      return [];
+    }
+  });
+  const mergePurchased = (urls: string[]) => {
+    const clean = urls.filter((u) => typeof u === "string" && /^https?:\/\//.test(u));
+    if (clean.length === 0) return;
+    setPurchasedUrls((prev) => {
+      const next = Array.from(new Set([...prev, ...clean])).slice(-200);
+      try {
+        window.localStorage.setItem(PURCHASED_STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        /* display-only */
+      }
+      return next;
+    });
+  };
+  // After a successful checkout: mark the shots bought and empty them out of
+  // the cart so the customer can't mistake them for an unpaid order.
+  const markPurchased = (urls: string[]) => {
+    mergePurchased(urls);
+    const bought = new Set(urls);
+    setCart((prev) => prev.filter((u) => !bought.has(u)));
+    setDiscountedUrls((prev) => {
+      const next = new Set([...prev].filter((u) => !bought.has(u)));
+      return next.size === prev.size ? prev : next;
+    });
+  };
   const addToCart = (url: string) => {
     setCart((prev) => {
       if (prev.includes(url)) return prev;
@@ -21213,6 +21322,7 @@ export default function App() {
           previousUrls?: (string | null)[];
           revertedSlots?: number[];
           versionShots?: string[];
+          purchasedUrls?: string[];
           allGeneratedUrls?: string[];
         };
         if (!d.generatedUrls || d.generatedUrls.length === 0) return;
@@ -21258,6 +21368,8 @@ export default function App() {
         // RTV email link shows them in the AllShotsGallery. Client state
         // is (string | null)[] — the server stores just the filled URLs,
         // so map to a compatible shape.
+        // Already-bought shots (2026-10-12) — green check + rim.
+        if (Array.isArray(d.purchasedUrls)) mergePurchased(d.purchasedUrls);
         if (Array.isArray(d.versionShots) && d.versionShots.length > 0) {
           setVersionShots(d.versionShots);
           setVersionSlotStatus([]);
@@ -21923,6 +22035,8 @@ export default function App() {
         // with a clear message, prompting the customer to contact support.
         customerName?: string;
         uploadedUrls: string[];
+        // Cart URLs as the grid shows them (2026-10-12).
+        sourceUrls?: string[];
         referencePhotoUrls: string[];
         selections: StyleSelections;
         // Per-photo retouch tier — index N here matches uploadedUrls[N].
@@ -22008,6 +22122,10 @@ export default function App() {
         // is safe; it only affects bonus cross-style previews' lens
         // correction language (soft downgrade, not broken).
         setEmail(stash.email);
+        markPurchased([
+          ...(Array.isArray(stash.sourceUrls) ? stash.sourceUrls : []),
+          ...stash.uploadedUrls,
+        ]);
         setDeliveredPhotoUrls(deliverData.photoUrls);
         setDeliveredShareGraphicUrls(deliverData.shareGraphicUrls ?? []);
         setLastSelections(stash.selections);
@@ -24686,6 +24804,7 @@ export default function App() {
       {screen === "grid" &&
         generatedImages.filter(Boolean).length > 0 && (
         <GridScreen
+          purchased={purchasedUrls}
           images={generatedImages}
           previousImages={previousImages}
           revertedSlots={revertedSlots}
@@ -24895,6 +25014,7 @@ export default function App() {
                     variationIndex?: number;
                   }[];
                   versionShots?: string[];
+                  purchasedUrls?: string[];
                 };
                 if (Array.isArray(d.generatedUrls) && d.generatedUrls.length > 0) {
                   setGeneratedImages((prev) => {
@@ -24941,6 +25061,7 @@ export default function App() {
                 // shows every "Generate Versions" tile the customer has
                 // requested this session, not just what's currently in
                 // client state.
+                if (Array.isArray(d.purchasedUrls)) mergePurchased(d.purchasedUrls);
                 if (Array.isArray(d.versionShots) && d.versionShots.length > 0) {
                   setVersionShots((prev) => {
                     const seen = new Set(
@@ -25032,6 +25153,7 @@ export default function App() {
         })()}
       {screen === "retouch" && (
         <RetouchScreen
+          purchased={purchasedUrls}
           selectedUrls={selectedImageUrls}
           retouchTiers={retouchTiers}
           setRetouchTiers={setRetouchTiers}
@@ -25080,6 +25202,7 @@ export default function App() {
           // last-chance upsell popup. (2026-08-20)
           discounted={selectedImageUrls.map((url) => discountedUrls.has(url))}
           onComplete={({ email: submittedEmail, photoUrls, shareGraphicUrls }) => {
+            markPurchased([...selectedImageUrls, ...photoUrls]);
             setEmail(submittedEmail);
             setDeliveredPhotoUrls(photoUrls);
             setDeliveredShareGraphicUrls(shareGraphicUrls ?? []);
@@ -25308,6 +25431,7 @@ export default function App() {
           the RetouchScreen still gates tier selection before payment. */}
       {showAllShotsGallery && (
         <AllShotsGallery
+          purchased={purchasedUrls}
           mainImages={generatedImages}
           wildCards={wildCards}
           versionShots={versionShots}

@@ -51,5 +51,7 @@ export default async function handler(
     // this session ever produced, so the "Every shot" cabinet + RTV link
     // never lose a shot the customer regenerated over more than once.
     allGeneratedUrls: session.allGeneratedUrls ?? [],
+    // Shots already bought (2026-10-12) — green check + rim on the tiles.
+    purchasedUrls: session.purchasedUrls ?? [],
   });
 }

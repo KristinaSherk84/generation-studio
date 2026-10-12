@@ -68,6 +68,9 @@ export type SavedSession = {
   // version number (0-3), when the server saved them itself (2026-10-09).
   versionRound?: string;
   versionSlots?: (string | null)[];
+  // Shots the customer has already bought (2026-10-12). Shown with a green
+  // check + green rim so nobody buys the same photo twice by mistake.
+  purchasedUrls?: string[];
   // Complete generation history (2026-09-09, per Kristi). Every image URL
   // this session ever produced, in first-seen order — main-batch shots,
   // regens, wild cards, variations, and shots that were later replaced by
@@ -521,6 +524,28 @@ export async function addSessionVersionShot(
   } finally {
     await redis.del(lockKey);
   }
+}
+
+/**
+ * Mark shots as purchased on a saved session (2026-10-12). Called by
+ * /api/deliver after a successful delivery. Accumulates, deduped, capped.
+ */
+export async function addSessionPurchasedUrls(
+  token: string,
+  urls: string[],
+): Promise<boolean> {
+  if (!token || !/^[A-Za-z0-9]{16,48}$/.test(token)) return false;
+  const cleaned = (Array.isArray(urls) ? urls : []).filter(
+    (u): u is string => typeof u === "string" && /^https?:\/\//.test(u),
+  );
+  if (cleaned.length === 0) return true;
+  const rec = (await redis.get<SavedSession>(key(token))) ?? null;
+  if (!rec) return false;
+  rec.purchasedUrls = Array.from(
+    new Set([...(rec.purchasedUrls ?? []), ...cleaned]),
+  ).slice(-120);
+  await redis.set(key(token), rec, { ex: TTL_SECONDS });
+  return true;
 }
 
 /**

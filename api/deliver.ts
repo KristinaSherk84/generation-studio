@@ -34,7 +34,8 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { GoogleGenAI, type Part } from "@google/genai";
 import sharp from "sharp";
 import { buildShareGraphic } from "./lib/compositeBeforeAfter.js";
-import { recordPurchase, addLeadAlias } from "./lib/leadStore.js";
+import { recordPurchase, addLeadAlias, getEmailResumeToken } from "./lib/leadStore.js";
+import { addSessionPurchasedUrls } from "./lib/sessionStore.js";
 import { useShareCredit } from "./lib/promoStore.js";
 import {
   buildRetouchPrompt,
@@ -1333,6 +1334,15 @@ export default async function handler(
         await addLeadAlias(genLeadEmail, checkoutEmail);
       } else {
         await recordPurchase(body.email, { name: customerNameTrimmed });
+      }
+      // Mark the bought shots on the customer's saved session so the grid,
+      // the "every shot" album and the email link show them as purchased.
+      // (2026-10-12, Kristi: a customer re-bought shots still in her cart.)
+      try {
+        const token = await getEmailResumeToken(genLeadEmail || checkoutEmail);
+        if (token) await addSessionPurchasedUrls(token, body.photoUrls ?? []);
+      } catch (err) {
+        console.warn("[deliver] purchased-urls save failed (non-fatal):", err);
       }
       // Paid order that Stripe already comped one headshot on: spend the
       // credit now (no-op for codes without one / other kinds of code).
