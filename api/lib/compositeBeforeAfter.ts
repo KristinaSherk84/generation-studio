@@ -7,7 +7,7 @@
  *     (no label bar, removed 2026-05-04 — was visually heavy and the
  *     SVG-text label rendered as missing-glyph squares on Vercel)
  *   - Bottom-right: white card containing a QR code linking to the
- *     share URL, with a "Scan to try it yourself" caption beneath
+ *     share URL, with a "Create yours now!" caption beneath
  *     the QR inside the same card. Caption is rendered from
  *     pre-computed SVG vector paths (see lib/textPaths.ts) so it's
  *     immune to the font-tofu problem that bit V1 — librsvg renders
@@ -275,7 +275,7 @@ async function buildBeforeSprite(beforeUrl: string): Promise<{
 
 /**
  * Build the QR card sprite — white rounded-rect card with a soft drop
- * shadow, containing a QR code on top and a "Scan to try it yourself"
+ * shadow, containing a QR code on top and a "Create yours now!"
  * caption beneath it. Both QR and caption live inside the same card
  * for a single visual unit.
  *
@@ -362,7 +362,9 @@ async function buildQrSprite(qrTargetUrl: string): Promise<{
 // -------------------- Main --------------------
 
 export type ShareGraphicArgs = {
-  beforeUrl: string;
+  // Omit (or pass "") for the headshot-only version: same graphic without the
+  // BEFORE Polaroid. (2026-10-12, Kristi: two graphics per photo.)
+  beforeUrl?: string;
   afterUrl: string;
   qrTargetUrl: string;
 };
@@ -376,7 +378,7 @@ export type ShareGraphicArgs = {
  *     with a slight tilt and soft drop shadow. Replaces the previous
  *     circular inset (changed 2026-05-06 because the tight circle was
  *     unforgiving of imperfect face crops on real customer photos)
- *   - Bottom-right: QR card with QR code + "Scan to try it yourself"
+ *   - Bottom-right: QR card with QR code + "Create yours now!"
  *     caption rendered as SVG vector paths (so it renders identically
  *     across all environments without needing the right system fonts)
  *
@@ -400,7 +402,9 @@ export async function buildShareGraphic(
   //    drop shadow). Returns a sprite that's bigger than the visible
   //    Polaroid — the extra padding holds the tilted bounding box and
   //    the shadow bleed.
-  const beforeSprite = await buildBeforeSprite(args.beforeUrl);
+  const beforeSprite = args.beforeUrl
+    ? await buildBeforeSprite(args.beforeUrl)
+    : null;
 
   // 3. Build the QR card sprite (QR + caption inside the same card).
   const qrSprite = await buildQrSprite(args.qrTargetUrl);
@@ -410,8 +414,10 @@ export async function buildShareGraphic(
   //    sized to its tilted bounding box; placing it so the bounding-box
   //    bottom-left sits at (MARGIN, CANVAS_H - MARGIN) keeps the visible
   //    Polaroid roughly the same MARGIN distance from the canvas edges.
-  const beforeLeft = MARGIN - beforeSprite.circleOffsetX;
-  const beforeTop = CANVAS_H - MARGIN - beforeSprite.spriteHeight + beforeSprite.circleOffsetY;
+  const beforeLeft = beforeSprite ? MARGIN - beforeSprite.circleOffsetX : 0;
+  const beforeTop = beforeSprite
+    ? CANVAS_H - MARGIN - beforeSprite.spriteHeight + beforeSprite.circleOffsetY
+    : 0;
   // QR card goes bottom-right at MARGIN offset.
   const qrLeft = CANVAS_W - MARGIN - QR_CARD_W - qrSprite.cardOffsetX;
   const qrTop = CANVAS_H - MARGIN - QR_CARD_H - qrSprite.cardOffsetY;
@@ -426,7 +432,9 @@ export async function buildShareGraphic(
   })
     .composite([
       { input: afterImage, top: 0, left: 0 },
-      { input: beforeSprite.buffer, top: beforeTop, left: beforeLeft },
+      ...(beforeSprite
+        ? [{ input: beforeSprite.buffer, top: beforeTop, left: beforeLeft }]
+        : []),
       { input: qrSprite.buffer, top: qrTop, left: qrLeft },
     ])
     .jpeg({ quality: 90, progressive: true })

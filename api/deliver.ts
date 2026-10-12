@@ -161,6 +161,8 @@ export type DeliveryManifest = {
   // the share graphic uses the Realistic version; for Deluxe photos it
   // uses the Polished version (middle-tier, safest visual default).
   shareGraphicUrls?: string[];
+  // Same graphics WITHOUT the before photo, same order. (2026-10-12)
+  shareGraphicCleanUrls?: string[];
 };
 
 // -------------------- Helpers --------------------
@@ -415,29 +417,37 @@ export async function sendCustomerDeliveryEmail(args: {
 
   const { manifest } = args;
   const hasShareGraphics =
-    manifest.shareGraphicUrls?.some((u) => !!u) ?? false;
+    (manifest.shareGraphicUrls?.some((u) => !!u) ?? false) ||
+    (manifest.shareGraphicCleanUrls?.some((u) => !!u) ?? false);
 
-  // Share-graphic download row — small thumbnail next to a forest-green
-  // "Download" pill link. Inline styles only because email clients strip
-  // <style> blocks.
-  const shareRow = (url: string, i: number) => `
-    <tr>
-      <td style="padding: 8px; vertical-align: middle; width: 80px;">
+  // Share graphics (2026-10-12, Kristi): TWO big graphics per photo, side by
+  // side — the before/after one and a headshot-only one — each with its own
+  // Download pill underneath. Inline styles only (email clients strip
+  // <style>); width:100% + max-width lets the pair shrink on phones.
+  const cleanUrls = manifest.shareGraphicCleanUrls ?? [];
+  const shareCell = (url: string, label: string) => `
+      <td style="width: 50%; padding: 6px; vertical-align: top; text-align: center;">
         <a href="${escapeHtml(url)}" style="text-decoration: none;">
-          <img src="${escapeHtml(url)}" alt="Share image ${i + 1}" style="width: 72px; height: 100px; object-fit: cover; border-radius: 6px; border: 1px solid #E2DFD8; display: block;" />
+          <img src="${escapeHtml(url)}" alt="${escapeHtml(label)}" width="250" style="width: 100%; max-width: 250px; height: auto; border-radius: 8px; border: 1px solid #E2DFD8; display: block; margin: 0 auto;" />
         </a>
-      </td>
-      <td style="padding: 8px 8px 8px 16px; vertical-align: middle;">
-        <a href="${escapeHtml(url)}" style="display: inline-block; background: #1B4332; color: #FFFFFF; padding: 12px 22px; border-radius: 999px; text-decoration: none; font-size: 14px; font-weight: 500; letter-spacing: 0.4px;">
-          Download share image ${i + 1}
+        <p style="font-size: 12px; color: #555; margin: 8px 0 8px;">${escapeHtml(label)}</p>
+        <a href="${escapeHtml(url)}" style="display: inline-block; background: #1B4332; color: #FFFFFF; padding: 10px 18px; border-radius: 999px; text-decoration: none; font-size: 13px; font-weight: 500; letter-spacing: 0.3px;">
+          Download
         </a>
-      </td>
-    </tr>`;
+      </td>`;
+  const sharePair = (url: string, i: number) => {
+    const clean = cleanUrls[i] ?? "";
+    const cells = [
+      url ? shareCell(url, "With your before photo") : "",
+      clean ? shareCell(clean, "Headshot only") : "",
+    ].join("");
+    return cells ? `<tr>${cells}</tr>` : "";
+  };
 
   const shareTable = hasShareGraphics
-    ? `<table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; max-width: 600px; margin: 0 auto;">
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; max-width: 540px; margin: 0 auto;">
         ${(manifest.shareGraphicUrls ?? [])
-          .map((url, i) => (url ? shareRow(url, i) : ""))
+          .map((url, i) => sharePair(url, i))
           .join("")}
       </table>`
     : "";
@@ -584,10 +594,10 @@ export async function sendCustomerDeliveryEmail(args: {
            a hand-made graphic if the auto one didn't render. -->
       <div style="margin: 40px 0 24px; padding: 24px 20px; background: #FBF8F0; border: 2px solid #C9A961; border-radius: 12px; text-align: center;">
         <h1 style="font-family: Georgia, 'Times New Roman', serif; font-size: 30px; font-weight: 500; color: #1B4332; margin: 0 0 10px; line-height: 1.2;">
-          I give refunds for social posts!
+          I'll pay YOU $10 for a social post!
         </h1>
         <p style="font-size: 13.5px; line-height: 1.55; color: #555; margin: 12px auto 6px; max-width: 460px;">
-          <strong>How it works:</strong> download your before/after graphic below, post it publicly on <strong>LinkedIn</strong>, tag <strong>Generation Headshots</strong>, then reply to this email with a screenshot of your post. <strong>I'll refund you $10 to your card within 24 hours.</strong>
+          <strong>How it works:</strong> download your before/after graphic below, post it publicly on <strong>LinkedIn</strong>, tag <strong>GenerAItion Headshots</strong>, then reply to this email with a screenshot of your post. <strong>I'll refund you $10 to your card within 24 hours.</strong>
         </p>
         <p style="font-size: 12px; line-height: 1.55; color: #888; margin: 4px auto 18px; max-width: 460px;">
           LinkedIn only. Must be a public post (not a private message or story). One refund per customer.
@@ -607,11 +617,11 @@ export async function sendCustomerDeliveryEmail(args: {
 
         <!-- LinkedIn CTA sits inside the same card, directly below the graphic. -->
         <div style="text-align: center; margin: 14px 0 4px;">
-          <a href="https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent("https://generationheadshots.com")}" target="_blank" rel="noopener" style="display: inline-block; background: #0A66C2; color: #FFFFFF; padding: 14px 28px; border-radius: 999px; text-decoration: none; font-size: 15px; font-weight: 600; letter-spacing: 0.3px;">
+          <a href="${escapeHtml(LINKEDIN_COMPOSE_URL)}" target="_blank" rel="noopener" style="display: inline-block; background: #0A66C2; color: #FFFFFF; padding: 14px 28px; border-radius: 999px; text-decoration: none; font-size: 15px; font-weight: 600; letter-spacing: 0.3px;">
             Open LinkedIn to post &rarr;
           </a>
           <p style="font-size: 11.5px; color: #888; margin: 8px 0 0;">
-            ${hasShareGraphics ? "Opens LinkedIn's share window &mdash; attach the graphic you downloaded above." : "Opens LinkedIn's share window &mdash; attach your favorite headshot (or the graphic once I send it)."}
+            ${hasShareGraphics ? "Opens LinkedIn with your post already written &mdash; just add the graphic you downloaded above." : "Opens LinkedIn with your post already written &mdash; just add your favorite headshot (or the graphic once I send it)."}
           </p>
         </div>
       </div>
@@ -718,9 +728,20 @@ export async function sendCustomerDeliveryEmail(args: {
 
 // -------------------- Share-graphic generation --------------------
 
+// Post text pre-filled in LinkedIn's composer by the delivery email's "Open
+// LinkedIn to post" button (2026-10-12, Kristi's wording). LinkedIn can't take
+// an image by link, so the customer attaches the graphic themselves.
+const LINKEDIN_POST_TEXT = `Finally! A headshot I can be proud of. And wanna guess the best part?... it took me 15 minutes and only cost me $15. Thankfully I found @KristinaSherk and her new app @generaitionheadshots - It was easy, quick, stress free, and it felt good supporting an ACTUAL HEADSHOT PHOTOGRAPHER with 20 years experience who built this app.
+It's free to try, gave me realistic, authentic results, and I'm thrilled with the results!`;
+const LINKEDIN_COMPOSE_URL = `https://www.linkedin.com/feed/?shareActive=true&text=${encodeURIComponent(LINKEDIN_POST_TEXT)}`;
+
 // QR code on every share graphic points to the marketing site so a poster's
 // followers can scan and arrive at the funnel's first conversion surface.
-const SHARE_QR_URL = "https://generationheadshots.com";
+// 2026-10-12 (Kristi): QR scans show up as their own source in GA4. The QR
+// holds the SHORT /qr-post path (the full UTM link made the code too dense to
+// scan from a feed photo); vercel.json redirects /qr-post to the home page
+// with utm_source=qr&utm_medium=share_graphic&utm_campaign=social_post.
+const SHARE_QR_URL = "https://generationheadshots.com/qr-post";
 
 // Cryptographically-meh shuffle is fine here — we just want unbiased order
 // for sample-without-replacement on a tiny array. Fisher-Yates.
@@ -729,6 +750,40 @@ function shuffleArrayInPlace<T>(arr: T[]): void {
     const j = Math.floor(Math.random() * (i + 1));
     [arr[i], arr[j]] = [arr[j], arr[i]];
   }
+}
+
+/**
+ * Headshot-only share graphic per delivered photo (2026-10-12, Kristi): the
+ * same layout as the before/after graphic minus the BEFORE Polaroid. Same
+ * order as deliveredPhotoUrls; "" where compositing failed.
+ */
+async function generateCleanShareGraphics(args: {
+  deliveryId: string;
+  deliveredPhotoUrls: string[];
+}): Promise<string[]> {
+  return Promise.all(
+    args.deliveredPhotoUrls.map(async (afterUrl, index) => {
+      try {
+        const buf = await buildShareGraphic({ afterUrl, qrTargetUrl: SHARE_QR_URL });
+        const blob = await put(
+          `deliveries/${args.deliveryId}/share-${index + 1}-headshot.jpg`,
+          buf,
+          { access: "public", contentType: "image/jpeg", addRandomSuffix: false },
+        );
+        return blob.url;
+      } catch (error) {
+        console.error(
+          JSON.stringify({
+            type: "clean_share_graphic_failed",
+            index,
+            deliveryId: args.deliveryId,
+            error: error instanceof Error ? error.message : String(error),
+          }),
+        );
+        return "";
+      }
+    }),
+  );
 }
 
 /**
@@ -1248,11 +1303,17 @@ export default async function handler(
     const shareSourceUrls: string[] = deliveredHeadshots.map((h) =>
       h.tier === "deluxe" ? (h.polished ?? h.realistic) : h.realistic,
     );
-    const shareGraphicUrls = await generateShareGraphics({
-      deliveryId,
-      deliveredPhotoUrls: shareSourceUrls,
-      referencePhotoUrls: body.referencePhotoUrls,
-    });
+    const [shareGraphicUrls, shareGraphicCleanUrls] = await Promise.all([
+      generateShareGraphics({
+        deliveryId,
+        deliveredPhotoUrls: shareSourceUrls,
+        referencePhotoUrls: body.referencePhotoUrls,
+      }),
+      generateCleanShareGraphics({
+        deliveryId,
+        deliveredPhotoUrls: shareSourceUrls,
+      }),
+    ]);
 
     // ---- Flatten the structured headshot list into a flat URL array
     //      for manifest back-compat with any external tooling. ----
@@ -1277,6 +1338,7 @@ export default async function handler(
       deliveredHeadshots,
       deliveredHeadshotUrls: flatDeliveredUrls,
       shareGraphicUrls,
+      shareGraphicCleanUrls,
     };
     const manifestKey = `deliveries/${deliveryId}/manifest.json`;
     const manifestBlob = await put(
