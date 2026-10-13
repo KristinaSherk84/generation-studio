@@ -128,6 +128,9 @@ export default async function handler(
           wildCards: prior.wildCards,
           previousUrls: extendedPreviousUrls,
           revertedSlots: prior.revertedSlots,
+          // Keep the already-bought marks (green check + rim) when a new
+          // batch is added — they were being wiped here. (2026-10-13)
+          purchasedUrls: prior.purchasedUrls,
         });
         if (ok) token = existing;
       }
