@@ -15,6 +15,10 @@
     {
       "path": "/api/share-ask-emails",
       "schedule": "45 * * * *"
+    },
+    {
+      "path": "/api/indexnow",
+      "schedule": "0 14 * * 1"
     }
   ],
   "functions": {
