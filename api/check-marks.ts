@@ -34,18 +34,23 @@ type Side = "left" | "right" | null;
 const LOCATE_PROMPT = `Look at this person's face. Find the single most noticeable mole, beauty mark, birthmark or scar on the face (not freckles, not blemishes, not piercings or jewelry).
 
 Give bounding boxes as [ymin, xmin, ymax, xmax] on a 0-1000 scale of this photo.
-Reply with JSON only: {"mark": [..] or null if there is no such mark, "what": "short plain description of where it is, WITHOUT the words left or right", "nose": [..]}`;
+Reply with JSON only: {"mark": [..] or null if there is no such mark, "what": "short plain description of where it is, WITHOUT the words left or right", "nose": [..], "mouth": [..]}`;
 
 type Box = [number, number, number, number];
 const isBox = (b: unknown): b is Box =>
   Array.isArray(b) && b.length === 4 && b.every((v) => typeof v === "number");
 const centerX = (b: Box) => (b[1] + b[3]) / 2;
 
-/** Which side of the IMAGE the mark sits on, relative to the nose. */
-function sideOf(mark: unknown, nose: unknown): Side {
+/**
+ * Which side of the IMAGE the mark sits on, relative to the face's center
+ * line. The center line is the midpoint of the nose and mouth centers, which
+ * holds up better than the nose alone when the face is slightly turned.
+ */
+function sideOf(mark: unknown, nose: unknown, mouth?: unknown): Side {
   if (!isBox(mark) || !isBox(nose)) return null;
+  const mid = isBox(mouth) ? (centerX(nose) + centerX(mouth)) / 2 : centerX(nose);
   const noseW = Math.max(1, nose[3] - nose[1]);
-  const dx = centerX(mark) - centerX(nose);
+  const dx = centerX(mark) - mid;
   // Too close to the face's center line to call (e.g. a mark right under the
   // middle of the nose) — skip rather than guess.
   if (Math.abs(dx) < noseW * 0.15) return null;
@@ -101,7 +106,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const located = await Promise.all(
       images.map((data) =>
-        askJson<{ mark?: unknown; nose?: unknown; what?: string }>([{ text: LOCATE_PROMPT }, img(data)]),
+        askJson<{ mark?: unknown; nose?: unknown; mouth?: unknown; what?: string }>([{ text: LOCATE_PROMPT }, img(data)]),
       ),
     );
     // Height of each mark relative to the nose (in nose-heights below the nose
@@ -114,7 +119,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const known = rel.filter((r): r is number => r !== null).sort((a, b) => a - b);
     const median = known.length ? known[Math.floor(known.length / 2)] : 0;
     const sides: Side[] = located.map((l, i) =>
-      rel[i] !== null && Math.abs((rel[i] as number) - median) <= 0.6 ? sideOf(l?.mark, l?.nose) : null,
+      rel[i] !== null && Math.abs((rel[i] as number) - median) <= 0.6 ? sideOf(l?.mark, l?.nose, l?.mouth) : null,
     );
     const whatIdx = rel.findIndex((r) => r !== null && Math.abs(r - median) <= 0.6);
     const parsed = { what: whatIdx >= 0 ? (located[whatIdx]?.what ?? "") : "" };
