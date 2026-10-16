@@ -47,6 +47,8 @@ import {
 } from "./lib/retouchPrompts.js";
 import { bumpProCall } from "./lib/dailyStats.js";
 import { getPromptOverrides } from "./lib/promptStore.js";
+import { faceScale, cropRatio, CROP_TIGHT_RATIO } from "./lib/cropCheck.js";
+import { reviewUrl } from "./lib/reviewLink.js";
 
 // Bumped from 60s → 300s on 2026-05-15 (Path B launch). 2026-05-18 Glow
 // Up Deluxe pivot: now each Deluxe photo fires BOTH Polished and Glam
@@ -132,6 +134,9 @@ export type DeliveredHeadshot = {
   // plain-English reason (2026-10-06). Shown in Kristi's alert email so she can
   // see what didn't work and why, and fix it by hand.
   touchupFailures?: { version: "polished" | "glam"; reason: string }[];
+  // Retouched versions whose face came out noticeably bigger than the
+  // original (cropped tighter), even after one automatic redo. (2026-10-16)
+  cropFlags?: { version: "polished" | "glam"; ratio: number }[];
 };
 
 export type DeliveryManifest = {
@@ -196,6 +201,9 @@ const PRO_PER_ATTEMPT_TIMEOUT_MS = 90_000;
 const PRO_OVERLOAD_BACKOFF_MS = [3_000, 6_000, 12_000, 20_000];
 const PRO_OTHER_MAX_ATTEMPTS = 2;
 const RETOUCH_PASS_DEADLINE_MS = 200_000;
+// Only redo a tight-crop retouch when at least this much of the pass deadline
+// is left, so the crop retry can never push a delivery past 300s.
+const CROP_RETRY_HEADROOM_MS = 100_000;
 function friendlyRetouchReason(msg: string): string {
   if (/\b429\b|RESOURCE_EXHAUSTED/i.test(msg)) return "Google rate limit (429) - too many requests at once";
   if (isProOverloadError(msg)) return "Google was busy (503 \"high demand\") - still busy after every retry";
@@ -293,6 +301,25 @@ export async function sendUsageAlertEmail(args: {
       </div>`
     : "";
 
+  // Tight-crop flags + the phone-friendly review page (2026-10-16, Kristi).
+  const cropRows = manifest.deliveredHeadshots
+    .map((h, i) => ({ h, i }))
+    .filter(({ h }) => h.cropFlags?.length)
+    .map(({ h, i }) => {
+      const what = (h.cropFlags ?? [])
+        .map((f) => `${f.version === "polished" ? "Polished" : "Glam"} (face ${Math.round((f.ratio - 1) * 100)}% bigger)`)
+        .join(", ");
+      return `<li><strong>Photo ${i + 1}:</strong> ${escapeHtml(what)}</li>`;
+    })
+    .join("");
+  const hasDeluxe = manifest.deliveredHeadshots.some((h) => h.tier === "deluxe");
+  const reviewBlock = hasDeluxe
+    ? `<div style="background:${cropRows ? "#FFF6E5" : "#F5F5F3"};border:1px solid ${cropRows ? "#E8C77A" : "#E2E0DA"};border-radius:8px;padding:12px 14px;margin:0 0 16px 0;">
+        ${cropRows ? `<strong>✂️ Possible tighter crop</strong> (already redone once automatically):<ul style="margin:6px 0 10px 18px;padding:0;">${cropRows}</ul>` : ""}
+        <a href="${escapeHtml(reviewUrl(manifest.deliveryId))}" style="display:inline-block;background:#1B4332;color:#fff;padding:10px 18px;border-radius:999px;text-decoration:none;font-size:14px;font-weight:600;">Review / redo retouches →</a>
+      </div>`
+    : "";
+
   // Small thumbnail strip helper — renders a flex-wrap row of <img> tags with
   // fixed max sizes. Email clients strip most CSS, so keep styling inline and
   // conservative (no flexbox — fall back to table-like wrapping via inline-block).
@@ -307,6 +334,7 @@ export async function sendUsageAlertEmail(args: {
   const html = `
     <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#2c2c2a;max-width:640px;">
       ${failBanner}
+      ${reviewBlock}
       <h2 style="margin:0 0 8px 0;font-weight:500;">Someone just used the AI Generator</h2>
       <p style="margin:0 0 16px 0;color:#666;">
         <strong>Name:</strong> ${escapeHtml(manifest.customerName)}<br/>
@@ -351,7 +379,7 @@ export async function sendUsageAlertEmail(args: {
         // Subject includes the customer name so Kristi can see at a glance
         // in her Gmail list who used the generator without opening the
         // email. Kept the "$$$" prefix so existing filter rules still match.
-        subject: `${failedTouchups ? "⚠️ TOUCH-UPS FAILED — " : ""}$$$-AI-Generator-Used — ${manifest.customerName}`,
+        subject: `${failedTouchups ? "⚠️ TOUCH-UPS FAILED — " : ""}${manifest.deliveredHeadshots.some((h) => h.cropFlags?.length) ? "✂️ CHECK CROP — " : ""}$$$-AI-Generator-Used — ${manifest.customerName}`,
         html,
       }),
     });
@@ -877,78 +905,46 @@ async function generateShareGraphics(args: {
   return results;
 }
 
-// -------------------- Per-photo retouch (Glow Up Deluxe) --------------------
-//
-// For each photo with tier "deluxe", fan out into TWO parallel Gemini Pro
-// Image Preview passes — one Polished, one Glam — using the prompts in
-// api/lib/retouchPrompts.ts. The customer receives all three versions
-// (Realistic + Polished + Glam) as separate download links in the email.
-//
-// For tier "basic", no Pro call is needed. The photo passes through with
-// just the Realistic URL.
-//
-// Failure mode per sub-tier: if either Pro call fails (429, 5xx, no image,
-// timeout), the failed sub-tier falls back to the Realistic URL. The
-// customer still gets 3 download buttons for a deluxe photo — one of
-// them will just be a duplicate Realistic. Logged loudly so the failure
-// pattern is visible without breaking customer delivery.
-//
-// Parallelism: every sub-tier call across every deluxe photo fires
-// concurrently via Promise.all. For 6 all-deluxe photos that's 12
-// simultaneous Pro calls. Tier 2 rate limits accommodate this. Total
-// wall-clock is dominated by the slowest individual call (~15-25s).
-export async function applyRetouchPass(
-  photoUrls: string[],
-  tiers: RetouchTier[],
-  deliveryId: string,
-): Promise<DeliveredHeadshot[]> {
-  const passStartedAt = Date.now();
-  const failures: Record<number, { version: "polished" | "glam"; reason: string }[]> = {};
-  const noteFailure = (i: number, version: RetouchSubTier, reason: string) => {
-    (failures[i] ??= []).push({ version: version as "polished" | "glam", reason });
-  };
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    console.warn(
-      "[deliver] retouch skipped — GEMINI_API_KEY missing; shipping basics",
-    );
-    return photoUrls.map((url) => ({ tier: "basic", realistic: url }));
-  }
-  const ai = new GoogleGenAI({ apiKey });
-
-  // Run one sub-tier (polished or glam) Pro pass against a single photo.
-  // Returns the Blob URL of the retouched image, or the original URL on
-  // any failure path.
-  async function runSubTier(
-    sourceUrl: string,
-    sourceBytes: Buffer,
-    sourceMime: string,
-    subTier: RetouchSubTier,
-    photoIndex: number,
-  ): Promise<string> {
-    try {
-      // Age band is unknown server-side (we don't collect age from the
-      // customer) — default to "mature" for the more conservative
-      // under-eye treatment. Glam ignores the age band entirely.
-      // Apply any live prompt-editor overrides for the retouch prompts.
-      setActiveRetouchOverrides(await getPromptOverrides());
-      const prompt = buildRetouchPrompt(subTier, "mature");
-      const parts: Part[] = [
-        { text: prompt },
-        {
-          inlineData: {
-            mimeType: sourceMime,
-            data: sourceBytes.toString("base64"),
-          },
-        },
-      ];
-      // Pro Image Preview can occasionally hang silently. Race each call
-      // against a hard timeout (PRO_PER_ATTEMPT_TIMEOUT_MS) and retry -
-      // see PRO_OVERLOAD_BACKOFF_MS for the "Google is busy" schedule.
-      // imageConfig.aspectRatio "3:4" is kept (prevents recompose); imageSize
-      // is intentionally NOT set — see 2026-05-22 finding in
-      // feedback_gemini_pro_imageconfig that pinning size constrained the
-      // model's retouching aggressiveness.
+/**
+ * One Glow Up retouch render (2026-10-16 refactor so the crop check and the
+ * admin "Redo retouch" page share it). Builds the prompt from the live prompt
+ * editor, calls Gemini Pro with the busy/timeout retries, and upscales to
+ * 1792x2400. Returns the JPEG bytes, null if Google sent no image, and throws
+ * when every retry failed.
+ */
+export async function renderRetouchImage(args: {
+  ai: GoogleGenAI;
+  sourceBytes: Buffer;
+  sourceMime: string;
+  subTier: RetouchSubTier;
+  deliveryId: string;
+  photoIndex: number;
+  startedAt: number;
+  deadlineMs: number;
+}): Promise<{ buffer: Buffer; mime: string } | null> {
+  const { ai, sourceBytes, sourceMime, subTier, deliveryId, photoIndex, startedAt, deadlineMs } = args;
+  // Age band is unknown server-side (we don't collect age from the
+  // customer) — default to "mature" for the more conservative
+  // under-eye treatment. Glam ignores the age band entirely.
+  // Apply any live prompt-editor overrides for the retouch prompts.
+  setActiveRetouchOverrides(await getPromptOverrides());
+  const prompt = buildRetouchPrompt(subTier, "mature");
+  const parts: Part[] = [
+    { text: prompt },
+    {
+      inlineData: {
+        mimeType: sourceMime,
+        data: sourceBytes.toString("base64"),
+      },
+    },
+  ];
+  // Pro Image Preview can occasionally hang silently. Race each call
+  // against a hard timeout (PRO_PER_ATTEMPT_TIMEOUT_MS) and retry -
+  // see PRO_OVERLOAD_BACKOFF_MS for the "Google is busy" schedule.
+  // imageConfig.aspectRatio "3:4" is kept (prevents recompose); imageSize
+  // is intentionally NOT set — see 2026-05-22 finding in
+  // feedback_gemini_pro_imageconfig that pinning size constrained the
+  // model's retouching aggressiveness.
       let resp: Awaited<
         ReturnType<typeof ai.models.generateContent>
       > | null = null;
@@ -999,19 +995,14 @@ export async function applyRetouchPass(
               : undefined;
           if (
             wait === undefined ||
-            Date.now() - passStartedAt + wait > RETOUCH_PASS_DEADLINE_MS
+            Date.now() - startedAt + wait > deadlineMs
           ) {
             throw err;
           }
           await new Promise((r) => setTimeout(r, wait));
         }
       }
-      if (!resp) {
-        // Unreachable in practice (the loop either sets resp or throws),
-        // but TypeScript needs the guard before we deref candidates.
-        noteFailure(photoIndex, subTier, "No response from Google");
-        return sourceUrl;
-      }
+      if (!resp) return null;
 
       const candidates = resp.candidates ?? [];
       for (const c of candidates) {
@@ -1060,27 +1051,126 @@ export async function applyRetouchPass(
               outputMime = inline.mimeType;
             }
 
-            const ext = outputMime === "image/png" ? "png" : "jpg";
-            const retouchedKey = `deliveries/${deliveryId}/retouched-${photoIndex}-${subTier}.${ext}`;
-            const blob = await put(retouchedKey, outputBuffer, {
-              access: "public",
-              contentType: outputMime,
-              allowOverwrite: true,
-            });
-            return blob.url;
+            return { buffer: outputBuffer, mime: outputMime };
           }
         }
       }
-      console.warn(
-        JSON.stringify({
-          type: "retouch_no_image_returned",
+  return null;
+}
+
+// -------------------- Per-photo retouch (Glow Up Deluxe) --------------------
+//
+// For each photo with tier "deluxe", fan out into TWO parallel Gemini Pro
+// Image Preview passes — one Polished, one Glam — using the prompts in
+// api/lib/retouchPrompts.ts. The customer receives all three versions
+// (Realistic + Polished + Glam) as separate download links in the email.
+//
+// For tier "basic", no Pro call is needed. The photo passes through with
+// just the Realistic URL.
+//
+// Failure mode per sub-tier: if either Pro call fails (429, 5xx, no image,
+// timeout), the failed sub-tier falls back to the Realistic URL. The
+// customer still gets 3 download buttons for a deluxe photo — one of
+// them will just be a duplicate Realistic. Logged loudly so the failure
+// pattern is visible without breaking customer delivery.
+//
+// Parallelism: every sub-tier call across every deluxe photo fires
+// concurrently via Promise.all. For 6 all-deluxe photos that's 12
+// simultaneous Pro calls. Tier 2 rate limits accommodate this. Total
+// wall-clock is dominated by the slowest individual call (~15-25s).
+export async function applyRetouchPass(
+  photoUrls: string[],
+  tiers: RetouchTier[],
+  deliveryId: string,
+): Promise<DeliveredHeadshot[]> {
+  const passStartedAt = Date.now();
+  const failures: Record<number, { version: "polished" | "glam"; reason: string }[]> = {};
+  const cropFlags: Record<number, { version: "polished" | "glam"; ratio: number }[]> = {};
+  const noteFailure = (i: number, version: RetouchSubTier, reason: string) => {
+    (failures[i] ??= []).push({ version: version as "polished" | "glam", reason });
+  };
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    console.warn(
+      "[deliver] retouch skipped — GEMINI_API_KEY missing; shipping basics",
+    );
+    return photoUrls.map((url) => ({ tier: "basic", realistic: url }));
+  }
+  const ai = new GoogleGenAI({ apiKey });
+
+  // Run one sub-tier (polished or glam) Pro pass against a single photo.
+  // Returns the Blob URL of the retouched image, or the original URL on
+  // any failure path.
+  async function runSubTier(
+    sourceUrl: string,
+    sourceBytes: Buffer,
+    sourceMime: string,
+    subTier: RetouchSubTier,
+    photoIndex: number,
+    originalScale: number | null,
+  ): Promise<string> {
+    try {
+      const render = () =>
+        renderRetouchImage({
+          ai,
+          sourceBytes,
+          sourceMime,
+          subTier,
           deliveryId,
           photoIndex,
-          subTier,
-        }),
-      );
-      noteFailure(photoIndex, subTier, "Google answered but sent back no image");
-      return sourceUrl;
+          startedAt: passStartedAt,
+          deadlineMs: RETOUCH_PASS_DEADLINE_MS,
+        });
+      let best = await render();
+      if (!best) {
+        console.warn(
+          JSON.stringify({
+            type: "retouch_no_image_returned",
+            deliveryId,
+            photoIndex,
+            subTier,
+          }),
+        );
+        noteFailure(photoIndex, subTier, "Google answered but sent back no image");
+        return sourceUrl;
+      }
+      // Crop check (2026-10-16): if the retouch zoomed in on the face, redo it
+      // once (time permitting) and keep whichever framing is closer to the
+      // original. Still-tight results are flagged in Kristi's alert email.
+      let ratio = await cropRatio(originalScale, best.buffer).catch(() => null);
+      if (
+        ratio !== null &&
+        ratio > CROP_TIGHT_RATIO &&
+        Date.now() - passStartedAt < RETOUCH_PASS_DEADLINE_MS - CROP_RETRY_HEADROOM_MS
+      ) {
+        console.log(
+          JSON.stringify({ type: "retouch_crop_retry", deliveryId, photoIndex, subTier, ratio }),
+        );
+        try {
+          const again = await render();
+          const r2 = again ? await cropRatio(originalScale, again.buffer).catch(() => null) : null;
+          if (again && r2 !== null && Math.abs(r2 - 1) < Math.abs(ratio - 1)) {
+            best = again;
+            ratio = r2;
+          }
+        } catch {
+          /* keep the first render */
+        }
+      }
+      if (ratio !== null && ratio > CROP_TIGHT_RATIO) {
+        (cropFlags[photoIndex] ??= []).push({
+          version: subTier as "polished" | "glam",
+          ratio: Math.round(ratio * 100) / 100,
+        });
+      }
+      const ext = best.mime === "image/png" ? "png" : "jpg";
+      const retouchedKey = `deliveries/${deliveryId}/retouched-${photoIndex}-${subTier}.${ext}`;
+      const blob = await put(retouchedKey, best.buffer, {
+        access: "public",
+        contentType: best.mime,
+        allowOverwrite: true,
+      });
+      return blob.url;
     } catch (err) {
       console.warn(
         JSON.stringify({
@@ -1141,8 +1231,10 @@ export async function applyRetouchPass(
 
         // Parallel Polished + Glam.
         const subTiers = subTiersForTier("deluxe"); // ["polished", "glam"]
+        // Face size in the original, for the crop check (null = skip check).
+        const originalScale = await faceScale(buf).catch(() => null);
         const [polished, glam] = await Promise.all(
-          subTiers.map((s) => runSubTier(url, buf, mimeType, s, i)),
+          subTiers.map((s) => runSubTier(url, buf, mimeType, s, i, originalScale)),
         );
 
         return {
@@ -1176,9 +1268,11 @@ export async function applyRetouchPass(
 
   const results = await Promise.all(tasks);
   // Attach any failure reasons so they land in the manifest + alert email.
-  return results.map((h, i) =>
-    failures[i]?.length ? { ...h, touchupFailures: failures[i] } : h,
-  );
+  return results.map((h, i) => ({
+    ...h,
+    ...(failures[i]?.length ? { touchupFailures: failures[i] } : {}),
+    ...(cropFlags[i]?.length ? { cropFlags: cropFlags[i] } : {}),
+  }));
 }
 
 // -------------------- Handler --------------------
