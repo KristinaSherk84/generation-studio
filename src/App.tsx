@@ -21438,7 +21438,12 @@ export default function App() {
       url.searchParams.get("paid") === "1" ||
       url.searchParams.get("photo_paid") === "1" ||
       url.searchParams.get("photo_cancel") === "1";
-    if (!token && !hasCheckoutParam) {
+    // Only auto-restore a remembered grid on the app's main page (2026-10-16,
+    // Kristi: /admin showed Victor's grid because her browser remembered his
+    // session from opening his link). Explicit ?resume= links still work on
+    // any page.
+    const onAppHome = url.pathname === "/" || url.pathname === "";
+    if (!token && !hasCheckoutParam && onAppHome) {
       try {
         const raw = window.localStorage.getItem("gh_resume_token");
         if (raw) {
