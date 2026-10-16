@@ -25,15 +25,36 @@ const BLOB_URL_RE = /^https:\/\/[^/]*\.public\.blob\.vercel-storage\.com\//;
 
 type Side = "left" | "right" | null;
 
+// Asking for "left/right" directly was unreliable (Jenny's 5 photos all came
+// back "left"), so we ask for boxes and compare the mark to the nose
+// ourselves. Gemini is much better at coordinates than at left/right words.
 const PROMPT = (n: number) => `These ${n} photos all show the same person (photo 1 to photo ${n}, in order).
 
-Look for ONE distinctive permanent mark on the face that shows up in most of the photos: a mole, beauty mark, birthmark or scar. Ignore piercings, jewelry, makeup, freckles spread across the face, blemishes and anything near the exact center line of the face.
+Find ONE distinctive permanent mark on the face that shows up in most of the photos: a mole, beauty mark, birthmark or scar. Ignore piercings, jewelry, makeup, freckles spread across the face and temporary blemishes.
 
-For each photo, say which side of the IMAGE (as you look at the picture, not the person's own left/right) that mark is on, or null if it isn't visible in that photo.
+For each photo give two bounding boxes as [ymin, xmin, ymax, xmax] on a 0-1000 scale of that photo:
+- "mark": the box around that mark, or null if it isn't visible in that photo
+- "nose": the box around the nose
 
 Reply with JSON only, exactly this shape:
-{"what": "short plain description of the mark, e.g. mole above the lip", "sides": ["left" | "right" | null, ...one entry per photo]}
-If there is no such mark, reply {"what": "", "sides": []}.`;
+{"what": "short plain description of the mark, e.g. mole above the lip", "photos": [{"mark": [..] | null, "nose": [..] | null}, ...one entry per photo]}
+If there is no such mark, reply {"what": "", "photos": []}.`;
+
+type Box = [number, number, number, number];
+const isBox = (b: unknown): b is Box =>
+  Array.isArray(b) && b.length === 4 && b.every((v) => typeof v === "number");
+const centerX = (b: Box) => (b[1] + b[3]) / 2;
+
+/** Which side of the IMAGE the mark sits on, relative to the nose. */
+function sideOf(mark: unknown, nose: unknown): Side {
+  if (!isBox(mark) || !isBox(nose)) return null;
+  const noseW = Math.max(1, nose[3] - nose[1]);
+  const dx = centerX(mark) - centerX(nose);
+  // Too close to the face's center line to call (e.g. a mark right under the
+  // middle of the nose) — skip rather than guess.
+  if (Math.abs(dx) < noseW * 0.15) return null;
+  return dx < 0 ? "left" : "right";
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") {
@@ -78,11 +99,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       contents: [{ role: "user", parts }],
       config: { responseMimeType: "application/json", temperature: 0 },
     });
-    const parsed = JSON.parse(resp.text ?? "{}") as { what?: string; sides?: unknown[] };
-    const sides: Side[] = urls.map((_, i) => {
-      const s = parsed.sides?.[i];
-      return s === "left" || s === "right" ? s : null;
-    });
+    const parsed = JSON.parse(resp.text ?? "{}") as {
+      what?: string;
+      photos?: { mark?: unknown; nose?: unknown }[];
+    };
+    const sides: Side[] = urls.map((_, i) => sideOf(parsed.photos?.[i]?.mark, parsed.photos?.[i]?.nose));
     const left = sides.filter((s) => s === "left").length;
     const right = sides.filter((s) => s === "right").length;
     const inconsistent = left > 0 && right > 0;
