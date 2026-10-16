@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
-import { Upload, Check, X, ArrowLeft, RefreshCw, Loader2, Download, Maximize2, ChevronDown, User, Sparkles, CircleUser, ArrowDown, ArrowRight, Menu, Plus, ShoppingBag, Trash2, Lock, Unlock, Undo2, Redo2, Folder } from "lucide-react";
+import { Upload, Check, X, ArrowLeft, RefreshCw, Loader2, Download, Maximize2, ChevronDown, User, Sparkles, CircleUser, ArrowDown, ArrowRight, Menu, Plus, ShoppingBag, Trash2, Lock, Unlock, Undo2, Redo2, Folder, FlipHorizontal } from "lucide-react";
 import { upload } from "@vercel/blob/client";
 import exifr from "exifr";
 import { seoForPath, SITE } from "./seo";
@@ -100,6 +100,11 @@ export type UploadedPhoto = {
   // Fingerprint of the file's exact contents (2026-09-24). Used to skip
   // the same photo being added twice, even under a different file name.
   contentHash?: string;
+  // Mirror check (2026-10-16): the customer flipped this photo left-right
+  // with the ↔ button (blobUrl/croppedUrl now point at flipped copies), and
+  // whether that flip is still being saved.
+  flipped?: boolean;
+  flipping?: boolean;
   status: "uploading" | "done" | "error";
   errorMessage: string | null;
   // EXIF-derived wide-angle flag, read in the browser via `exifr` as soon as
@@ -8624,6 +8629,92 @@ async function fingerprintFile(file: File): Promise<string> {
 const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) => {
   // How many duplicate photos were skipped on the last add (0 = no notice).
   const [dupSkipped, setDupSkipped] = useState(0);
+  // Mirror check (2026-10-16, Kristi — Jenny's mole showed up on both sides
+  // of her mouth because 2 of her 5 photos were mirror images). Once 2+
+  // photos are ready, /api/check-marks reports which side a distinctive
+  // mole/mark is on in each. If they disagree we ask the customer to flip
+  // the odd ones out with the ↔ button — we never flip for them.
+  const [markCheck, setMarkCheck] = useState<{
+    what: string;
+    flaggedIds: string[];
+  } | null>(null);
+  const checkablePhotos = photos.filter(
+    (p) => p.status === "done" && !p.multiFace && !p.flipping && (p.croppedUrl || p.blobUrl),
+  );
+  const markCheckKey = checkablePhotos
+    .map((p) => `${p.id}=${p.croppedUrl ?? p.blobUrl}`)
+    .join("|");
+  useEffect(() => {
+    if (checkablePhotos.length < 2) {
+      setMarkCheck(null);
+      return;
+    }
+    let cancelled = false;
+    // Wait a moment so face-crops landing a few seconds after upload (and
+    // quick flips in a row) settle into one check.
+    const timer = window.setTimeout(() => {
+      const ids = checkablePhotos.map((p) => p.id);
+      void fetch("/api/check-marks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          urls: checkablePhotos.map((p) => p.croppedUrl ?? (p.blobUrl as string)),
+        }),
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d: { ok?: boolean; inconsistent?: boolean; what?: string; flagged?: number[] } | null) => {
+          if (cancelled) return;
+          if (!d?.ok || !d.inconsistent) {
+            setMarkCheck(null);
+            return;
+          }
+          setMarkCheck({
+            what: d.what || "a mole or mark",
+            flaggedIds: (d.flagged ?? []).map((i) => ids[i]).filter(Boolean),
+          });
+        })
+        .catch(() => {
+          /* best-effort: no banner */
+        });
+    }, 2500);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [markCheckKey]);
+  // Flip one photo left-right (server makes mirrored copies of the original
+  // and the face-crop). Flipping twice returns it to how it was.
+  const flipPhoto = async (id: string) => {
+    const photo = photos.find((p) => p.id === id);
+    if (!photo || photo.flipping || !photo.blobUrl) return;
+    setPhotos((prev) => prev.map((p) => (p.id === id ? { ...p, flipping: true } : p)));
+    const flipUrl = async (url: string) => {
+      const r = await fetch("/api/flip-reference", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      const d = (await r.json()) as { url?: string };
+      if (!r.ok || !d.url) throw new Error("flip failed");
+      return d.url;
+    };
+    try {
+      const [blobUrl, croppedUrl] = await Promise.all([
+        flipUrl(photo.blobUrl),
+        photo.croppedUrl ? flipUrl(photo.croppedUrl) : Promise.resolve(undefined),
+      ]);
+      setPhotos((prev) =>
+        prev.map((p) =>
+          p.id === id
+            ? { ...p, blobUrl, croppedUrl, flipped: !p.flipped, flipping: false }
+            : p,
+        ),
+      );
+    } catch {
+      setPhotos((prev) => prev.map((p) => (p.id === id ? { ...p, flipping: false } : p)));
+    }
+  };
   // Upload files one at a time to Vercel Blob via our /api/upload endpoint.
   // Each photo flows through three states: uploading → done (with blobUrl) or error.
   const handleNewFiles = async (incoming: File[]) => {
@@ -8763,11 +8854,14 @@ const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) 
   const usableCount = photos.filter((p) => p.status === "done").length;
   const hasError = photos.some((p) => p.status === "error");
   const enoughPhotos = usableCount >= 5;
-  const canContinue = enoughPhotos && uploadingCount === 0;
+  const flippingCount = photos.filter((p) => p.flipping).length;
+  const canContinue = enoughPhotos && uploadingCount === 0 && flippingCount === 0;
 
   let ctaLabel: string;
   if (uploadingCount > 0) {
     ctaLabel = `Uploading ${uploadingCount}…`;
+  } else if (flippingCount > 0) {
+    ctaLabel = "Flipping photo…";
   } else if (!enoughPhotos) {
     const needed = 5 - usableCount;
     ctaLabel = `Upload ${needed} more to continue`;
@@ -8901,7 +8995,9 @@ const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) 
                   width: "100%",
                   height: "100%",
                   objectFit: "cover",
-                  opacity: p.status === "done" ? 1 : 0.55,
+                  opacity: p.status === "done" && !p.flipping ? 1 : 0.55,
+                  // Show the flip right away; the mirrored copy saves behind it.
+                  transform: p.flipped ? "scaleX(-1)" : undefined,
                 }}
               />
 
@@ -8990,6 +9086,63 @@ const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) 
                 </div>
               )}
 
+              {/* Mirror check (2026-10-16): "Flipped?" tag on the odd ones out
+                  and a ↔ Flip button on every photo while the banner is up. */}
+              {markCheck && p.status === "done" && !p.multiFace && (
+                <>
+                  {markCheck.flaggedIds.includes(p.id) && !p.flipping && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        padding: "3px 4px",
+                        background: "rgba(154, 91, 0, 0.92)",
+                        color: C.white,
+                        fontSize: 10,
+                        fontWeight: 600,
+                        textAlign: "center",
+                        lineHeight: 1.2,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      Mirrored?
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => void flipPhoto(p.id)}
+                    disabled={p.flipping}
+                    title="Flip this photo left-right"
+                    aria-label="Flip this photo left-right"
+                    style={{
+                      position: "absolute",
+                      top: 6,
+                      left: 6,
+                      background: "rgba(255,255,255,0.95)",
+                      color: C.dark,
+                      border: "none",
+                      borderRadius: "50%",
+                      width: 26,
+                      height: 26,
+                      padding: 0,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      cursor: p.flipping ? "default" : "pointer",
+                      boxShadow: "0 1px 3px rgba(0,0,0,0.25)",
+                    }}
+                  >
+                    {p.flipping ? (
+                      <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} />
+                    ) : (
+                      <FlipHorizontal size={14} />
+                    )}
+                  </button>
+                </>
+              )}
+
               {/* Group photo warning (2026-09-23). Sits along the bottom so
                   the customer can still see who's in the shot. */}
               {p.multiFace && p.status === "done" && (
@@ -9076,6 +9229,29 @@ const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) 
             ? "You already added that photo, so we skipped the copy."
             : `You already added ${dupSkipped} of those photos, so we skipped the copies.`}{" "}
           Different photos of you give the best likeness.
+        </div>
+      )}
+
+      {/* Mirror-image banner (2026-10-16). A nudge, not a block. */}
+      {markCheck && (
+        <div
+          style={{
+            marginTop: 16,
+            fontSize: 13,
+            color: "#5A3E0A",
+            background: "#FFF7E5",
+            border: "1px solid #F3D593",
+            borderRadius: 8,
+            padding: "10px 14px",
+            lineHeight: 1.5,
+          }}
+        >
+          <strong>Some of your photos look like mirror images.</strong> Your{" "}
+          {markCheck.what} shows up on different sides of your face in different
+          photos, which can confuse the AI.{" "}
+          {markCheck.flaggedIds.length > 0
+            ? "Tap the flip button (top-left corner) on the photos marked \"Mirrored?\" so they all match how you really look."
+            : "Tap the flip button (top-left corner) on the photos that look backwards so they all match how you really look."}
         </div>
       )}
 
