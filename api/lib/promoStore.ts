@@ -71,6 +71,9 @@ export type PromoRecord = {
   // model; just stash whatever's useful for tracking — IP from headers,
   // and maybe email later if we capture it pre-redemption).
   consumedFingerprint: string | null;
+  // Browser fingerprint of the redeemer (2026-10-16). Lets the same person
+  // re-enter their own code after a refresh or restart; see redeemCode.
+  consumedDevice?: string;
   // Monotonic version for optimistic-concurrency control on the redeem
   // path. Increments on every write.
   version: number;
@@ -280,21 +283,39 @@ export type RedeemResult =
   | { valid: true; kind: PromoKind; reason?: undefined }
   | { valid: false; kind?: undefined; reason: "unknown" | "revoked" | "consumed" };
 
+// The person who redeemed a code can enter it again (same internet
+// connection OR same browser) for this long — a refresh, a restart or a
+// second visit shouldn't lock them out (2026-10-16, Kristi: Melis Tuncay's
+// code said "isn't recognized" when she re-entered it). Anyone else still
+// gets "already used".
+const SAME_PERSON_REUSE_MS = 7 * 24 * 60 * 60 * 1000;
+
 export async function redeemCode(params: {
   code: string;
   fingerprint: string;
+  device?: string;
 }): Promise<RedeemResult> {
   const key = recordKey(params.code);
   const existing = await redis.get<PromoRecord>(key);
   if (!existing) return { valid: false, reason: "unknown" };
   if (existing.revoked) return { valid: false, reason: "revoked" };
-  if (existing.consumed) return { valid: false, reason: "consumed" };
+  if (existing.consumed) {
+    const recent =
+      !!existing.consumedAt &&
+      Date.now() - new Date(existing.consumedAt).getTime() < SAME_PERSON_REUSE_MS;
+    const samePerson =
+      (!!params.fingerprint && params.fingerprint !== "unknown" && params.fingerprint === existing.consumedFingerprint) ||
+      (!!params.device && params.device === existing.consumedDevice);
+    if (recent && samePerson) return { valid: true, kind: promoKindOf(existing) };
+    return { valid: false, reason: "consumed" };
+  }
 
   const next: PromoRecord = {
     ...existing,
     consumed: true,
     consumedAt: new Date().toISOString(),
     consumedFingerprint: params.fingerprint,
+    ...(params.device ? { consumedDevice: params.device } : {}),
     version: existing.version + 1,
   };
   await redis.set(key, next);

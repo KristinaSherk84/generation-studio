@@ -44,7 +44,11 @@ export default async function handler(
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const body = req.body as { code?: string } | undefined;
+  const body = req.body as { code?: string; fp?: string } | undefined;
+  // Browser fingerprint (same one /api/generate gets) so the redeemer can
+  // re-enter their own code later from this browser. (2026-10-16)
+  const device =
+    typeof body?.fp === "string" && body.fp.length <= 128 ? body.fp : undefined;
   const submitted = body?.code?.trim();
   if (!submitted) {
     return res.status(400).json({ error: "Missing code" });
@@ -72,6 +76,7 @@ export default async function handler(
     const result = await redeemCode({
       code: submitted.toLowerCase(),
       fingerprint,
+      device,
     });
     if (result.valid) {
       // Forward the code's kind so the client knows whether this unlock also

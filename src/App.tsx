@@ -404,6 +404,16 @@ function browserFingerprint(): string | undefined {
 // The email the customer generated under (stored at batch time), or "" if
 // unknown. Sent to /api/deliver so a purchase made under a different checkout
 // email still lands on their original lead row. (2026-10-09)
+// Message when /api/verify-promo says no (2026-10-16). Single-use codes that
+// someone else already used get a clear "already used" note instead of
+// "isn't recognized", which read like a typo.
+function promoErrorText(reason?: string): string {
+  if (reason === "consumed")
+    return "This code has already been used. Reply to your email and I'll send you a new one.";
+  if (reason === "revoked") return "This code is no longer active.";
+  return "That code isn't recognized.";
+}
+
 function readGenLeadEmail(): string {
   try {
     return window.localStorage.getItem("gen_lead_email") || "";
@@ -2422,12 +2432,13 @@ const LandingV2 = ({
       const resp = await fetch("/api/verify-promo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: trimmed }),
+        body: JSON.stringify({ code: trimmed, fp: browserFingerprint() }),
       });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data = (await resp.json()) as {
         valid?: boolean;
         kind?: PromoKind;
+        reason?: string;
       };
       if (data.valid) {
         setPromoStatus("success");
@@ -2444,7 +2455,7 @@ const LandingV2 = ({
         );
       } else {
         setPromoStatus("error");
-        setPromoErrMsg("That code isn't recognized.");
+        setPromoErrMsg(promoErrorText(data.reason));
       }
     } catch {
       setPromoStatus("error");
@@ -4608,12 +4619,13 @@ const HealthcareScreen = ({
       const resp = await fetch("/api/verify-promo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: trimmed }),
+        body: JSON.stringify({ code: trimmed, fp: browserFingerprint() }),
       });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data = (await resp.json()) as {
         valid?: boolean;
         kind?: PromoKind;
+        reason?: string;
       };
       if (data.valid) {
         setPromoStatus("success");
@@ -4629,7 +4641,7 @@ const HealthcareScreen = ({
         );
       } else {
         setPromoStatus("error");
-        setPromoErrMsg("That code isn't recognized.");
+        setPromoErrMsg(promoErrorText(data.reason));
       }
     } catch {
       setPromoStatus("error");
@@ -5994,10 +6006,10 @@ const AboutScreen = ({ onStart, onBackToHome, onPromoUnlock, entryFeeEnabled }: 
       const resp = await fetch("/api/verify-promo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: trimmed }),
+        body: JSON.stringify({ code: trimmed, fp: browserFingerprint() }),
       });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const data = (await resp.json()) as { valid?: boolean; kind?: PromoKind };
+      const data = (await resp.json()) as { valid?: boolean; kind?: PromoKind; reason?: string };
       if (data.valid) {
         setPromoStatus("success");
         setTimeout(
@@ -6006,7 +6018,7 @@ const AboutScreen = ({ onStart, onBackToHome, onPromoUnlock, entryFeeEnabled }: 
         );
       } else {
         setPromoStatus("error");
-        setPromoErrMsg("That code isn't recognized.");
+        setPromoErrMsg(promoErrorText(data.reason));
       }
     } catch {
       setPromoStatus("error");
