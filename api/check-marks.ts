@@ -25,20 +25,20 @@ const BLOB_URL_RE = /^https:\/\/[^/]*\.public\.blob\.vercel-storage\.com\//;
 
 type Side = "left" | "right" | null;
 
-// Asking for "left/right" directly was unreliable (Jenny's 5 photos all came
-// back "left"), so we ask for boxes and compare the mark to the nose
-// ourselves. Gemini is much better at coordinates than at left/right words.
-const PROMPT = (n: number) => `These ${n} photos all show the same person (photo 1 to photo ${n}, in order).
+// Two steps (2026-10-16): asking for left/right words, or for boxes in all
+// photos at once, was unreliable on Jenny's photos. Step 1 names the mark
+// using all photos together; step 2 locates it in each photo on its own
+// (bounding boxes), and the side is decided in code from mark vs nose.
+const NAME_PROMPT = (n: number) => `These ${n} photos all show the same person.
 
-Find ONE distinctive permanent mark on the face that shows up in most of the photos: a mole, beauty mark, birthmark or scar. Ignore piercings, jewelry, makeup, freckles spread across the face and temporary blemishes.
+Is there ONE distinctive permanent mark on the face that shows up in most of the photos: a mole, beauty mark, birthmark or scar? Ignore piercings, jewelry, makeup, freckles spread across the face and temporary blemishes.
 
-For each photo give two bounding boxes as [ymin, xmin, ymax, xmax] on a 0-1000 scale of that photo:
-- "mark": the box around that mark, or null if it isn't visible in that photo
-- "nose": the box around the nose
+Reply with JSON only: {"what": "short plain description of where the mark is on the face, WITHOUT the words left or right, e.g. mole just above the upper lip"} or {"what": ""} if there is no such mark.`;
 
-Reply with JSON only, exactly this shape:
-{"what": "short plain description of the mark WITHOUT the words left or right, e.g. mole above the lip", "photos": [{"mark": [..] | null, "nose": [..] | null}, ...one entry per photo]}
-If there is no such mark, reply {"what": "", "photos": []}.`;
+const LOCATE_PROMPT = (what: string) => `Find this person's ${what} in this photo, and their nose.
+
+Give bounding boxes as [ymin, xmin, ymax, xmax] on a 0-1000 scale of this photo.
+Reply with JSON only: {"mark": [..] or null if it isn't visible, "nose": [..]}`;
 
 type Box = [number, number, number, number];
 const isBox = (b: unknown): b is Box =>
@@ -88,40 +88,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return buf.toString("base64");
       }),
     );
-    const parts: Part[] = [{ text: PROMPT(urls.length) }];
-    images.forEach((data, i) => {
-      parts.push({ text: `Photo ${i + 1}:` });
-      parts.push({ inlineData: { mimeType: "image/jpeg", data } });
-    });
     const ai = new GoogleGenAI({ apiKey });
-    // Three independent looks, then a per-photo vote (2 of 3 must agree) —
-    // a single look misplaced one of Jenny's photos about 1 time in 3.
-    const looks = await Promise.all(
-      [0, 1, 2].map(async () => {
-        try {
-          const resp = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
-            contents: [{ role: "user", parts }],
-            config: { responseMimeType: "application/json", temperature: 0.4 },
-          });
-          return JSON.parse(resp.text ?? "{}") as {
-            what?: string;
-            photos?: { mark?: unknown; nose?: unknown }[];
-          };
-        } catch {
-          return null;
-        }
-      }),
+    const askJson = async <T,>(parts: Part[]): Promise<T | null> => {
+      try {
+        const resp = await ai.models.generateContent({
+          model: "gemini-2.5-flash",
+          contents: [{ role: "user", parts }],
+          config: { responseMimeType: "application/json", temperature: 0 },
+        });
+        return JSON.parse(resp.text ?? "null") as T;
+      } catch {
+        return null;
+      }
+    };
+    const img = (data: string): Part => ({ inlineData: { mimeType: "image/jpeg", data } });
+
+    // Step 1: what is the mark (all photos together)?
+    const named = await askJson<{ what?: string }>([
+      { text: NAME_PROMPT(urls.length) },
+      ...images.flatMap((data, i) => [{ text: `Photo ${i + 1}:` } as Part, img(data)]),
+    ]);
+    const what = (named?.what ?? "").trim();
+    if (!what) {
+      res.status(200).json({ ok: true, inconsistent: false, what: "", sides: urls.map(() => null), flagged: [] });
+      return;
+    }
+    // Step 2: where is it in each photo (one photo per call, in parallel)?
+    const located = await Promise.all(
+      images.map((data) => askJson<{ mark?: unknown; nose?: unknown }>([{ text: LOCATE_PROMPT(what) }, img(data)])),
     );
-    const ok = looks.filter((l): l is NonNullable<typeof l> => !!l);
-    if (ok.length < 2) throw new Error("not enough answers");
-    const sides: Side[] = urls.map((_, i) => {
-      const votes = ok.map((l) => sideOf(l.photos?.[i]?.mark, l.photos?.[i]?.nose));
-      const l = votes.filter((v) => v === "left").length;
-      const r = votes.filter((v) => v === "right").length;
-      return l >= 2 ? "left" : r >= 2 ? "right" : null;
-    });
-    const parsed = { what: ok.find((l) => l.what)?.what ?? "" };
+    const sides: Side[] = located.map((l) => sideOf(l?.mark, l?.nose));
+    const parsed = { what };
     const left = sides.filter((s) => s === "left").length;
     const right = sides.filter((s) => s === "right").length;
     const inconsistent = left > 0 && right > 0;
