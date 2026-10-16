@@ -37,7 +37,7 @@ For each photo give two bounding boxes as [ymin, xmin, ymax, xmax] on a 0-1000 s
 - "nose": the box around the nose
 
 Reply with JSON only, exactly this shape:
-{"what": "short plain description of the mark, e.g. mole above the lip", "photos": [{"mark": [..] | null, "nose": [..] | null}, ...one entry per photo]}
+{"what": "short plain description of the mark WITHOUT the words left or right, e.g. mole above the lip", "photos": [{"mark": [..] | null, "nose": [..] | null}, ...one entry per photo]}
 If there is no such mark, reply {"what": "", "photos": []}.`;
 
 type Box = [number, number, number, number];
@@ -94,16 +94,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       parts.push({ inlineData: { mimeType: "image/jpeg", data } });
     });
     const ai = new GoogleGenAI({ apiKey });
-    const resp = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: [{ role: "user", parts }],
-      config: { responseMimeType: "application/json", temperature: 0 },
+    // Three independent looks, then a per-photo vote (2 of 3 must agree) —
+    // a single look misplaced one of Jenny's photos about 1 time in 3.
+    const looks = await Promise.all(
+      [0, 1, 2].map(async () => {
+        try {
+          const resp = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: [{ role: "user", parts }],
+            config: { responseMimeType: "application/json", temperature: 0.4 },
+          });
+          return JSON.parse(resp.text ?? "{}") as {
+            what?: string;
+            photos?: { mark?: unknown; nose?: unknown }[];
+          };
+        } catch {
+          return null;
+        }
+      }),
+    );
+    const ok = looks.filter((l): l is NonNullable<typeof l> => !!l);
+    if (ok.length < 2) throw new Error("not enough answers");
+    const sides: Side[] = urls.map((_, i) => {
+      const votes = ok.map((l) => sideOf(l.photos?.[i]?.mark, l.photos?.[i]?.nose));
+      const l = votes.filter((v) => v === "left").length;
+      const r = votes.filter((v) => v === "right").length;
+      return l >= 2 ? "left" : r >= 2 ? "right" : null;
     });
-    const parsed = JSON.parse(resp.text ?? "{}") as {
-      what?: string;
-      photos?: { mark?: unknown; nose?: unknown }[];
-    };
-    const sides: Side[] = urls.map((_, i) => sideOf(parsed.photos?.[i]?.mark, parsed.photos?.[i]?.nose));
+    const parsed = { what: ok.find((l) => l.what)?.what ?? "" };
     const left = sides.filter((s) => s === "left").length;
     const right = sides.filter((s) => s === "right").length;
     const inconsistent = left > 0 && right > 0;
