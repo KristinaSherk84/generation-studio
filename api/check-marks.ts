@@ -25,20 +25,16 @@ const BLOB_URL_RE = /^https:\/\/[^/]*\.public\.blob\.vercel-storage\.com\//;
 
 type Side = "left" | "right" | null;
 
-// Two steps (2026-10-16): asking for left/right words, or for boxes in all
-// photos at once, was unreliable on Jenny's photos. Step 1 names the mark
-// using all photos together; step 2 locates it in each photo on its own
-// (bounding boxes), and the side is decided in code from mark vs nose.
-const NAME_PROMPT = (n: number) => `These ${n} photos all show the same person.
-
-Is there ONE distinctive permanent mark on the face that shows up in most of the photos: a mole, beauty mark, birthmark or scar? Ignore piercings, jewelry, makeup, freckles spread across the face and temporary blemishes.
-
-Reply with JSON only: {"what": "short plain description of where the mark is on the face, WITHOUT the words left or right, e.g. mole just above the upper lip"} or {"what": ""} if there is no such mark.`;
-
-const LOCATE_PROMPT = (what: string) => `Find this person's ${what} in this photo, and their nose.
+// How it works (2026-10-16, after several tries on Jenny's photos): asking
+// for left/right words, for boxes in all photos at once, or naming the mark
+// first were all unreliable. Now each photo is checked ON ITS OWN for its
+// single most noticeable mole/mark plus the nose box; the side is decided in
+// code, and only marks at about the same height on the face (relative to the
+// nose) are compared, so a different mark in one photo doesn't count.
+const LOCATE_PROMPT = `Look at this person's face. Find the single most noticeable mole, beauty mark, birthmark or scar on the face (not freckles, not blemishes, not piercings or jewelry).
 
 Give bounding boxes as [ymin, xmin, ymax, xmax] on a 0-1000 scale of this photo.
-Reply with JSON only: {"mark": [..] or null if it isn't visible, "nose": [..]}`;
+Reply with JSON only: {"mark": [..] or null if there is no such mark, "what": "short plain description of where it is, WITHOUT the words left or right", "nose": [..]}`;
 
 type Box = [number, number, number, number];
 const isBox = (b: unknown): b is Box =>
@@ -103,22 +99,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     };
     const img = (data: string): Part => ({ inlineData: { mimeType: "image/jpeg", data } });
 
-    // Step 1: what is the mark (all photos together)?
-    const named = await askJson<{ what?: string }>([
-      { text: NAME_PROMPT(urls.length) },
-      ...images.flatMap((data, i) => [{ text: `Photo ${i + 1}:` } as Part, img(data)]),
-    ]);
-    const what = (named?.what ?? "").trim();
-    if (!what) {
-      res.status(200).json({ ok: true, inconsistent: false, what: "", sides: urls.map(() => null), flagged: [] });
-      return;
-    }
-    // Step 2: where is it in each photo (one photo per call, in parallel)?
     const located = await Promise.all(
-      images.map((data) => askJson<{ mark?: unknown; nose?: unknown }>([{ text: LOCATE_PROMPT(what) }, img(data)])),
+      images.map((data) =>
+        askJson<{ mark?: unknown; nose?: unknown; what?: string }>([{ text: LOCATE_PROMPT }, img(data)]),
+      ),
     );
-    const sides: Side[] = located.map((l) => sideOf(l?.mark, l?.nose));
-    const parsed = { what };
+    // Height of each mark relative to the nose (in nose-heights below the nose
+    // center). Keep only marks near the most common height = the same mark.
+    const rel = located.map((l) => {
+      if (!isBox(l?.mark) || !isBox(l?.nose)) return null;
+      const noseH = Math.max(1, l.nose[2] - l.nose[0]);
+      return ((l.mark[0] + l.mark[2]) / 2 - (l.nose[0] + l.nose[2]) / 2) / noseH;
+    });
+    const known = rel.filter((r): r is number => r !== null).sort((a, b) => a - b);
+    const median = known.length ? known[Math.floor(known.length / 2)] : 0;
+    const sides: Side[] = located.map((l, i) =>
+      rel[i] !== null && Math.abs((rel[i] as number) - median) <= 0.6 ? sideOf(l?.mark, l?.nose) : null,
+    );
+    const whatIdx = rel.findIndex((r) => r !== null && Math.abs(r - median) <= 0.6);
+    const parsed = { what: whatIdx >= 0 ? (located[whatIdx]?.what ?? "") : "" };
     const left = sides.filter((s) => s === "left").length;
     const right = sides.filter((s) => s === "right").length;
     const inconsistent = left > 0 && right > 0;
