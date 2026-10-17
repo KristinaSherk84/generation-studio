@@ -49,6 +49,7 @@ import { bumpProCall } from "./lib/dailyStats.js";
 import { getPromptOverrides } from "./lib/promptStore.js";
 import { faceScale, cropRatio, CROP_TIGHT_RATIO } from "./lib/cropCheck.js";
 import { reviewUrl } from "./lib/reviewLink.js";
+import { setDeliveryProgress } from "./lib/deliveryProgress.js";
 
 // Bumped from 60s → 300s on 2026-05-15 (Path B launch). 2026-05-18 Glow
 // Up Deluxe pivot: now each Deluxe photo fires BOTH Polished and Glam
@@ -78,6 +79,9 @@ type Skin = "realistic" | "polished" | "glam";
 
 type DeliverRequest = {
   email: string;
+  // Random id from the browser so the delivery screen can show live progress
+  // via /api/delivery-progress. (2026-10-17)
+  progressId?: string;
   // The email they generated under, when it differs from the checkout email.
   genLeadEmail?: string;
   // Customer full name (added 2026-05-22). Required. Captured on the
@@ -204,6 +208,11 @@ const RETOUCH_PASS_DEADLINE_MS = 200_000;
 // Only redo a tight-crop retouch when at least this much of the pass deadline
 // is left, so the crop retry can never push a delivery past 300s.
 const CROP_RETRY_HEADROOM_MS = 100_000;
+// Max Glow Up retouch calls to Google at once (2026-10-17). A 6-photo Glow Up
+// order is 12 Pro calls; firing all 12 together overloaded Google ("busy" /
+// timeouts) — Lorne Gold Oct 6, Raegan's test Oct 17. Override with the
+// RETOUCH_CONCURRENCY env var.
+const PRO_CONCURRENCY = Math.max(1, Number(process.env.RETOUCH_CONCURRENCY ?? "4") || 4);
 function friendlyRetouchReason(msg: string): string {
   if (/\b429\b|RESOURCE_EXHAUSTED/i.test(msg)) return "Google rate limit (429) - too many requests at once";
   if (isProOverloadError(msg)) return "Google was busy (503 \"high demand\") - still busy after every retry";
@@ -1078,10 +1087,27 @@ export async function renderRetouchImage(args: {
 // concurrently via Promise.all. For 6 all-deluxe photos that's 12
 // simultaneous Pro calls. Tier 2 rate limits accommodate this. Total
 // wall-clock is dominated by the slowest individual call (~15-25s).
+/** Run `fn` over `items`, at most `limit` at a time. */
+async function runPool<T>(items: T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const item = items[next++];
+      await fn(item);
+    }
+  });
+  await Promise.all(workers);
+}
+
 export async function applyRetouchPass(
   photoUrls: string[],
   tiers: RetouchTier[],
   deliveryId: string,
+  onProgress?: (
+    done: number,
+    total: number,
+    item?: { i: number; v: "polished" | "glam"; url?: string; failed?: boolean },
+  ) => void,
 ): Promise<DeliveredHeadshot[]> {
   const passStartedAt = Date.now();
   const failures: Record<number, { version: "polished" | "glam"; reason: string }[]> = {};
@@ -1098,181 +1124,156 @@ export async function applyRetouchPass(
   }
   const ai = new GoogleGenAI({ apiKey });
 
-  // Run one sub-tier (polished or glam) Pro pass against a single photo.
-  // Returns the Blob URL of the retouched image, or the original URL on
-  // any failure path.
-  async function runSubTier(
-    sourceUrl: string,
-    sourceBytes: Buffer,
-    sourceMime: string,
-    subTier: RetouchSubTier,
-    photoIndex: number,
-    originalScale: number | null,
-  ): Promise<string> {
-    try {
-      const render = () =>
-        renderRetouchImage({
-          ai,
-          sourceBytes,
-          sourceMime,
-          subTier,
-          deliveryId,
-          photoIndex,
-          startedAt: passStartedAt,
-          deadlineMs: RETOUCH_PASS_DEADLINE_MS,
-        });
-      let best = await render();
-      if (!best) {
-        console.warn(
-          JSON.stringify({
-            type: "retouch_no_image_returned",
-            deliveryId,
-            photoIndex,
-            subTier,
-          }),
-        );
-        noteFailure(photoIndex, subTier, "Google answered but sent back no image");
-        return sourceUrl;
-      }
-      // Crop check (2026-10-16): if the retouch zoomed in on the face, redo it
-      // once (time permitting) and keep whichever framing is closer to the
-      // original. Still-tight results are flagged in Kristi's alert email.
-      let ratio = await cropRatio(originalScale, best.buffer).catch(() => null);
-      if (
-        ratio !== null &&
-        ratio > CROP_TIGHT_RATIO &&
-        Date.now() - passStartedAt < RETOUCH_PASS_DEADLINE_MS - CROP_RETRY_HEADROOM_MS
-      ) {
-        console.log(
-          JSON.stringify({ type: "retouch_crop_retry", deliveryId, photoIndex, subTier, ratio }),
-        );
-        try {
-          const again = await render();
-          const r2 = again ? await cropRatio(originalScale, again.buffer).catch(() => null) : null;
-          if (again && r2 !== null && Math.abs(r2 - 1) < Math.abs(ratio - 1)) {
-            best = again;
-            ratio = r2;
-          }
-        } catch {
-          /* keep the first render */
-        }
-      }
-      if (ratio !== null && ratio > CROP_TIGHT_RATIO) {
-        (cropFlags[photoIndex] ??= []).push({
-          version: subTier as "polished" | "glam",
-          ratio: Math.round(ratio * 100) / 100,
-        });
-      }
-      const ext = best.mime === "image/png" ? "png" : "jpg";
-      const retouchedKey = `deliveries/${deliveryId}/retouched-${photoIndex}-${subTier}.${ext}`;
-      const blob = await put(retouchedKey, best.buffer, {
-        access: "public",
-        contentType: best.mime,
-        allowOverwrite: true,
-      });
-      return blob.url;
-    } catch (err) {
-      console.warn(
-        JSON.stringify({
-          type: "retouch_threw",
-          deliveryId,
-          photoIndex,
-          subTier,
-          error: err instanceof Error ? err.message : String(err),
-        }),
-      );
-      noteFailure(
-        photoIndex,
-        subTier,
-        friendlyRetouchReason(err instanceof Error ? err.message : String(err)),
-      );
-      return sourceUrl;
-    }
-  }
-
-  const tasks = photoUrls.map(
-    async (url, i): Promise<DeliveredHeadshot> => {
-      const tier = tiers[i] ?? "basic";
-
-      if (tier === "basic") {
-        // No Pro call needed. Just return the original Realistic URL.
-        return { tier: "basic", realistic: url };
-      }
-
-      // Deluxe: fetch the source bytes ONCE, then run both sub-tier
-      // passes in parallel against those bytes. Fetching the original
-      // twice would double the Blob bandwidth for no reason.
+  // Load each Deluxe photo's bytes once (both versions use them).
+  const sources = await Promise.all(
+    photoUrls.map(async (url, i): Promise<{ bytes: Buffer; mime: string } | null> => {
+      if ((tiers[i] ?? "basic") !== "deluxe") return null;
       try {
-        const fetchResp = await fetch(url);
-        if (!fetchResp.ok) {
-          console.warn(
-            JSON.stringify({
-              type: "retouch_fetch_failed",
-              deliveryId,
-              photoIndex: i,
-              status: fetchResp.status,
-            }),
-          );
-          // Soft-fall: deluxe degrades to basic if we can't even fetch
-          // the source. Customer gets the Realistic version 3x. Better
-          // than failing the whole delivery.
-          noteFailure(i, "polished", `Couldn't load the photo (HTTP ${fetchResp.status})`);
-          noteFailure(i, "glam", `Couldn't load the photo (HTTP ${fetchResp.status})`);
-          return {
-            tier: "deluxe",
-            realistic: url,
-            polished: url,
-            glam: url,
-          };
+        const r = await fetch(url);
+        if (!r.ok) {
+          console.warn(JSON.stringify({ type: "retouch_fetch_failed", deliveryId, photoIndex: i, status: r.status }));
+          noteFailure(i, "polished", `Couldn't load the photo (HTTP ${r.status})`);
+          noteFailure(i, "glam", `Couldn't load the photo (HTTP ${r.status})`);
+          return null;
         }
-        const buf = Buffer.from(await fetchResp.arrayBuffer());
-        const mimeType =
-          fetchResp.headers.get("content-type") ?? "image/jpeg";
-
-        // Parallel Polished + Glam.
-        const subTiers = subTiersForTier("deluxe"); // ["polished", "glam"]
-        // Face size in the original, for the crop check (null = skip check).
-        const originalScale = await faceScale(buf).catch(() => null);
-        const [polished, glam] = await Promise.all(
-          subTiers.map((s) => runSubTier(url, buf, mimeType, s, i, originalScale)),
-        );
-
-        return {
-          tier: "deluxe",
-          realistic: url,
-          polished,
-          glam,
-        };
+        return { bytes: Buffer.from(await r.arrayBuffer()), mime: r.headers.get("content-type") ?? "image/jpeg" };
       } catch (err) {
-        console.warn(
-          JSON.stringify({
-            type: "retouch_deluxe_outer_threw",
-            deliveryId,
-            photoIndex: i,
-            error: err instanceof Error ? err.message : String(err),
-          }),
-        );
-        // Catastrophic fall: deluxe photo degrades to all-realistic.
         const why = friendlyRetouchReason(err instanceof Error ? err.message : String(err));
         noteFailure(i, "polished", why);
         noteFailure(i, "glam", why);
-        return {
-          tier: "deluxe",
-          realistic: url,
-          polished: url,
-          glam: url,
-        };
+        return null;
       }
-    },
+    }),
   );
 
-  const results = await Promise.all(tasks);
-  // Attach any failure reasons so they land in the manifest + alert email.
-  return results.map((h, i) => ({
-    ...h,
-    ...(failures[i]?.length ? { touchupFailures: failures[i] } : {}),
-    ...(cropFlags[i]?.length ? { cropFlags: cropFlags[i] } : {}),
-  }));
+  type Job = { photoIndex: number; subTier: RetouchSubTier; result?: { buffer: Buffer; mime: string } };
+  const jobs: Job[] = [];
+  photoUrls.forEach((_, i) => {
+    if (sources[i]) for (const subTier of subTiersForTier("deluxe")) jobs.push({ photoIndex: i, subTier });
+  });
+  const render = (job: Job) =>
+    renderRetouchImage({
+      ai,
+      sourceBytes: sources[job.photoIndex]!.bytes,
+      sourceMime: sources[job.photoIndex]!.mime,
+      subTier: job.subTier,
+      deliveryId,
+      photoIndex: job.photoIndex,
+      startedAt: passStartedAt,
+      deadlineMs: RETOUCH_PASS_DEADLINE_MS,
+    });
+
+  // Stage 1 — render every version, at most PRO_CONCURRENCY at once
+  // (2026-10-17: 12 Pro calls at once for a 6-photo Glow Up order overloads
+  // Google and the server; see PRO_CONCURRENCY).
+  let done = 0;
+  onProgress?.(0, jobs.length);
+  const urlFor = new Map<string, string>();
+  const save = async (job: Job, out: { buffer: Buffer; mime: string }, suffix = "") => {
+    const ext = out.mime === "image/png" ? "png" : "jpg";
+    const blob = await put(`deliveries/${deliveryId}/retouched-${job.photoIndex}-${job.subTier}${suffix}.${ext}`, out.buffer, {
+      access: "public",
+      contentType: out.mime,
+      allowOverwrite: true,
+    });
+    urlFor.set(`${job.photoIndex}:${job.subTier}`, blob.url);
+    return blob.url;
+  };
+  await runPool(jobs, PRO_CONCURRENCY, async (job) => {
+    let itemUrl: string | undefined;
+    try {
+      const out = await render(job);
+      if (out) {
+        job.result = out;
+        // Save right away so the delivery screen can offer it now.
+        itemUrl = await save(job, out).catch(() => undefined);
+        if (!itemUrl) noteFailure(job.photoIndex, job.subTier, "Couldn't save the retouched photo");
+      } else {
+        console.warn(JSON.stringify({ type: "retouch_no_image_returned", deliveryId, photoIndex: job.photoIndex, subTier: job.subTier }));
+        noteFailure(job.photoIndex, job.subTier, "Google answered but sent back no image");
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(JSON.stringify({ type: "retouch_threw", deliveryId, photoIndex: job.photoIndex, subTier: job.subTier, error: msg }));
+      noteFailure(job.photoIndex, job.subTier, friendlyRetouchReason(msg));
+    }
+    done++;
+    onProgress?.(done, jobs.length, {
+      i: job.photoIndex,
+      v: job.subTier as "polished" | "glam",
+      ...(itemUrl ? { url: itemUrl } : { failed: true }),
+    });
+  });
+
+  // Stage 2 — crop check, only AFTER every Google call has finished. Face
+  // measuring runs on the server's own processor and blocks it while it
+  // works; running it alongside 12 Pro calls (Oct 16–17) froze the server for
+  // minutes and 7 calls "timed out" at the same instant.
+  const originalScale = new Map<number, number | null>();
+  const ratios = new Map<Job, number | null>();
+  for (const job of jobs) {
+    if (!job.result) continue;
+    if (!originalScale.has(job.photoIndex)) {
+      originalScale.set(job.photoIndex, await faceScale(sources[job.photoIndex]!.bytes).catch(() => null));
+    }
+    ratios.set(job, await cropRatio(originalScale.get(job.photoIndex) ?? null, job.result.buffer).catch(() => null));
+  }
+
+  // Stage 3 — one automatic redo for versions that came out tighter, if time
+  // allows; keep whichever framing is closer to the original.
+  const tight = jobs.filter((j) => {
+    const r = ratios.get(j);
+    return r != null && r > CROP_TIGHT_RATIO;
+  });
+  if (tight.length && Date.now() - passStartedAt < RETOUCH_PASS_DEADLINE_MS - CROP_RETRY_HEADROOM_MS) {
+    const redos = new Map<Job, { buffer: Buffer; mime: string }>();
+    await runPool(tight, PRO_CONCURRENCY, async (job) => {
+      console.log(JSON.stringify({ type: "retouch_crop_retry", deliveryId, photoIndex: job.photoIndex, subTier: job.subTier, ratio: ratios.get(job) }));
+      try {
+        const again = await render(job);
+        if (again) redos.set(job, again);
+      } catch {
+        /* keep the first render */
+      }
+    });
+    for (const [job, again] of redos) {
+      const r1 = ratios.get(job) as number;
+      const r2 = await cropRatio(originalScale.get(job.photoIndex) ?? null, again.buffer).catch(() => null);
+      if (r2 !== null && Math.abs(r2 - 1) < Math.abs(r1 - 1)) {
+        // New file name so nobody sees a cached copy of the tighter one.
+        if (await save(job, again, "-r2").catch(() => undefined)) {
+          job.result = again;
+          ratios.set(job, r2);
+        }
+      }
+    }
+  }
+  for (const job of jobs) {
+    const r = ratios.get(job);
+    if (r != null && r > CROP_TIGHT_RATIO) {
+      (cropFlags[job.photoIndex] ??= []).push({
+        version: job.subTier as "polished" | "glam",
+        ratio: Math.round(r * 100) / 100,
+      });
+    }
+  }
+
+  return photoUrls.map((url, i): DeliveredHeadshot => {
+    const base: DeliveredHeadshot =
+      (tiers[i] ?? "basic") !== "deluxe"
+        ? { tier: "basic", realistic: url }
+        : {
+            tier: "deluxe",
+            realistic: url,
+            polished: urlFor.get(`${i}:polished`) ?? url,
+            glam: urlFor.get(`${i}:glam`) ?? url,
+          };
+    return {
+      ...base,
+      ...(failures[i]?.length ? { touchupFailures: failures[i] } : {}),
+      ...(cropFlags[i]?.length ? { cropFlags: cropFlags[i] } : {}),
+    };
+  });
 }
 
 // -------------------- Handler --------------------
@@ -1376,11 +1377,17 @@ export default async function handler(
       )
         ? (body.retouchTiers as RetouchTier[])
         : body.photoUrls.map(() => "basic" as RetouchTier);
+    const progressItems: { i: number; v: "polished" | "glam"; url?: string; failed?: boolean }[] = [];
     const deliveredHeadshots = await applyRetouchPass(
       body.photoUrls,
       incomingTiers,
       deliveryId,
+      (done, total, item) => {
+        if (item) progressItems.push(item);
+        void setDeliveryProgress(body.progressId, { stage: "retouching", done, total, items: progressItems });
+      },
     );
+    void setDeliveryProgress(body.progressId, { stage: "finishing", done: 0, total: 0, items: progressItems });
 
     // ---- Generate one before/after share graphic per delivered photo. ----
     //

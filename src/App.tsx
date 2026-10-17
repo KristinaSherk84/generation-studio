@@ -404,6 +404,52 @@ function browserFingerprint(): string | undefined {
 // The email the customer generated under (stored at batch time), or "" if
 // unknown. Sent to /api/deliver so a purchase made under a different checkout
 // email still lands on their original lead row. (2026-10-09)
+// Live delivery progress (2026-10-17). /api/deliver records which Glow Up
+// retouches are done under this random id; the delivery screen polls it so a
+// 6-photo order (12 retouches, a few minutes) never looks frozen.
+function newProgressId(): string {
+  try {
+    return crypto.randomUUID().replace(/-/g, "").slice(0, 24);
+  } catch {
+    return `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+  }
+}
+type DeliveryProgressInfo = {
+  stage: string;
+  done: number;
+  total: number;
+  items?: { i: number; v: "polished" | "glam"; url?: string; failed?: boolean }[];
+};
+function pollDeliveryProgress(id: string, onUpdate: (p: DeliveryProgressInfo) => void): () => void {
+  let stopped = false;
+  const tick = async () => {
+    try {
+      const r = await fetch(`/api/delivery-progress?id=${encodeURIComponent(id)}`, { cache: "no-store" });
+      if (r.ok && !stopped) onUpdate((await r.json()) as DeliveryProgressInfo);
+    } catch {
+      /* keep polling */
+    }
+  };
+  void tick();
+  const timer = window.setInterval(() => void tick(), 3000);
+  // Deliveries finish within the server's 5-minute limit; stop polling after
+  // that even if the caller never calls stop (e.g. the request threw).
+  const giveUp = window.setTimeout(() => stop(), 6 * 60 * 1000);
+  function stop() {
+    stopped = true;
+    window.clearInterval(timer);
+    window.clearTimeout(giveUp);
+  }
+  return stop;
+}
+/** Plain-English progress line for the delivery screens. */
+function deliveryProgressText(p: DeliveryProgressInfo | null): string {
+  if (!p || p.stage === "unknown") return "Getting started…";
+  if (p.stage === "retouching" && p.total > 0)
+    return `Retouching your Glow Ups: ${p.done} of ${p.total} versions done`;
+  return "Almost done: creating your download links and email…";
+}
+
 // Message when /api/verify-promo says no (2026-10-16). Single-use codes that
 // someone else already used get a clear "already used" note instead of
 // "isn't recognized", which read like a typo.
@@ -16946,10 +16992,16 @@ const CheckoutScreen = ({
       // -----------------------------------------------------------------
       if (isPromoUnlock || shareFreeCheckout) {
         setProgressLabel("Finalizing delivery…");
+        // Live progress for Glow Up retouches (2026-10-17).
+        const progressId = newProgressId();
+        const stopProgress = retouchTiers.some((t) => t === "deluxe")
+          ? pollDeliveryProgress(progressId, (p) => setProgressLabel(deliveryProgressText(p)))
+          : () => {};
         const response = await fetch("/api/deliver", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            progressId,
             customerName: customerName.trim(),
             photoUrls: uploadedUrls,
             referencePhotoUrls,
@@ -16976,6 +17028,7 @@ const CheckoutScreen = ({
             genLeadEmail: readGenLeadEmail(),
           }),
         });
+        stopProgress();
         if (shareFreeCheckout) {
           try {
             window.localStorage.setItem("share_credit_used", "1");
@@ -19053,7 +19106,31 @@ const BackWarningModal = ({ onStay, onLeave, cartCount }: BackWarningModalProps)
 // cycling tips or thumbnail grid — there's nothing to show yet, and
 // the wait is shorter than the initial generation wait.
 
-const DeliveringScreen = () => (
+const DeliveringScreen = ({
+  progressId,
+  glowUps = 0,
+  photos = [],
+  tiers = [],
+}: {
+  progressId?: string | null;
+  glowUps?: number;
+  photos?: string[];
+  tiers?: RetouchTier[];
+}) => {
+  const [progress, setProgress] = useState<DeliveryProgressInfo | null>(null);
+  useEffect(() => {
+    if (!progressId) return;
+    return pollDeliveryProgress(progressId, setProgress);
+  }, [progressId]);
+  // Glow Up retouches run 4 at a time, about 30-45s per round.
+  const minutes = Math.max(1, Math.ceil((Math.ceil((glowUps * 2) / 4) * 40) / 60) + 1);
+  const pct =
+    progress && progress.stage === "retouching" && progress.total > 0
+      ? Math.round((progress.done / progress.total) * 90)
+      : progress && progress.stage !== "unknown"
+        ? 95
+        : 3;
+  return (
   <div
     style={{
       maxWidth: 560,
@@ -19122,11 +19199,145 @@ const DeliveringScreen = () => (
       }}
     >
       Your payment came through. We're putting together your downloadable
-      files now. This usually takes 1–2 minutes. Please don't close this
-      tab — your headshots will appear here as soon as they're ready.
+      files now.{" "}
+      {glowUps > 0
+        ? `Retouching ${glowUps} Glow Up photo${glowUps === 1 ? "" : "s"} takes about ${minutes} minutes.`
+        : "This usually takes about a minute."}{" "}
+      Please keep this tab open. Your headshots will appear here as soon as
+      they're ready.
     </p>
+
+    {progressId && (
+      <div style={{ marginTop: 28, textAlign: "left" }}>
+        <style>{`
+          @keyframes ghIndeterminate { 0% { transform: translateX(-100%); } 100% { transform: translateX(250%); } }
+          @media (prefers-reduced-motion: reduce) { .gh-indet { animation: none !important; transform: none !important; width: 100% !important; opacity: .35; } }
+        `}</style>
+        <div
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={pct}
+          style={{ height: 8, background: C.border, borderRadius: 999, overflow: "hidden" }}
+        >
+          <div
+            style={{
+              width: `${pct}%`,
+              height: "100%",
+              background: "#1B4332",
+              borderRadius: 999,
+              transition: "width 0.6s ease",
+            }}
+          />
+        </div>
+        <div style={{ fontSize: 13.5, color: C.dark, marginTop: 10, textAlign: "center" }}>
+          {deliveryProgressText(progress)}
+        </div>
+
+        {/* Per-photo cards (2026-10-17, Kristi): Realistic is ready to
+            download as soon as delivery starts; Polished / Glam show
+            "Processing" until each one finishes. */}
+        {photos.length > 0 && progress && progress.stage !== "unknown" && (
+          <div style={{ display: "grid", gap: 14, marginTop: 24 }}>
+            {photos.map((url, i) => {
+              const deluxe = tiers[i] === "deluxe";
+              const itemFor = (v: "polished" | "glam") =>
+                progress.items?.filter((it) => it.i === i && it.v === v).pop();
+              const row = (
+                label: string,
+                href: string | undefined,
+                state: "ready" | "processing" | "failed",
+              ) => (
+                <div
+                  key={label}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
+                    padding: "10px 12px",
+                    border: `1px solid ${C.border}`,
+                    borderRadius: 8,
+                    background: C.white,
+                  }}
+                >
+                  <div style={{ fontSize: 14, fontWeight: 500, color: C.dark, width: 72, flexShrink: 0 }}>{label}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    {state === "processing" && (
+                      <div>
+                        <div style={{ height: 6, background: C.border, borderRadius: 999, overflow: "hidden" }}>
+                          <div
+                            className="gh-indet"
+                            style={{
+                              width: "40%",
+                              height: "100%",
+                              background: "#1B4332",
+                              borderRadius: 999,
+                              animation: "ghIndeterminate 1.4s ease-in-out infinite",
+                            }}
+                          />
+                        </div>
+                        <div style={{ fontSize: 12, color: C.mediumGrey, marginTop: 4 }}>Processing…</div>
+                      </div>
+                    )}
+                    {state === "failed" && (
+                      <div style={{ fontSize: 12.5, color: C.mediumGrey, lineHeight: 1.4 }}>
+                        Kristi will email this one to you.
+                      </div>
+                    )}
+                  </div>
+                  {state === "ready" && href && (
+                    <a
+                      href={href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        background: "#1B4332",
+                        color: "#FFFFFF",
+                        textDecoration: "none",
+                        fontSize: 13,
+                        fontWeight: 600,
+                        padding: "8px 14px",
+                        borderRadius: 999,
+                        flexShrink: 0,
+                      }}
+                    >
+                      Download
+                    </a>
+                  )}
+                </div>
+              );
+              const versionRow = (v: "polished" | "glam") => {
+                const it = itemFor(v);
+                const label = v === "polished" ? "Polished" : "Glam";
+                if (it?.url) return row(label, it.url, "ready");
+                if (it?.failed) return row(label, undefined, "failed");
+                return row(label, undefined, "processing");
+              };
+              return (
+                <div
+                  key={url}
+                  style={{ display: "grid", gridTemplateColumns: "64px 1fr", gap: 12, alignItems: "start" }}
+                >
+                  <img
+                    src={url}
+                    alt={`Headshot ${i + 1}`}
+                    style={{ width: 64, aspectRatio: "3/4", objectFit: "cover", borderRadius: 6, display: "block" }}
+                  />
+                  <div style={{ display: "grid", gap: 6, minWidth: 0 }}>
+                    {row("Realistic", url, "ready")}
+                    {deluxe && versionRow("polished")}
+                    {deluxe && versionRow("glam")}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    )}
   </div>
-);
+  );
+};
 
 // -------------------- Root app --------------------
 
@@ -20656,6 +20867,11 @@ export default function App() {
   // Public Blob URLs returned by /api/deliver — handed to DownloadScreen so
   // each photo gets its own Download button.
   const [deliveredPhotoUrls, setDeliveredPhotoUrls] = useState<string[]>([]);
+  // Live progress for the "delivering" screen (2026-10-17).
+  const [deliveryProgressId, setDeliveryProgressId] = useState<string | null>(null);
+  const [deliveryGlowUps, setDeliveryGlowUps] = useState(0);
+  const [deliveryPhotos, setDeliveryPhotos] = useState<string[]>([]);
+  const [deliveryTiers, setDeliveryTiers] = useState<RetouchTier[]>([]);
   // Auto-generated share graphics, same array order as deliveredPhotoUrls.
   // Currently UNUSED on the client — moved to email delivery on
   // 2026-05-04 (sendCustomerDeliveryEmail in /api/deliver). State kept
@@ -22257,10 +22473,16 @@ export default function App() {
           stash.retouchTiers.length === stash.uploadedUrls.length
             ? stash.retouchTiers
             : stash.uploadedUrls.map(() => "basic" as RetouchTier);
+        const progressId = newProgressId();
+        setDeliveryProgressId(progressId);
+        setDeliveryGlowUps(resolvedTiers.filter((t) => t === "deluxe").length);
+        setDeliveryPhotos(stash.uploadedUrls);
+        setDeliveryTiers(resolvedTiers);
         const deliverResp = await fetch("/api/deliver", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            progressId,
             // Customer name (added 2026-05-22). Falls back to empty string
             // for stashes that predate this field — server-side validation
             // will reject those with a clear error, prompting the customer
@@ -25408,7 +25630,14 @@ export default function App() {
           + /api/deliver finish in the background. Without this the customer
           briefly sees the home landing because React mounts fresh after the
           Stripe redirect. Added 2026-05-27. */}
-      {screen === "delivering" && <DeliveringScreen />}
+      {screen === "delivering" && (
+        <DeliveringScreen
+          progressId={deliveryProgressId}
+          glowUps={deliveryGlowUps}
+          photos={deliveryPhotos}
+          tiers={deliveryTiers}
+        />
+      )}
       {screen === "success" && lastSelections && (
         <DownloadScreen
           email={email}
