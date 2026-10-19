@@ -572,7 +572,7 @@ export default async function handler(
   }
 
   try {
-    const leads = await listLeads();
+    let leads = await listLeads();
 
     // Live Stripe payments keyed by checkout email — powers the per-lead
     // "Paid" column, the CSV amountPaidUsd, and the Total revenue card.
@@ -738,6 +738,16 @@ export default async function handler(
     }
 
     // ---- HTML webpage branch (default) ----
+    // Blocked people (blocked email or matching a blocked pattern) are left
+    // out of the totals, conversion rate and table (2026-10-19, Kristi:
+    // abuser sign-ups were dragging the conversion rate down). They are not
+    // deleted; unblocking brings them back.
+    const isBlocked = (email: string) => {
+      const e = email.trim().toLowerCase();
+      return blacklistedSet.has(e) || blacklistedPatterns.some((p) => p && e.includes(p.toLowerCase()));
+    };
+    const hiddenBlockedCount = leads.filter((l) => isBlocked(l.email)).length;
+    leads = leads.filter((l) => !isBlocked(l.email));
     const total = leads.length;
     const purchasedCount = leads.filter((l) => l.purchased).length;
     const abandoned = leads.filter((l) => !l.purchased);
@@ -1029,7 +1039,7 @@ export default async function handler(
 <body>
 <div class="wrap">
   <h1>Leads &amp; abandoned sessions</h1>
-  <p class="meta">GenerAItion Headshots · as of ${esc(nowET)} ET · reload this page to refresh · <a href="/feedback?pw=${pwParam}">Survey feedback →</a>${hiddenUnsubCount ? ` · ${hiddenUnsubCount} unsubscribed hidden from the list below` : ""}</p>
+  <p class="meta">GenerAItion Headshots · as of ${esc(nowET)} ET · reload this page to refresh · <a href="/feedback?pw=${pwParam}">Survey feedback →</a>${hiddenUnsubCount ? ` · ${hiddenUnsubCount} unsubscribed hidden from the list below` : ""}${hiddenBlockedCount ? ` · ${hiddenBlockedCount} blocked left out of the totals and list` : ""}</p>
 
   <div class="cards">
     <div class="card"><div class="n">${total}</div><div class="l">Total leads</div></div>

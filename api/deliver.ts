@@ -298,7 +298,7 @@ export async function sendUsageAlertEmail(args: {
             .join("<br/>")
         : "Fell back to the original photo (no reason recorded)";
       return `<tr>
-          <td style="padding:6px 10px 6px 0;vertical-align:top;"><a href="${escapeHtml(h.realistic)}"><img src="${escapeHtml(h.realistic)}" alt="Photo ${i + 1}" style="width:70px;height:88px;object-fit:cover;border-radius:4px;border:1px solid #ddd;" /></a></td>
+          <td style="padding:6px 10px 6px 0;vertical-align:top;"><a href="${escapeHtml(h.realistic)}"><img src="${escapeHtml(h.realistic)}" alt="Photo ${i + 1}" width="140" style="width:140px;height:auto;border-radius:4px;border:1px solid #ddd;" /></a></td>
           <td style="padding:6px 0;vertical-align:top;font-size:13px;"><strong>Photo ${i + 1}</strong><br/>${reasons}<br/><a href="${escapeHtml(h.realistic)}" style="color:#7A1F1F;font-size:12px;">original file</a></td>
         </tr>`;
     })
@@ -336,7 +336,7 @@ export async function sendUsageAlertEmail(args: {
     urls
       .map(
         (u) =>
-          `<img src="${escapeHtml(u)}" alt="${escapeHtml(alt)}" style="width:120px;height:150px;object-fit:cover;border-radius:6px;margin:4px;display:inline-block;border:1px solid #ddd;" />`,
+          `<a href="${escapeHtml(u)}"><img src="${escapeHtml(u)}" alt="${escapeHtml(alt)}" width="200" style="width:200px;max-width:46%;height:auto;border-radius:6px;margin:4px;display:inline-block;border:1px solid #ddd;vertical-align:top;" /></a>`,
       )
       .join("");
 
@@ -494,32 +494,33 @@ export async function sendCustomerDeliveryEmail(args: {
   // own rectangular card matching the app's download-screen pattern:
   // photo on the left, label + one-liner in the middle, Download button
   // on the right.
+  // One version as a big tile: photo, label, short line, Download button.
+  // (2026-10-17, Kristi: much larger thumbnails.) Tiles sit side by side
+  // so a Glow Up's Realistic / Polished / Glam can be compared at a glance;
+  // width:100% + max-width lets them shrink on phones.
   const versionRow = (args: {
     url: string;
     label: string;
     blurb: string;
     photoIndex: number;
-  }) => `
-    <tr><td style="padding: 6px 0;">
-      <table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; border: 1px solid #E2DFD8; border-radius: 8px;">
-        <tr>
-          <td style="padding: 10px; width: 76px; vertical-align: middle;">
-            <a href="${escapeHtml(args.url)}" style="text-decoration: none;">
-              <img src="${escapeHtml(args.url)}" alt="${escapeHtml(args.label)} version of photo ${args.photoIndex + 1}" style="width: 64px; height: 80px; object-fit: cover; border-radius: 6px; display: block;" />
-            </a>
-          </td>
-          <td style="padding: 10px 14px; vertical-align: middle;">
-            <div style="font-size: 14px; font-weight: 500; color: #2A2A2A; line-height: 1.3;">${escapeHtml(args.label)}</div>
-            <div style="font-size: 12px; color: #888; line-height: 1.4; margin-top: 2px;">${escapeHtml(args.blurb)}</div>
-          </td>
-          <td style="padding: 10px; vertical-align: middle; text-align: right; white-space: nowrap;">
-            <a href="${escapeHtml(args.url)}" style="display: inline-block; color: #C9A961; font-size: 13px; text-decoration: none; padding: 6px 14px; border: 1px solid #C9A961; border-radius: 6px;">
-              Download
-            </a>
-          </td>
-        </tr>
-      </table>
-    </td></tr>`;
+  }) => ({
+    // Photo + label + line in one table row, the Download button in the row
+    // below, so buttons line up even when one line wraps longer.
+    top: `
+      <td style="padding: 6px 6px 0; vertical-align: top; text-align: center; width: 33%;">
+        <a href="${escapeHtml(args.url)}" style="text-decoration: none;">
+          <img src="${escapeHtml(args.url)}" alt="${escapeHtml(args.label)} version of photo ${args.photoIndex + 1}" width="180" style="width: 100%; max-width: 180px; height: auto; border-radius: 8px; border: 1px solid #E2DFD8; display: block; margin: 0 auto;" />
+        </a>
+        <div style="font-size: 14px; font-weight: 600; color: #2A2A2A; margin-top: 8px;">${escapeHtml(args.label)}</div>
+        <div style="font-size: 11.5px; color: #888; line-height: 1.4; margin-top: 2px;">${escapeHtml(args.blurb)}</div>
+      </td>`,
+    bottom: `
+      <td style="padding: 8px 6px 6px; vertical-align: top; text-align: center; width: 33%;">
+        <a href="${escapeHtml(args.url)}" style="display: inline-block; color: #FFFFFF; background: #1B4332; font-size: 13px; font-weight: 500; text-decoration: none; padding: 8px 16px; border-radius: 999px;">
+          Download
+        </a>
+      </td>`,
+  });
 
   // One photo block — wraps one (Basic) or three (Deluxe) versionRows
   // under a single photo header with a tier badge.
@@ -532,7 +533,7 @@ export async function sendCustomerDeliveryEmail(args: {
       ? `<p style="font-size: 12px; color: #888; line-height: 1.5; margin: 0 0 10px;">Three versions of the same headshot — keep them all or pick your favorite.</p>`
       : "";
 
-    const rows: string[] = [
+    const rows: { top: string; bottom: string }[] = [
       versionRow({
         url: h.realistic,
         label: "Realistic",
@@ -567,8 +568,9 @@ export async function sendCustomerDeliveryEmail(args: {
           <span style="font-size: 13px; font-weight: 500; color: #2A2A2A;">Photo ${i + 1}</span>${tierBadge}
         </div>
         ${deluxeSub}
-        <table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; max-width: 540px; margin: 0; border-spacing: 0;">
-          ${rows.join("")}
+        <table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; max-width: 560px; margin: 0; border-spacing: 0;">
+          <tr>${rows.map((r) => r.top).join("")}</tr>
+          <tr>${rows.map((r) => r.bottom).join("")}</tr>
         </table>
       </div>
     `;

@@ -37,6 +37,7 @@ import {
 } from "./lib/freeGenLimit.js";
 import { bumpApiCall } from "./lib/dailyStats.js";
 import {
+  blacklistEmail,
   bumpLeadCalls,
   isEmailBlacklisted,
   isFingerprintBlacklisted,
@@ -2210,6 +2211,17 @@ export default async function handler(
             ip: clientIp,
           }),
         );
+        // A blocked device trying a new email: block that email too, so it
+        // drops out of the leads list and conversion rate. (2026-10-19,
+        // Kristi — one blocked device signed up under 4 new emails.)
+        if (typeof body.email === "string" && body.email.includes("@")) {
+          try {
+            await blacklistEmail(body.email);
+            await recordFingerprint(body.email, clientFp);
+          } catch {
+            /* best-effort */
+          }
+        }
         return res.status(403).json({
           error:
             "This device is temporarily unable to generate. Please contact kristi@kristinasherk.com if you believe this is a mistake.",
