@@ -16820,6 +16820,15 @@ const CheckoutScreen = ({
   // each image to Blob. Cleared when not in-flight.
   const [progressLabel, setProgressLabel] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // Promo / free-share checkouts call /api/deliver right here (no Stripe
+  // trip), so this screen shows the delivery progress itself while the
+  // Glow Ups render. Before this the email page just sat with a grey button
+  // until every version was done. (2026-10-20, Kristi)
+  const [promoDelivery, setPromoDelivery] = useState<{
+    progressId: string;
+    photos: string[];
+    tiers: RetouchTier[];
+  } | null>(null);
   const count = selectedImages.length;
 
   // Same regex as api/deliver.ts. Kept in sync deliberately — client-side
@@ -16999,11 +17008,11 @@ const CheckoutScreen = ({
       // -----------------------------------------------------------------
       if (isPromoUnlock || shareFreeCheckout) {
         setProgressLabel("Finalizing delivery…");
-        // Live progress for Glow Up retouches (2026-10-17).
+        // Live progress for Glow Up retouches (2026-10-17): switch to the
+        // delivery screen right away (Realistic downloads + per-version
+        // progress) instead of waiting on this page.
         const progressId = newProgressId();
-        const stopProgress = retouchTiers.some((t) => t === "deluxe")
-          ? pollDeliveryProgress(progressId, (p) => setProgressLabel(deliveryProgressText(p)))
-          : () => {};
+        setPromoDelivery({ progressId, photos: uploadedUrls, tiers: retouchTiers });
         const response = await fetch("/api/deliver", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -17035,7 +17044,6 @@ const CheckoutScreen = ({
             genLeadEmail: readGenLeadEmail(),
           }),
         });
-        stopProgress();
         if (shareFreeCheckout) {
           try {
             window.localStorage.setItem("share_credit_used", "1");
@@ -17140,11 +17148,23 @@ const CheckoutScreen = ({
       // the delivery and routes to the Success screen.
       window.location.href = checkoutData.url;
     } catch (err) {
+      setPromoDelivery(null);
       setErrorMessage(err instanceof Error ? err.message : "Delivery failed");
       setProcessing(false);
       setProgressLabel("");
     }
   };
+
+  if (promoDelivery) {
+    return (
+      <DeliveringScreen
+        progressId={promoDelivery.progressId}
+        glowUps={promoDelivery.tiers.filter((t) => t === "deluxe").length}
+        photos={promoDelivery.photos}
+        tiers={promoDelivery.tiers}
+      />
+    );
+  }
 
   return (
     <div style={{ maxWidth: 560, margin: "0 auto", padding: "64px 32px", ...font }}>
@@ -19243,13 +19263,16 @@ const DeliveringScreen = ({
 
         {/* Per-photo cards (2026-10-17, Kristi): Realistic is ready to
             download as soon as delivery starts; Polished / Glam show
-            "Processing" until each one finishes. */}
-        {photos.length > 0 && progress && progress.stage !== "unknown" && (
+            "Processing" until each one finishes. The cards no longer wait
+            for the server's first progress report — the Realistic files
+            already exist, so they're downloadable the moment this screen
+            opens (2026-10-20, Kristi). */}
+        {photos.length > 0 && (
           <div style={{ display: "grid", gap: 14, marginTop: 24 }}>
             {photos.map((url, i) => {
               const deluxe = tiers[i] === "deluxe";
               const itemFor = (v: "polished" | "glam") =>
-                progress.items?.filter((it) => it.i === i && it.v === v).pop();
+                progress?.items?.filter((it) => it.i === i && it.v === v).pop();
               const row = (
                 label: string,
                 href: string | undefined,
