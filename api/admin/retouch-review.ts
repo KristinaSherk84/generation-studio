@@ -21,9 +21,12 @@ import { checkReviewKey } from "../lib/reviewLink.js";
 import { faceScale, cropRatio, CROP_TIGHT_RATIO } from "../lib/cropCheck.js";
 import {
   renderRetouchImage,
+  sendCustomerDeliveryEmail,
   type DeliveryManifest,
   type DeliveredHeadshot,
 } from "../deliver.js";
+import { recordPurchase, getEmailResumeToken } from "../lib/leadStore.js";
+import { addSessionPurchasedUrls } from "../lib/sessionStore.js";
 
 export const maxDuration = 300;
 
@@ -204,6 +207,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       for (const r of pending) r.sentAt = now;
       await saveManifest(d, m);
       res.status(200).json({ ok: true, sentTo: m.email, count: pending.length });
+      return;
+    }
+
+    // Send (or re-send) the full customer delivery email from this order
+    // (2026-10-20, Kristi). For a delivery that never reached the customer —
+    // Melissa Zerfoss's 6-photo order timed out after her photos were made —
+    // once Kristi has checked and fixed the versions here. Uses the current
+    // photos (including any swapped-in redos), marks the purchase, and counts
+    // the fixes as sent so the personal-note Send doesn't repeat them.
+    if (action === "sendDelivery") {
+      if (!m.email) return void res.status(400).json({ ok: false, error: "no customer email" });
+      m.deliveredHeadshotUrls = m.deliveredHeadshots.flatMap((x) =>
+        [x.realistic, x.polished, x.glam].filter((u): u is string => !!u),
+      );
+      await sendCustomerDeliveryEmail({ manifest: m });
+      const now = new Date().toISOString();
+      for (const r of m.revisions ?? []) r.sentAt ??= now;
+      (m as Manifest & { deliveryEmailSentAt?: string }).deliveryEmailSentAt = now;
+      await saveManifest(d, m);
+      try {
+        await recordPurchase(m.email, { name: m.customerName });
+        const token = await getEmailResumeToken(m.email);
+        if (token) await addSessionPurchasedUrls(token, m.deliveredHeadshots.map((x) => x.realistic));
+      } catch (err) {
+        console.warn("[retouch-review] purchase record failed (non-fatal):", err);
+      }
+      console.log(JSON.stringify({ type: "delivery_email_resent", deliveryId: d, email: m.email }));
+      res.status(200).json({ ok: true, sentTo: m.email });
       return;
     }
 
