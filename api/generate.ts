@@ -233,6 +233,7 @@ type Background =
   | "black"
   | "blue"
   | "bluebright"
+  | "cloudblue"
   | "green"
   | "red"
   | "rainbow"; // rainbow = generate each of 6 variations with a different color
@@ -763,6 +764,11 @@ const BLOCK_6_BACKGROUND: Record<Exclude<Background, "rainbow">, string> = {
   // logo" blue spotlight; modern/tech feel vs. the enterprise navy of "blue".
   // Prompt stored VERBATIM per Kristi (tested phrasing — do not reword).
   bluebright: `Background: Highly saturated Klein blue with slight gradient to deeper Klein blue at the background edges. Place a spot light on the background illuminating the circle directly behind the subject's lower neck and upper shoulders. The brightest part of the spot light should be bright "dell logo" blue with a very gradual gradient transitioning outward in a circle. Add soft rim lights to the subject on either side to separate them from the background. Add cool tonality to the whole person in the photo to match the coloring to the background; avoid generating a person with too much warm light. Especially add cool color tonality to the shadow areas of the subject.`,
+  // Cloud blue (2026-10-20, Kristi) — Salesforce brand blue paper with a
+  // lighter Salesforce-cloud cyan spotlight, made for the Salesforce employee
+  // demo. Offered to everyone as "Cloud blue". This wording ("test 1") was
+  // picked by Kristi's client over Kristi's darker variant — keep as is.
+  cloudblue: `Background: Seamless photography paper in rich Salesforce brand blue, a clear bright medium blue (#0176D3), with a slight gradient to a deeper blue at the background edges. Place a spot light on the background illuminating the circle directly behind the subject's lower neck and upper shoulders. The brightest part of the spot light is the light, clean sky-cyan blue of the Salesforce cloud logo (#00A1E0), with a very gradual gradient transitioning outward in a circle. Add soft rim lights to the subject on either side to separate them from the background. Give the person a gentle cool tonality that matches the blue background, especially in the shadow areas, while their skin stays natural and healthy.`,
   green: `Background: Muted green paper seamless photography background, natural and warm.`,
   red: `Background: Seamless graduated photography background paper transitioning smoothly through three colors from bottom to top. Bottom third: bright golden-rod yellow. Middle third: the golden-rod yellow blends gradually into a medium fire-truck red. Top third: the fire-truck red deepens into a DEEP, RICHLY SATURATED DARK RUST at the very top of the frame — a dark, vivid burnt-orange / oxblood rust (roughly #7A2409, a dark saturated rust-brown), clearly the darkest AND most saturated part of the entire gradient. The top must NOT be pale, washed-out, muted, desaturated, or a light orange — it is a deep, intensely saturated dark rust, almost approaching a dark brick/maroon. CRITICAL: the transitions between all three colors must be EXTREMELY smooth, soft, and gradual — long, feathered, seamless blends where each color melts imperceptibly into the next with no visible banding, no stripes, no hard edges, and no abrupt color stops. It should read as one continuous smooth gradient, not three separate bands. No environmental features in the background — only smooth graduated seamless paper transitioning vertically from bottom to top.`,
 };
@@ -1173,6 +1179,7 @@ export const PROMPT_DEFAULTS: Record<string, string> = {
   bg_black: BLOCK_6_BACKGROUND.black,
   bg_blue: BLOCK_6_BACKGROUND.blue,
   bg_bluebright: BLOCK_6_BACKGROUND.bluebright,
+  bg_cloudblue: BLOCK_6_BACKGROUND.cloudblue,
   bg_green: BLOCK_6_BACKGROUND.green,
   bg_red: BLOCK_6_BACKGROUND.red,
   lens_correction: BLOCK_LENS_CORRECTION,
@@ -1249,6 +1256,7 @@ export const PROMPT_SEGMENTS: PromptSegmentMeta[] = [
   { key: "bg_black", label: "Background — Black", group: "Background", fires: { style: "corporate", background: "black" } },
   { key: "bg_blue", label: "Background — Navy blue", group: "Background", fires: { style: "corporate", background: "blue" } },
   { key: "bg_bluebright", label: "Background — Bright blue", group: "Background", fires: { style: "corporate", background: "bluebright" } },
+  { key: "bg_cloudblue", label: "Background — Cloud blue (Salesforce)", group: "Background", fires: { style: "corporate", background: "cloudblue" } },
   { key: "bg_green", label: "Background — Soft green", group: "Background", fires: { style: "corporate", background: "green" } },
   { key: "bg_red", label: "Background — Red", group: "Background", fires: { style: "corporate", background: "red" } },
   { key: "slot_0", label: "Slot 1 touch-up", group: "Per-slot touch-ups", fires: {} },
@@ -2332,7 +2340,7 @@ export default async function handler(
   if (
     body.style === "corporate" &&
     body.background &&
-    !["white", "lightgrey", "dark", "black", "blue", "bluebright", "green", "red", "rainbow"].includes(body.background)
+    !["white", "lightgrey", "dark", "black", "blue", "bluebright", "cloudblue", "green", "red", "rainbow"].includes(body.background)
   ) {
     return res.status(400).json({ error: "Invalid background" });
   }

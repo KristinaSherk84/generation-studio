@@ -225,6 +225,7 @@ const BG_LABELS: Record<string, string> = {
   black: "Black",
   blue: "Navy blue",
   bluebright: "Bright blue",
+  cloudblue: "Cloud blue",
   green: "Soft green",
   red: "Red",
   rainbow: "Rainbow",

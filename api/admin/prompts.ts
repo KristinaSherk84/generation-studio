@@ -38,7 +38,7 @@ function esc(v: string): string {
 
 const RECIPE_DIMS: { key: string; label: string; options: string[] }[] = [
   { key: "style", label: "Style", options: ["corporate", "creative", "executive", "urban", "healthcare", "tech"] },
-  { key: "background", label: "Background", options: ["white", "lightgrey", "dark", "black", "blue", "bluebright", "green", "red"] },
+  { key: "background", label: "Background", options: ["white", "lightgrey", "dark", "black", "blue", "bluebright", "cloudblue", "green", "red"] },
   { key: "lighting", label: "Lighting", options: ["studio", "dramatic", "golden"] },
   { key: "attire", label: "Attire", options: ["formal", "casual", "polo", "keep", "upload", "medical"] },
   { key: "skin", label: "Skin", options: ["realistic"] },

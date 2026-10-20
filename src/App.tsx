@@ -9537,6 +9537,9 @@ const STUDIO_BGS = [
   // spotlight; reads modern/tech vs. the enterprise navy of "Soft blue".
   // Renders as a radial gradient (branch in the picker render below).
   { id: "bluebright", color: "#002FA7", label: "Bright blue" },
+  // Cloud blue (2026-10-20) — Salesforce brand blue paper with a lighter
+  // cloud-cyan glow behind the shoulders; built for the Salesforce demo.
+  { id: "cloudblue", color: "#0176D3", label: "Cloud blue" },
   { id: "green", color: "#C0DD97", label: "Soft green" },
   // Graduated goldenrod→firetruck-red→dark-red paper sweep (2026-08-01). The
   // dot shows a medium fire-truck red as its representative color.
@@ -9624,7 +9627,7 @@ export type StyleSelections = {
   style: "corporate" | "creative" | "executive" | "urban" | "healthcare" | "tech";
   attire: "formal" | "casual" | "keep" | "medical" | "polo" | "upload";
   lighting: "studio" | "natural" | "dramatic" | "golden";
-  background?: "white" | "lightgrey" | "dark" | "black" | "blue" | "bluebright" | "green" | "red" | "rainbow";
+  background?: "white" | "lightgrey" | "dark" | "black" | "blue" | "bluebright" | "cloudblue" | "green" | "red" | "rainbow";
   // Skin treatment toggle (added 2026-04-26, expanded 2026-05-01 to add glam).
   // - "realistic" (default) — current behavior, no extra block.
   // - "polished" — BLOCK_SKIN_POLISHED smooths color inconsistencies while
@@ -10527,7 +10530,9 @@ const StyleScreen = ({
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(4, 28px)",
+              // 5 across (2026-10-20) so the 9 swatches sit in two rows
+              // after Cloud blue was added, instead of a lone 9th swatch.
+              gridTemplateColumns: "repeat(5, 28px)",
               gap: 16,
               justifyContent: "start",
               maxWidth: 240,
@@ -10558,6 +10563,8 @@ const StyleScreen = ({
                           ? "linear-gradient(to top, #E4A81E 0%, #E4A81E 16%, #CE2029 55%, #7A2409 100%)"
                           : bg.id === "bluebright"
                             ? "radial-gradient(circle at 50% 45%, #007DB8 0%, #002FA7 60%, #001a5c 100%)"
+                            : bg.id === "cloudblue"
+                              ? "radial-gradient(circle at 50% 45%, #00A1E0 0%, #0176D3 60%, #014486 100%)"
                             : bg.id === "blue"
                               ? "radial-gradient(circle at 50% 45%, #1E5A96 0%, #0B2A5E 55%, #04122E 100%)"
                               : bg.color,

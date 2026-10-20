@@ -72,6 +72,7 @@ type Background =
   | "black"
   | "blue"
   | "bluebright"
+  | "cloudblue"
   | "green"
   | "red"
   | "rainbow";
