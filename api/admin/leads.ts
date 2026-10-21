@@ -709,6 +709,7 @@ export default async function handler(
         "purchasedAt (ET)",
         "followedUp",
         "foundVia",
+        "promoOptOut",
         "firstBackground",
         "firstOutfit",
       ];
@@ -724,6 +725,7 @@ export default async function handler(
           formatET(l.purchasedAt),
           l.followedUp,
           l.foundVia ?? "",
+          l.promoOptOut ? "yes" : "",
           choiceFor(l.email)?.background ?? "",
           choiceFor(l.email)?.outfit ?? "",
         ]
@@ -827,7 +829,7 @@ export default async function handler(
       </div>`
       : "";
 
-    const aliasInlineHtml = (email: string): string => {
+    const aliasInlineHtml = (email: string, promoOptOut?: boolean): string => {
       const canonical = email.trim().toLowerCase();
       const aliases = aliasesByCanonical[canonical] ?? [];
       const chips = aliases
@@ -843,14 +845,19 @@ export default async function handler(
       const unsubChip = unsubSet.has(canonical)
         ? `<span class="aliaschip" title="Unsubscribed — gets no marketing emails" style="background:#EDEBE6;color:#6E6E6A;">unsubscribed</span>`
         : "";
-      return `${chips}${unsubChip}<button class="aliasadd" data-email="${esc(email)}" title="Add an alt email that pays under this lead">+ alt</button>${banBtn}`;
+      // Promotion privacy list (2026-10-21): always shown so the row layout
+      // stays the same; filled in red when the customer checked the box.
+      const promoPill = promoOptOut
+        ? `<span class="promopill on" title="Checked the promotion privacy list box — don't use their headshots in ads or promo material">no promo</span>`
+        : `<span class="promopill" title="Didn't opt out — OK to use in promo material">no promo</span>`;
+      return `${chips}${unsubChip}<button class="aliasadd" data-email="${esc(email)}" title="Add an alt email that pays under this lead">+ alt</button>${banBtn}${promoPill}`;
     };
 
     const rowsHtml = leads
       .filter((l) => !isUnsub(l.email))
       .map(
         (l) => `<tr class="${l.purchased ? "bought" : "aband"}">
-        <td class="email"><span class="emailtxt">${esc(l.email)}</span> ${aliasInlineHtml(l.email)}</td>
+        <td class="email"><span class="emailtxt">${esc(l.email)}</span><div class="emailtools">${aliasInlineHtml(l.email, l.promoOptOut)}</div></td>
         <td>${esc(formatET(l.createdAt))}</td>
         <td>${esc(formatET(l.lastSeenAt))}</td>
         <td class="num">${esc(shownCalls(l))}</td>
@@ -1023,7 +1030,14 @@ export default async function handler(
   .pbfill{background:var(--forest);height:100%;border-radius:5px;transition:width .3s ease;}
   .pbval{text-align:right;color:var(--ink);}
   .pbval b{color:var(--forest);}
-  td.email .emailtxt{margin-right:6px;}
+  td.email .emailtxt{display:block;}
+  /* + alt / block / no promo sit on their own line under the email so the
+     column doesn't get any wider (2026-10-21, Kristi). */
+  td.email .emailtools{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;font-weight:500;}
+  td.email .emailtools .aliaschip{margin-right:0;}
+  .promopill{display:inline-block;font-size:11px;font-weight:500;padding:1px 8px;border-radius:12px;border:1px solid var(--line);color:var(--sub);white-space:nowrap;vertical-align:middle;}
+  .promopill.on{background:#B3261E;border-color:#B3261E;color:#fff;font-weight:600;}
+  td.email .emailtools .blockbtn,td.email .emailtools .unblockbtn{margin-left:0;}
   .aliaschip{background:var(--amber);border:1px solid var(--line);border-radius:12px;font-size:11px;font-weight:500;padding:1px 8px;color:var(--ink);white-space:nowrap;margin-right:4px;display:inline-block;vertical-align:middle;}
   .aliasrm{color:#B00020;cursor:pointer;font-weight:700;margin-left:3px;text-decoration:none;}
   .aliasadd{background:none;border:1px dashed var(--line);border-radius:12px;font-size:11px;color:var(--sub);padding:1px 8px;cursor:pointer;font-weight:500;vertical-align:middle;}

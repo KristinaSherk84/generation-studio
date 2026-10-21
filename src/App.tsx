@@ -15886,7 +15886,7 @@ const LoadingRetouchPreviewModal = ({
 // deliberately avoids implying headshots are emailed/delivered for free —
 // delivery only happens after purchase (see /api/deliver).
 type EmailCaptureModalProps = {
-  onSubmit: (email: string, foundVia: string) => void;
+  onSubmit: (email: string, foundVia: string, promoOptOut: boolean) => void;
   onClose: () => void;
 };
 const EmailCaptureModal = ({ onSubmit, onClose }: EmailCaptureModalProps) => {
@@ -15896,10 +15896,12 @@ const EmailCaptureModal = ({ onSubmit, onClose }: EmailCaptureModalProps) => {
   // generation. "Generate my headshots" stays disabled until BOTH the email is
   // valid AND a source has been picked.
   const [foundVia, setFoundVia] = useState("");
+  // Promotion privacy list opt-out (2026-10-21, Kristi). Unchecked by default.
+  const [promoOptOut, setPromoOptOut] = useState(false);
   const emailValid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value.trim());
   const valid = emailValid && foundVia !== "";
   const submit = () => {
-    if (valid) onSubmit(value.trim(), foundVia);
+    if (valid) onSubmit(value.trim(), foundVia, promoOptOut);
   };
   return (
     <div
@@ -16081,6 +16083,36 @@ const EmailCaptureModal = ({ onSubmit, onClose }: EmailCaptureModalProps) => {
           >
             Generate my headshots
           </button>
+          {/* Promotion privacy list (2026-10-21, Kristi): opt out of having
+              their headshots used in ads. Shows on the leads page as
+              a red "no promo" pill. */}
+          <label
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 8,
+              marginTop: 10,
+              fontSize: 11.5,
+              lineHeight: 1.4,
+              color: C.mediumGrey,
+              cursor: "pointer",
+              textAlign: "left",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={promoOptOut}
+              onChange={(e) => setPromoOptOut(e.target.checked)}
+              style={{ marginTop: 2, flexShrink: 0, cursor: "pointer" }}
+            />
+            <span>
+              <strong style={{ color: C.dark, fontWeight: 600 }}>
+                Add your name to our promotion privacy list.
+              </strong>{" "}
+              By checking this box, you refuse to let us use your headshot to
+              advertise our service.
+            </span>
+          </label>
         </div>
       </div>
     </div>
@@ -23812,7 +23844,11 @@ export default function App() {
   // then re-invoke handleGenerate with the same selections (passing the
   // email through as an override so it doesn't re-trip the gate on the
   // stale `email` state this same tick).
-  const handleEmailGateSubmit = (enteredEmail: string, foundVia?: string) => {
+  const handleEmailGateSubmit = (
+    enteredEmail: string,
+    foundVia?: string,
+    promoOptOut?: boolean,
+  ) => {
     setEmail(enteredEmail);
     setShowEmailGate(false);
     // Record the "How did you find us?" answer now captured in the same gate
@@ -23822,7 +23858,11 @@ export default function App() {
         void fetch("/api/lead", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: enteredEmail, foundVia }),
+          body: JSON.stringify({
+            email: enteredEmail,
+            foundVia,
+            ...(promoOptOut ? { promoOptOut: true } : {}),
+          }),
         }).catch(() => {});
       } catch {
         /* attribution capture must never block generation */

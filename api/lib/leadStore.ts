@@ -52,6 +52,11 @@ export type LeadRecord = {
   // answered. One of the fixed options (Referral, Google Ad, LinkedIn Ad,
   // "Best Generator" Article, Facebook). (2026-08-02)
   foundVia?: string | null;
+  // Checked "Add your name to our promotion privacy list" in the email popup:
+  // never use this person's headshots in ads or promotional material.
+  // (2026-10-21, Kristi)
+  promoOptOut?: boolean;
+  promoOptOutAt?: string | null;
   // Loose context for debugging / segmentation (style picked, etc.).
   source: string;
   // Name typed at checkout (2026-10-07), for "Hi Name" in follow-up emails.
@@ -462,6 +467,36 @@ export async function getEmailResumeToken(
   } catch {
     return null;
   }
+}
+
+/**
+ * Promotion privacy list (2026-10-21, Kristi). Marks a lead as "don't use my
+ * headshots to advertise". Only ever turns the flag ON — unchecking the box
+ * on a later visit never takes someone off the list.
+ */
+export async function setLeadPromoOptOut(email: string): Promise<void> {
+  if (!looksLikeEmail(email)) return;
+  const key = recordKey(email);
+  const now = new Date().toISOString();
+  const existing = (await redis.get<LeadRecord>(key)) ?? null;
+  if (existing) {
+    if (existing.promoOptOut) return;
+    await redis.set(key, { ...existing, promoOptOut: true, promoOptOutAt: now });
+    return;
+  }
+  await redis.set(key, {
+    email: email.trim(),
+    createdAt: now,
+    lastSeenAt: now,
+    generateCount: 0,
+    purchased: false,
+    purchasedAt: null,
+    followedUp: false,
+    source: "promo-opt-out",
+    promoOptOut: true,
+    promoOptOutAt: now,
+  } as LeadRecord);
+  await redis.sadd(INDEX_KEY, email.trim().toLowerCase());
 }
 
 export async function setLeadFoundVia(

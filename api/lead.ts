@@ -17,6 +17,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import {
   recordLead,
   setLeadFoundVia,
+  setLeadPromoOptOut,
   markLeadEntryUnlock,
   looksLikeEmail,
 } from "./lib/leadStore.js";
@@ -37,6 +38,7 @@ export default async function handler(
     source?: unknown;
     foundVia?: unknown;
     entryUnlockUsd?: unknown;
+    promoOptOut?: unknown;
   };
   const email = typeof body.email === "string" ? body.email.trim() : "";
 
@@ -57,6 +59,20 @@ export default async function handler(
       res.status(200).json({ ok: false, reason: "store_error" });
     }
     return;
+  }
+
+  // Promotion privacy list checkbox (2026-10-21) — rides along with the
+  // foundVia answer from the email popup. Attribute update only.
+  if (body.promoOptOut === true) {
+    try {
+      await setLeadPromoOptOut(email);
+    } catch (err) {
+      console.error("[lead] setLeadPromoOptOut failed:", err);
+    }
+    if (typeof body.foundVia !== "string" || !body.foundVia.trim()) {
+      res.status(200).json({ ok: true });
+      return;
+    }
   }
 
   // "How did you find us?" answer — attribute update only, never counts as a
