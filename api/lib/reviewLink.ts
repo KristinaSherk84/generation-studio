@@ -27,3 +27,8 @@ export function checkReviewKey(deliveryId: string, key: string): boolean {
 export function reviewUrl(deliveryId: string): string {
   return `${SITE}/api/admin/retouch-review?d=${encodeURIComponent(deliveryId)}&k=${reviewKey(deliveryId)}`;
 }
+
+/** The post-delivery crop check for one delivery (2026-10-20). */
+export function cropCheckUrl(deliveryId: string): string {
+  return `${SITE}/api/admin/crop-check?d=${encodeURIComponent(deliveryId)}&k=${reviewKey(deliveryId)}`;
+}

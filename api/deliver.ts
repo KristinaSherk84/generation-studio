@@ -47,8 +47,7 @@ import {
 } from "./lib/retouchPrompts.js";
 import { bumpProCall } from "./lib/dailyStats.js";
 import { getPromptOverrides } from "./lib/promptStore.js";
-import { faceScale, cropRatio, CROP_TIGHT_RATIO } from "./lib/cropCheck.js";
-import { reviewUrl } from "./lib/reviewLink.js";
+import { reviewUrl, cropCheckUrl } from "./lib/reviewLink.js";
 import { setDeliveryProgress } from "./lib/deliveryProgress.js";
 
 // Bumped from 60s → 300s on 2026-05-15 (Path B launch). 2026-05-18 Glow
@@ -206,9 +205,6 @@ const PRO_PER_ATTEMPT_TIMEOUT_MS = 90_000;
 const PRO_OVERLOAD_BACKOFF_MS = [3_000, 6_000, 12_000, 20_000];
 const PRO_OTHER_MAX_ATTEMPTS = 2;
 const RETOUCH_PASS_DEADLINE_MS = 200_000;
-// Only redo a tight-crop retouch when at least this much of the pass deadline
-// is left, so the crop retry can never push a delivery past 300s.
-const CROP_RETRY_HEADROOM_MS = 100_000;
 // Max Glow Up retouch calls to Google at once (2026-10-17). A 6-photo Glow Up
 // order is 12 Pro calls; firing all 12 together overloaded Google ("busy" /
 // timeouts) — Lorne Gold Oct 6, Raegan's test Oct 17. Override with the
@@ -1208,58 +1204,13 @@ export async function applyRetouchPass(
     });
   });
 
-  // Stage 2 — crop check, only AFTER every Google call has finished. Face
-  // measuring runs on the server's own processor and blocks it while it
-  // works; running it alongside 12 Pro calls (Oct 16–17) froze the server for
-  // minutes and 7 calls "timed out" at the same instant.
-  const originalScale = new Map<number, number | null>();
-  const ratios = new Map<Job, number | null>();
-  for (const job of jobs) {
-    if (!job.result) continue;
-    if (!originalScale.has(job.photoIndex)) {
-      originalScale.set(job.photoIndex, await faceScale(sources[job.photoIndex]!.bytes).catch(() => null));
-    }
-    ratios.set(job, await cropRatio(originalScale.get(job.photoIndex) ?? null, job.result.buffer).catch(() => null));
-  }
-
-  // Stage 3 — one automatic redo for versions that came out tighter, if time
-  // allows; keep whichever framing is closer to the original.
-  const tight = jobs.filter((j) => {
-    const r = ratios.get(j);
-    return r != null && r > CROP_TIGHT_RATIO;
-  });
-  if (tight.length && Date.now() - passStartedAt < RETOUCH_PASS_DEADLINE_MS - CROP_RETRY_HEADROOM_MS) {
-    const redos = new Map<Job, { buffer: Buffer; mime: string }>();
-    await runPool(tight, PRO_CONCURRENCY, async (job) => {
-      console.log(JSON.stringify({ type: "retouch_crop_retry", deliveryId, photoIndex: job.photoIndex, subTier: job.subTier, ratio: ratios.get(job) }));
-      try {
-        const again = await render(job);
-        if (again) redos.set(job, again);
-      } catch {
-        /* keep the first render */
-      }
-    });
-    for (const [job, again] of redos) {
-      const r1 = ratios.get(job) as number;
-      const r2 = await cropRatio(originalScale.get(job.photoIndex) ?? null, again.buffer).catch(() => null);
-      if (r2 !== null && Math.abs(r2 - 1) < Math.abs(r1 - 1)) {
-        // New file name so nobody sees a cached copy of the tighter one.
-        if (await save(job, again, "-r2").catch(() => undefined)) {
-          job.result = again;
-          ratios.set(job, r2);
-        }
-      }
-    }
-  }
-  for (const job of jobs) {
-    const r = ratios.get(job);
-    if (r != null && r > CROP_TIGHT_RATIO) {
-      (cropFlags[job.photoIndex] ??= []).push({
-        version: job.subTier as "polished" | "glam",
-        ratio: Math.round(r * 100) / 100,
-      });
-    }
-  }
+  // Crop check REMOVED from delivery (2026-10-20, Kristi). Measuring faces
+  // takes ~15s each on the server's processor; a 6-photo Glow Up order (18
+  // measurements) ran past the 300s limit, so Melissa Zerfoss paid and got
+  // no email even though all 12 versions were saved. Kristi now checks the
+  // Polished / Glam versions herself after the customer has them, and fixes
+  // any tight crop from the "Review / redo retouches" link in her alert
+  // email. api/lib/cropCheck.ts is kept for a possible later background check.
 
   return photoUrls.map((url, i): DeliveredHeadshot => {
     const base: DeliveredHeadshot =
@@ -1478,6 +1429,19 @@ export default async function handler(
     //      channel for the relationship-building moment.
     //      BCC'd to kristi@kristinasherk.com per roadmap #9. ----
     await sendCustomerDeliveryEmail({ manifest });
+
+    // ---- Crop check AFTER the customer has their email (2026-10-20,
+    //      Kristi). It runs as its own function (/api/admin/crop-check) and
+    //      emails Kristi a second "✂️ Crop check" email. We only wait long
+    //      enough for the request to start; the check keeps running on its
+    //      own, so it can never hold up or time out a delivery. ----
+    if (deliveredHeadshots.some((h) => h.tier === "deluxe")) {
+      try {
+        await fetch(cropCheckUrl(deliveryId), { signal: AbortSignal.timeout(2500) });
+      } catch {
+        /* expected: we stop waiting after 2.5s while the check carries on */
+      }
+    }
 
     // ---- Mark this email as having purchased so it drops out of the
     //      abandonment-recovery list (leadStore groundwork). Wrapped so a
