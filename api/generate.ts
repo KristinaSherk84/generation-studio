@@ -2188,8 +2188,9 @@ export default async function handler(
   // but best-effort (never throws) so the number is reliable without the
   // serverless function freezing before a fire-and-forget write lands.
   await bumpApiCall(clientIp);
-  // Share-reward codes are capped at SHARE_GEN_CAP image calls (2026-10-07).
-  // No-op for every other kind of code. Best-effort, never throws.
+  // Share-reward codes are capped at SHARE_GEN_CAP image calls (2026-10-07)
+  // and full codes at FULL_GEN_CAP (50, 2026-10-20). No-op for "generation"
+  // codes. Best-effort, never throws.
   if (typeof body.promoCode === "string" && body.promoCode.trim()) {
     await countPromoGeneration(body.promoCode.trim().toLowerCase());
   }

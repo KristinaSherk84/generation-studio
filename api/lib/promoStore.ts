@@ -30,7 +30,8 @@ const redis = new Redis({
 });
 
 // The two flavors of promo code (2026-08-01):
-//   - "full":       unlimited free generations AND free download / checkout —
+//   - "full":       free generations (capped at FULL_GEN_CAP image calls since
+//                   2026-10-20) AND free download / checkout —
 //                   the whole product, on the house. (The original behavior;
 //                   any code created before this field existed is treated as
 //                   "full" for backward-compatibility.)
@@ -45,6 +46,9 @@ export type PromoKind = "full" | "generation" | "share";
 
 /** Image calls a share-reward code may make (30 × ~$0.10 ≈ $3). */
 export const SHARE_GEN_CAP = Number(process.env.SHARE_GEN_CAP ?? "30");
+/** Image calls a "full" code may make (2026-10-20, Kristi: cap at 50). Counted
+ *  from this date; usage before the cap existed wasn't tracked. */
+export const FULL_GEN_CAP = Number(process.env.FULL_GEN_CAP ?? "50");
 /** Free headshot downloads a share-reward code includes. */
 export const SHARE_DOWNLOAD_CREDITS = 1;
 
@@ -209,11 +213,14 @@ export async function isCodeActiveForGenerate(
     if (!existing) return false;
     if (existing.revoked) return false;
     if (!existing.consumed) return false; // not yet activated
-    // Share-reward codes stop unlocking generation once their image-call cap
-    // is spent; the customer then falls back to the normal free/paid limits.
-    if (promoKindOf(existing) === "share") {
+    // Share-reward and full codes stop unlocking generation once their
+    // image-call cap is spent; the customer then falls back to the normal
+    // free/paid limits. ("generation" codes stay unlimited.)
+    const kind = promoKindOf(existing);
+    if (kind === "share" || kind === "full") {
       const used = Number((await redis.get<number>(gensKey(code))) ?? 0);
-      if (used >= (existing.genCap ?? SHARE_GEN_CAP)) return false;
+      const cap = existing.genCap ?? (kind === "share" ? SHARE_GEN_CAP : FULL_GEN_CAP);
+      if (used >= cap) return false;
     }
     return true;
   } catch {
@@ -346,7 +353,8 @@ export async function countPromoGeneration(code: string): Promise<void> {
   if (!code) return;
   try {
     const rec = await redis.get<PromoRecord>(recordKey(code));
-    if (!rec || promoKindOf(rec) !== "share") return;
+    const kind = rec ? promoKindOf(rec) : null;
+    if (kind !== "share" && kind !== "full") return;
     await redis.incr(gensKey(code));
   } catch {
     /* best-effort */
