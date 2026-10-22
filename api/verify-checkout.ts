@@ -213,20 +213,16 @@ export default async function handler(
         // Fire the credit grant BEFORE the Stripe write so the customer
         // sees the extra headroom on their very next /api/generate call.
         // Best-effort — a Redis blip should never fail the paywall verify.
-        // recordUnlockPayment tracks how many $3.99 payments this IP has
-        // made in the rolling window and only grants credits on the 2nd+
-        // payment (2026-09-09 per Kristi's model — payment #1 = 40 total,
-        // payment #2 = 70, payment #3 = 100).
+        // recordUnlockPayment resets this IP's generation count, so every
+        // $3.99 is a fresh 40 from now — earlier (even yesterday's free)
+        // calls no longer count against it (2026-10-22, Kristi).
         let creditsGranted = 0;
         try {
           const result = await recordUnlockPayment(clientIp);
           creditsGranted = result.creditsGranted;
           console.log(
             JSON.stringify({
-              type:
-                creditsGranted > 0
-                  ? "hardcap_credit_granted"
-                  : "hardcap_first_payment_no_credit",
+              type: "hardcap_reset_on_payment",
               ip: clientIp || "unknown",
               sessionId,
               paymentNumber: result.paymentNumber,

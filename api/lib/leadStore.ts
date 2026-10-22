@@ -579,6 +579,34 @@ const deviceKey = (fp: string) => `fp48:${fp}`;
 
 /** Note that this email generated for free on this device; returns every
  *  email seen on the device in the last 48 hours (including this one). */
+// ---- Paid time follows the gallery link (2026-10-22, Kristi) ----
+// The $3.99 unlock lives in the browser that paid. When this email generates
+// on a live paid unlock we remember it until it expires, so /api/get-session
+// can hand it to the same gallery opened in another browser (Abigail opened
+// her email link elsewhere and was asked to pay again). /api/generate still
+// re-checks the Stripe session on every call, so this grants nothing by itself.
+const paidUnlockKey = (email: string) => `paidunlock:${email.trim().toLowerCase()}`;
+
+export async function rememberPaidUnlock(
+  email: string,
+  sessionId: string,
+  expiresAt: number,
+): Promise<void> {
+  if (!looksLikeEmail(email) || !/^cs_[A-Za-z0-9_]{10,255}$/.test(sessionId)) return;
+  const ms = expiresAt - Date.now();
+  if (!Number.isFinite(ms) || ms <= 0) return;
+  await redis.set(paidUnlockKey(email), { sessionId, expiresAt }, { px: Math.ceil(ms) });
+}
+
+export async function getPaidUnlock(
+  email: string,
+): Promise<{ sessionId: string; expiresAt: number } | null> {
+  if (!looksLikeEmail(email)) return null;
+  const v = await redis.get<{ sessionId?: string; expiresAt?: number }>(paidUnlockKey(email));
+  if (!v || typeof v.sessionId !== "string" || typeof v.expiresAt !== "number") return null;
+  return v.expiresAt > Date.now() ? { sessionId: v.sessionId, expiresAt: v.expiresAt } : null;
+}
+
 export async function noteDeviceEmail(fp: string, email: string): Promise<string[]> {
   if (!fp || fp.length > 64 || !looksLikeEmail(email)) return [];
   const k = deviceKey(fp);
@@ -627,6 +655,24 @@ export async function rememberRefFile(urls: string[], sha: string): Promise<void
     );
   } catch {
     /* best-effort */
+  }
+}
+
+/** Read-only: every email that generated with any of these exact photo files
+ *  in the reuse window (for the UK upload alert). Never writes. */
+export async function emailsThatUsedPhotos(photoUrls: string[]): Promise<string[]> {
+  if (photoUrls.length === 0) return [];
+  try {
+    const shas = ((await redis.mget<(string | null)[]>(...photoUrls.map(refShaKey))) ?? []).filter(
+      (s): s is string => typeof s === "string" && s.length > 0,
+    );
+    const out = new Set<string>();
+    for (const sha of Array.from(new Set(shas))) {
+      for (const u of ((await redis.zrange(refUseKey(sha), 0, -1)) as string[]) ?? []) out.add(u);
+    }
+    return Array.from(out);
+  } catch {
+    return [];
   }
 }
 

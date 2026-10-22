@@ -120,15 +120,13 @@ export async function addHardCapCredits(
 }
 
 /**
- * Record a confirmed $3.99 unlock for this IP and — ONLY when it's the
- * SECOND-or-later payment in the current rolling window — grant the
- * bonus HARD_CAP_CREDIT_PER_UNLOCK credits. The first payment in the
- * window doesn't add credits: the customer just gets the base HARD_CAP
- * (40 calls) that the initial payment already unlocks. Kristi's model
- * (2026-09-09): $3.99×1 = 40, $3.99×2 = 70, $3.99×3 = 100.
+ * Record a confirmed $3.99 unlock for this IP and reset its hard-cap count
+ * to zero, so every payment buys a fresh HARD_CAP (40 calls) from now.
+ * (Was: 1st payment = no reset, 2nd+ = +30 credits — Kristi 2026-09-09;
+ * replaced 2026-10-22.)
  *
  * Returns {creditsGranted, paymentNumber, totalExtraCredits} so the
- * caller can log the outcome and stamp Stripe metadata for audit.
+ * caller can log the outcome.
  * Fail-open on any Redis error (returns as if first payment, no
  * credits) so a paywall verify never breaks because of an infra hiccup.
  */
@@ -147,22 +145,14 @@ export async function recordUnlockPayment(
     if (paymentNumber === 1) {
       await redis.expire(payKey, HARD_CAP_WINDOW_SECONDS);
     }
-    // First payment in this window → base HARD_CAP is enough, no credit
-    if (paymentNumber <= 1) {
-      const existing = await readHardCapCredits(ip);
-      return {
-        creditsGranted: 0,
-        paymentNumber,
-        totalExtraCredits: existing,
-      };
-    }
-    // Second-or-later payment → grant a full HARD_CAP_CREDIT_PER_UNLOCK
-    const result = await addHardCapCredits(ip, HARD_CAP_CREDIT_PER_UNLOCK);
-    return {
-      creditsGranted: result.ok ? HARD_CAP_CREDIT_PER_UNLOCK : 0,
-      paymentNumber,
-      totalExtraCredits: result.total,
-    };
+    // Every $3.99 is a fresh start (2026-10-22, Kristi): forget everything
+    // this IP generated before the payment, including free shots from the day
+    // before (the 24h window starts at the IP's first call, so yesterday's free
+    // batch was eating into what Abigail paid for). The payer gets the full
+    // HARD_CAP from now. Leftover bonus credits are cleared too, so each
+    // payment = HARD_CAP fresh calls, never more.
+    await redis.del(hardCapKey(ip), hardCapCreditsKey(ip));
+    return { creditsGranted: 0, paymentNumber, totalExtraCredits: 0 };
   } catch {
     return { creditsGranted: 0, paymentNumber: 0, totalExtraCredits: 0 };
   }
