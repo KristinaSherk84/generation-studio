@@ -2289,6 +2289,8 @@ export default async function handler(
   // Refused selfies (2026-10-22, Kristi): a selfie file a blocked person used
   // is refused forever, under any email. Using one blocks this email too, and
   // every other selfie in this request joins the list. Fail-open on errors.
+  // Checked here at Generate, never at upload, and the message never mentions
+  // photos, so they can't tell the selfies are what gave them away (Kristi).
   const reqEmail =
     typeof body.email === "string" && body.email.includes("@") ? body.email : "";
   const reqPhotos = Array.isArray(body.photoUrls)
@@ -2310,7 +2312,7 @@ export default async function handler(
       );
       return res.status(403).json({
         error:
-          "These photos are temporarily unable to generate. Please contact kristi@kristinasherk.com if you believe this is a mistake.",
+          "This account is temporarily unable to generate. Please contact kristi@kristinasherk.com if you believe this is a mistake.",
       });
     }
   }
