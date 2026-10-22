@@ -48,6 +48,9 @@ import {
   otherEmailsWithSamePhotos,
   flagReusedPhotos,
   rememberPaidUnlock,
+  noteEmailPhotos,
+  anyPhotoRefused,
+  refusePhotoUrls,
 } from "./lib/leadStore.js";
 import { put } from "@vercel/blob";
 import { recordBatchImage } from "./lib/batchStore.js";
@@ -2283,6 +2286,34 @@ export default async function handler(
     typeof body.fp === "string" && body.fp.length > 0 && body.fp.length <= 64
       ? body.fp
       : null;
+  // Refused selfies (2026-10-22, Kristi): a selfie file a blocked person used
+  // is refused forever, under any email. Using one blocks this email too, and
+  // every other selfie in this request joins the list. Fail-open on errors.
+  const reqEmail =
+    typeof body.email === "string" && body.email.includes("@") ? body.email : "";
+  const reqPhotos = Array.isArray(body.photoUrls)
+    ? body.photoUrls.filter((u): u is string => typeof u === "string").slice(0, 12)
+    : [];
+  if (reqPhotos.length) {
+    if (reqEmail) await noteEmailPhotos(reqEmail, reqPhotos);
+    if (await anyPhotoRefused(reqPhotos)) {
+      const listed = await refusePhotoUrls(reqPhotos);
+      if (reqEmail) await blacklistEmail(reqEmail).catch(() => {});
+      console.log(
+        JSON.stringify({
+          type: "refused_photos",
+          email: reqEmail ? reqEmail.trim().toLowerCase() : null,
+          ip: clientIp,
+          fp: clientFp,
+          listed,
+        }),
+      );
+      return res.status(403).json({
+        error:
+          "These photos are temporarily unable to generate. Please contact kristi@kristinasherk.com if you believe this is a mistake.",
+      });
+    }
+  }
   if (clientFp) {
     try {
       if (await isFingerprintBlacklisted(clientFp)) {
@@ -2309,6 +2340,8 @@ export default async function handler(
             /* best-effort */
           }
         }
+        // Whatever selfies a blocked device uses go on the refused list.
+        await refusePhotoUrls(reqPhotos);
         return res.status(403).json({
           error:
             "This device is temporarily unable to generate. Please contact kristi@kristinasherk.com if you believe this is a mistake.",
@@ -2331,6 +2364,8 @@ export default async function handler(
             ip: clientIp,
           }),
         );
+        // A blocked email's new selfies go on the refused list too.
+        await refusePhotoUrls(reqPhotos);
         return res.status(403).json({
           error:
             "This email address is temporarily unable to generate. Please contact kristi@kristinasherk.com if you believe this is a mistake.",

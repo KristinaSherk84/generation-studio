@@ -39,6 +39,7 @@ import {
   setLeadChoiceField,
   BACKGROUND_OPTIONS,
   OUTFIT_OPTIONS,
+  refusePhotosOfEmail,
 } from "../lib/leadStore.js";
 import type { LeadChoice } from "../lib/leadStore.js";
 import { createCode, generateCode } from "../lib/promoStore.js";
@@ -369,7 +370,10 @@ export default async function handler(
     if (body.action === "blacklist" && typeof body.email === "string") {
       try {
         await blacklistEmail(body.email);
-        res.status(200).json({ ok: true });
+        // Also list every selfie they used, searching older records (slow,
+        // so only here). (2026-10-22, Kristi)
+        const refusedPhotos = await refusePhotosOfEmail(body.email, true);
+        res.status(200).json({ ok: true, refusedPhotos });
       } catch (err) {
         console.error("[admin/leads] blacklist failed:", err);
         res.status(500).json({ ok: false, error: "Failed to blacklist" });

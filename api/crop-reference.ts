@@ -25,7 +25,7 @@ import { put } from "@vercel/blob";
 import sharp from "sharp";
 import { createHash } from "node:crypto";
 import { detectFaceBoxes } from "./lib/skin/detectLandmarks.js";
-import { rememberRefFile } from "./lib/leadStore.js";
+import { rememberRefFile, isShaRefused } from "./lib/leadStore.js";
 
 export const maxDuration = 60;
 
@@ -120,6 +120,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Saved before face detection, which can be slow, so it's always there.
     const sha = createHash("sha1").update(bytes).digest("hex");
     await rememberRefFile([url], sha);
+    // A refused selfie (used by a blocked person) — log it; /api/generate
+    // refuses it and blocks the email. (2026-10-22)
+    if (await isShaRefused(sha)) {
+      console.log(JSON.stringify({ type: "refused_photo_upload", sha: sha.slice(0, 12) }));
+    }
 
     const det = await detectFaceBoxes(bytes);
     if (!det) return keep("detect_failed");

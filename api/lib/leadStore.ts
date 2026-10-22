@@ -647,6 +647,99 @@ const REF_SHA_TTL_SEC = 9 * 3600;
 const refShaKey = (url: string) => `refsha:${url}`;
 const refUseKey = (sha: string) => `refuse:${sha}`;
 
+// ---- Refused selfies (2026-10-22, Kristi) ----
+// Every selfie file a BLOCKED person used goes on a permanent list (badsha).
+// Uploading a listed file again — under any email, from any VPN — refuses
+// generating and blocks that email too; any NEW selfies uploaded alongside a
+// listed one are added, so mixing in fresh photos doesn't help. emailsha:{e}
+// remembers which files each email generated with, so blocking an email from
+// the leads page lists its selfies.
+const BAD_SHA_KEY = "badsha";
+const emailShaKey = (email: string) => `emailsha:${email.trim().toLowerCase()}`;
+const EMAIL_SHA_TTL_SEC = 30 * 86400;
+
+async function shasForUrls(urls: string[]): Promise<string[]> {
+  if (urls.length === 0) return [];
+  const shas = ((await redis.mget<(string | null)[]>(...urls.map(refShaKey))) ?? []).filter(
+    (s): s is string => typeof s === "string" && s.length > 0,
+  );
+  return Array.from(new Set(shas));
+}
+
+/** Note which selfie files this email generated with. Best-effort. */
+export async function noteEmailPhotos(email: string, urls: string[]): Promise<void> {
+  try {
+    if (!looksLikeEmail(email)) return;
+    const shas = await shasForUrls(urls);
+    if (!shas.length) return;
+    const k = emailShaKey(email);
+    await redis.sadd(k, shas[0], ...shas.slice(1));
+    await redis.expire(k, EMAIL_SHA_TTL_SEC);
+  } catch {
+    /* best-effort */
+  }
+}
+
+/** Put these photo files on the refused list. Returns how many were listed. */
+export async function refusePhotoUrls(urls: string[]): Promise<number> {
+  try {
+    const shas = await shasForUrls(urls);
+    if (shas.length) await redis.sadd(BAD_SHA_KEY, shas[0], ...shas.slice(1));
+    return shas.length;
+  } catch {
+    return 0;
+  }
+}
+
+/** Put every selfie file this email used on the refused list: the files we
+ *  remembered for it, plus (deep = true, leads-page blocks only — it's slow)
+ *  any reused-selfies records still naming it. */
+export async function refusePhotosOfEmail(email: string, deep = false): Promise<number> {
+  try {
+    if (!looksLikeEmail(email)) return 0;
+    const me = email.trim().toLowerCase();
+    const shas = new Set<string>(((await redis.smembers(emailShaKey(me))) as string[]) ?? []);
+    let cursor: string | number = 0;
+    let rounds = 0;
+    if (deep) do {
+      const [next, keys] = (await redis.scan(cursor, { match: "refuse:*", count: 500 })) as [
+        string | number,
+        string[],
+      ];
+      cursor = next;
+      for (const k of keys) {
+        if ((await redis.zscore(k, me)) != null) shas.add(k.slice("refuse:".length));
+      }
+    } while (String(cursor) !== "0" && ++rounds < 50);
+    const list = Array.from(shas);
+    if (list.length) await redis.sadd(BAD_SHA_KEY, list[0], ...list.slice(1));
+    return list.length;
+  } catch {
+    return 0;
+  }
+}
+
+/** True if this exact file is on the refused list. Fail-open (false). */
+export async function isShaRefused(sha: string): Promise<boolean> {
+  try {
+    return (await redis.sismember(BAD_SHA_KEY, sha)) === 1;
+  } catch {
+    return false;
+  }
+}
+
+/** True if ANY of these photos is a refused file. Fail-open (false). */
+export async function anyPhotoRefused(urls: string[]): Promise<boolean> {
+  try {
+    const shas = await shasForUrls(urls);
+    if (!shas.length) return false;
+    const hits = (await redis.smismember(BAD_SHA_KEY, shas)) as number[];
+    return hits.some((h) => h === 1);
+  } catch {
+    return false;
+  }
+}
+
 /** Remember which file a reference-photo URL holds. Fail-open. */
 export async function rememberRefFile(urls: string[], sha: string): Promise<void> {
   try {
@@ -765,6 +858,8 @@ export async function blacklistEmail(email: string): Promise<void> {
   if (canon !== lower) {
     await redis.sadd(BLACKLIST_KEY, canon);
   }
+  // Their selfies go on the refused list too (2026-10-22, Kristi).
+  await refusePhotosOfEmail(lower);
 }
 
 /** Remove one email from the blacklist. Also removes the Gmail-normalized
