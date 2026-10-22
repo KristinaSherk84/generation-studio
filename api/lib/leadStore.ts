@@ -76,6 +76,14 @@ export type LeadRecord = {
   // page can show it in Paid even when they later check out under a different
   // email (Stripe-by-email match would otherwise miss it). (2026-08-10)
   entryUnlockUsd?: number | null;
+  // When the $3.99 generation unlock was paid (2026-10-22). Older records only
+  // have the amount.
+  entryUnlockAt?: string | null;
+  // Same-device rule (2026-10-22, Kristi): this email was one of 3+ emails
+  // used on one device ID within 48h with no payment, so free generating
+  // stopped for that device. Shown as a tag on the leads page.
+  sameDeviceAt?: string | null;
+  sameDeviceEmails?: string[];
   // Manual override for the estimated AI cost of this lead (dollars). Set from
   // the real per-call count in the logs for specific customers; when present it
   // replaces the batches × flat-rate estimate on the leads page. (2026-08-14)
@@ -548,7 +556,62 @@ export async function markLeadEntryUnlock(
   const existing = (await redis.get<LeadRecord>(key)) ?? null;
   if (!existing) return;
   const prev = existing.entryUnlockUsd ?? 0;
-  await redis.set(key, { ...existing, entryUnlockUsd: Math.max(prev, usd) });
+  await redis.set(key, {
+    ...existing,
+    entryUnlockUsd: Math.max(prev, usd),
+    entryUnlockAt: new Date().toISOString(),
+  });
+}
+
+// ---- Same-device rule (2026-10-22, Kristi) ----
+// One person rotated 4 emails + VPN locations overnight for free batches.
+// The device ID (browser fingerprint) survives a VPN and a private window but
+// is NOT unique (two real customers already share one), so it never blocks on
+// its own: only 3+ different emails on one device ID within 48 hours, none of
+// whom paid anything in those 48 hours, stops FREE generating on that device
+// (they get the normal pay screen).
+const DEVICE_WINDOW_MS = 48 * 3600 * 1000;
+const deviceKey = (fp: string) => `fp48:${fp}`;
+
+/** Note that this email generated for free on this device; returns every
+ *  email seen on the device in the last 48 hours (including this one). */
+export async function noteDeviceEmail(fp: string, email: string): Promise<string[]> {
+  if (!fp || fp.length > 64 || !looksLikeEmail(email)) return [];
+  const k = deviceKey(fp);
+  const now = Date.now();
+  await redis.zadd(k, { score: now, member: email.trim().toLowerCase() });
+  await redis.zremrangebyscore(k, 0, now - DEVICE_WINDOW_MS);
+  await redis.expire(k, Math.ceil(DEVICE_WINDOW_MS / 1000) + 3600);
+  return ((await redis.zrange(k, 0, -1)) as string[]) ?? [];
+}
+
+/** True if any of these emails paid anything (a photo purchase or the $3.99
+ *  unlock) in the last 48 hours. */
+export async function anyPaidRecently(emails: string[]): Promise<boolean> {
+  const since = Date.now() - DEVICE_WINDOW_MS;
+  const recent = (iso?: string | null) => !!iso && Date.parse(iso) >= since;
+  for (const e of emails) {
+    const rec = (await redis.get<LeadRecord>(recordKey(e))) ?? null;
+    if (!rec) continue;
+    if (rec.purchased && recent(rec.purchasedAt)) return true;
+    if ((rec.entryUnlockUsd ?? 0) > 0) {
+      // Older unlock records have no date — count them if the lead was active
+      // in the window, so a real payer is never caught.
+      if (rec.entryUnlockAt ? recent(rec.entryUnlockAt) : recent(rec.lastSeenAt)) return true;
+    }
+  }
+  return false;
+}
+
+/** Tag every email in the group so the leads page shows "same device". */
+export async function flagSameDevice(emails: string[]): Promise<void> {
+  const at = new Date().toISOString();
+  for (const e of emails) {
+    const key = recordKey(e);
+    const rec = (await redis.get<LeadRecord>(key)) ?? null;
+    if (!rec) continue;
+    await redis.set(key, { ...rec, sameDeviceAt: at, sameDeviceEmails: emails });
+  }
 }
 
 // ---- Email blacklist (2026-08-28) ----

@@ -42,6 +42,9 @@ import {
   isEmailBlacklisted,
   isFingerprintBlacklisted,
   recordFingerprint,
+  noteDeviceEmail,
+  anyPaidRecently,
+  flagSameDevice,
 } from "./lib/leadStore.js";
 import { put } from "@vercel/blob";
 import { recordBatchImage } from "./lib/batchStore.js";
@@ -1853,6 +1856,8 @@ async function verifyUnlock(
   batchId: string | undefined,
   purchaseSessionId: string | undefined,
   clientId?: string,
+  deviceFp?: string,
+  email?: string,
 ): Promise<UnlockCheck> {
   // Feature flag — free-tier mode (added 2026-07-03).
   // When ENTRY_FEE_ENABLED === "false", the $2.99 entry paywall moves from
@@ -2001,6 +2006,22 @@ async function verifyUnlock(
       }
     }
     if (!exempt) {
+      // Same-device rule (2026-10-22, Kristi): 3+ different emails on one
+      // device ID within 48h, none of whom paid in that time → no more free
+      // generating on that device (normal pay screen). Fail-open on errors.
+      if (deviceFp && email) {
+        try {
+          const emails = await noteDeviceEmail(deviceFp, email);
+          const limit = Math.max(2, Number(process.env.DEVICE_EMAIL_LIMIT ?? "3"));
+          if (emails.length >= limit && !(await anyPaidRecently(emails))) {
+            await flagSameDevice(emails);
+            console.log(JSON.stringify({ type: "free_limit_device", fp: deviceFp, emails, ip }));
+            return { ok: false, reason: "free_limit" };
+          }
+        } catch {
+          /* fail open */
+        }
+      }
       const { allowed } = await checkFreeBatchLimit(ip, batchId);
       if (!allowed) {
         return { ok: false, reason: "free_limit" };
@@ -2181,6 +2202,8 @@ export default async function handler(
     body.batchId,
     body.purchaseSessionId,
     typeof body.cid === "string" && /^[a-z0-9]{16,40}$/.test(body.cid) ? body.cid : undefined,
+    typeof body.fp === "string" && body.fp.length > 0 && body.fp.length <= 64 ? body.fp : undefined,
+    typeof body.email === "string" ? body.email : undefined,
   );
   if (!unlock.ok) {
     return res.status(402).json({

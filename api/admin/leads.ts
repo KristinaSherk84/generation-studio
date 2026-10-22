@@ -857,7 +857,7 @@ export default async function handler(
       .filter((l) => !isUnsub(l.email))
       .map(
         (l) => `<tr class="${l.purchased ? "bought" : "aband"}">
-        <td class="email"><span class="emailtxt">${esc(l.email)}</span><div class="emailtools">${aliasInlineHtml(l.email, l.promoOptOut)}</div></td>
+        <td class="email"><span class="emailtxt">${esc(l.email)}</span><div class="emailtools">${aliasInlineHtml(l.email, l.promoOptOut)}${l.sameDeviceAt ? `<span class="samedev" title="${esc(`Same device as: ${(l.sameDeviceEmails ?? []).filter((x) => x !== l.email.toLowerCase()).join(", ")} — free generating stopped ${formatET(l.sameDeviceAt)}`)}">⚠️ same device</span>` : ""}</div></td>
         <td>${esc(formatET(l.createdAt))}</td>
         <td>${esc(formatET(l.lastSeenAt))}</td>
         <td class="num">${esc(shownCalls(l))}</td>
@@ -1037,6 +1037,7 @@ export default async function handler(
   td.email .emailtools .aliaschip{margin-right:0;}
   .promopill{display:inline-block;font-size:11px;font-weight:500;padding:1px 8px;border-radius:12px;border:1px solid var(--line);color:var(--sub);white-space:nowrap;vertical-align:middle;}
   .promopill.on{background:#B3261E;border-color:#B3261E;color:#fff;font-weight:600;}
+  .samedev{display:inline-block;font-size:11px;font-weight:600;padding:1px 8px;border-radius:12px;background:#FFF1D6;border:1px solid #E8B44C;color:#7A4A00;white-space:nowrap;cursor:help;}
   td.email .emailtools .blockbtn,td.email .emailtools .unblockbtn{margin-left:0;}
   .aliaschip{background:var(--amber);border:1px solid var(--line);border-radius:12px;font-size:11px;font-weight:500;padding:1px 8px;color:var(--ink);white-space:nowrap;margin-right:4px;display:inline-block;vertical-align:middle;}
   .aliasrm{color:#B00020;cursor:pointer;font-weight:700;margin-left:3px;text-decoration:none;}
