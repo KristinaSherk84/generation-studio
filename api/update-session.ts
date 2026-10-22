@@ -9,12 +9,14 @@
  * one). Any resume-link visitor's regen persists the same way.
  *
  * Body: { token: string, index: number, url: string }  // url = https Blob URL
+ * Cart (2026-10-22): { action: "cart", token, urls: string[] } saves the
+ * customer's cart on their gallery (no index needed). Returns { ok, count }.
  * Best-effort: returns { ok:false } on bad input / missing session / store
  * error — the on-screen regen still shows regardless.
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { updateSessionSlot, revertSessionSlot, removeSessionUrl } from "./lib/sessionStore.js";
+import { updateSessionSlot, revertSessionSlot, removeSessionUrl, setSessionCart } from "./lib/sessionStore.js";
 
 export const maxDuration = 10;
 
@@ -32,10 +34,33 @@ export default async function handler(
     url?: unknown;
     previousUrl?: unknown;
     action?: unknown;
+    urls?: unknown;
   };
   const token = typeof body.token === "string" ? body.token : "";
   const index = typeof body.index === "number" ? body.index : -1;
   const action = typeof body.action === "string" ? body.action : "patch";
+
+  // Cart sync (2026-10-22, Kristi): the browser saves the cart on the gallery
+  // so it follows the "ready to view" link and the "Share for approval" page
+  // shows the same picks. The only action that doesn't need a slot index.
+  if (action === "cart") {
+    if (!token) {
+      res.status(400).json({ ok: false, reason: "bad_input" });
+      return;
+    }
+    try {
+      const saved = await setSessionCart(token, body.urls);
+      res.status(200).json(saved ? { ok: true, count: saved.length } : { ok: false, reason: "no_session" });
+    } catch (err) {
+      console.warn(
+        "[update-session] cart failed:",
+        err instanceof Error ? err.message : String(err),
+      );
+      res.status(200).json({ ok: false, reason: "store_error" });
+    }
+    return;
+  }
+
   if (!token || !Number.isInteger(index)) {
     res.status(400).json({ ok: false, reason: "bad_input" });
     return;

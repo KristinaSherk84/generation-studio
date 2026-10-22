@@ -221,7 +221,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       m.deliveredHeadshotUrls = m.deliveredHeadshots.flatMap((x) =>
         [x.realistic, x.polished, x.glam].filter((u): u is string => !!u),
       );
-      await sendCustomerDeliveryEmail({ manifest: m });
+      // Approval orders (2026-10-22): the employee gets the re-send too.
+      await sendCustomerDeliveryEmail({
+        manifest: m,
+        extraTo: m.approvalFor ? [m.approvalFor] : undefined,
+      });
       const now = new Date().toISOString();
       for (const r of m.revisions ?? []) r.sentAt ??= now;
       (m as Manifest & { deliveryEmailSentAt?: string }).deliveryEmailSentAt = now;

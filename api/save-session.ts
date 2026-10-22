@@ -131,6 +131,12 @@ export default async function handler(
           // Keep the already-bought marks (green check + rim) when a new
           // batch is added — they were being wiped here. (2026-10-13)
           purchasedUrls: prior.purchasedUrls,
+          // Same for the saved cart and the "Share for approval" link, so a
+          // new batch doesn't empty the cart or break a link the manager
+          // already has. (2026-10-22, Kristi)
+          cartUrls: prior.cartUrls,
+          shareId: prior.shareId,
+          approvedUrls: prior.approvedUrls,
         });
         if (ok) token = existing;
       }

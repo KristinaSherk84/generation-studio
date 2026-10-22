@@ -83,6 +83,18 @@ export type SavedSession = {
   // Backfilled for old sessions by /api/admin/salvage-session, which scans
   // Vercel Blob for orphan shots that predate this field.
   allGeneratedUrls?: string[];
+  // The customer's cart, saved with their gallery (2026-10-22, Kristi). Lets
+  // the cart follow the "ready to view" link to another device, and lets a
+  // manager see exactly these picks on the "Share for approval" page.
+  cartUrls?: string[];
+  // Random id of this gallery's "Share for approval" link (share:{id} in
+  // Redis points back to this token). Reused so repeat clicks give the same
+  // link. (2026-10-22)
+  shareId?: string;
+  // Shots a manager bought through the approval link (2026-10-22). Kept so
+  // the approval page can still show them as "Purchased" after they leave
+  // the cart.
+  approvedUrls?: string[];
 };
 
 const TTL_SECONDS = 4 * 24 * 60 * 60; // 4 days (safe cushion; win-back fires ~12h after generation, so the resume link is always alive)
@@ -533,6 +545,9 @@ export async function addSessionVersionShot(
 export async function addSessionPurchasedUrls(
   token: string,
   urls: string[],
+  // approved: bought by a manager through the "Share for approval" link
+  // (2026-10-22), so the approval page keeps showing them as Purchased.
+  opts?: { approved?: boolean },
 ): Promise<boolean> {
   if (!token || !/^[A-Za-z0-9]{16,48}$/.test(token)) return false;
   const cleaned = (Array.isArray(urls) ? urls : []).filter(
@@ -544,8 +559,129 @@ export async function addSessionPurchasedUrls(
   rec.purchasedUrls = Array.from(
     new Set([...(rec.purchasedUrls ?? []), ...cleaned]),
   ).slice(-120);
+  // Bought shots leave the saved cart too (2026-10-22), same as the cart on
+  // the screen, so nobody is asked to pay for them twice.
+  if (Array.isArray(rec.cartUrls)) {
+    const bought = new Set(cleaned);
+    rec.cartUrls = rec.cartUrls.filter((u) => !bought.has(u));
+  }
+  if (opts?.approved) {
+    rec.approvedUrls = Array.from(
+      new Set([...(rec.approvedUrls ?? []), ...cleaned]),
+    ).slice(-60);
+  }
   await redis.set(key(token), rec, { ex: TTL_SECONDS });
   return true;
+}
+
+/** Every shot URL this saved session knows about (grid, history, extras). */
+export function sessionShotUrls(rec: SavedSession): Set<string> {
+  return new Set<string>([
+    ...(rec.generatedUrls ?? []),
+    ...(rec.allGeneratedUrls ?? []),
+    ...(rec.versionShots ?? []),
+    ...((rec.previousUrls ?? []).filter((u): u is string => !!u)),
+    ...((rec.wildCards ?? []).map((w) => w.url)),
+    ...(rec.purchasedUrls ?? []),
+  ]);
+}
+
+/**
+ * Save the customer's cart on their gallery (2026-10-22, Kristi). Replaces
+ * the saved cart with `urls`. Keeps only shots that belong to this gallery
+ * (so a cart from another session on the same browser can't leak in), drops
+ * anything already bought, max 30. Returns the saved cart, or null if the
+ * session is gone / input is bad.
+ */
+export async function setSessionCart(
+  token: string,
+  urls: unknown,
+): Promise<string[] | null> {
+  if (!token || !/^[A-Za-z0-9]{16,48}$/.test(token)) return null;
+  if (!Array.isArray(urls)) return null;
+  let rec: SavedSession | null;
+  try {
+    rec = (await redis.get<SavedSession>(key(token))) ?? null;
+  } catch {
+    return null;
+  }
+  if (!rec) return null;
+  const known = sessionShotUrls(rec);
+  const bought = new Set(rec.purchasedUrls ?? []);
+  const cart: string[] = [];
+  for (const u of urls) {
+    if (typeof u !== "string" || u.length > 600 || !/^https?:\/\//.test(u)) continue;
+    if (!known.has(u)) continue;
+    if (bought.has(u) || cart.includes(u)) continue;
+    cart.push(u);
+    if (cart.length >= 30) break;
+  }
+  rec.cartUrls = cart;
+  await redis.set(key(token), rec, { ex: TTL_SECONDS });
+  return cart;
+}
+
+// ---- "Share for approval" links (2026-10-22, Kristi) ----
+// share:{id} → { token, createdAt }. Lives as long as a gallery does (same
+// TTL, refreshed when the link is shared again). The id is unguessable and
+// is the only thing the manager's link carries — never the gallery token.
+const shareKey = (id: string) => `share:${id}`;
+export const SHARE_ID_RE = /^[A-Za-z0-9]{16,40}$/;
+
+/** The gallery token behind a share id, or null if missing / expired. */
+export async function getShareToken(id: string): Promise<string | null> {
+  if (!id || !SHARE_ID_RE.test(id)) return null;
+  try {
+    const rec = await redis.get<{ token?: string }>(shareKey(id));
+    return rec && typeof rec.token === "string" ? rec.token : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Reuse this gallery's share id if its link is still alive, else store
+ * `freshId` as the new one. Refreshes the link's TTL either way. Returns the
+ * id to use, or null if the session is gone.
+ */
+export async function ensureShareId(
+  token: string,
+  freshId: string,
+): Promise<string | null> {
+  if (!token || !/^[A-Za-z0-9]{16,48}$/.test(token)) return null;
+  if (!SHARE_ID_RE.test(freshId)) return null;
+  const rec = (await redis.get<SavedSession>(key(token))) ?? null;
+  if (!rec) return null;
+  let id = rec.shareId && SHARE_ID_RE.test(rec.shareId) ? rec.shareId : "";
+  if (id && (await getShareToken(id)) !== token) id = "";
+  if (!id) {
+    id = freshId;
+    rec.shareId = id;
+    await redis.set(key(token), rec, { ex: TTL_SECONDS });
+  }
+  await redis.set(
+    shareKey(id),
+    { token, createdAt: new Date().toISOString() },
+    { ex: TTL_SECONDS },
+  );
+  return id;
+}
+
+/**
+ * Count one approval email for this share id today; returns the new count
+ * (0 if Redis is down — fail-open). Keeps the "Email it to them" button from
+ * being used to spam people. (2026-10-22)
+ */
+export async function bumpShareEmailCount(id: string): Promise<number> {
+  const day = new Date().toISOString().slice(0, 10);
+  const k = `${shareKey(id)}:mails:${day}`;
+  try {
+    const n = await redis.incr(k);
+    if (n === 1) await redis.expire(k, 2 * 24 * 60 * 60);
+    return n;
+  } catch {
+    return 0;
+  }
 }
 
 /**

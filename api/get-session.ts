@@ -63,5 +63,7 @@ export default async function handler(
     allGeneratedUrls: session.allGeneratedUrls ?? [],
     // Shots already bought (2026-10-12) — green check + rim on the tiles.
     purchasedUrls: session.purchasedUrls ?? [],
+    // The cart saved with this gallery (2026-10-22) so it follows the link.
+    cartUrls: session.cartUrls ?? [],
   });
 }

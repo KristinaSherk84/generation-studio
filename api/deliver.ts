@@ -35,7 +35,13 @@ import { GoogleGenAI, type Part } from "@google/genai";
 import sharp from "sharp";
 import { buildShareGraphic } from "./lib/compositeBeforeAfter.js";
 import { recordPurchase, addLeadAlias, getEmailResumeToken } from "./lib/leadStore.js";
-import { addSessionPurchasedUrls } from "./lib/sessionStore.js";
+import {
+  addSessionPurchasedUrls,
+  getShareToken,
+  getSession,
+  sessionShotUrls,
+  SHARE_ID_RE,
+} from "./lib/sessionStore.js";
 import { useShareCredit } from "./lib/promoStore.js";
 import {
   buildRetouchPrompt,
@@ -121,6 +127,10 @@ type DeliverRequest = {
   // "basic" for every photo (the safest fallback: no Pro calls, no
   // unexpected per-photo cost).
   retouchTiers?: RetouchTier[];
+  // "Share for approval" order (2026-10-22, Kristi): a manager paying for an
+  // employee's picks from /approve/<id>. When valid, the delivery email also
+  // goes to the employee and the shots are marked bought on their gallery.
+  approvalShareId?: string;
 };
 
 // One delivered headshot, expanded to N versions based on tier.
@@ -172,6 +182,9 @@ export type DeliveryManifest = {
   shareGraphicUrls?: string[];
   // Same graphics WITHOUT the before photo, same order. (2026-10-12)
   shareGraphicCleanUrls?: string[];
+  // Employee's email when a manager paid through a "Share for approval"
+  // link (2026-10-22). `email` is then the manager's (checkout) email.
+  approvalFor?: string;
 };
 
 // -------------------- Helpers --------------------
@@ -345,6 +358,7 @@ export async function sendUsageAlertEmail(args: {
       <p style="margin:0 0 16px 0;color:#666;">
         <strong>Name:</strong> ${escapeHtml(manifest.customerName)}<br/>
         <strong>Email:</strong> ${escapeHtml(manifest.email)}<br/>
+        ${manifest.approvalFor ? `<strong>Approved &amp; paid by ${escapeHtml(manifest.email)} for ${escapeHtml(manifest.approvalFor)}</strong><br/>` : ""}
         <strong>When:</strong> ${escapeHtml(manifest.timestamp)}<br/>
         <strong>Delivery ID:</strong> ${escapeHtml(manifest.deliveryId)}
       </p>
@@ -437,6 +451,9 @@ export async function sendUsageAlertEmail(args: {
 // to pull marketing content from real customer deliveries.
 export async function sendCustomerDeliveryEmail(args: {
   manifest: DeliveryManifest;
+  // More people who get this same email (2026-10-22): the employee when a
+  // manager paid through a "Share for approval" link. Both see each other.
+  extraTo?: string[];
 }): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
@@ -722,7 +739,13 @@ export async function sendCustomerDeliveryEmail(args: {
         // a second domain, OR swapping out the kristinasherk.com domain
         // first and re-verifying. Tracked for V1.x cleanup.
         from: "Kristi at GenerAItion Headshots <kristi@kristinasherk.com>",
-        to: [manifest.email],
+        to: Array.from(
+          new Map(
+            [manifest.email, ...(args.extraTo ?? [])]
+              .filter((e) => typeof e === "string" && EMAIL_REGEX.test(e))
+              .map((e) => [e.trim().toLowerCase(), e.trim()] as const),
+          ).values(),
+        ),
         // BCC Kristi per roadmap item #9 — gives her a zero-effort audit
         // log of every delivery she can pull marketing content from. Nic
         // added 2026-07-30 (BCC so the customer never sees the address).
@@ -749,6 +772,7 @@ export async function sendCustomerDeliveryEmail(args: {
           type: "customer_email_sent",
           deliveryId: manifest.deliveryId,
           to: manifest.email,
+          ...(args.extraTo?.length ? { alsoTo: args.extraTo } : {}),
         }),
       );
     }
@@ -1312,6 +1336,30 @@ export default async function handler(
   const deliveryId = newDeliveryId();
   const timestamp = new Date().toISOString();
 
+  // "Share for approval" order (2026-10-22, Kristi). Look up the employee
+  // behind the link. Only honored when every photo is one of that
+  // employee's own shots, so the link can't be used to email them anything
+  // else. Best-effort: any problem here just delivers as a normal order.
+  let approval: { ownerToken: string; ownerEmail: string } | null = null;
+  if (typeof body.approvalShareId === "string" && SHARE_ID_RE.test(body.approvalShareId)) {
+    try {
+      const ownerToken = await getShareToken(body.approvalShareId);
+      const owner = ownerToken ? await getSession(ownerToken) : null;
+      const ownerEmail = owner && typeof owner.email === "string" ? owner.email.trim() : "";
+      if (ownerToken && owner && EMAIL_REGEX.test(ownerEmail)) {
+        const known = sessionShotUrls(owner);
+        for (const u of owner.cartUrls ?? []) known.add(u);
+        if (body.photoUrls.every((u) => known.has(u))) {
+          approval = { ownerToken, ownerEmail };
+        } else {
+          console.warn(JSON.stringify({ type: "approval_mismatch", deliveryId }));
+        }
+      }
+    } catch (err) {
+      console.warn("[deliver] approval lookup failed (non-fatal):", err);
+    }
+  }
+
   try {
     // ---- Per-photo retouch pass (Glow Up Deluxe 2026-05-18) ----
     //
@@ -1394,6 +1442,7 @@ export default async function handler(
       deliveredHeadshotUrls: flatDeliveredUrls,
       shareGraphicUrls,
       shareGraphicCleanUrls,
+      ...(approval ? { approvalFor: approval.ownerEmail } : {}),
     };
     const manifestKey = `deliveries/${deliveryId}/manifest.json`;
     const manifestBlob = await put(
@@ -1427,8 +1476,12 @@ export default async function handler(
     //      Download screen; moving it to email keeps that screen focused
     //      on the immediate "give me my photos" goal and uses the email
     //      channel for the relationship-building moment.
-    //      BCC'd to kristi@kristinasherk.com per roadmap #9. ----
-    await sendCustomerDeliveryEmail({ manifest });
+    //      BCC'd to kristi@kristinasherk.com per roadmap #9.
+    //      Approval orders (2026-10-22): the employee gets the same email. ----
+    await sendCustomerDeliveryEmail({
+      manifest,
+      extraTo: approval ? [approval.ownerEmail] : undefined,
+    });
 
     // ---- Crop check AFTER the customer has their email (2026-10-20,
     //      Kristi). It runs as its own function (/api/admin/crop-check) and
@@ -1473,6 +1526,19 @@ export default async function handler(
         if (token) await addSessionPurchasedUrls(token, body.photoUrls ?? []);
       } catch (err) {
         console.warn("[deliver] purchased-urls save failed (non-fatal):", err);
+      }
+      // Approval order (2026-10-22): the employee's lead counts as a buyer
+      // too, and their gallery shows the shots as bought (and drops them
+      // from their saved cart). Own try so it can never affect the rest.
+      if (approval) {
+        try {
+          await recordPurchase(approval.ownerEmail);
+          await addSessionPurchasedUrls(approval.ownerToken, body.photoUrls ?? [], {
+            approved: true,
+          });
+        } catch (err) {
+          console.warn("[deliver] approval purchase marks failed (non-fatal):", err);
+        }
       }
       // Paid order that Stripe already comped one headshot on: spend the
       // credit now (no-op for codes without one / other kinds of code).

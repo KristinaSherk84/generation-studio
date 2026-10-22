@@ -101,6 +101,18 @@
     {
       "source": "/admin",
       "destination": "/index.html"
+    },
+    {
+      "source": "/approve/:id",
+      "destination": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/approve/:id",
+      "headers": [
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow" }
+      ]
     }
   ]
 }

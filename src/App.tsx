@@ -593,7 +593,8 @@ function getStepFromScreen(
     | "success"
     | "admin"
     | "faq"
-    | "faq-detail",
+    | "faq-detail"
+    | "approve",
 ): number | null {
   switch (screen) {
     case "upload":
@@ -5954,6 +5955,79 @@ const TeamsScreen = ({ onStart, onBackToHome }: TeamsScreenProps) => {
         </div>
       </section>
 
+      {/* SHARE FOR APPROVAL (2026-10-22, Kristi) — how a team member sends
+          their picks to a manager who approves and pays. Same look as the
+          team-workflow steps above. */}
+      <section style={{ padding: "0 clamp(20px, 5vw, 80px) clamp(48px, 8vw, 96px)" }}>
+        <div style={{ maxWidth: 760, margin: "0 auto" }}>
+          <h2
+            style={{
+              fontFamily: SERIF_STACK,
+              fontSize: "clamp(28px, 4vw, 42px)",
+              lineHeight: 1.15,
+              color: charcoal,
+              fontWeight: 400,
+              letterSpacing: -0.3,
+              margin: "0 0 24px",
+              textAlign: "center",
+            }}
+          >
+            How do I share my chosen headshots with a colleague?
+          </h2>
+          <p style={{ fontSize: 17, lineHeight: 1.75, color: bodyText, marginBottom: 20 }}>
+            No need to email anyone a pile of photos. Once you've picked your favorites, send them to your
+            manager (or whoever is paying) for approval:
+          </p>
+          <ol style={{ listStyle: "none", padding: 0, marginTop: 24 }}>
+            {[
+              <><strong>Add your favorite headshots to your cart.</strong></>,
+              <><strong>Tap "Share for approval"</strong> and type your manager's email — or copy the link and send it yourself.</>,
+              <><strong>Your manager sees only the shots you picked,</strong> chooses Realistic ($14.99) or Glow Up ($17.99) for each one, and checks out.</>,
+              <><strong>You both get the finished photos by email.</strong></>,
+            ].map((content, i) => (
+              <li
+                key={i}
+                style={{
+                  padding: "20px 24px 20px 68px",
+                  background: white,
+                  border: `1px solid ${border}`,
+                  borderRadius: 10,
+                  marginBottom: 12,
+                  position: "relative",
+                  fontSize: 15,
+                  lineHeight: 1.6,
+                }}
+              >
+                <span
+                  style={{
+                    position: "absolute",
+                    left: 20,
+                    top: 20,
+                    width: 32,
+                    height: 32,
+                    background: gold,
+                    color: white,
+                    borderRadius: "50%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontWeight: 700,
+                    fontFamily: SERIF_STACK,
+                    fontSize: 14,
+                  }}
+                >
+                  {i + 1}
+                </span>
+                {content}
+              </li>
+            ))}
+          </ol>
+          <p style={{ fontSize: 15, lineHeight: 1.7, color: bodyText, marginTop: 20 }}>
+            Your manager only sees the headshots you chose — never the rest of your gallery.
+          </p>
+        </div>
+      </section>
+
       {/* CLOSING CTA — forest green band */}
       <section
         style={{
@@ -6893,6 +6967,11 @@ export const FAQ_QUESTIONS: { slug: string; q: string; a: string }[] = [
     slug: "file-format-and-resolution",
     q: "What file format and resolution do I get?",
     a: "Every delivered headshot is a high-quality 2K JPEG (1792 × 2400 pixels) suitable for LinkedIn, company directories, conference badges, press, and most professional uses. Files arrive in your inbox AND are available on-screen for direct download right after checkout.",
+  },
+  {
+    slug: "how-do-i-share-headshots-for-approval",
+    q: "How do I share my chosen headshots with a colleague or manager?",
+    a: "Add your favorite headshots to your cart, then tap \"Share for approval.\" Type your manager's email (or whoever is paying) and we'll send them a link, or copy the link and send it yourself. Your manager sees only the shots you picked, chooses Realistic ($14.99) or Glow Up ($17.99) for each one, and checks out. You both get the finished photos by email. Your manager never sees the rest of your gallery.",
   },
   {
     slug: "are-my-photos-kept-private",
@@ -11664,6 +11743,9 @@ type GridScreenProps = {
   // pick from a prior style/regen round is preserved even after Generate
   // wiped the grid.
   onDeliver: (selectedUrls: string[]) => void;
+  // "Share for approval" (2026-10-22, Kristi): sends the cart to a manager
+  // who pays. Only passed once the gallery is saved (it needs the token).
+  onShareForApproval?: () => void;
   onBack: () => void;
   onRegenerateSlot: (index: number) => void;
   onRegenerateWildCard: (index: number) => void;
@@ -11762,6 +11844,7 @@ const GridScreen = ({
   onAdminDeleteSlot,
   onAdminDeleteUrl,
   onDeliver,
+  onShareForApproval,
   onBack,
   onRegenerateSlot,
   onRegenerateWildCard,
@@ -12535,9 +12618,16 @@ const GridScreen = ({
             ? `${cart.length} in your cart — check out whenever you’re ready`
             : "Save your favorites above, then check out here."}
         </div>
-        <Button onClick={() => onDeliver(cart)} disabled={cart.length === 0}>
-          Check out
-        </Button>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          {onShareForApproval && cart.length > 0 && (
+            <Button variant="ghost" onClick={onShareForApproval}>
+              Share for approval
+            </Button>
+          )}
+          <Button onClick={() => onDeliver(cart)} disabled={cart.length === 0}>
+            Check out
+          </Button>
+        </div>
       </div>
 
       {/* Responsive 3x2 on desktop, 2x3 on mobile. Inline style sets the
@@ -14773,7 +14863,12 @@ const GridScreen = ({
             Enter your email on the next screen, then download your clean 2K files.
           </div>
         </div>
-        <div style={{ display: "flex", gap: 12 }}>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          {onShareForApproval && cart.length > 0 && (
+            <Button variant="ghost" onClick={onShareForApproval}>
+              Share for approval
+            </Button>
+          )}
           <Button
             onClick={() => onDeliver(cart)}
             disabled={cart.length === 0}
@@ -16245,6 +16340,8 @@ type RetouchScreenProps = {
   >;
   onContinue: () => void;
   onBack: () => void;
+  // "Share for approval" (2026-10-22): same as on the grid. Optional.
+  onShareForApproval?: () => void;
   // Remove a single URL from the cart (and from selectedUrls). Used by the
   // per-photo trash icon — lets a customer drop a pick from the retouch
   // step without backing out to the grid. Added 2026-06-03 per Kristi.
@@ -16266,6 +16363,7 @@ const RetouchScreen = ({
   setRetouchTiers,
   onContinue,
   onBack,
+  onShareForApproval,
   onRemovePick,
   discountedUrls,
   winbackActive = false,
@@ -16721,6 +16819,16 @@ const RetouchScreen = ({
         <Button onClick={onContinue} full>
           Continue to checkout
         </Button>
+        {onShareForApproval && selectedUrls.length > 0 && (
+          <Button
+            variant="ghost"
+            onClick={onShareForApproval}
+            full
+            style={{ marginTop: 10 }}
+          >
+            Share for approval
+          </Button>
+        )}
       </div>
     </div>
   );
@@ -16758,6 +16866,11 @@ type CheckoutScreenProps = {
   // Per-photo 30%-off flag (same order as retouchTiers). True for shots added
   // via the last-chance upsell popup. (2026-08-20)
   discounted: boolean[];
+  // "Share for approval" order (2026-10-22, Kristi): a manager paying for an
+  // employee's picks. Always goes through Stripe at full price — no promo,
+  // share-reward or win-back discount from this browser applies — and the
+  // stash carries the share id so delivery also emails the employee.
+  approval?: { shareId: string; ownerEmail: string };
   // On success: parent navigates to the download screen with the email the
   // user typed + the public Blob URLs for the delivered photos.
   onComplete: (args: {
@@ -16790,6 +16903,7 @@ const CheckoutScreen = ({
   selections,
   retouchTiers,
   discounted,
+  approval,
   onComplete,
   onBack,
 }: CheckoutScreenProps) => {
@@ -16870,12 +16984,14 @@ const CheckoutScreen = ({
         })()
       : null;
   const isPromoUnlock =
-    unlockSource === "promo" && (promoKind === null || promoKind === "full");
+    !approval &&
+    unlockSource === "promo" &&
+    (promoKind === null || promoKind === "full");
   // Share-reward code (2026-10-07): one free headshot, then normal prices.
   // The server re-checks the credit at checkout and at delivery; this flag
   // only drives what the screen shows and whether Stripe is skipped.
   const shareCode =
-    unlockSource === "promo" && promoKind === "share" && typeof window !== "undefined"
+    !approval && unlockSource === "promo" && promoKind === "share" && typeof window !== "undefined"
       ? (() => {
           try {
             return window.localStorage.getItem("promo_code");
@@ -16910,6 +17026,7 @@ const CheckoutScreen = ({
   // screen showed full price, so a win-back customer saw $14.99 here and
   // $13.49 on Stripe. Same per-photo rounding as the server.
   const winbackOn = (() => {
+    if (approval) return false;
     try {
       return window.localStorage.getItem("winback_discount") === "1";
     } catch {
@@ -17086,6 +17203,11 @@ const CheckoutScreen = ({
         // wipes React state, so without this the post-payment handler
         // wouldn't know which tier the customer picked for each photo.
         retouchTiers,
+        // Approval order (2026-10-22): survives the Stripe trip so delivery
+        // also emails the employee, and a cancel returns to /approve/<id>.
+        ...(approval
+          ? { approvalShareId: approval.shareId, approvalOwnerEmail: approval.ownerEmail }
+          : {}),
       };
       window.sessionStorage.setItem(
         "pending_delivery",
@@ -17113,14 +17235,9 @@ const CheckoutScreen = ({
             // Win-back 10%-off flag (2026-09-06). Set when the customer
             // arrived via the ?winback=1 URL in the win-back email — server
             // applies -10% to every photo. Read from localStorage so it
-            // survives page reloads and the Stripe roundtrip.
-            winback: (() => {
-              try {
-                return window.localStorage.getItem("winback_discount") === "1";
-              } catch {
-                return false;
-              }
-            })(),
+            // survives page reloads and the Stripe roundtrip. Same flag as
+            // the on-screen total (always off for approval orders).
+            winback: winbackOn,
             // Share reward: server comps the most expensive photo if the
             // code's free-headshot credit is still unused. (2026-10-07)
             ...(shareCreditOpen && shareCode ? { shareCode } : {}),
@@ -17199,6 +17316,12 @@ const CheckoutScreen = ({
         {count} headshot{count !== 1 ? "s" : ""} ready. Drop your email below and
         we'll take you straight to the download page.
       </p>
+      {approval?.ownerEmail && (
+        <p style={{ fontSize: 14, color: C.dark, marginTop: 8, lineHeight: 1.6 }}>
+          You're buying these for {approval.ownerEmail}. You'll both get the
+          photos by email.
+        </p>
+      )}
 
       {/* Pricing breakdown — skipped entirely for promo-unlocked users, who
           pay nothing. Paid users see subtotal + total owed. Credit line was
@@ -17497,6 +17620,10 @@ type DownloadScreenProps = {
   // with their reference photos preserved (no re-upload required).
   onNewStyle: () => void;
   onHome: () => void;
+  // Manager who paid through a "Share for approval" link (2026-10-22): hide
+  // the "try a different style" offers — they can't generate from someone
+  // else's photos.
+  approvalMode?: boolean;
   // Inputs for the post-purchase cross-style bonus block. When all present,
   // DownloadScreen fires 2 extra /api/generate calls on mount (one per style
   // the user did NOT pick) and renders them as 2 additional download cards.
@@ -17542,6 +17669,7 @@ const DownloadScreen = ({
   onHome,
   chosenStyle,
   wildCards,
+  approvalMode,
 }: DownloadScreenProps) => {
   const [downloaded, setDownloaded] = useState<Set<number>>(new Set());
   // In-app full-screen photo viewer — shown on MOBILE when the customer
@@ -17633,7 +17761,8 @@ const DownloadScreen = ({
     // network request. The endpoint is idempotent server-side too, so
     // a double-fire is harmless — this guard is just to avoid the round
     // trip on every click after the first.
-    if (!unlockBurned.current) {
+    // (Approval orders never touch this browser's own unlock. 2026-10-22)
+    if (!unlockBurned.current && !approvalMode) {
       unlockBurned.current = true;
       try {
         const sid =
@@ -18128,7 +18257,7 @@ const DownloadScreen = ({
           generated on the grid (Paper/color only), reused here to flank the
           "upload your pet" card — no fresh generation. If no wild cards came
           through we just show the pet card. */}
-      {chosenStyle && (
+      {chosenStyle && !approvalMode && (
         <div style={{ marginTop: 48 }}>
           <style>{`
             @media (max-width: 600px) {
@@ -18303,6 +18432,13 @@ const DownloadScreen = ({
         </div>
       )}
 
+      {approvalMode ? (
+        <div style={{ marginTop: 32 }}>
+          <Button variant="ghost" onClick={onHome}>
+            I'm done — back to home
+          </Button>
+        </div>
+      ) : (
       <div
         style={{
           background: C.white,
@@ -18331,6 +18467,7 @@ const DownloadScreen = ({
           </Button>
         </div>
       </div>
+      )}
 
       {/* Auto-show instructions the first time DownloadScreen renders.
           Covers both desktop and mobile behavior in plain, non-technical
@@ -19411,7 +19548,11 @@ type Screen =
   // being shown is tracked in `activeFaqSlug` state (set by URL parser
   // on mount + popstate). CTA at bottom drops the visitor into the
   // upload flow, matching healthcare/how-it-works pattern.
-  | "faq-detail";
+  | "faq-detail"
+  // "approve" (2026-10-22, Kristi): /approve/<id> — a manager reviews and
+  // pays for the headshots an employee shared for approval. Shows ONLY the
+  // employee's cart picks; no regenerating, no rest of the gallery.
+  | "approve";
 
 const TOTAL_HEADSHOTS = 6;
 
@@ -20613,12 +20754,722 @@ const AllShotsGallery = ({
   );
 };
 
+// -------------------- "Share for approval" (2026-10-22, Kristi) --------------------
+//
+// For company orders: an employee picks headshots, then sends those picks to
+// their manager (or whoever pays). The manager opens /approve/<id>, sees ONLY
+// the shots in the employee's cart, picks Realistic or Glow Up for each, and
+// pays through the normal checkout. Both of them get the delivery email.
+
+// Plain-English messages for /api/share-picks refusals.
+function sharePicksErrorText(reason?: string): string {
+  if (reason === "empty_cart") return "Your cart is empty. Add the headshots you like first.";
+  if (reason === "invalid_email") return "Please check their email address.";
+  if (reason === "not_found")
+    return "Your gallery link has expired. Email kristi@kristinasherk.com and I'll help.";
+  if (reason === "blocked") return "This gallery isn't available. Please email kristi@kristinasherk.com.";
+  return "Something went wrong. Please try again.";
+}
+
+type ShareApprovalModalProps = {
+  token: string;
+  cartUrls: string[];
+  onClose: () => void;
+};
+
+// Employee side: "Send your picks for approval". Optional email to the
+// approver, or copy the link and send it yourself.
+const ShareApprovalModal = ({ token, cartUrls, onClose }: ShareApprovalModalProps) => {
+  const [approverEmail, setApproverEmail] = useState("");
+  const [busy, setBusy] = useState<null | "email" | "copy">(null);
+  const [link, setLink] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const emailValid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(approverEmail.trim());
+
+  const createLink = async (withEmail: boolean) => {
+    const resp = await fetch("/api/share-picks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        token,
+        // The cart as shown right now, in case the background save is behind.
+        urls: cartUrls.filter((u) => /^https?:\/\//.test(u)),
+        ...(withEmail ? { approverEmail: approverEmail.trim() } : {}),
+      }),
+    });
+    const d = (await resp.json().catch(() => ({}))) as {
+      ok?: boolean;
+      url?: string;
+      emailed?: boolean;
+      emailNote?: string;
+      reason?: string;
+    };
+    if (!resp.ok || !d.ok || !d.url) throw new Error(sharePicksErrorText(d.reason));
+    setLink(d.url);
+    return d;
+  };
+
+  const onEmail = async () => {
+    if (!emailValid || busy) return;
+    setBusy("email");
+    setError(null);
+    setMessage(null);
+    try {
+      const d = await createLink(true);
+      if (d.emailed) {
+        setMessage(`Sent to ${approverEmail.trim()}. You can also copy the link below.`);
+      } else if (d.emailNote === "rate_limited") {
+        setError("This link has been emailed a lot today. Copy the link below and send it yourself.");
+      } else {
+        setError("We couldn't send the email. Copy the link below and send it yourself.");
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : sharePicksErrorText());
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const onCopy = async () => {
+    if (busy) return;
+    setBusy("copy");
+    setError(null);
+    setMessage(null);
+    try {
+      const url = link ?? (await createLink(false)).url!;
+      try {
+        await navigator.clipboard.writeText(url);
+        setMessage("Link copied. Paste it into an email or chat.");
+      } catch {
+        setMessage("Here's your link. Select it below to copy it.");
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : sharePicksErrorText());
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Send your picks for approval"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !busy) onClose();
+      }}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.72)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 20,
+        zIndex: 1000,
+        ...font,
+      }}
+    >
+      <div
+        style={{
+          position: "relative",
+          background: C.white,
+          borderRadius: 12,
+          padding: "22px 20px 20px",
+          maxWidth: 420,
+          width: "100%",
+          maxHeight: "92vh",
+          overflowY: "auto",
+          boxSizing: "border-box",
+        }}
+      >
+        <button
+          onClick={onClose}
+          aria-label="Close"
+          style={{
+            position: "absolute",
+            top: 8,
+            right: 12,
+            width: 34,
+            height: 34,
+            border: "none",
+            background: "transparent",
+            color: C.mediumGrey,
+            fontSize: 26,
+            lineHeight: 1,
+            cursor: "pointer",
+            padding: 0,
+            ...font,
+          }}
+        >
+          ×
+        </button>
+        <h2
+          style={{
+            fontSize: 19,
+            fontWeight: 500,
+            color: C.dark,
+            margin: "0 0 8px",
+            lineHeight: 1.25,
+            textAlign: "center",
+          }}
+        >
+          Send your picks for approval
+        </h2>
+        <p
+          style={{
+            fontSize: 13,
+            color: C.mediumGrey,
+            margin: "0 0 16px",
+            lineHeight: 1.5,
+            textAlign: "center",
+          }}
+        >
+          Your manager (or whoever is paying) can review the shots in your cart
+          and buy them. You'll both get the photos.
+        </p>
+        <label style={{ fontSize: 13, color: C.mediumGrey, fontWeight: 500 }}>
+          Their email (optional)
+        </label>
+        <input
+          type="email"
+          value={approverEmail}
+          onChange={(e) => setApproverEmail(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void onEmail();
+          }}
+          placeholder="manager@company.com"
+          disabled={!!busy}
+          style={{
+            width: "100%",
+            padding: "10px 14px",
+            marginTop: 6,
+            fontSize: 15,
+            border: `1px solid ${C.border}`,
+            borderRadius: 8,
+            boxSizing: "border-box",
+            color: C.dark,
+            background: C.white,
+            ...font,
+          }}
+        />
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 14 }}>
+          <Button onClick={() => void onEmail()} disabled={!emailValid || !!busy} full>
+            {busy === "email" ? "Sending…" : "Email it to them"}
+          </Button>
+          <Button variant="ghost" onClick={() => void onCopy()} disabled={!!busy} full>
+            {busy === "copy" ? "Making your link…" : "Copy link"}
+          </Button>
+        </div>
+        {message && (
+          <div style={{ marginTop: 14, fontSize: 13, color: PURCHASED_GREEN, lineHeight: 1.5, textAlign: "center" }}>
+            {message}
+          </div>
+        )}
+        {error && (
+          <div
+            style={{
+              marginTop: 14,
+              padding: 10,
+              background: "#FDECEC",
+              border: "1px solid #F5C7C5",
+              borderRadius: 8,
+              fontSize: 13,
+              color: "#7A1F1B",
+              lineHeight: 1.5,
+            }}
+          >
+            {error}
+          </div>
+        )}
+        {link && (
+          <input
+            readOnly
+            value={link}
+            onFocus={(e) => e.currentTarget.select()}
+            aria-label="Approval link"
+            style={{
+              width: "100%",
+              marginTop: 12,
+              padding: "9px 12px",
+              fontSize: 12,
+              border: `1px solid ${C.border}`,
+              borderRadius: 8,
+              boxSizing: "border-box",
+              color: C.dark,
+              background: C.pageBg,
+              ...font,
+            }}
+          />
+        )}
+      </div>
+    </div>
+  );
+};
+
+type ApproveCheckoutArgs = {
+  urls: string[];
+  tiers: Record<string, RetouchTier>;
+  selections: StyleSelections;
+  referencePhotoUrls: string[];
+  ownerEmail: string;
+};
+
+type ApproveScreenProps = {
+  shareId: string | null;
+  // Shown above the photos, e.g. after a canceled Stripe checkout.
+  notice?: string | null;
+  onCheckout: (args: ApproveCheckoutArgs) => void;
+  onHome: () => void;
+};
+
+// /api/deliver takes up to 6 photos per order, so one checkout buys up to 6.
+const APPROVE_MAX_PER_ORDER = 6;
+
+// Manager side: /approve/<id>. Only the employee's cart picks, watermarked
+// like the grid previews. Each pick: select toggle + Realistic / Glow Up.
+const ApproveScreen = ({ shareId, notice, onCheckout, onHome }: ApproveScreenProps) => {
+  const [status, setStatus] = useState<"loading" | "ready" | "missing" | "blocked" | "error">(
+    shareId ? "loading" : "missing",
+  );
+  const [data, setData] = useState<{
+    ownerEmail: string;
+    picks: string[];
+    purchased: string[];
+    selections: StyleSelections;
+    referencePhotoUrls: string[];
+  } | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [tiers, setTiers] = useState<Record<string, RetouchTier>>({});
+
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      document.title = "Headshots for your approval | GenerAItion Headshots";
+    }
+    if (!shareId) {
+      setStatus("missing");
+      return;
+    }
+    let cancelled = false;
+    setStatus("loading");
+    void (async () => {
+      try {
+        const r = await fetch(`/api/get-picks?id=${encodeURIComponent(shareId)}`, { cache: "no-store" });
+        if (cancelled) return;
+        if (r.status === 404) return setStatus("missing");
+        if (r.status === 403) return setStatus("blocked");
+        if (!r.ok) return setStatus("error");
+        const d = (await r.json()) as {
+          ownerEmail?: string;
+          picks?: string[];
+          purchased?: string[];
+          selections?: Partial<StyleSelections> | null;
+          referencePhotoUrls?: string[];
+        };
+        if (cancelled) return;
+        const isUrl = (u: unknown): u is string => typeof u === "string" && /^https?:\/\//.test(u);
+        const picks = (d.picks ?? []).filter(isUrl);
+        // /api/deliver needs style / attire / lighting to be present (they're
+        // only recorded on the order), so fill any gap with a safe default.
+        const selections: StyleSelections = {
+          style: "corporate",
+          attire: "keep",
+          lighting: "studio",
+          ...(d.selections && typeof d.selections === "object" ? d.selections : {}),
+        } as StyleSelections;
+        setData({
+          ownerEmail: typeof d.ownerEmail === "string" ? d.ownerEmail : "",
+          picks,
+          purchased: (d.purchased ?? []).filter(isUrl),
+          selections,
+          referencePhotoUrls: (d.referencePhotoUrls ?? []).filter(isUrl),
+        });
+        setSelected(new Set(picks.slice(0, APPROVE_MAX_PER_ORDER)));
+        setTiers(Object.fromEntries(picks.map((u) => [u, "basic" as RetouchTier])));
+        setStatus("ready");
+      } catch {
+        if (!cancelled) setStatus("error");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [shareId]);
+
+  const atMax = selected.size >= APPROVE_MAX_PER_ORDER;
+  const toggle = (url: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(url)) next.delete(url);
+      else if (next.size < APPROVE_MAX_PER_ORDER) next.add(url);
+      return next;
+    });
+  };
+  const pickTier = (url: string, tier: RetouchTier) => {
+    setTiers((prev) => ({ ...prev, [url]: tier }));
+    // Choosing a finish also selects the photo (if there's room).
+    setSelected((prev) => {
+      if (prev.has(url) || prev.size >= APPROVE_MAX_PER_ORDER) return prev;
+      const next = new Set(prev);
+      next.add(url);
+      return next;
+    });
+  };
+
+  const chosen = (data?.picks ?? []).filter((u) => selected.has(u));
+  const totalCents = chosen.reduce((sum, u) => sum + centsForTier(tiers[u] ?? "basic"), 0);
+
+  const watermark = (
+    <div style={{ position: "absolute", inset: 0, pointerEvents: "none", overflow: "hidden" }}>
+      {[33, 67].map((topPercent, row) => (
+        <div
+          key={row}
+          style={{
+            position: "absolute",
+            top: `${topPercent}%`,
+            left: "50%",
+            transform: "translate(-50%, -50%) rotate(-30deg)",
+            fontSize: 11,
+            color: "rgba(255,255,255,0.55)",
+            textShadow: "0 1px 2px rgba(0,0,0,0.4)",
+            letterSpacing: 2,
+            whiteSpace: "nowrap",
+            fontWeight: 400,
+          }}
+        >
+          INVISIBLE WATERMARKS APPLIED TO PROTECT ARTIST
+        </div>
+      ))}
+    </div>
+  );
+
+  const photo = (url: string, alt: string) => (
+    <>
+      <img
+        src={url}
+        alt={alt}
+        draggable={false}
+        decoding="async"
+        onContextMenu={(e) => e.preventDefault()}
+        style={{
+          position: "absolute",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+          objectPosition: "center",
+          display: "block",
+          pointerEvents: "none",
+          WebkitTouchCallout: "none",
+          WebkitUserSelect: "none",
+          userSelect: "none",
+        }}
+      />
+      {watermark}
+    </>
+  );
+
+  const pageWrap: CSSProperties = {
+    maxWidth: 960,
+    margin: "0 auto",
+    padding: "40px 16px 140px",
+    boxSizing: "border-box",
+    ...font,
+  };
+
+  if (status !== "ready" || !data) {
+    const msg =
+      status === "loading"
+        ? "Loading the headshots…"
+        : status === "blocked"
+          ? "This gallery isn't available. Questions? Email kristi@kristinasherk.com."
+          : status === "missing"
+            ? "This link has expired or isn't right. Ask for a new link."
+            : "Something went wrong loading this page. Please refresh to try again.";
+    return (
+      <div style={{ ...pageWrap, textAlign: "center" }}>
+        <h1 style={{ fontSize: 28, fontWeight: 500, color: C.dark, margin: "24px 0 12px", letterSpacing: -0.5 }}>
+          Headshots for your approval
+        </h1>
+        <p style={{ fontSize: 15, color: C.mediumGrey, lineHeight: 1.6 }}>
+          {status === "loading" && (
+            <Loader2 size={16} style={{ animation: "spin 1s linear infinite", verticalAlign: "middle", marginRight: 8 }} />
+          )}
+          {msg}
+        </p>
+        {status !== "loading" && (
+          <div style={{ marginTop: 20 }}>
+            <Button variant="ghost" onClick={onHome}>
+              Go to the home page
+            </Button>
+          </div>
+        )}
+        <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
+
+  const owner = data.ownerEmail || "Your team member";
+  const nothingLeft = data.picks.length === 0;
+
+  return (
+    <div style={pageWrap}>
+      <style>{`
+        .approve-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+        @media (max-width: 600px) {
+          .approve-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+        }
+      `}</style>
+      <h1 style={{ fontSize: 28, fontWeight: 500, color: C.dark, margin: 0, letterSpacing: -0.5, lineHeight: 1.2 }}>
+        Headshots for your approval
+      </h1>
+      <p style={{ fontSize: 15, color: C.mediumGrey, margin: "10px 0 0", lineHeight: 1.6, overflowWrap: "anywhere" }}>
+        {owner} picked these. Choose the ones you'd like to buy.
+      </p>
+      <p style={{ fontSize: 13, color: C.mediumGrey, margin: "8px 0 0", lineHeight: 1.6 }}>
+        Realistic is the photo as it is. Glow Up gives you 3 versions: Realistic,
+        Polished and Glam. You and {owner} both get the photos by email.
+      </p>
+      {data.picks.length > APPROVE_MAX_PER_ORDER && (
+        <p style={{ fontSize: 13, color: C.dark, margin: "8px 0 0", lineHeight: 1.6 }}>
+          You can buy up to {APPROVE_MAX_PER_ORDER} at a time. Come back to this
+          link for the rest.
+        </p>
+      )}
+      {notice && (
+        <div
+          style={{
+            marginTop: 16,
+            padding: "12px 14px",
+            background: C.white,
+            border: `1px solid ${C.border}`,
+            borderRadius: 8,
+            fontSize: 13,
+            color: C.dark,
+            lineHeight: 1.5,
+          }}
+        >
+          {notice}
+        </div>
+      )}
+      {nothingLeft && (
+        <p style={{ fontSize: 15, color: C.dark, margin: "20px 0 0", lineHeight: 1.6 }}>
+          {data.purchased.length > 0
+            ? "Everything here has been purchased. Thank you!"
+            : `There's nothing to approve yet. Ask ${owner} to add headshots to their cart and share again.`}
+        </p>
+      )}
+
+      <div className="approve-grid" style={{ marginTop: 24 }}>
+        {data.picks.map((url, i) => {
+          const isOn = selected.has(url);
+          const tier = tiers[url] ?? "basic";
+          const blocked = !isOn && atMax;
+          return (
+            <div
+              key={url}
+              style={{
+                background: C.white,
+                borderRadius: 8,
+                overflow: "hidden",
+                border: `2px solid ${isOn ? C.dark : C.border}`,
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => toggle(url)}
+                aria-pressed={isOn}
+                aria-label={`${isOn ? "Remove" : "Choose"} headshot ${i + 1}`}
+                disabled={blocked}
+                style={{
+                  position: "relative",
+                  aspectRatio: "3 / 4",
+                  background: C.lightGrey,
+                  border: "none",
+                  padding: 0,
+                  cursor: blocked ? "not-allowed" : "pointer",
+                  display: "block",
+                  width: "100%",
+                }}
+              >
+                {photo(url, `Headshot ${i + 1}`)}
+                <span
+                  aria-hidden
+                  style={{
+                    position: "absolute",
+                    top: 8,
+                    right: 8,
+                    width: 30,
+                    height: 30,
+                    borderRadius: "50%",
+                    background: isOn ? C.dark : blocked ? "rgba(255,255,255,0.4)" : "rgba(255,255,255,0.92)",
+                    color: isOn ? C.white : C.dark,
+                    border: isOn ? "none" : `1px solid ${C.border}`,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    boxSizing: "border-box",
+                  }}
+                >
+                  {isOn ? <Check size={16} strokeWidth={2.5} /> : <Plus size={16} />}
+                </span>
+              </button>
+              <div style={{ display: "flex", gap: 6, padding: 8 }}>
+                {(["basic", "deluxe"] as RetouchTier[]).map((t) => {
+                  const active = isOn && tier === t;
+                  return (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => pickTier(url, t)}
+                      disabled={blocked}
+                      aria-pressed={active}
+                      style={{
+                        flex: 1,
+                        minWidth: 0,
+                        padding: "7px 4px",
+                        borderRadius: 999,
+                        border: `1px solid ${active ? C.dark : C.border}`,
+                        background: active ? C.dark : C.white,
+                        color: active ? C.buttonText : isOn ? C.dark : C.mediumGrey,
+                        cursor: blocked ? "not-allowed" : "pointer",
+                        lineHeight: 1.2,
+                        ...font,
+                      }}
+                    >
+                      <span style={{ display: "block", fontSize: 12, fontWeight: 500 }}>
+                        {t === "deluxe" ? "Glow Up" : "Realistic"}
+                      </span>
+                      <span style={{ display: "block", fontSize: 11, opacity: 0.85 }}>
+                        {usdCents(centsForTier(t))}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+        {data.purchased.map((url, i) => (
+          <div
+            key={url}
+            style={{
+              background: C.white,
+              borderRadius: 8,
+              overflow: "hidden",
+              ...purchasedRim(true),
+            }}
+          >
+            <div style={{ position: "relative", aspectRatio: "3 / 4", background: C.lightGrey }}>
+              {photo(url, `Purchased headshot ${i + 1}`)}
+              <span
+                style={{
+                  position: "absolute",
+                  top: 8,
+                  left: 8,
+                  background: PURCHASED_GREEN,
+                  color: C.white,
+                  fontSize: 11,
+                  fontWeight: 500,
+                  letterSpacing: 0.5,
+                  padding: "4px 10px",
+                  borderRadius: 999,
+                  textTransform: "uppercase",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                }}
+              >
+                <Check size={12} strokeWidth={2.5} /> Purchased
+              </span>
+            </div>
+            <div style={{ padding: "14px 8px", fontSize: 12, color: PURCHASED_GREEN, textAlign: "center", fontWeight: 500 }}>
+              Already bought
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {!nothingLeft && (
+        <div
+          style={{
+            position: "fixed",
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: C.white,
+            borderTop: `1px solid ${C.border}`,
+            zIndex: 50,
+            ...font,
+          }}
+        >
+          <div
+            style={{
+              maxWidth: 960,
+              margin: "0 auto",
+              padding: "12px 16px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              flexWrap: "wrap",
+              boxSizing: "border-box",
+            }}
+          >
+            <div style={{ fontSize: 14, color: C.dark }}>
+              <span style={{ fontWeight: 500 }}>
+                {chosen.length} selected
+              </span>
+              <span style={{ color: C.mediumGrey }}> · Total </span>
+              <span style={{ fontWeight: 600 }}>{usdCents(totalCents)}</span>
+            </div>
+            {/* Forest-green primary CTA (Button's primary variant is charcoal). */}
+            <button
+              type="button"
+              disabled={chosen.length === 0}
+              onClick={() =>
+                onCheckout({
+                  urls: chosen,
+                  tiers: Object.fromEntries(chosen.map((u) => [u, tiers[u] ?? "basic"])),
+                  selections: data.selections,
+                  referencePhotoUrls: data.referencePhotoUrls,
+                  ownerEmail: data.ownerEmail,
+                })
+              }
+              style={{
+                padding: "14px 28px",
+                borderRadius: 8,
+                fontSize: 14,
+                fontWeight: 500,
+                border: "none",
+                background: BRAND.forestGreen,
+                color: BRAND.white,
+                cursor: chosen.length === 0 ? "not-allowed" : "pointer",
+                opacity: chosen.length === 0 ? 0.4 : 1,
+                ...font,
+              }}
+            >
+              Continue to checkout
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const FAQ_DETAIL_RE = /^\/faq\/([a-z0-9-]+)\/?$/;
+// "Share for approval" manager page (2026-10-22). Same id format the server
+// checks in api/get-picks.ts.
+const APPROVE_RE = /^\/approve\/([A-Za-z0-9]{16,40})\/?$/;
 
 // Maps a URL path to the screen that should render. Module-level so the
 // very first render already shows the right page (no landing-page flash) and
 // so the build-time prerender (src/entry-prerender.tsx) can pick a route.
-export function screenForPath(path: string): { screen: Screen; faqSlug?: string } | null {
+export function screenForPath(path: string): { screen: Screen; faqSlug?: string; approveId?: string } | null {
     if (path === "/healthcare" || path === "/healthcare/") return { screen: "healthcare" };
     if (path === "/teams" || path === "/teams/") return { screen: "teams" };
     if (path === "/headshot-generator-gallery" || path === "/headshot-generator-gallery/") return { screen: "gallery" };
@@ -20628,13 +21479,15 @@ export function screenForPath(path: string): { screen: Screen; faqSlug?: string 
     if (faqDetailMatch) return { screen: "faq-detail", faqSlug: faqDetailMatch[1] };
     if (path === "/faq" || path === "/faq/") return { screen: "faq" };
     if (path === "/admin" || path === "/admin/") return { screen: "admin" };
+    const approveMatch = path.match(APPROVE_RE);
+    if (approveMatch) return { screen: "approve", approveId: approveMatch[1] };
     if (path === "/" || path === "") return { screen: "landing" };
     return null;
 }
 
 // The path to render first: the prerender sets globalThis.__PRERENDER_PATH__;
 // in the browser it is the real URL.
-function initialRoute(): { screen: Screen; faqSlug?: string } {
+function initialRoute(): { screen: Screen; faqSlug?: string; approveId?: string } {
   const p = (globalThis as { __PRERENDER_PATH__?: string }).__PRERENDER_PATH__
     ?? (typeof window !== "undefined" && window.location ? window.location.pathname : "/");
   return screenForPath(p) ?? { screen: "landing" };
@@ -20720,6 +21573,14 @@ export default function App() {
   // FAQDetailScreen knows which question to render. Null on any other
   // screen. Populated on initial mount + updated by popstate.
   const [activeFaqSlug, setActiveFaqSlug] = useState<string | null>(() => initialRoute().faqSlug ?? null);
+  // "Share for approval" (2026-10-22, Kristi). approveShareId = the id in an
+  // /approve/<id> URL. approvalCtx is set once the manager heads to checkout
+  // from that page, so checkout skips every discount/promo, the paid return
+  // tells /api/deliver to email the employee too, and the download screen
+  // hides "try a different style" (managers can't generate).
+  const [approveShareId, setApproveShareId] = useState<string | null>(() => initialRoute().approveId ?? null);
+  const [approvalCtx, setApprovalCtx] = useState<{ shareId: string; ownerEmail: string } | null>(null);
+  const [approveNotice, setApproveNotice] = useState<string | null>(null);
 
   useEffect(() => {
     // FAQ slug regex: matches /faq/{lowercase-hyphens-only-slug}.
@@ -20740,6 +21601,7 @@ export default function App() {
       } else {
         setActiveFaqSlug(null);
       }
+      if (result.screen === "approve") setApproveShareId(result.approveId ?? null);
     };
 
     applyPath(window.location.pathname);
@@ -21178,6 +22040,16 @@ export default function App() {
   // email link, so a per-slot regen can be persisted back onto the saved grid
   // (see handleRegenerateSlot) and thus STICK when the link is reopened.
   const resumeTokenRef = useRef<string | null>(null);
+  // Same token as state (2026-10-22) so the screen can react to it: the
+  // "Share for approval" button only shows once the gallery is saved, and
+  // the cart is saved onto the gallery whenever it changes (effect below).
+  // Cleared by reset() so starting over doesn't wipe the saved cart.
+  const [galleryToken, setGalleryToken] = useState<string | null>(null);
+  // Bumped after each batch is saved so the cart is re-saved: the server only
+  // keeps cart shots it knows belong to this gallery, and a pick from a new
+  // batch can land in the cart before that batch is saved.
+  const [cartSyncNonce, setCartSyncNonce] = useState(0);
+  const [showShareApproval, setShowShareApproval] = useState(false);
   // Where the CURRENT batch's shots start inside the accumulated saved grid
   // (2026-08-24). 0 for a resume-link session (the on-screen grid IS the full
   // saved grid) or a first batch; set to the server-returned offset after each
@@ -21436,6 +22308,24 @@ export default function App() {
       // silently skip. The in-memory cart still works for this session.
     }
   }, [cart]);
+  // Save the cart onto the customer's gallery too (2026-10-22, Kristi), so
+  // it follows the "ready to view" link to any device and the "Share for
+  // approval" page shows the same picks. Debounced; best-effort — a failed
+  // save never blocks the screen.
+  useEffect(() => {
+    if (typeof window === "undefined" || !galleryToken) return;
+    const urls = cart.filter((u) => /^https?:\/\//.test(u));
+    const timer = window.setTimeout(() => {
+      void fetch("/api/update-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "cart", token: galleryToken, urls }),
+      }).catch(() => {
+        /* best-effort */
+      });
+    }, 800);
+    return () => window.clearTimeout(timer);
+  }, [cart, galleryToken, cartSyncNonce]);
   // Last-chance upsell (2026-08-20): URLs added via the post-"Check out" popup
   // are flagged here so their 30% discount rides through to the checkout total
   // AND the pricing API. showUpsell toggles the popup itself.
@@ -21699,6 +22589,9 @@ export default function App() {
     // session from opening his link). Explicit ?resume= links still work on
     // any page.
     const onAppHome = url.pathname === "/" || url.pathname === "";
+    // The manager's approval page never opens anyone's gallery, even with a
+    // stray ?resume= on the link. (2026-10-22)
+    if (APPROVE_RE.test(url.pathname)) return;
     if (!token && !hasCheckoutParam && onAppHome) {
       try {
         const raw = window.localStorage.getItem("gh_resume_token");
@@ -21765,6 +22658,7 @@ export default function App() {
           versionShots?: string[];
           purchasedUrls?: string[];
           allGeneratedUrls?: string[];
+          cartUrls?: string[];
         };
         if (!d.generatedUrls || d.generatedUrls.length === 0) return;
         setGeneratedImages(d.generatedUrls);
@@ -21826,10 +22720,29 @@ export default function App() {
         if (Array.isArray(d.allGeneratedUrls) && d.allGeneratedUrls.length > 0) {
           setAllGeneratedUrls(d.allGeneratedUrls);
         }
+        // The cart saved with this gallery (2026-10-22, Kristi) joins this
+        // browser's cart (no duplicates), so it follows the link to any
+        // device. Already-bought shots come out of the cart so nobody pays
+        // for them twice.
+        {
+          const bought = new Set(Array.isArray(d.purchasedUrls) ? d.purchasedUrls : []);
+          const savedCart = (Array.isArray(d.cartUrls) ? d.cartUrls : []).filter(
+            (u) => typeof u === "string" && /^https?:\/\//.test(u),
+          );
+          setCart((prev) => {
+            const next = Array.from(new Set([...prev, ...savedCart]))
+              .filter((u) => !bought.has(u))
+              .slice(0, MAX_CART_SIZE);
+            return next.length === prev.length && next.every((u, i) => u === prev[i])
+              ? prev
+              : next;
+          });
+        }
         setResumedFromEmail(true);
         // Remember the token so a damage-control regen can be written back to
         // this same saved grid (below).
         resumeTokenRef.current = token;
+        setGalleryToken(token);
         batchOffsetRef.current = 0;
         // Admin damage-control fix mode. Turns on when EITHER the link carries
         // a valid admin password (&fix=<pw>) OR this device was previously
@@ -22359,7 +23272,25 @@ export default function App() {
             referencePhotoUrls?: string[];
             selections?: StyleSelections;
             retouchTiers?: RetouchTier[];
+            approvalShareId?: string;
           };
+          // A manager who backs out of Stripe goes back to the approval page
+          // (fresh picks from the server), not into a retouch screen.
+          // (2026-10-22, Kristi)
+          if (
+            typeof cancelStash.approvalShareId === "string" &&
+            /^[A-Za-z0-9]{16,40}$/.test(cancelStash.approvalShareId)
+          ) {
+            window.sessionStorage.removeItem("pending_delivery");
+            window.history.replaceState({}, "", `/approve/${cancelStash.approvalShareId}`);
+            setApproveShareId(cancelStash.approvalShareId);
+            setApprovalCtx(null);
+            setApproveNotice(
+              "Checkout was canceled. Nothing was charged. Choose your headshots again when you're ready.",
+            );
+            setScreen("approve");
+            return;
+          }
           // Rehydrate the pieces of state the retouch screen needs so the
           // customer can retry checkout without redoing anything. We don't
           // clear `pending_delivery` here — leaving it lets a customer
@@ -22485,6 +23416,10 @@ export default function App() {
         // checkout still using the old stash shape will default to
         // "polished" for every photo when this is undefined).
         retouchTiers?: RetouchTier[];
+        // "Share for approval" order (2026-10-22): a manager paying for an
+        // employee's picks. Tells /api/deliver to email the employee too.
+        approvalShareId?: string;
+        approvalOwnerEmail?: string;
       };
       try {
         stash = JSON.parse(stashRaw);
@@ -22505,6 +23440,9 @@ export default function App() {
           stash.retouchTiers.length === stash.uploadedUrls.length
             ? stash.retouchTiers
             : stash.uploadedUrls.map(() => "basic" as RetouchTier);
+        const isApproval =
+          typeof stash.approvalShareId === "string" &&
+          /^[A-Za-z0-9]{16,40}$/.test(stash.approvalShareId);
         const progressId = newProgressId();
         setDeliveryProgressId(progressId);
         setDeliveryGlowUps(resolvedTiers.filter((t) => t === "deluxe").length);
@@ -22528,22 +23466,30 @@ export default function App() {
             background: stash.selections.background,
             skin: stash.selections.skin,
             retouchTiers: resolvedTiers,
-            // Burn the entry unlock (Stripe metadata flip) when delivery
-            // succeeds. Promo users have no sessionId; server skips them.
-            ...readUnlockRequestFields(),
-            // The spread above carries the email they GENERATED under as
-            // `email`; the checkout email must win so the photos go where the
-            // customer asked. The generating email rides along separately so
-            // the purchase lands on their original lead row. (2026-10-09)
+            // Approval orders (2026-10-22) skip this browser's own unlock /
+            // promo / generating email: the manager isn't the one who
+            // generated, and the employee is looked up from the share id.
+            ...(isApproval
+              ? { approvalShareId: stash.approvalShareId }
+              : {
+                  // Burn the entry unlock (Stripe metadata flip) when delivery
+                  // succeeds. Promo users have no sessionId; server skips them.
+                  ...readUnlockRequestFields(),
+                  // The spread above carries the email they GENERATED under as
+                  // `email`; the checkout email must win so the photos go where
+                  // the customer asked. The generating email rides along
+                  // separately so the purchase lands on their original lead
+                  // row. (2026-10-09)
+                  genLeadEmail: readGenLeadEmail(),
+                }),
             email: stash.email,
-            genLeadEmail: readGenLeadEmail(),
           }),
         });
         if (!deliverResp.ok) throw new Error(`HTTP ${deliverResp.status}`);
         // A share-reward code's free headshot was comped on this paid order
         // (the server spent the credit in /api/deliver). (2026-10-07)
         try {
-          if (window.localStorage.getItem("promo_kind") === "share") {
+          if (!isApproval && window.localStorage.getItem("promo_kind") === "share") {
             window.localStorage.setItem("share_credit_used", "1");
           }
         } catch {
@@ -22558,7 +23504,8 @@ export default function App() {
         // would still say "unlocked" until the 4h TTL expired — fine for
         // security (server gate catches anyway, returns 402) but the UI
         // would falsely show the user as still in the try-it window.
-        clearUnlock();
+        // (Approval orders never touch this browser's own unlock.)
+        if (!isApproval) clearUnlock();
         // Restore ALL state DownloadScreen needs. The Stripe redirect is a
         // full page navigation, which wipes React in-memory state — so
         // lastSelections/lastPhotoUrls come back null on return and the
@@ -22594,6 +23541,17 @@ export default function App() {
         // batches + 3 more single regens. Store the paid session so generate
         // calls can prove the purchase to the server, and flip the client
         // gates to the larger allowance.
+        // Approval orders (2026-10-22): no perk — the manager doesn't
+        // generate. Remember the order so the download screen hides
+        // "try a different style".
+        if (isApproval) {
+          setApprovalCtx({
+            shareId: stash.approvalShareId as string,
+            ownerEmail: stash.approvalOwnerEmail ?? "",
+          });
+          setScreen("success");
+          return;
+        }
         try {
           window.localStorage.setItem("purchase_session_id", sessionId);
         } catch {
@@ -22637,6 +23595,10 @@ export default function App() {
     setLastPhotoUrls([]);
     setLastHasWideAngle(false);
     setRegeneratingSlots(new Set());
+    // Starting over: stop saving the cart to the old gallery first, so the
+    // empty cart below doesn't wipe the one saved there. (2026-10-22)
+    setGalleryToken(null);
+    setApprovalCtx(null);
     // Clear cart (Phase 1, 2026-06-03). Reset means new session, new source
     // photos — prior cart URLs no longer reference anything meaningful.
     setCart([]);
@@ -23054,6 +24016,8 @@ export default function App() {
               resumeToken = d.token;
               // Enable regen + wild-card persistence for this session.
               resumeTokenRef.current = d.token;
+              setGalleryToken(d.token);
+              setCartSyncNonce((n) => n + 1);
               // Where this batch landed in the accumulated grid, so a later
               // per-slot regen patches the correct photo (2026-08-24).
               batchOffsetRef.current =
@@ -25260,6 +26224,7 @@ export default function App() {
         generatedImages.filter(Boolean).length > 0 && (
         <GridScreen
           purchased={purchasedUrls}
+          onShareForApproval={galleryToken ? () => setShowShareApproval(true) : undefined}
           images={generatedImages}
           previousImages={previousImages}
           revertedSlots={revertedSlots}
@@ -25626,6 +26591,7 @@ export default function App() {
             }
           })()}
           onContinue={handleRetouchContinue}
+          onShareForApproval={galleryToken ? () => setShowShareApproval(true) : undefined}
           onBack={() => setScreen("grid")}
           onRemovePick={(url) => {
             // Trash button on a retouch row (Phase 5, 2026-06-03).
@@ -25654,8 +26620,11 @@ export default function App() {
             (url) => retouchTiers[url] ?? "basic",
           )}
           // Per-photo 30%-off flags (same order) for shots added via the
-          // last-chance upsell popup. (2026-08-20)
-          discounted={selectedImageUrls.map((url) => discountedUrls.has(url))}
+          // last-chance upsell popup. (2026-08-20) Never on approval orders.
+          discounted={selectedImageUrls.map(
+            (url) => !approvalCtx && discountedUrls.has(url),
+          )}
+          approval={approvalCtx ?? undefined}
           onComplete={({ email: submittedEmail, photoUrls, shareGraphicUrls }) => {
             markPurchased([...selectedImageUrls, ...photoUrls]);
             setEmail(submittedEmail);
@@ -25663,7 +26632,40 @@ export default function App() {
             setDeliveredShareGraphicUrls(shareGraphicUrls ?? []);
             setScreen("success");
           }}
-          onBack={() => setScreen("retouch")}
+          onBack={() => {
+            if (approvalCtx) {
+              setApprovalCtx(null);
+              setScreen("approve");
+            } else {
+              setScreen("retouch");
+            }
+          }}
+        />
+      )}
+      {screen === "approve" && (
+        <ApproveScreen
+          shareId={approveShareId}
+          notice={approveNotice}
+          onCheckout={({ urls, tiers, selections, referencePhotoUrls, ownerEmail }) => {
+            if (!approveShareId) return;
+            // Reuse the normal per-photo checkout. Approval context makes it
+            // skip every discount and tells delivery to email the employee.
+            setApproveNotice(null);
+            setSelectedImageUrls(urls);
+            setRetouchTiers(tiers);
+            setDiscountedUrls(new Set());
+            setLastSelections(selections);
+            setLastPhotoUrls(referencePhotoUrls);
+            setApprovalCtx({ shareId: approveShareId, ownerEmail });
+            setScreen("checkout");
+          }}
+          onHome={() => {
+            setApprovalCtx(null);
+            setScreen("landing");
+            if (window.location.pathname !== "/") {
+              window.history.pushState({}, "", "/");
+            }
+          }}
         />
       )}
       {/* Post-Stripe-redirect interstitial. Shown while /api/verify-checkout
@@ -25688,6 +26690,7 @@ export default function App() {
           hasWideAngle={lastHasWideAngle}
           attire={lastSelections.attire}
           lighting={lastSelections.lighting}
+          approvalMode={!!approvalCtx}
           onNewStyle={() => {
             // "Generate a different Style": keep reference photos + EXIF flag
             // + email, but wipe generated images / cart / selections so the
@@ -25710,6 +26713,16 @@ export default function App() {
       )}
 
       {showPaywall && <PaywallModal onClose={() => setShowPaywall(false)} />}
+
+      {/* "Share for approval" (2026-10-22, Kristi) — employee sends their
+          cart to the person paying. */}
+      {showShareApproval && galleryToken && (
+        <ShareApprovalModal
+          token={galleryToken}
+          cartUrls={cart}
+          onClose={() => setShowShareApproval(false)}
+        />
+      )}
 
       {/* Free-tier "1 more free regen left" nudge (2026-07-03). Fires once,
           after the customer's 1st regen in free-tier mode. Set via useEffect
