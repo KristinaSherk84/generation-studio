@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
-import { Upload, Check, X, ArrowLeft, RefreshCw, Loader2, Download, Maximize2, ChevronDown, User, Sparkles, CircleUser, ArrowDown, ArrowRight, Menu, Plus, ShoppingBag, Trash2, Lock, Unlock, Undo2, Redo2, Folder, FlipHorizontal } from "lucide-react";
+import { Upload, Check, X, ArrowLeft, RefreshCw, Loader2, Download, Maximize2, ChevronDown, User, Sparkles, CircleUser, ArrowDown, ArrowRight, Menu, Plus, ShoppingBag, Trash2, Lock, Unlock, Undo2, Redo2, Folder } from "lucide-react";
 import { upload } from "@vercel/blob/client";
 import exifr from "exifr";
 import { seoForPath, SITE } from "./seo";
@@ -105,6 +105,10 @@ export type UploadedPhoto = {
   // whether that flip is still being saved.
   flipped?: boolean;
   flipping?: boolean;
+  // Which phone camera took the photo, from EXIF LensModel ("…front camera…"
+  // / "…back…camera…"). Null when the photo has no lens info (most Android
+  // and edited/screenshot photos). Used by the silent mirror fix. (2026-10-21)
+  camera?: "front" | "rear" | null;
   status: "uploading" | "done" | "error";
   errorMessage: string | null;
   // EXIF-derived wide-angle flag, read in the browser via `exifr` as soon as
@@ -468,6 +472,26 @@ function readGenLeadEmail(): string {
   }
 }
 
+// Random id for this browser, kept in localStorage (2026-10-22). Sent with
+// every generation so the server can count free batches per browser as well
+// as per IP — a VPN changes the IP but not this. Null if storage is blocked.
+function browserClientId(): string | undefined {
+  try {
+    let id = window.localStorage.getItem("gh_cid");
+    if (!id || !/^[a-z0-9]{16,40}$/.test(id)) {
+      id =
+        Math.random().toString(36).slice(2, 12) +
+        Date.now().toString(36) +
+        Math.random().toString(36).slice(2, 10);
+      id = id.replace(/[^a-z0-9]/g, "").slice(0, 32);
+      window.localStorage.setItem("gh_cid", id);
+    }
+    return id;
+  } catch {
+    return undefined;
+  }
+}
+
 function readUnlockRequestFields(): {
   stripeSessionId?: string;
   promoCode?: string;
@@ -475,14 +499,18 @@ function readUnlockRequestFields(): {
   purchaseSessionId?: string;
   email?: string;
   fp?: string;
+  cid?: string;
 } {
   const batch: {
     batchId?: string;
     purchaseSessionId?: string;
     email?: string;
     fp?: string;
+    cid?: string;
   } = currentBatchId ? { batchId: currentBatchId } : {};
   if (typeof window === "undefined") return batch;
+  const cid = browserClientId();
+  if (cid) batch.cid = cid;
   // Attach the browser fingerprint on every request. Server stores it per
   // lead + checks it against the fingerprint blacklist before spending
   // compute. See browserFingerprint() above for what goes into the hash.
@@ -6420,7 +6448,7 @@ const HOW_IT_WORKS_FAQ: { q: string; a: string }[] = [
   },
   {
     q: "Are my photos kept private?",
-    a: "Your uploaded selfies are used only to generate your headshots. They're not shared, sold, or used to train our AI. The headshots themselves are delivered to your email and stored only as long as we need to deliver them. If you'd like your data deleted, just email us.",
+    a: "Your uploaded selfies are used to create your headshots. They're never sold or used to train our AI. Your finished headshots are delivered to your email and stored only as long as we need to deliver them. From time to time we share before-and-after examples to show what our app can do. If you'd rather we never use yours, check the \"promotion privacy list\" box when you enter your email, or email us anytime and we'll leave you out. If you'd like your data deleted, just email us.",
   },
 ];
 
@@ -6801,6 +6829,24 @@ const readWideAngleFromFile = async (file: File): Promise<boolean | null> => {
   }
 };
 
+// Which camera took the photo (2026-10-21). iPhones write the lens into EXIF
+// LensModel, e.g. "iPhone 15 Pro front camera 2.69mm f/1.9" or "iPhone 15 Pro
+// back triple camera 6.765mm f/1.78". Anything else → null (unknown).
+const readCameraFromFile = async (file: File): Promise<"front" | "rear" | null> => {
+  try {
+    const exif = (await exifr.parse(file, { pick: ["LensModel"] })) as
+      | { LensModel?: string }
+      | undefined;
+    const lens = (exif?.LensModel ?? "").toLowerCase();
+    if (!lens) return null;
+    if (lens.includes("front")) return "front";
+    if (lens.includes("back") || lens.includes("rear")) return "rear";
+    return null;
+  } catch {
+    return null;
+  }
+};
+
 // -------------------- /faq — full FAQ spoke page --------------------
 //
 // Standalone explainer reached from the hamburger menu (and direct URL).
@@ -6851,7 +6897,7 @@ export const FAQ_QUESTIONS: { slug: string; q: string; a: string }[] = [
   {
     slug: "are-my-photos-kept-private",
     q: "Are my uploaded photos kept private?",
-    a: "Yes. Your uploads are used only to generate your headshots. We do not share them, sell them, or use them to train any AI model. Your reference photos and generated files are stored only as long as needed to deliver your order. If you'd like your data deleted at any time, email kristi@kristinasherk.com and we'll remove it.",
+    a: "Yes. Your uploads are used to create your headshots. We never sell them or use them to train any AI model. Your reference photos and generated files are stored only as long as needed to deliver your order. From time to time we share before-and-after examples to show what our app can do. If you'd rather we never use yours, check the \"promotion privacy list\" box when you enter your email, or email kristi@kristinasherk.com and we'll leave you out. If you'd like your data deleted at any time, email us and we'll remove it.",
   },
   {
     slug: "can-i-use-for-linkedin-and-business",
@@ -8687,15 +8733,15 @@ async function fingerprintFile(file: File): Promise<string> {
 const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) => {
   // How many duplicate photos were skipped on the last add (0 = no notice).
   const [dupSkipped, setDupSkipped] = useState(0);
-  // Mirror check (2026-10-16, Kristi — Jenny's mole showed up on both sides
-  // of her mouth because 2 of her 5 photos were mirror images). Once 2+
-  // photos are ready, /api/check-marks reports which side a distinctive
-  // mole/mark is on in each. If they disagree we ask the customer to flip
-  // the odd ones out with the ↔ button — we never flip for them.
-  const [markCheck, setMarkCheck] = useState<{
-    what: string;
-    flaggedIds: string[];
-  } | null>(null);
+  // Mirror check, now SILENT (2026-10-21, Kristi). Jenny's mole (Oct 16)
+  // showed up on both sides of her mouth because some of her photos were
+  // mirror images. Once 2+ photos are ready, /api/check-marks finds which
+  // side a distinctive mole/mark is on in each photo and decides which way
+  // is real — trusting photos someone else probably took (back camera,
+  // waist-up or wider, other people in the shot) over arm's-length selfies.
+  // The photos on the wrong side are flipped quietly; the customer never
+  // sees a banner or a flip button. Each photo is auto-flipped at most once.
+  const autoFlippedRef = useRef<Set<string>>(new Set());
   const checkablePhotos = photos.filter(
     (p) => p.status === "done" && !p.multiFace && !p.flipping && (p.croppedUrl || p.blobUrl),
   );
@@ -8703,13 +8749,10 @@ const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) 
     .map((p) => `${p.id}=${p.croppedUrl ?? p.blobUrl}`)
     .join("|");
   useEffect(() => {
-    if (checkablePhotos.length < 2) {
-      setMarkCheck(null);
-      return;
-    }
+    if (checkablePhotos.length < 2) return;
     let cancelled = false;
-    // Wait a moment so face-crops landing a few seconds after upload (and
-    // quick flips in a row) settle into one check.
+    // Wait a moment so face-crops landing a few seconds after upload settle
+    // into one check.
     const timer = window.setTimeout(() => {
       const ids = checkablePhotos.map((p) => p.id);
       void fetch("/api/check-marks", {
@@ -8717,22 +8760,21 @@ const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           urls: checkablePhotos.map((p) => p.croppedUrl ?? (p.blobUrl as string)),
+          cameras: checkablePhotos.map((p) => p.camera ?? null),
         }),
       })
         .then((r) => (r.ok ? r.json() : null))
-        .then((d: { ok?: boolean; inconsistent?: boolean; what?: string; flagged?: number[] } | null) => {
-          if (cancelled) return;
-          if (!d?.ok || !d.inconsistent) {
-            setMarkCheck(null);
-            return;
+        .then((d: { ok?: boolean; flip?: number[] } | null) => {
+          if (cancelled || !d?.ok || !d.flip?.length) return;
+          for (const i of d.flip) {
+            const id = ids[i];
+            if (!id || autoFlippedRef.current.has(id)) continue;
+            autoFlippedRef.current.add(id);
+            void flipPhoto(id);
           }
-          setMarkCheck({
-            what: d.what || "a mole or mark",
-            flaggedIds: (d.flagged ?? []).map((i) => ids[i]).filter(Boolean),
-          });
         })
         .catch(() => {
-          /* best-effort: no banner */
+          /* best-effort: photos stay as uploaded */
         });
     }, 2500);
     return () => {
@@ -8887,6 +8929,11 @@ const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) 
           prev.map((p) =>
             p.id === placeholder.id ? { ...p, isWideAngle } : p,
           ),
+        );
+      });
+      readCameraFromFile(file).then((camera) => {
+        setPhotos((prev) =>
+          prev.map((p) => (p.id === placeholder.id ? { ...p, camera } : p)),
         );
       });
     });
@@ -9144,63 +9191,6 @@ const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) 
                 </div>
               )}
 
-              {/* Mirror check (2026-10-16): "Flipped?" tag on the odd ones out
-                  and a ↔ Flip button on every photo while the banner is up. */}
-              {markCheck && p.status === "done" && !p.multiFace && (
-                <>
-                  {markCheck.flaggedIds.includes(p.id) && !p.flipping && (
-                    <div
-                      style={{
-                        position: "absolute",
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        padding: "3px 4px",
-                        background: "rgba(154, 91, 0, 0.92)",
-                        color: C.white,
-                        fontSize: 10,
-                        fontWeight: 600,
-                        textAlign: "center",
-                        lineHeight: 1.2,
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      Mirrored?
-                    </div>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => void flipPhoto(p.id)}
-                    disabled={p.flipping}
-                    title="Flip this photo left-right"
-                    aria-label="Flip this photo left-right"
-                    style={{
-                      position: "absolute",
-                      top: 6,
-                      left: 6,
-                      background: "rgba(255,255,255,0.95)",
-                      color: C.dark,
-                      border: "none",
-                      borderRadius: "50%",
-                      width: 26,
-                      height: 26,
-                      padding: 0,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      cursor: p.flipping ? "default" : "pointer",
-                      boxShadow: "0 1px 3px rgba(0,0,0,0.25)",
-                    }}
-                  >
-                    {p.flipping ? (
-                      <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} />
-                    ) : (
-                      <FlipHorizontal size={14} />
-                    )}
-                  </button>
-                </>
-              )}
-
               {/* Group photo warning (2026-09-23). Sits along the bottom so
                   the customer can still see who's in the shot. */}
               {p.multiFace && p.status === "done" && (
@@ -9287,29 +9277,6 @@ const UploadScreen = ({ onNext, onBack, photos, setPhotos }: UploadScreenProps) 
             ? "You already added that photo, so we skipped the copy."
             : `You already added ${dupSkipped} of those photos, so we skipped the copies.`}{" "}
           Different photos of you give the best likeness.
-        </div>
-      )}
-
-      {/* Mirror-image banner (2026-10-16). A nudge, not a block. */}
-      {markCheck && (
-        <div
-          style={{
-            marginTop: 16,
-            fontSize: 13,
-            color: "#5A3E0A",
-            background: "#FFF7E5",
-            border: "1px solid #F3D593",
-            borderRadius: 8,
-            padding: "10px 14px",
-            lineHeight: 1.5,
-          }}
-        >
-          <strong>Some of your photos look like mirror images.</strong> Your{" "}
-          {markCheck.what} shows up on different sides of your face in different
-          photos, which can confuse the AI.{" "}
-          {markCheck.flaggedIds.length > 0
-            ? "Tap the flip button (top-left corner) on the photos marked \"Mirrored?\" so they all match how you really look."
-            : "Tap the flip button (top-left corner) on the photos that look backwards so they all match how you really look."}
         </div>
       )}
 
@@ -20925,6 +20892,8 @@ export default function App() {
   const [email, setEmail] = useState("");
   // Email-capture gate before the first generation (2026-07-29).
   const [showEmailGate, setShowEmailGate] = useState(false);
+  // A saved-gallery link for a blocked customer (2026-10-22, Kristi).
+  const [galleryBlocked, setGalleryBlocked] = useState(false);
   const pendingGenerateRef = useRef<StyleSelections | null>(null);
   // Public Blob URLs returned by /api/deliver — handed to DownloadScreen so
   // each photo gets its own Download button.
@@ -21777,6 +21746,10 @@ export default function App() {
         const r = await fetch(
           `/api/get-session?token=${encodeURIComponent(token)}`,
         );
+        if (r.status === 403) {
+          setGalleryBlocked(true);
+          return;
+        }
         if (!r.ok) return;
         const d = (await r.json()) as {
           generatedUrls?: string[];
@@ -25942,6 +25915,60 @@ export default function App() {
       )}
       {/* Email-capture gate — opens on the first Generate click, before any
           headshots run. Captures the lead; closing cancels the generation. */}
+      {galleryBlocked && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.72)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 20,
+            zIndex: 1000,
+            ...font,
+          }}
+        >
+          <div
+            style={{
+              background: C.white,
+              borderRadius: 12,
+              padding: "24px 22px",
+              maxWidth: 400,
+              width: "100%",
+              textAlign: "center",
+            }}
+          >
+            <h2 style={{ fontSize: 19, fontWeight: 500, color: C.dark, margin: "0 0 10px" }}>
+              This gallery isn't available
+            </h2>
+            <p style={{ fontSize: 14, color: C.mediumGrey, lineHeight: 1.5, margin: "0 0 18px" }}>
+              If you'd like access to your headshots, please email Kristi at{" "}
+              <a href="mailto:kristi@kristinasherk.com" style={{ color: C.dark }}>
+                kristi@kristinasherk.com
+              </a>
+              .
+            </p>
+            <button
+              onClick={() => setGalleryBlocked(false)}
+              style={{
+                padding: "11px 22px",
+                background: C.dark,
+                color: C.buttonText,
+                border: "none",
+                borderRadius: 8,
+                fontSize: 14,
+                cursor: "pointer",
+                ...font,
+              }}
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
       {showEmailGate && (
         <EmailCaptureModal
           onSubmit={handleEmailGateSubmit}

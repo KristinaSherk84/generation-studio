@@ -285,6 +285,10 @@ type GenerateRequest = {
   // wild cards + regens of one user-initiated batch; new for each brand-new
   // batch. Used server-side to cap distinct free batches per IP.
   batchId?: string;
+  // Random per-browser id kept in localStorage (2026-10-22). Free-tier limits
+  // are also counted per browser, not just per IP, so switching VPN
+  // locations between emails no longer buys a fresh free batch.
+  cid?: string;
   // The customer's PAID photo-checkout session id (cs_...), sent after a
   // purchase so the server can grant the post-purchase free-batch credit
   // (2 more batches) even though their IP already used its free batch. (2026-08-11)
@@ -1848,6 +1852,7 @@ async function verifyUnlock(
   ip: string,
   batchId: string | undefined,
   purchaseSessionId: string | undefined,
+  clientId?: string,
 ): Promise<UnlockCheck> {
   // Feature flag — free-tier mode (added 2026-07-03).
   // When ENTRY_FEE_ENABLED === "false", the $2.99 entry paywall moves from
@@ -2008,6 +2013,20 @@ async function verifyUnlock(
       if (!callCap.allowed) {
         return { ok: false, reason: "free_limit" };
       }
+      // Same two limits per BROWSER (2026-10-22, Kristi). One person kept one
+      // browser open all night, switched VPN location and email before every
+      // batch, and got a fresh free batch each time because the limits above
+      // only know the IP. The browser id survives a VPN change.
+      if (clientId) {
+        const byBrowser = await checkFreeBatchLimit(`cid:${clientId}`, batchId);
+        const browserCalls = byBrowser.allowed
+          ? await checkFreeCallCap(`cid:${clientId}`)
+          : { allowed: false, count: 0 };
+        if (!byBrowser.allowed || !browserCalls.allowed) {
+          console.log(JSON.stringify({ type: "free_limit_browser", ip, cid: clientId, batchId }));
+          return { ok: false, reason: "free_limit" };
+        }
+      }
     }
     return { ok: true, via: "free-tier" };
   }
@@ -2161,6 +2180,7 @@ export default async function handler(
     clientIp,
     body.batchId,
     body.purchaseSessionId,
+    typeof body.cid === "string" && /^[a-z0-9]{16,40}$/.test(body.cid) ? body.cid : undefined,
   );
   if (!unlock.ok) {
     return res.status(402).json({

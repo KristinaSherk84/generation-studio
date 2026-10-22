@@ -11,6 +11,7 @@
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { getSession } from "./lib/sessionStore.js";
+import { isEmailBlacklisted } from "./lib/leadStore.js";
 
 export const maxDuration = 10;
 
@@ -32,6 +33,15 @@ export default async function handler(
   }
 
   res.setHeader("Cache-Control", "no-store");
+  // Blocked customers lose access to their saved gallery too (2026-10-22,
+  // Kristi): the page tells them to email her instead. Fail-open on errors.
+  if (typeof session.email === "string" && session.email) {
+    const blocked = await isEmailBlacklisted(session.email).catch(() => false);
+    if (blocked) {
+      res.status(403).json({ ok: false, reason: "blocked" });
+      return;
+    }
+  }
   res.status(200).json({
     ok: true,
     generatedUrls: session.generatedUrls,

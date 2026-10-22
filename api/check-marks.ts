@@ -1,7 +1,10 @@
 /**
  * POST /api/check-marks  (2026-10-16, Kristi)
- * Body: { urls: string[] }  — the customer's uploaded reference photos (2–8)
- * Returns: { ok, inconsistent, what, sides, flagged }
+ * Body: { urls: string[], cameras?: ("front"|"rear"|null)[] } — the
+ *       customer's uploaded reference photos (2–8) and, when the browser could
+ *       read it from EXIF, which phone camera took each one.
+ * Returns: { ok, inconsistent, what, sides, flagged, flip }
+ *   flip = photos to mirror so they all match the real face (2026-10-21).
  *
  * Mirror-image check for reference photos. Jenny (Oct 16) uploaded 5 photos
  * where a mole sat on one side of her mouth in 3 and on the OTHER side in 2
@@ -10,7 +13,11 @@
  * One cheap Gemini Flash vision call looks at all the photos together, finds
  * the most distinctive permanent mark (mole, beauty mark, scar), and reports
  * which side of each IMAGE it appears on. If the photos disagree, the upload
- * screen asks the customer to flip the odd ones out (we never flip for them).
+ * screen flips the wrong-way photos quietly (2026-10-21, Kristi: asking the
+ * customer to flip was too confusing). Which way is "real" is decided by
+ * trusting photos someone else probably took — back camera, waist-up or
+ * wider framing, other people in the shot — over arm's-length selfies, which
+ * some phones and apps save mirrored.
  *
  * Best-effort: any failure returns { ok:false } and the upload screen shows
  * nothing.
@@ -20,6 +27,11 @@ import { GoogleGenAI, type Part } from "@google/genai";
 import sharp from "sharp";
 
 export const maxDuration = 30;
+
+// Vision model for the mark check. Overridable without a deploy; Google no
+// longer offers gemini-2.5-flash to NEW API keys (2026-10-21), so a new key
+// would need MARKS_MODEL set to a current Flash model.
+const MARKS_MODEL = process.env.MARKS_MODEL?.trim() || "gemini-2.5-flash";
 
 const BLOB_URL_RE = /^https:\/\/[^/]*\.public\.blob\.vercel-storage\.com\//;
 
@@ -34,9 +46,43 @@ type Side = "left" | "right" | null;
 const LOCATE_PROMPT = `Look at this person's face. Find the single most noticeable mole, beauty mark, birthmark or scar on the face (not freckles, not blemishes, not piercings or jewelry).
 
 Give bounding boxes as [ymin, xmin, ymax, xmax] on a 0-1000 scale of this photo.
-Reply with JSON only: {"mark": [..] or null if there is no such mark, "what": "short plain description of where it is, WITHOUT the words left or right", "nose": [..], "mouth": [..]}`;
+Also describe the photo itself:
+- "people": how many people are visible, counting anyone partly in the frame.
+- "framing": how much of this person shows — "close-up", "head and shoulders", "waist up" or "full body".
+- "selfie": true if the person took this photo of themselves (arm's-length angle, their arm or phone visible, or a mirror); false if someone else took it.
+
+Reply with JSON only: {"mark": [..] or null if there is no such mark, "what": "short plain description of where it is, WITHOUT the words left or right", "nose": [..], "mouth": [..], "people": 1, "framing": "head and shoulders", "selfie": true}`;
 
 type Box = [number, number, number, number];
+type Camera = "front" | "rear" | null;
+type Located = {
+  mark?: unknown;
+  nose?: unknown;
+  mouth?: unknown;
+  what?: string;
+  people?: unknown;
+  framing?: unknown;
+  selfie?: unknown;
+};
+
+/**
+ * How much to trust one photo's left/right (2026-10-21, Kristi). Photos
+ * someone else probably took are almost never mirrored, so they count more:
+ * a back-camera EXIF tag, waist-up or wider framing, or other people in the
+ * shot. Arm's-length selfies and front-camera photos count less, because some
+ * phones and apps (Samsung, Snapchat, Instagram…) save them mirrored.
+ */
+function trustWeight(l: Located | null, camera: Camera): number {
+  let w = 1;
+  if (camera === "rear") w += 3;
+  const people = typeof l?.people === "number" ? l.people : 1;
+  if (people >= 2) w += 2;
+  const framing = typeof l?.framing === "string" ? l.framing.toLowerCase() : "";
+  if (framing.includes("waist") || framing.includes("full")) w += 2;
+  if (camera === "front") w *= 0.5;
+  else if (l?.selfie === true && camera !== "rear") w *= 0.6;
+  return w;
+}
 const isBox = (b: unknown): b is Box =>
   Array.isArray(b) && b.length === 4 && b.every((v) => typeof v === "number");
 const centerX = (b: Box) => (b[1] + b[3]) / 2;
@@ -66,6 +112,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const urls: string[] = raw.filter(
     (u): u is string => typeof u === "string" && BLOB_URL_RE.test(u),
   );
+  const rawCams: unknown[] = Array.isArray(req.body?.cameras) ? req.body.cameras : [];
+  // Only trust the camera list when it lines up 1:1 with the photos.
+  const cameras: Camera[] = urls.map((_, i) =>
+    raw.length === urls.length && (rawCams[i] === "front" || rawCams[i] === "rear")
+      ? (rawCams[i] as Camera)
+      : null,
+  );
   if (urls.length < 2 || urls.length > 8) {
     res.status(400).json({ ok: false, error: "need 2-8 photo urls" });
     return;
@@ -93,7 +146,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const askJson = async <T,>(parts: Part[]): Promise<T | null> => {
       try {
         const resp = await ai.models.generateContent({
-          model: "gemini-2.5-flash",
+          model: MARKS_MODEL,
           contents: [{ role: "user", parts }],
           config: { responseMimeType: "application/json", temperature: 0 },
         });
@@ -104,34 +157,68 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     };
     const img = (data: string): Part => ({ inlineData: { mimeType: "image/jpeg", data } });
 
-    const located = await Promise.all(
-      images.map((data) =>
-        askJson<{ mark?: unknown; nose?: unknown; mouth?: unknown; what?: string }>([{ text: LOCATE_PROMPT }, img(data)]),
-      ),
-    );
+    // Each photo is looked at TWICE (2026-10-21). Photos are now flipped
+    // silently, so a one-off misread (a "mole" where there is none) must not
+    // count: a photo's side only counts when both looks agree.
+    const locateAll = () =>
+      Promise.all(images.map((data) => askJson<Located>([{ text: LOCATE_PROMPT }, img(data)])));
+    const [located, located2] = await Promise.all([locateAll(), locateAll()]);
     // Height of each mark relative to the nose (in nose-heights below the nose
     // center). Keep only marks near the most common height = the same mark.
-    const rel = located.map((l) => {
-      if (!isBox(l?.mark) || !isBox(l?.nose)) return null;
-      const noseH = Math.max(1, l.nose[2] - l.nose[0]);
-      return ((l.mark[0] + l.mark[2]) / 2 - (l.nose[0] + l.nose[2]) / 2) / noseH;
-    });
-    const known = rel.filter((r): r is number => r !== null).sort((a, b) => a - b);
-    const median = known.length ? known[Math.floor(known.length / 2)] : 0;
-    const sides: Side[] = located.map((l, i) =>
-      rel[i] !== null && Math.abs((rel[i] as number) - median) <= 0.6 ? sideOf(l?.mark, l?.nose, l?.mouth) : null,
-    );
+    const sidesFor = (runs: (Located | null)[]) => {
+      const rel = runs.map((l) => {
+        if (!isBox(l?.mark) || !isBox(l?.nose)) return null;
+        const noseH = Math.max(1, l.nose[2] - l.nose[0]);
+        return ((l.mark[0] + l.mark[2]) / 2 - (l.nose[0] + l.nose[2]) / 2) / noseH;
+      });
+      const known = rel.filter((r): r is number => r !== null).sort((a, b) => a - b);
+      const median = known.length ? known[Math.floor(known.length / 2)] : 0;
+      const sides: Side[] = runs.map((l, i) =>
+        rel[i] !== null && Math.abs((rel[i] as number) - median) <= 0.6 ? sideOf(l?.mark, l?.nose, l?.mouth) : null,
+      );
+      return { rel, median, sides };
+    };
+    const first = sidesFor(located);
+    const second = sidesFor(located2);
+    const sides: Side[] = first.sides.map((s, i) => (s && s === second.sides[i] ? s : null));
+    const { rel, median } = first;
     const whatIdx = rel.findIndex((r) => r !== null && Math.abs(r - median) <= 0.6);
     const parsed = { what: whatIdx >= 0 ? (located[whatIdx]?.what ?? "") : "" };
     const left = sides.filter((s) => s === "left").length;
     const right = sides.filter((s) => s === "right").length;
     const inconsistent = left > 0 && right > 0;
-    // Flag the outnumbered side. On a tie we can't tell which is real, so
-    // flag nothing and let the banner ask the customer to make them match.
-    const minority: Side = !inconsistent || left === right ? null : left < right ? "left" : "right";
-    const flagged = minority ? sides.flatMap((s, i) => (s === minority ? [i] : [])) : [];
-    console.log(JSON.stringify({ type: "check_marks", n: urls.length, what: parsed.what, sides, inconsistent }));
-    res.status(200).json({ ok: true, inconsistent, what: (parsed.what ?? "").slice(0, 80), sides, flagged });
+    // Decide which side is real by trust weight (see trustWeight); a clear
+    // lead (25%+) wins. Otherwise fall back to the photo count, and on a true
+    // tie flip nothing — a wrong flip is worse than none.
+    const weights = located.map((l, i) => trustWeight(l, cameras[i] ?? null));
+    const wLeft = sides.reduce((t, s, i) => t + (s === "left" ? weights[i] : 0), 0);
+    const wRight = sides.reduce((t, s, i) => t + (s === "right" ? weights[i] : 0), 0);
+    let real: Side = null;
+    if (inconsistent) {
+      if (wLeft >= wRight * 1.25) real = "left";
+      else if (wRight >= wLeft * 1.25) real = "right";
+      else if (left !== right) real = left > right ? "left" : "right";
+    }
+    const wrong: Side = real === "left" ? "right" : real === "right" ? "left" : null;
+    const flip = wrong ? sides.flatMap((s, i) => (s === wrong ? [i] : [])) : [];
+    // Back-compat name for the same list (the old banner flagged these).
+    const flagged = flip;
+    console.log(
+      JSON.stringify({
+        type: "check_marks",
+        n: urls.length,
+        what: parsed.what,
+        sides,
+        inconsistent,
+        weights: weights.map((w) => Math.round(w * 10) / 10),
+        cameras,
+        framing: located.map((l) => (typeof l?.framing === "string" ? l.framing : null)),
+        people: located.map((l) => (typeof l?.people === "number" ? l.people : null)),
+        selfie: located.map((l) => (typeof l?.selfie === "boolean" ? l.selfie : null)),
+        flip,
+      }),
+    );
+    res.status(200).json({ ok: true, inconsistent, what: (parsed.what ?? "").slice(0, 80), sides, flagged, flip });
   } catch (err) {
     console.warn("[check-marks] failed:", err instanceof Error ? err.message : String(err));
     res.status(200).json({ ok: false });
