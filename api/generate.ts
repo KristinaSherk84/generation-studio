@@ -47,6 +47,7 @@ import {
   flagSameDevice,
   otherEmailsWithSamePhotos,
   flagReusedPhotos,
+  rememberPaidUnlock,
 } from "./lib/leadStore.js";
 import { put } from "@vercel/blob";
 import { recordBatchImage } from "./lib/batchStore.js";
@@ -1923,7 +1924,14 @@ async function verifyUnlock(
           const consumed = ses.metadata?.unlock_consumed === "true";
           const exp = Number(ses.metadata?.unlock_expires_at ?? "");
           const live = Number.isFinite(exp) && exp > 0 && Date.now() <= exp;
-          if (paid && !consumed && live) exempt = true;
+          if (paid && !consumed && live) {
+            exempt = true;
+            // Let this paid time follow the customer's gallery link to
+            // another browser (see rememberPaidUnlock). Best-effort.
+            if (email) {
+              await rememberPaidUnlock(email, stripeSessionId, exp).catch(() => {});
+            }
+          }
         }
       } catch {
         /* any error → not exempt → falls through to the cap */

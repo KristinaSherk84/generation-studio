@@ -22663,8 +22663,34 @@ export default function App() {
           purchasedUrls?: string[];
           allGeneratedUrls?: string[];
           cartUrls?: string[];
+          unlock?: { sessionId?: string; expiresAt?: number } | null;
         };
         if (!d.generatedUrls || d.generatedUrls.length === 0) return;
+        // Paid time follows the gallery link (2026-10-22, Kristi). If this
+        // gallery's owner has a live $3.99 unlock from another browser, turn
+        // it on here too, so opening the email link elsewhere doesn't ask
+        // them to pay again (Abigail). The server re-checks it with Stripe on
+        // every generation. Never replaces an unlock this browser already has.
+        const u = d.unlock;
+        if (
+          u &&
+          typeof u.sessionId === "string" &&
+          u.sessionId.startsWith("cs_") &&
+          typeof u.expiresAt === "number" &&
+          u.expiresAt > Date.now() &&
+          !readUnlockFromStorage()
+        ) {
+          try {
+            window.localStorage.setItem("paywall_unlocked", "true");
+            window.localStorage.setItem("unlock_source", "stripe");
+            window.localStorage.setItem("stripe_session_id", u.sessionId);
+            window.localStorage.setItem("unlock_expires_at", String(u.expiresAt));
+          } catch {
+            /* storage blocked — the unlock still holds for this tab */
+          }
+          setUnlockExpiresAt(u.expiresAt);
+          setIsUnlocked(true);
+        }
         setGeneratedImages(d.generatedUrls);
         setReadyCount(d.generatedUrls.length);
         if (d.referencePhotoUrls) setLastPhotoUrls(d.referencePhotoUrls);

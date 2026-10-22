@@ -11,7 +11,7 @@
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { getSession } from "./lib/sessionStore.js";
-import { isEmailBlacklisted } from "./lib/leadStore.js";
+import { isEmailBlacklisted, getPaidUnlock } from "./lib/leadStore.js";
 
 export const maxDuration = 10;
 
@@ -42,8 +42,15 @@ export default async function handler(
       return;
     }
   }
+  // A live $3.99 unlock this email paid for in another browser, so the paid
+  // time follows the gallery link (2026-10-22). Fail-open: none on errors.
+  const unlock =
+    typeof session.email === "string" && session.email
+      ? await getPaidUnlock(session.email).catch(() => null)
+      : null;
   res.status(200).json({
     ok: true,
+    unlock,
     generatedUrls: session.generatedUrls,
     referencePhotoUrls: session.referencePhotoUrls,
     selections: session.selections,
