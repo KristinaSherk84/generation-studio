@@ -22552,6 +22552,10 @@ export default function App() {
   // effect further below knows NOT to override us with setScreen("upload")
   // (which would fire the cart-clear effect and wipe the restored picks).
   const freeTierRestoredRef = useRef(false);
+  // Selections of a batch the customer paid $3.99 to run but never got any
+  // shots from (their very first batch was blocked by the free limit). Once
+  // the unlock lands, the effect below runs that batch for them. (2026-10-22)
+  const paidAutoGenerateRef = useRef<StyleSelections | null>(null);
 
   // "Resume my session" from the ready-email link (2026-08-03). If the URL
   // carries ?resume=<token>, fetch the saved grid and drop the customer
@@ -22904,6 +22908,22 @@ export default function App() {
             }));
           }
           if (restoredPhotos.length > 0) setPhotos(restoredPhotos);
+          // Paid before ANY shot came back (their first batch hit the free
+          // limit), so there's no grid to return to. The empty grid showed
+          // "Let's pick up where you left off", whose reload dropped them on
+          // the upload screen (Abigail, 2026-10-22). Run the batch they paid
+          // for instead, with the same selfies + choices.
+          const hadShots = (stash.generatedImages ?? []).some(Boolean);
+          if (!hadShots) {
+            if (stash.lastSelections && restoredPhotos.length >= 5) {
+              paidAutoGenerateRef.current = stash.lastSelections;
+              setScreen("style");
+            } else {
+              setScreen(restoredPhotos.length > 0 ? "style" : "upload");
+            }
+          }
+        } else {
+          setScreen("upload");
         }
       } catch {
         /* IDB read failed — user stays on the grid; images may be blank */
@@ -22914,6 +22934,17 @@ export default function App() {
     // Only run at mount — no deps.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Fire the paid-for batch (see paidAutoGenerateRef) once the $3.99 unlock is
+  // confirmed and the selfies are back.
+  useEffect(() => {
+    const sel = paidAutoGenerateRef.current;
+    if (!sel || !isUnlocked) return;
+    if (photos.filter((p) => p.status === "done" && p.blobUrl).length < 5) return;
+    paidAutoGenerateRef.current = null;
+    void handleGenerate(sel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isUnlocked, photos, email]);
 
   // Live ticker for the welcome-popup countdown. Reads the expires_at
   // from localStorage at mount so the popup countdown is accurate even
