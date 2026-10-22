@@ -45,6 +45,8 @@ import {
   noteDeviceEmail,
   anyPaidRecently,
   flagSameDevice,
+  otherEmailsWithSamePhotos,
+  flagReusedPhotos,
 } from "./lib/leadStore.js";
 import { put } from "@vercel/blob";
 import { recordBatchImage } from "./lib/batchStore.js";
@@ -1858,6 +1860,7 @@ async function verifyUnlock(
   clientId?: string,
   deviceFp?: string,
   email?: string,
+  photoUrls?: string[],
 ): Promise<UnlockCheck> {
   // Feature flag — free-tier mode (added 2026-07-03).
   // When ENTRY_FEE_ENABLED === "false", the $2.99 entry paywall moves from
@@ -2017,6 +2020,24 @@ async function verifyUnlock(
             await flagSameDevice(emails);
             console.log(JSON.stringify({ type: "free_limit_device", fp: deviceFp, emails, ip }));
             return { ok: false, reason: "free_limit" };
+          }
+        } catch {
+          /* fail open */
+        }
+      }
+      // Reused-selfies rule (2026-10-22, Kristi): 2+ of these photos were the
+      // exact same files another email uploaded in the last 8 hours, and
+      // nobody involved paid in 48h → no free generating. Fail-open.
+      if (email && photoUrls?.length) {
+        try {
+          const others = await otherEmailsWithSamePhotos(email, photoUrls);
+          if (others.length) {
+            const group = [email.trim().toLowerCase(), ...others];
+            if (!(await anyPaidRecently(group))) {
+              await flagReusedPhotos(group);
+              console.log(JSON.stringify({ type: "free_limit_reused_photos", emails: group, ip }));
+              return { ok: false, reason: "free_limit" };
+            }
           }
         } catch {
           /* fail open */
@@ -2204,6 +2225,9 @@ export default async function handler(
     typeof body.cid === "string" && /^[a-z0-9]{16,40}$/.test(body.cid) ? body.cid : undefined,
     typeof body.fp === "string" && body.fp.length > 0 && body.fp.length <= 64 ? body.fp : undefined,
     typeof body.email === "string" ? body.email : undefined,
+    Array.isArray(body.photoUrls)
+      ? body.photoUrls.filter((u): u is string => typeof u === "string").slice(0, 12)
+      : undefined,
   );
   if (!unlock.ok) {
     return res.status(402).json({

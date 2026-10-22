@@ -84,6 +84,10 @@ export type LeadRecord = {
   // stopped for that device. Shown as a tag on the leads page.
   sameDeviceAt?: string | null;
   sameDeviceEmails?: string[];
+  // Reused-selfies rule (2026-10-22, Kristi): 2+ of this email's reference
+  // photos were the exact same files another email uploaded within 8 hours.
+  reusedPhotosAt?: string | null;
+  reusedPhotosEmails?: string[];
   // Manual override for the estimated AI cost of this lead (dollars). Set from
   // the real per-call count in the logs for specific customers; when present it
   // replaces the batches × flat-rate estimate on the leads page. (2026-08-14)
@@ -601,6 +605,68 @@ export async function anyPaidRecently(emails: string[]): Promise<boolean> {
     }
   }
   return false;
+}
+
+// ---- Reused-selfies rule (2026-10-22, Kristi) ----
+// Every abuser so far re-uploaded the SAME selfie files under each new email
+// (the Korpacz man: 3 identical selfies across 3 emails; the blonde man: 3
+// across 2). /api/crop-reference fingerprints each uploaded file (exact
+// bytes, SHA-1) and remembers it by Blob URL; /api/generate looks the
+// fingerprints up and, for a free-tier caller, refuses free generating when
+// 2+ of their photos were uploaded under a DIFFERENT email in the last 8
+// hours and nobody involved paid in the last 48 hours.
+const REF_SHA_TTL_SEC = 9 * 3600;
+const refShaKey = (url: string) => `refsha:${url}`;
+const refUseKey = (sha: string) => `refuse:${sha}`;
+
+/** Remember which file a reference-photo URL holds. Fail-open. */
+export async function rememberRefFile(urls: string[], sha: string): Promise<void> {
+  try {
+    await Promise.all(
+      urls.filter(Boolean).map((u) => redis.set(refShaKey(u), sha, { ex: REF_SHA_TTL_SEC })),
+    );
+  } catch {
+    /* best-effort */
+  }
+}
+
+/** Note this email used these photos; return the OTHER emails that used
+ *  2+ of the same photo files within the window (empty = fine). */
+export async function otherEmailsWithSamePhotos(
+  email: string,
+  photoUrls: string[],
+): Promise<string[]> {
+  if (!looksLikeEmail(email) || photoUrls.length === 0) return [];
+  const me = email.trim().toLowerCase();
+  const windowMs = Math.max(1, Number(process.env.REUSE_WINDOW_HOURS ?? "8")) * 3600 * 1000;
+  const minPhotos = Math.max(1, Number(process.env.REUSE_PHOTO_MIN ?? "2"));
+  const shas = ((await redis.mget<(string | null)[]>(...photoUrls.map(refShaKey))) ?? []).filter(
+    (s): s is string => typeof s === "string" && s.length > 0,
+  );
+  const now = Date.now();
+  const sharedCount = new Map<string, number>();
+  for (const sha of Array.from(new Set(shas))) {
+    const k = refUseKey(sha);
+    await redis.zadd(k, { score: now, member: me });
+    await redis.zremrangebyscore(k, 0, now - windowMs);
+    await redis.expire(k, Math.ceil(windowMs / 1000) + 3600);
+    const users = ((await redis.zrange(k, 0, -1)) as string[]) ?? [];
+    for (const u of users) if (u !== me) sharedCount.set(u, (sharedCount.get(u) ?? 0) + 1);
+  }
+  return Array.from(sharedCount.entries())
+    .filter(([, n]) => n >= minPhotos)
+    .map(([u]) => u);
+}
+
+/** Tag every email in the group so the leads page shows "same photos". */
+export async function flagReusedPhotos(emails: string[]): Promise<void> {
+  const at = new Date().toISOString();
+  for (const e of emails) {
+    const key = recordKey(e);
+    const rec = (await redis.get<LeadRecord>(key)) ?? null;
+    if (!rec) continue;
+    await redis.set(key, { ...rec, reusedPhotosAt: at, reusedPhotosEmails: emails });
+  }
 }
 
 /** Tag every email in the group so the leads page shows "same device". */

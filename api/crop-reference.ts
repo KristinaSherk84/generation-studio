@@ -23,7 +23,9 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { put } from "@vercel/blob";
 import sharp from "sharp";
+import { createHash } from "node:crypto";
 import { detectFaceBoxes } from "./lib/skin/detectLandmarks.js";
+import { rememberRefFile } from "./lib/leadStore.js";
 
 export const maxDuration = 60;
 
@@ -114,6 +116,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const r = await fetch(url);
     if (!r.ok) return keep("fetch_failed");
     const bytes = Buffer.from(await r.arrayBuffer());
+    // Fingerprint the exact file for the reused-selfies rule (2026-10-22).
+    // Saved before face detection, which can be slow, so it's always there.
+    const sha = createHash("sha1").update(bytes).digest("hex");
+    await rememberRefFile([url], sha);
 
     const det = await detectFaceBoxes(bytes);
     if (!det) return keep("detect_failed");
@@ -171,6 +177,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       contentType: "image/jpeg",
       addRandomSuffix: true,
     });
+    await rememberRefFile([blob.url], sha);
     res.status(200).json({ url: blob.url, cropped: true, faces: det.boxes.length, quality });
   } catch (err) {
     console.warn(

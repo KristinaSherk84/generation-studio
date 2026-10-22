@@ -857,7 +857,7 @@ export default async function handler(
       .filter((l) => !isUnsub(l.email))
       .map(
         (l) => `<tr class="${l.purchased ? "bought" : "aband"}">
-        <td class="email"><span class="emailtxt">${esc(l.email)}</span><div class="emailtools">${aliasInlineHtml(l.email, l.promoOptOut)}${l.sameDeviceAt ? `<span class="samedev" title="${esc(`Same device as: ${(l.sameDeviceEmails ?? []).filter((x) => x !== l.email.toLowerCase()).join(", ")} — free generating stopped ${formatET(l.sameDeviceAt)}`)}">⚠️ same device</span>` : ""}</div></td>
+        <td class="email"><span class="emailtxt">${esc(l.email)}</span><div class="emailtools">${aliasInlineHtml(l.email, l.promoOptOut)}${l.reusedPhotosAt ? `<span class="samedev" title="${esc(`Same selfies as: ${(l.reusedPhotosEmails ?? []).filter((x) => x !== l.email.toLowerCase()).join(", ")} — free generating stopped ${formatET(l.reusedPhotosAt)}`)}">♻️ same selfies</span>` : ""}${l.sameDeviceAt ? `<span class="samedev" title="${esc(`Same device as: ${(l.sameDeviceEmails ?? []).filter((x) => x !== l.email.toLowerCase()).join(", ")} — free generating stopped ${formatET(l.sameDeviceAt)}`)}">⚠️ same device</span>` : ""}</div></td>
         <td>${esc(formatET(l.createdAt))}</td>
         <td>${esc(formatET(l.lastSeenAt))}</td>
         <td class="num">${esc(shownCalls(l))}</td>
