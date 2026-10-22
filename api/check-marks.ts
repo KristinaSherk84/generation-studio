@@ -120,7 +120,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ? (rawCams[i] as Camera)
       : null,
   );
-  // UK upload alert to Kristi (see lib/uploadAlert.ts). Before the size check
+  // Blocked-person upload alert to Kristi (see lib/uploadAlert.ts). Before the size check
   // so 9+ photos still alert.
   await alertCountryUpload(req, urls);
   if (urls.length < 2 || urls.length > 8) {

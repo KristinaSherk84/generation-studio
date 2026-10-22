@@ -1,17 +1,18 @@
 /**
- * Upload alert by country (2026-10-22, Kristi). A man rotated VPNs and emails
- * for free batches; his VPNs exited in the UK. Kristi asked to see the selfies
- * of ANY UK visitor the moment they upload. /api/check-marks receives all of a
- * visitor's photos a few seconds after upload, so it calls this: if Vercel's
- * country header matches UPLOAD_ALERT_COUNTRIES (default "GB"; "off" turns it
- * off, no redeploy), email Kristi the photos she hasn't been sent yet (each
- * photo once, so adding a photo doesn't resend the rest).
+ * Blocked-person upload alert (2026-10-22, Kristi). A man rotated VPNs and
+ * emails for free batches. /api/check-marks receives all of a visitor's photos
+ * a few seconds after upload, so it calls this: if ANY of them is a refused
+ * selfie (a file a blocked person used — see leadStore badsha), email Kristi
+ * the photos she hasn't been sent yet, wherever they are. (First version
+ * alerted on UK uploads; his VPNs moved to Ireland, so Kristi switched it.)
+ * UPLOAD_ALERT_COUNTRIES (default none, e.g. "GB,IE") can still add
+ * countries. Each photo is sent once, so retries don't flood her inbox.
  *
  * Best-effort: never throws, never slows the mirror check by much.
  */
 import type { VercelRequest } from "@vercel/node";
 import { Redis } from "@upstash/redis";
-import { emailsThatUsedPhotos, isEmailBlacklisted } from "./leadStore.js";
+import { emailsThatUsedPhotos, isEmailBlacklisted, anyPhotoRefused } from "./leadStore.js";
 
 const redis = new Redis({
   url: process.env.KV_REST_API_URL ?? "",
@@ -34,13 +35,13 @@ const header = (req: VercelRequest, name: string): string => {
 
 export async function alertCountryUpload(req: VercelRequest, urls: string[]): Promise<void> {
   try {
-    const setting = (process.env.UPLOAD_ALERT_COUNTRIES ?? "GB").trim().toUpperCase();
-    if (!setting || setting === "OFF") return;
-    const countries = setting.split(",").map((c) => c.trim()).filter(Boolean);
-    const country = header(req, "x-vercel-ip-country").toUpperCase();
-    if (!country || !countries.includes(country)) return;
     const apiKey = process.env.RESEND_API_KEY;
     if (!apiKey || urls.length === 0) return;
+    const setting = (process.env.UPLOAD_ALERT_COUNTRIES ?? "").trim().toUpperCase();
+    const countries = setting === "OFF" ? [] : setting.split(",").map((c) => c.trim()).filter(Boolean);
+    const country = header(req, "x-vercel-ip-country").toUpperCase();
+    const refused = await anyPhotoRefused(urls);
+    if (!refused && !(country && countries.includes(country))) return;
 
     // Each photo is sent once.
     const fresh: string[] = [];
@@ -85,6 +86,7 @@ export async function alertCountryUpload(req: VercelRequest, urls: string[]): Pr
       )
       .join("");
     const html = `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:15px;line-height:1.55;color:#2C2C2A;max-width:560px;">
+${refused ? `<p style="background:#FBEAEA;padding:10px 12px;border-radius:6px;"><strong>🚫 A blocked person's selfie is in this upload.</strong> They can't generate — the app refuses it and blocks their email automatically.</p>` : ""}
 <p><strong>${fresh.length} new selfie${fresh.length === 1 ? "" : "s"}</strong> uploaded from <strong>${esc(where)}</strong> at ${esc(when)} ET.</p>
 <p style="color:#888780;">IP ${esc(ip || "unknown")} · they haven't generated yet, so there's no email address yet.</p>
 ${usedNote}
@@ -96,11 +98,13 @@ ${usedNote}
       body: JSON.stringify({
         from: "GenerAItion Headshots <kristi@kristinasherk.com>",
         to: [KRISTI],
-        subject: `${country === "GB" ? "🇬🇧 UK" : country} upload: ${fresh.length} selfie${fresh.length === 1 ? "" : "s"} — ${where}`,
+        subject: refused
+          ? `🚫 Blocked person uploading again — ${where}`
+          : `${country === "GB" ? "🇬🇧 UK" : country} upload: ${fresh.length} selfie${fresh.length === 1 ? "" : "s"} — ${where}`,
         html,
       }),
     }).catch(() => null);
-    console.log(JSON.stringify({ type: "upload_alert", country, city, ip, photos: fresh.length, sent: !!resp?.ok, usedBy }));
+    console.log(JSON.stringify({ type: "upload_alert", refused, country, city, ip, photos: fresh.length, sent: !!resp?.ok, usedBy }));
   } catch (err) {
     console.warn("[uploadAlert] failed:", err instanceof Error ? err.message : String(err));
   }
