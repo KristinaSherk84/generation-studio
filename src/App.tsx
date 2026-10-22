@@ -16073,11 +16073,9 @@ const EmailCaptureModal = ({ onSubmit, onClose }: EmailCaptureModalProps) => {
               style={{ marginTop: 2, flexShrink: 0, cursor: "pointer" }}
             />
             <span>
-              <strong style={{ color: C.dark, fontWeight: 600 }}>
-                Add your name to our promotion privacy list.
-              </strong>{" "}
-              By checking this box, you refuse to let us use your headshot to
-              advertise our service.
+              Add your name to our promotion privacy list. By checking this
+              box, you refuse to let us use your headshot to advertise our
+              service.
             </span>
           </label>
         </div>
