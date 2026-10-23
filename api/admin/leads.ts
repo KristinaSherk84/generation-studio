@@ -59,10 +59,12 @@ export const maxDuration = 10;
 // regens), so cost ≈ calls × this. Matches the ~$0.10/call Kristi used for the
 // Everett estimate. (2026-08-14 — replaced the old per-batch estimate.)
 const PER_CALL_COST_USD = 0.1;
-// Per-lead rate after the 2026-10-09 switch to Nano Banana 2.1 ($0.0504 per
-// 2K image). Leads FIRST SEEN at/after the switch use it; earlier leads keep
-// $0.10 (their calls ran on Nano Banana 2). (Kristi 2026-10-09)
-const PER_CALL_COST_AFTER_SWITCH_USD = 0.0504;
+// Per-lead rate after the 2026-10-09 switch to Nano Banana 2.1. Google lists
+// $0.0504 per 2K image, but the real bill works out to ~$0.065 per headshot
+// call (reference-photo input + thinking tokens; measured from Kristi's typed
+// spend, e.g. Oct 13 $0.072, Oct 22 ~$0.066 after the mirror check), so we
+// use the measured rate. (Kristi 2026-10-09; corrected 2026-10-23)
+const PER_CALL_COST_AFTER_SWITCH_USD = 0.065;
 const MODEL_SWITCH_AT_ISO = "2026-10-09T13:25:00Z"; // 9:25 AM ET
 const perCallRateFor = (createdAt: string | null | undefined) =>
   createdAt && createdAt >= MODEL_SWITCH_AT_ISO ? PER_CALL_COST_AFTER_SWITCH_USD : PER_CALL_COST_USD;
@@ -74,7 +76,10 @@ const FLASH_IMG_COST_USD = 0.101;
 // -> Nano Banana 2.1 ($0.0504/2K image). Days from the switch date on use the
 // new rate in the "Est. cost" column; earlier days keep the old one.
 const MODEL_SWITCH_DATE = "2026-10-09";
-const FLASH_IMG_COST_AFTER_SWITCH_USD = 0.0504;
+const FLASH_IMG_COST_AFTER_SWITCH_USD = 0.065; // measured, see PER_CALL_COST_AFTER_SWITCH_USD
+// Mirror check (Gemini 2.5 Flash): ~$0.0028 a call with unlimited thinking;
+// ~$0.001 after thinking was capped and results cached on 2026-10-23.
+const CHECK_CALL_COST_USD = 0.001;
 const flashRateFor = (date: string) =>
   date >= MODEL_SWITCH_DATE ? FLASH_IMG_COST_AFTER_SWITCH_USD : FLASH_IMG_COST_USD;
 const PRO_IMG_COST_USD = 0.134;
@@ -886,7 +891,9 @@ export default async function handler(
       .map((d) => {
         const totalCalls = d.apiCalls + d.proCalls;
         const estCost =
-          d.apiCalls * flashRateFor(d.date) + d.proCalls * PRO_IMG_COST_USD;
+          d.apiCalls * flashRateFor(d.date) +
+          d.proCalls * PRO_IMG_COST_USD +
+          d.checkCalls * CHECK_CALL_COST_USD;
         const cpc =
           d.spendUsd != null && totalCalls > 0 ? d.spendUsd / totalCalls : null;
         return `<tr>
@@ -897,6 +904,7 @@ export default async function handler(
         }</td>
         <td class="num">${d.apiCalls.toLocaleString()}</td>
         <td class="num">${d.proCalls.toLocaleString()}</td>
+        <td class="num">${d.checkCalls ? d.checkCalls.toLocaleString() : "—"}</td>
         <td class="num"><input class="peopleinput" data-date="${esc(
           d.date,
         )}" type="number" step="1" min="0" value="${
@@ -968,11 +976,11 @@ export default async function handler(
     const dailyTableHtml = `
   <h2 style="font-size:16px;font-weight:600;margin:24px 0 4px;color:#2C2C2A">Daily activity <span style="font-weight:400;color:#888780;font-size:13px">(ET · last 14 days)</span></h2>
   <div style="margin:0 0 10px;padding:10px 12px;background:#FBF3E2;border:1px solid #EAD9A8;border-radius:8px;font-size:13px;color:#5C4A12;line-height:1.5"><b>Note, Oct 9, 2026:</b> headshots switched from Nano Banana 2 ($0.101 per image) to <b>Nano Banana 2.1 ($0.050 per image)</b> around 9:25 AM ET. Google spend per day should drop by roughly half from Oct 10 on. Oct 9 is a mix of both. Retouch (Pro) calls are unchanged at $0.134.</div>
-  <p class="meta" style="margin:0 0 10px">Flash calls = preview generations (~$0.05 each since Oct 9; ~$0.10 before); Pro calls = retouch renders that run when someone buys a Deluxe photo (~$0.13 each). Est. cost = flash x $0.050 (before Oct 9: $0.101) + pro x $0.134 — compare it to the real Google spend you type in; a big gap usually means retried/overloaded generations. Each is still a Gemini image call that hit the model (each ≈ one unit of Google spend). People generated = distinct email addresses that got a “ready to view” email that day (older days fall back to distinct IPs). The box is editable — type a number to override it, or clear the box to go back to the automatic count. Type the day's real spend from <a href="https://aistudio.google.com/spend?project=gen-lang-client-0496086422" target="_blank" rel="noopener">your Google AI Studio spend page ↗</a> and cost-per-call fills in.</p>
+  <p class="meta" style="margin:0 0 10px">Flash calls = preview generations (~$0.065 each since Oct 9 — measured from your real bills; ~$0.10 before); Pro calls = retouch renders that run when someone buys a Deluxe photo (~$0.13 each); Check calls = the mirror check on uploaded selfies (~$0.001 each, counted from Oct 23). Est. cost = flash x $0.065 (before Oct 9: $0.101) + pro x $0.134 + check x $0.001 — compare it to the real Google spend you type in; a big gap usually means retried/overloaded generations. Each is still a Gemini image call that hit the model (each ≈ one unit of Google spend). People generated = distinct email addresses that got a “ready to view” email that day (older days fall back to distinct IPs). The box is editable — type a number to override it, or clear the box to go back to the automatic count. Type the day's real spend from <a href="https://aistudio.google.com/spend?project=gen-lang-client-0496086422" target="_blank" rel="noopener">your Google AI Studio spend page ↗</a> and cost-per-call fills in.</p>
   <div class="tablewrap">
     <table>
       <thead><tr>
-        <th>Date (ET)</th><th class="num">Flash calls</th><th class="num">Pro calls</th><th class="num">People generated</th><th class="num">Google spend</th><th class="num">Est. cost</th><th class="num">$ / call</th>
+        <th>Date (ET)</th><th class="num">Flash calls</th><th class="num">Pro calls</th><th class="num" title="Mirror-check calls (Gemini 2.5 Flash), counted from Oct 23">Check calls</th><th class="num">People generated</th><th class="num">Google spend</th><th class="num">Est. cost</th><th class="num">$ / call</th>
       </tr></thead>
       <tbody>${dailyRowsHtml}</tbody>
     </table>
@@ -1152,7 +1160,7 @@ export default async function handler(
         ? `<table>
       <thead><tr>
         <th>Email</th><th>First seen (ET)</th><th>Last seen (ET)</th>
-        <th class="num" title="Total AI image calls made for this person - the real cost driver. Includes the 6 they see plus automatic likeness redos, bonus shots, and any regenerations (~10-13 per round). Counting started 2026-08-14.">Calls</th><th class="num" title="Estimated AI cost: image calls × $0.050 for people first seen after the Nano Banana 2.1 switch (Oct 9, 9:25 AM ET), × $0.10 before. A manual override wins when set.">Est. $</th><th class="num">Paid</th><th>Status</th><th>Purchased</th><th title="Background (style) they picked on their FIRST batch. Recorded from 2026-10-05 on. Click ✎ to fix or fill in by hand.">1st BG</th><th title="Outfit they picked on their FIRST batch.">1st outfit</th><th>Found via</th>
+        <th class="num" title="Total AI image calls made for this person - the real cost driver. Includes the 6 they see plus automatic likeness redos, bonus shots, and any regenerations (~10-13 per round). Counting started 2026-08-14.">Calls</th><th class="num" title="Estimated AI cost: image calls × $0.065 for people first seen after the Nano Banana 2.1 switch (Oct 9, 9:25 AM ET), × $0.10 before. A manual override wins when set.">Est. $</th><th class="num">Paid</th><th>Status</th><th>Purchased</th><th title="Background (style) they picked on their FIRST batch. Recorded from 2026-10-05 on. Click ✎ to fix or fill in by hand.">1st BG</th><th title="Outfit they picked on their FIRST batch.">1st outfit</th><th>Found via</th>
       </tr></thead>
       <tbody>${rowsHtml}</tbody>
     </table>`

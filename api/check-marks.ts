@@ -25,7 +25,24 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { GoogleGenAI, type Part } from "@google/genai";
 import sharp from "sharp";
+import { Redis } from "@upstash/redis";
 import { alertCountryUpload } from "./lib/uploadAlert.js";
+import { bumpCheckCall } from "./lib/dailyStats.js";
+
+const redis = new Redis({
+  url: process.env.KV_REST_API_URL ?? "",
+  token: process.env.KV_REST_API_TOKEN ?? "",
+});
+
+// Cost control (2026-10-23, Kristi — Oct 22 spend was $22 vs a $15
+// estimate; this check made ~1,084 Gemini calls that day). The app re-runs
+// the check every time a photo is added, cropped or flipped, so each photo's
+// two reads are cached by URL: a photo is only ever read twice. Thinking is
+// capped (not off — at temperature 0 with no thinking the two reads would
+// always match, which would defeat the double-read safety check).
+const MARKS_CACHE_SEC = 9 * 3600;
+const marksKey = (url: string) => `marks:${url}`;
+const MARKS_THINKING_BUDGET = Math.max(0, Number(process.env.MARKS_THINKING_BUDGET ?? "256"));
 
 export const maxDuration = 30;
 
@@ -134,25 +151,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   try {
     // Small copies are plenty to see a mole and keep the call cheap/fast.
-    const images = await Promise.all(
-      urls.map(async (u) => {
-        const r = await fetch(u);
-        if (!r.ok) throw new Error(`fetch ${r.status}`);
-        const buf = await sharp(Buffer.from(await r.arrayBuffer()))
-          .rotate()
-          .resize(768, 768, { fit: "inside", withoutEnlargement: true })
-          .jpeg({ quality: 85 })
-          .toBuffer();
-        return buf.toString("base64");
-      }),
-    );
+    const loadImage = async (u: string) => {
+      const r = await fetch(u);
+      if (!r.ok) throw new Error(`fetch ${r.status}`);
+      const buf = await sharp(Buffer.from(await r.arrayBuffer()))
+        .rotate()
+        .resize(768, 768, { fit: "inside", withoutEnlargement: true })
+        .jpeg({ quality: 85 })
+        .toBuffer();
+      return buf.toString("base64");
+    };
     const ai = new GoogleGenAI({ apiKey });
     const askJson = async <T,>(parts: Part[]): Promise<T | null> => {
       try {
         const resp = await ai.models.generateContent({
           model: MARKS_MODEL,
           contents: [{ role: "user", parts }],
-          config: { responseMimeType: "application/json", temperature: 0 },
+          config: {
+            responseMimeType: "application/json",
+            temperature: 0,
+            thinkingConfig: { thinkingBudget: MARKS_THINKING_BUDGET },
+          },
         });
         return JSON.parse(resp.text ?? "null") as T;
       } catch {
@@ -164,9 +183,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Each photo is looked at TWICE (2026-10-21). Photos are now flipped
     // silently, so a one-off misread (a "mole" where there is none) must not
     // count: a photo's side only counts when both looks agree.
-    const locateAll = () =>
-      Promise.all(images.map((data) => askJson<Located>([{ text: LOCATE_PROMPT }, img(data)])));
-    const [located, located2] = await Promise.all([locateAll(), locateAll()]);
+    // Both reads per photo are cached (see marksKey), so only photos this
+    // check hasn't seen yet cost anything.
+    type Reads = { a: Located | null; b: Located | null };
+    const cached = ((await redis
+      .mget<(Reads | null)[]>(...urls.map(marksKey))
+      .catch(() => null)) ?? urls.map(() => null)) as (Reads | null)[];
+    const reads: Reads[] = await Promise.all(
+      urls.map(async (u, i) => {
+        const hit = cached[i];
+        if (hit && typeof hit === "object" && "a" in hit) return hit;
+        const data = await loadImage(u);
+        const ask = () => askJson<Located>([{ text: LOCATE_PROMPT }, img(data)]);
+        const [a, b] = await Promise.all([ask(), ask()]);
+        // Only remember real answers, so a failed call is retried next time.
+        if (a && b) {
+          await redis.set(marksKey(u), { a, b }, { ex: MARKS_CACHE_SEC }).catch(() => {});
+        }
+        return { a, b };
+      }),
+    );
+    const fresh = cached.filter((c) => !(c && typeof c === "object")).length;
+    await bumpCheckCall(fresh * 2);
+    const located = reads.map((r) => r.a);
+    const located2 = reads.map((r) => r.b);
+    console.log(
+      JSON.stringify({
+        type: "check_marks",
+        photos: urls.length,
+        cached: cached.filter((c) => c && typeof c === "object").length,
+      }),
+    );
     // Height of each mark relative to the nose (in nose-heights below the nose
     // center). Keep only marks near the most common height = the same mark.
     const sidesFor = (runs: (Located | null)[]) => {
