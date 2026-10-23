@@ -717,6 +717,10 @@ export async function sendCustomerDeliveryEmail(args: {
       <div style="margin-top: 40px; padding-top: 24px; border-top: 1px solid #EFEAE0; text-align: center; font-size: 12px; color: #888;">
         Questions? Just reply to this email — I read every one.<br/>
         <span style="color: #2C2C2A;">— Kristi</span>
+        <!-- Replaces the email-popup checkbox (2026-10-23, Kristi). -->
+        <div style="margin-top: 14px; font-size: 11px; color: #A8A6A0;">
+          Reply to this email if you want to opt in to our privacy policy.
+        </div>
       </div>
 
     </div>

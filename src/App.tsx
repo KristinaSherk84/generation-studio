@@ -6522,7 +6522,7 @@ const HOW_IT_WORKS_FAQ: { q: string; a: string }[] = [
   },
   {
     q: "Are my photos kept private?",
-    a: "Your uploaded selfies are used to create your headshots. They're never sold or used to train our AI. Your finished headshots are delivered to your email and stored only as long as we need to deliver them. From time to time we share before-and-after examples to show what our app can do. If you'd rather we never use yours, check the \"promotion privacy list\" box when you enter your email, or email us anytime and we'll leave you out. If you'd like your data deleted, just email us.",
+    a: "Your uploaded selfies are used to create your headshots. They're never sold or used to train our AI. Your finished headshots are delivered to your email and stored only as long as we need to deliver them. From time to time we share before-and-after examples to show what our app can do. If you'd rather we never use yours, reply to your delivery email or email us anytime and we'll leave you out. If you'd like your data deleted, just email us.",
   },
 ];
 
@@ -6976,7 +6976,7 @@ export const FAQ_QUESTIONS: { slug: string; q: string; a: string }[] = [
   {
     slug: "are-my-photos-kept-private",
     q: "Are my uploaded photos kept private?",
-    a: "Yes. Your uploads are used to create your headshots. We never sell them or use them to train any AI model. Your reference photos and generated files are stored only as long as needed to deliver your order. From time to time we share before-and-after examples to show what our app can do. If you'd rather we never use yours, check the \"promotion privacy list\" box when you enter your email, or email kristi@kristinasherk.com and we'll leave you out. If you'd like your data deleted at any time, email us and we'll remove it.",
+    a: "Yes. Your uploads are used to create your headshots. We never sell them or use them to train any AI model. Your reference photos and generated files are stored only as long as needed to deliver your order. From time to time we share before-and-after examples to show what our app can do. If you'd rather we never use yours, reply to your delivery email or email kristi@kristinasherk.com and we'll leave you out. If you'd like your data deleted at any time, email us and we'll remove it.",
   },
   {
     slug: "can-i-use-for-linkedin-and-business",
@@ -15959,7 +15959,7 @@ const EmailCaptureModal = ({ onSubmit, onClose }: EmailCaptureModalProps) => {
   // valid AND a source has been picked.
   const [foundVia, setFoundVia] = useState("");
   // Promotion privacy list opt-out (2026-10-21, Kristi). Unchecked by default.
-  const [promoOptOut, setPromoOptOut] = useState(false);
+  const promoOptOut = false; // checkbox removed 2026-10-23 — see below
   const emailValid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value.trim());
   const valid = emailValid && foundVia !== "";
   const submit = () => {
@@ -16145,33 +16145,10 @@ const EmailCaptureModal = ({ onSubmit, onClose }: EmailCaptureModalProps) => {
           >
             Generate my headshots
           </button>
-          {/* Promotion privacy list (2026-10-21, Kristi): opt out of having
-              their headshots used in ads. Shows on the leads page as
-              a red "no promo" pill. */}
-          <label
-            style={{
-              display: "flex",
-              alignItems: "flex-start",
-              gap: 8,
-              marginTop: 10,
-              fontSize: 11.5,
-              lineHeight: 1.4,
-              color: C.mediumGrey,
-              cursor: "pointer",
-              textAlign: "left",
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={promoOptOut}
-              onChange={(e) => setPromoOptOut(e.target.checked)}
-              style={{ marginTop: 2, flexShrink: 0, cursor: "pointer" }}
-            />
-            <span>
-              Opt-in to our promotion privacy list. By checking this box, you
-              refuse to let us use your headshot to advertise our service.
-            </span>
-          </label>
+          {/* Promotion privacy checkbox REMOVED 2026-10-23 (Kristi): it sat
+              right before people saw their headshots and planted doubt
+              (nearly everyone ticked it; conversion dipped). Opt-out now
+              lives in the FAQ and a line in the delivery email. */}
         </div>
       </div>
     </div>
@@ -19251,6 +19228,90 @@ const BackWarningModal = ({ onStay, onLeave, cartCount }: BackWarningModalProps)
   );
 };
 
+// "Last Step" nudge (2026-10-23, Kristi). Customers who hit Back after seeing
+// their 6 headshots usually leave without trying "Make more variations" — the
+// green button under the grid. Shown once per batch, before the normal back
+// action, while that free versions round is still unused.
+type VersionsNudgeModalProps = {
+  onMakeVersions: () => void;
+  onGoBack: () => void;
+};
+
+const VersionsNudgeModal = ({ onMakeVersions, onGoBack }: VersionsNudgeModalProps) => (
+  <div
+    role="dialog"
+    aria-modal="true"
+    aria-label="Last step: make your headshot versions"
+    style={{
+      position: "fixed",
+      inset: 0,
+      background: "rgba(44, 44, 42, 0.55)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      zIndex: 1100,
+      padding: 24,
+      ...font,
+    }}
+  >
+    <div
+      style={{
+        background: C.white,
+        borderRadius: 8,
+        padding: 32,
+        maxWidth: 460,
+        width: "100%",
+      }}
+    >
+      <div style={{ fontSize: 18, fontWeight: 500, color: C.dark }}>
+        Last Step: Make Your Headshot Versions
+      </div>
+      <div
+        style={{
+          fontSize: 14,
+          color: C.mediumGrey,
+          marginTop: 12,
+          lineHeight: 1.6,
+        }}
+      >
+        Use the green button below the grid to create 4 versions of your
+        favorite headshot you just created.
+      </div>
+      <div
+        style={{
+          display: "flex",
+          gap: 10,
+          marginTop: 24,
+          flexWrap: "wrap",
+        }}
+      >
+        <button
+          onClick={onMakeVersions}
+          style={{
+            background:
+              "linear-gradient(180deg, #2F5F46 0%, #1B4332 55%, #0F2E1E 100%)",
+            border: "1px solid #0B2415",
+            color: "#FAF8F4",
+            borderRadius: 999,
+            padding: "12px 22px",
+            fontSize: 14,
+            fontWeight: 500,
+            cursor: "pointer",
+            fontFamily: "inherit",
+            letterSpacing: 0.3,
+            textShadow: "0 1px 1px rgba(0,0,0,0.4)",
+          }}
+        >
+          Make my versions
+        </button>
+        <Button variant="ghost" onClick={onGoBack}>
+          No thanks, go back
+        </Button>
+      </div>
+    </div>
+  </div>
+);
+
 // -------------------- Post-checkout delivering interstitial --------------------
 //
 // Added 2026-05-27 to fix the "home page flash" customers saw after
@@ -21520,6 +21581,13 @@ export default function App() {
   // popstate handler so the two effects don't fight over the same event.
   const [showBackWarning, setShowBackWarning] = useState(false);
   const protectedScreenGuardActiveRef = useRef(false);
+  // "Last Step: Make Your Headshot Versions" nudge (2026-10-23, Kristi):
+  // which Back the customer pressed on the grid ("inapp" = the ← Back link,
+  // "browser" = the browser button), shown once per batch while the free
+  // versions round is unused. The eligible ref is refreshed every render.
+  const [versionsNudge, setVersionsNudge] = useState<null | "inapp" | "browser">(null);
+  const versionsNudgeShownRef = useRef(false);
+  const versionsNudgeEligibleRef = useRef(false);
 
   // Entry-specialty context (added 2026-05-27). When a customer enters the
   // flow via a vertical landing page like /healthcare, this records which
@@ -21666,6 +21734,18 @@ export default function App() {
       if (allShotsHistory.open) return;
       if (allShotsHistory.suppressPops > 0) {
         allShotsHistory.suppressPops -= 1;
+        return;
+      }
+      // First Back on the grid with the free versions round unused: show the
+      // "Last Step" nudge instead (once per batch). (2026-10-23, Kristi)
+      if (
+        screen === "grid" &&
+        versionsNudgeEligibleRef.current &&
+        !versionsNudgeShownRef.current
+      ) {
+        versionsNudgeShownRef.current = true;
+        setVersionsNudge("browser");
+        window.history.pushState({ guard: true }, "", window.location.pathname);
         return;
       }
       // Surface the warning, then re-push the marker so the user visually
@@ -25069,6 +25149,7 @@ export default function App() {
     versionRoundRef.current = null;
     setVersionsSourceLabel(null);
     setVersionsUsedThisBatch(false);
+    versionsNudgeShownRef.current = false;
     setPickingVersionSource(false);
     setVersionsGenerating(false);
     setReadyCount(0);
@@ -25751,6 +25832,41 @@ export default function App() {
     }
   };
 
+  // "Last Step" nudge eligibility: on the grid, batch finished, the free
+  // versions round still unused and available. Mirrors the conditions the
+  // paywall's "try variations" route uses.
+  versionsNudgeEligibleRef.current =
+    screen === "grid" &&
+    !versionsUsedThisBatch &&
+    !versionsGenerating &&
+    !pickingVersionSource &&
+    !versionsBlockedRef.current &&
+    lastPhotoUrls.length >= 5 &&
+    generatedImages.filter((u) => typeof u === "string" && /^https?:\/\//.test(u)).length >= 6;
+  const handleGridBack = () => {
+    if (versionsNudgeEligibleRef.current && !versionsNudgeShownRef.current) {
+      versionsNudgeShownRef.current = true;
+      setVersionsNudge("inapp");
+      return;
+    }
+    setScreen("style");
+  };
+  const handleVersionsNudgeMake = () => {
+    setVersionsNudge(null);
+    setPickingVersionSource(true);
+    window.setTimeout(() => {
+      document
+        .querySelector(".gen-grid")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 60);
+  };
+  const handleVersionsNudgeGoBack = () => {
+    const via = versionsNudge;
+    setVersionsNudge(null);
+    if (via === "browser") setShowBackWarning(true);
+    else setScreen("style");
+  };
+
   return (
     <div style={{ minHeight: "100vh", background: C.pageBg, ...font }}>
       {/* Old "Generation Studio / Selected (N)" navbar — hidden on landing
@@ -26424,7 +26540,7 @@ export default function App() {
             }
           }}
           onDeliver={handleAdvanceToRetouch}
-          onBack={() => setScreen("style")}
+          onBack={handleGridBack}
           onRegenerateSlot={handleRegenerateSlot}
           onRegenerateWildCard={handleRegenerateWildCard}
           wildCardRegenerating={wildCardRegenerating}
@@ -27065,6 +27181,12 @@ export default function App() {
           modal is up — the back-warning takes precedence). Only fires
           when the customer is on grid / retouch / checkout AND triggered
           a back navigation; the screen-guard useEffect handles that. */}
+      {versionsNudge && (
+        <VersionsNudgeModal
+          onMakeVersions={handleVersionsNudgeMake}
+          onGoBack={handleVersionsNudgeGoBack}
+        />
+      )}
       {showBackWarning && (
         <BackWarningModal
           onStay={handleStayOnProtectedScreen}
