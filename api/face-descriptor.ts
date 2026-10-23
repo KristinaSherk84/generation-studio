@@ -55,15 +55,20 @@ export default async function handler(
     // detection is slow, and scoring 5 was timing out — 2 is plenty to
     // anchor identity and keeps this well under the ceiling (2026-07-31).
     const MAX_REFS = 2;
-    const urls = photoUrls.slice(0, MAX_REFS);
-    const buffers = await Promise.all(urls.map(fetchBuffer));
+    // A photo the server can't open (an iPhone HEIC) is skipped and the next
+    // photo is used instead, so one HEIC never switches the check off for
+    // everyone's photos. (2026-10-23, Kristi)
+    const isHeic = (u: string) => /\.hei[cf](\?|$)/i.test(u);
+    const urls = photoUrls.filter((u) => !isHeic(u)).slice(0, 6);
 
     // Detect sequentially to avoid piling parallel work onto the CPU tfjs
     // backend (which would contend and be slower overall).
     const descriptors: number[][] = [];
-    for (const buf of buffers) {
+    for (const url of urls) {
+      if (descriptors.length >= MAX_REFS) break;
+      const buf = await fetchBuffer(url);
       if (!buf) continue;
-      const d = await computeFaceDescriptor(buf);
+      const d = await computeFaceDescriptor(buf).catch(() => null);
       if (d && d.length === 128) descriptors.push(d);
     }
 

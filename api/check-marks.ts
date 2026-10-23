@@ -189,11 +189,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const cached = ((await redis
       .mget<(Reads | null)[]>(...urls.map(marksKey))
       .catch(() => null)) ?? urls.map(() => null)) as (Reads | null)[];
+    let calls = 0;
     const reads: Reads[] = await Promise.all(
       urls.map(async (u, i) => {
         const hit = cached[i];
         if (hit && typeof hit === "object" && "a" in hit) return hit;
-        const data = await loadImage(u);
+        // One photo the server can't open (e.g. an iPhone HEIC) is simply
+        // skipped; the other photos are still checked. (2026-10-23, Kristi)
+        const data = await loadImage(u).catch(() => null);
+        if (!data) return { a: null, b: null };
+        calls += 2;
         const ask = () => askJson<Located>([{ text: LOCATE_PROMPT }, img(data)]);
         const [a, b] = await Promise.all([ask(), ask()]);
         // Only remember real answers, so a failed call is retried next time.
@@ -203,8 +208,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return { a, b };
       }),
     );
-    const fresh = cached.filter((c) => !(c && typeof c === "object")).length;
-    await bumpCheckCall(fresh * 2);
+    await bumpCheckCall(calls);
     const located = reads.map((r) => r.a);
     const located2 = reads.map((r) => r.b);
     console.log(
