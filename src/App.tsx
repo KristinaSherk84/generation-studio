@@ -22759,8 +22759,18 @@ export default function App() {
           const savedCart = (Array.isArray(d.cartUrls) ? d.cartUrls : []).filter(
             (u) => typeof u === "string" && /^https?:\/\//.test(u),
           );
+          // Only this gallery's shots may stay in the cart. Opening several
+          // people's links in one browser (Kristi checking galleries) was
+          // piling their picks into one cart. (2026-10-23)
+          const ours = new Set<string>([
+            ...(d.generatedUrls ?? []),
+            ...(d.allGeneratedUrls ?? []),
+            ...(d.versionShots ?? []),
+            ...(d.wildCards ?? []).map((w) => w.url),
+            ...((d.previousUrls ?? []).filter(Boolean) as string[]),
+          ]);
           setCart((prev) => {
-            const next = Array.from(new Set([...prev, ...savedCart]))
+            const next = Array.from(new Set([...prev.filter((u) => ours.has(u)), ...savedCart]))
               .filter((u) => !bought.has(u))
               .slice(0, MAX_CART_SIZE);
             return next.length === prev.length && next.every((u, i) => u === prev[i])
